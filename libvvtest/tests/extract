@@ -1,0 +1,98 @@
+#!/usr/bin/env python
+
+import os, sys
+import string, re
+
+from testutils import *
+
+rmallfiles()
+
+# check that all files are getting extracted
+
+writefile( 'orig/atest.xml', """
+<rtest name="atest">
+  <copy_files> file1.txt </copy_files>
+  <link_files> file2.txt </link_files>
+  <baseline file="file3.txt"/>
+  <source_files> file4.txt </source_files>
+  <execute>
+    set echo
+    cat file1.txt || exit 1
+    cat file2.txt || exit 1
+    cat $XMLDIR/file3.txt || exit 1
+    cat $XMLDIR/file4.txt || exit 1
+    unset echo
+  </execute>
+</rtest>""" )
+
+writefile( 'orig/file1.txt', "file one" )
+writefile( 'orig/file2.txt', "file two" )
+writefile( 'orig/file3.txt', "file three" )
+writefile( 'orig/file4.txt', "file four" )
+
+os.chdir('orig')
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( greptestlist(out,'pass.*atest') ) == 1
+
+os.chdir('..')
+
+# extract the orig directory then run in the extracted area
+
+out,np,nd,nf,nn = run_vvtest( '--extract copy orig' )
+
+os.chdir('copy')
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( greptestlist(out,'pass.*atest') ) == 1
+
+os.chdir('..')
+
+###########################################################################
+
+rmallfiles()
+
+# check the three ways name substitution can occur
+
+writefile( 'orig/atest.xml', """
+<rtest name="atest">
+  <copy_files> $NAME.txt </copy_files>
+  <link_files> NAME.txt </link_files>
+  <baseline file="${NAME}_base.txt"/>
+  <source_files> {$NAME}_src.txt </source_files>
+  <execute>
+    set echo
+    cat atest.txt || exit 1
+    cat NAME.txt || exit 1
+    cat $XMLDIR/atest_base.txt || exit 1
+    cat $XMLDIR/atest_src.txt || exit 1
+    unset echo
+  </execute>
+</rtest>""" )
+
+writefile( 'orig/atest.txt', "file one" )
+writefile( 'orig/NAME.txt', "file two" )
+writefile( 'orig/atest_base.txt', "file three" )
+writefile( 'orig/atest_src.txt', "file four" )
+
+os.chdir('orig')
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( greptestlist(out,'pass.*atest') ) == 1
+
+os.chdir('..')
+
+# extract the orig directory then run in the extracted area
+
+out,np,nd,nf,nn = run_vvtest( '--extract copy orig' )
+
+os.chdir('copy')
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( greptestlist(out,'pass.*atest') ) == 1
+
+os.chdir('..')

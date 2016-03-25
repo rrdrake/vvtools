@@ -1,0 +1,239 @@
+#!/usr/bin/env python
+
+import os, sys
+import string, re
+import glob
+
+from testutils import *
+
+rmallfiles()
+
+writefile( 'basic.xml', """
+  <rtest name="basic">
+    <parameterize np="1 4"/>
+    <parameterize dt="0.1 0.01"/>
+    <execute> echo "execute basic np = $np dt = $dt" </execute>
+  </rtest>
+""")
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 4 and nd == 0 and nf == 0 and nn == 0
+L = filegrep( results_dir() + '/basic.dt=0.01.np=4/execute.log', 'execute basic' )
+print "execute", L
+assert len(L) == 1 and string.strip(L[0]) == 'execute basic np = 4 dt = 0.01'
+
+platname = None
+for line in string.split(out,os.linesep):
+  L = string.split(line)
+  if len(L) >= 2 and L[0] == 'Importing':
+    b = os.path.splitext( os.path.basename( L[1] ) )[0]
+    platname = string.split(b,'_')[-1]
+print "Extracted platname =", platname
+
+remove_results()
+
+out,np,nd,nf,nn = run_vvtest( '-p np=4' )
+assert np == 2 and nd == 0 and nf == 0 and nn == 0
+L = filegrep( results_dir() + '/basic.dt=0.01.np=4/execute.log', 'execute basic' )
+assert len(L) == 1 and string.strip(L[0]) == 'execute basic np = 4 dt = 0.01'
+L = filegrep( results_dir() + '/basic.dt=0.1.np=4/execute.log', 'execute basic' )
+assert len(L) == 1 and string.strip(L[0]) == 'execute basic np = 4 dt = 0.1'
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+remove_results()
+
+if platname == 'Linux' or platname == 'iDarwin':
+  
+  out,np,nd,nf,nn = run_vvtest( '-p np=4 --pipeline --qsub-length 0' )
+  assert np == 2 and nd == 0 and nf == 0 and nn == 0
+  L = filegrep( results_dir() + '/basic.dt=0.01.np=4/execute.log', 'execute basic' )
+  assert len(L) == 1 and string.strip(L[0]) == 'execute basic np = 4 dt = 0.01'
+  L = filegrep( results_dir() + '/basic.dt=0.1.np=4/execute.log', 'execute basic' )
+  assert len(L) == 1 and string.strip(L[0]) == 'execute basic np = 4 dt = 0.1'
+  
+  out,np,nd,nf,nn = run_vvtest( '--pipeline --qsub-length 0' )
+  assert np == 2 and nd == 0 and nf == 0 and nn == 0
+  
+  out,np,nd,nf,nn = run_vvtest( '-i' )
+  assert np == 4 and nd == 0 and nf == 0 and nn == 0
+
+remove_results()
+
+writefile( 'basic.xml', """
+  <rtest name="basic">
+    <parameterize np="1 4 8"/>
+    <execute> echo "execute basic2 np = $np" </execute>
+  </rtest>
+""")
+
+out,np,nd,nf,nn = run_vvtest( '-p np<8 -P np=1' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+L = filegrep( results_dir() + '/basic.np=4/execute.log', 'execute basic2' )
+print "execute", L
+assert len(L) == 1 and string.strip(L[0]) == 'execute basic2 np = 4'
+
+out,np,nd,nf,nn = run_vvtest( '-p np<=8' )
+assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-i' )
+assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-i -p np=4' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+remove_results()
+
+if platname == 'Linux' or platname == 'iDarwin':
+  
+  out,np,nd,nf,nn = run_vvtest( '-p np<8 -P np=1 --pipeline --qsub-length 0' )
+  assert np == 1 and nd == 0 and nf == 0 and nn == 0
+  
+  L = filegrep( results_dir() + '/basic.np=4/execute.log', 'execute basic2' )
+  print "execute", L
+  assert len(L) == 1 and string.strip(L[0]) == 'execute basic2 np = 4'
+  
+  out,np,nd,nf,nn = run_vvtest( '-p np<=8 --pipeline --qsub-length 0' )
+  assert np == 2 and nd == 0 and nf == 0 and nn == 0
+  
+  out,np,nd,nf,nn = run_vvtest( '-i -p np=4' )
+  assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+# check what happens with empty parameterize
+
+remove_results()
+
+writefile( 'basic.xml', """
+  <rtest name="basic">
+    <keywords> foobar </keywords>
+    <parameterize/>
+    <execute> echo "execute basic3 np = $np" </execute>
+  </rtest>""")
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+L = filegrep( results_dir() + '/basic/execute.log', 'execute basic3 np = 0' )
+print "execute", L
+assert len(L) == 1 and string.strip(L[0]) == 'execute basic3 np = 0'
+
+remove_results()
+
+writefile( 'basic.xml', """
+  <rtest name="basic">
+    <keywords> foobar </keywords>
+    <parameterize keywords="foobar"/>
+    <execute> echo "execute basic3 np = $np" </execute>
+  </rtest>""")
+
+out,np,nd,nf,nn = run_vvtest( '-k foobar' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+L = filegrep( results_dir() + '/basic/execute.log', 'execute basic3 np = 0' )
+print "execute", L
+assert len(L) == 1 and string.strip(L[0]) == 'execute basic3 np = 0'
+
+
+#####################################################################
+
+rmallfiles()
+
+# check that the keywords in a parameterize are included in the test keywords
+
+writefile( 'keyw.xml', """
+<rtest name="keyw">
+  <keywords> fast medium </keywords>
+  <parameterize not_keywords="full" np="1"/>
+  <parameterize keywords="full"     np="2 4"/>
+  <analyze> echo "here we are" </analyze>
+</rtest>""" )
+
+out,np,nd,nf,nn = run_vvtest( '-k full' )
+assert np == 3 and nd == 0 and nf == 0 and nn == 0
+fL = glob.glob( 'TestResults.*/keyw/execute.log' )
+assert len(fL) == 1
+fL = glob.glob( 'TestResults.*/keyw.np=*/execute.log' )
+assert len(fL) == 2
+
+out,np,nd,nf,nn = run_vvtest( '-w' )
+assert np == 2 and nd == 0 and nf == 0 and nn == 0
+fL = glob.glob( 'TestResults.*/keyw/execute.log' )
+assert len(fL) == 1
+fL = glob.glob( 'TestResults.*/keyw.np=*/execute.log' )
+assert len(fL) == 1
+
+#####################################################################
+
+rmallfiles()
+
+# exercise filtering out by parameter on a subsequent run
+
+writefile( 'params.xml', """
+<rtest name="params">
+  <parameterize AA="1 2"/>
+  <parameterize BB="foo bar"/>
+  <execute> echo "params AA=$AA BB=$BB" </execute>
+</rtest>""" )
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 4 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-F -p AA=2' )
+assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+
+######################################################################
+
+# an analyze section has the keywords available to it
+
+rmallfiles()
+
+writefile( 'basic.xml', """
+  <rtest name="basic">
+    <parameterize np="1 4"/>
+    <parameterize dt="0.1 0.01"/>
+    <execute> echo "execute basic np = $np dt = $dt" </execute>
+    <analyze>
+      echo "access PARAM_np = $PARAM_np"
+      echo "access PARAM_dt = $PARAM_dt"
+    </analyze>
+  </rtest>
+""")
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 5 and nd == 0 and nf == 0 and nn == 0
+tdir = results_dir()
+L = filegrep( tdir + '/basic/execute.log', 'PARAM_np' )
+assert len(L) == 2 and L[0].find( '1' ) > 0 and L[0].find( '4' ) > 0
+assert L[1].find( '1' ) > 0 and L[1].find( '4' ) > 0
+L = filegrep( tdir + '/basic/execute.log', 'access PARAM_np' )
+assert len(L) == 1 and L[0].find( '1' ) > 0 and L[0].find( '4' ) > 0
+L = filegrep( tdir + '/basic/execute.log', 'PARAM_dt' )
+assert len(L) == 2 and L[0].find( '0.1' ) > 0 and L[0].find( '0.01' ) > 0
+assert L[1].find( '0.1' ) > 0 and L[1].find( '0.01' ) > 0
+L = filegrep( tdir + '/basic/execute.log', 'access PARAM_dt' )
+assert len(L) == 1 and L[0].find( '0.1' ) > 0 and L[0].find( '0.01' ) > 0
+
+
+rmallfiles()
+
+writefile( 'zip.xml', """
+  <rtest name="zip">
+    <parameterize np="1 4" dt="0.1 0.01"/>
+    <execute> echo "execute zip np = $np dt = $dt" </execute>
+    <analyze>
+      echo "access PARAM_np_dt = $PARAM_np_dt"
+    </analyze>
+  </rtest>
+""")
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 3 and nd == 0 and nf == 0 and nn == 0
+tdir = results_dir()
+L = filegrep( tdir+'/zip/execute.log', 'PARAM_np_dt' )
+assert len(L) == 2 and L[0].find( '1/0.1' ) > 0 and L[0].find( '4/0.01' ) > 0
+assert L[1].find( '1/0.1' ) > 0 and L[1].find( '4/0.01' ) > 0
+L = filegrep( tdir+'/zip/execute.log', 'access PARAM_np_dt' )
+assert len(L) == 1 and L[0].find( '1/0.1' ) > 0 and L[0].find( '4/0.01' ) > 0

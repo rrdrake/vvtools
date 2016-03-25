@@ -1,0 +1,52 @@
+#!/usr/bin/env python
+
+import os, sys
+import string, re
+
+from testutils import *
+
+rmallfiles()
+
+#####################################################################
+
+writefile( "param.xml", """
+<rtest name="param">
+  <parameterize hello="world mars"/>
+  <execute> <![CDATA[
+sleep 1
+echo "parm=$hello"
+]]>
+  </execute>
+</rtest>""" )
+
+writefile( "bline.xml", """
+<rtest name="bline">
+  <execute> <![CDATA[
+# create a single baseline file to use for the first differencing
+echo "baseline test data file" >! bline.txt
+echo "line two" >> bline.txt
+]]>
+  </execute>
+  <execute name="unixdiff"> bline.txt ${XMLDIR}/bline.txt </execute>
+  <execute> <![CDATA[
+# copy the previous file to a separate name
+cp bline.txt bline2.txt
+]]>
+  </execute>
+  <execute name="unixdiff"> bline2.txt ${XMLDIR}/blinetwo.txt </execute>
+  <baseline file="bline.txt"/>
+  <baseline file="bline2.txt" destination="blinetwo.txt"/>
+</rtest>""" )
+
+writefile( "bline.txt", "" )
+writefile( "bline2.txt", "" )
+writefile( "blinetwo.txt", "" )
+
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 2 and nd == 1 and nf == 0 and nn == 0
+
+# run baseline and rerun tests
+out,np,nd,nf,nn = run_vvtest( '-b' )
+out,np,nd,nf,nn = run_vvtest( '-F' )
+assert np == 3 and nd == 0 and nf == 0 and nn == 0

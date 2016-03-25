@@ -1,0 +1,191 @@
+#!/usr/bin/env python
+
+import os, sys
+import string, re
+
+from testutils import *
+
+rmallfiles()
+
+###############################
+
+def extract_keywords(out):
+    start = 0
+    kL = []
+    for line in string.split(out, os.linesep):
+      if start:
+        kL.extend( string.split(line) )
+      elif string.strip(line)[:14] == 'test keywords:':
+        start = 1
+    D = {}
+    for k in kL:
+      D[k] = None
+    L = D.keys()
+    L.sort()
+    return L
+
+def extract_files(out, rootd):
+    D = {}
+    for line in string.split(out, os.linesep):
+      line = string.strip(line)
+      if line and line[0] == '/':
+        D[line] = None
+    fL = D.keys()
+    lend = len(rootd)
+    for i in range(len(fL)):
+      fL[i] = fL[i][lend+1:]
+    fL.sort()
+    return fL
+
+###############################
+
+writefile( "param.xml", """
+<rtest name="param">
+  <parameterize hello="world mars"/>
+  <execute> <![CDATA[
+sleep 1
+echo "parm=$hello"
+]]>
+  </execute>
+</rtest>""" )
+
+writefile( "FailTest.xml", """
+<rtest name="FailTest">
+  <execute> <![CDATA[
+sleep 1
+echo "Exiting with failure status"
+exit 1
+]]>
+  </execute>
+</rtest>""")
+
+writefile( "DiffTest.xml", """
+<rtest name="DiffTest">
+  <execute> <![CDATA[
+sleep 1
+echo "Exiting with diff status"
+set have_diff = yes
+]]>
+  </execute>
+</rtest>""")
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 2 and nd == 1 and nf == 1 and nn == 0
+assert len( testlist(out) ) == 4, "expected 4 tests to have run"
+out,np,nd,nf,nn = run_vvtest( '-i' )
+assert np == 2 and nd == 1 and nf == 1 and nn == 0
+assert len( testlist(out) ) == 4, "expected 4 tests to have run"
+
+# cd into the run directory and check the -i output
+saved = os.getcwd()
+os.chdir( results_dir() )
+out,np,nd,nf,nn = run_vvtest( '-i' )
+assert np == 2 and nd == 1 and nf == 1 and nn == 0
+assert len( testlist(out) ) == 4, "expected 4 tests to have run"
+os.chdir(saved)
+
+remove_results()
+
+# again but with a build option
+
+out,np,nd,nf,nn = run_vvtest( '-o dbg' )
+assert np == 2 and nd == 1 and nf == 1 and nn == 0
+assert len( testlist(out) ) == 4, "expected 4 tests to have run"
+
+os.chdir( results_dir() )
+out,np,nd,nf,nn = run_vvtest( '-i' )
+assert np == 2 and nd == 1 and nf == 1 and nn == 0
+assert len( testlist(out) ) == 4, "expected 4 tests to have run"
+os.chdir(saved)
+
+remove_results()
+
+writefile( 'keys.xml', """
+  <rtest name="keys">
+    <keywords> hello world </keywords>
+  </rtest>
+""" )
+
+writefile( 'sdir/skeys.xml', """
+  <rtest name="skeys">
+    <keywords> mars jupiter fast </keywords>
+  </rtest>
+""" )
+
+rootd = os.getcwd()
+
+out,np,nd,nf,nn = run_vvtest( '--keys' )
+L = extract_keywords(out)
+print "keywords", L
+assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
+
+out,np,nd,nf,nn = run_vvtest( '--files' )
+L = extract_files(out, rootd)
+print "files", L
+assert L == [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml', \
+              'param.xml', 'sdir/skeys.xml']
+
+out,np,nd,nf,nn = run_vvtest( '-k fast --files' )
+L = extract_files(out, rootd)
+print "files", L
+assert L == [ 'sdir/skeys.xml']
+
+out,np,nd,nf,nn = run_vvtest( '-K fast -K medium -K long --files' )
+L = extract_files(out, rootd)
+print "files", L
+assert L == [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml', 'param.xml']
+
+out,np,nd,nf,nn = run_vvtest()
+out,np,nd,nf,nn = run_vvtest( '-F --keys' )
+L = extract_keywords(out)
+print "keywords", L
+assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
+
+out,np,nd,nf,nn = run_vvtest( '-i --keys' )
+L = extract_keywords(out)
+print "keywords", L
+assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
+
+out,np,nd,nf,nn = run_vvtest( '-i --files' )
+L = extract_files(out, rootd)
+print "files", L
+assert L == [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml', \
+              'param.xml', 'sdir/skeys.xml']
+
+os.chdir( results_dir() )
+
+out,np,nd,nf,nn = run_vvtest( '-F --keys' )
+L = extract_keywords(out)
+print "keywords", L
+assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
+
+out,np,nd,nf,nn = run_vvtest( '-i --keys' )
+L = extract_keywords(out)
+print "keywords", L
+assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
+
+out,np,nd,nf,nn = run_vvtest( '-i --files' )
+L = extract_files(out, rootd)
+print "files", L
+assert L == [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml', \
+              'param.xml', 'sdir/skeys.xml']
+
+os.chdir( 'sdir' )
+
+out,np,nd,nf,nn = run_vvtest( '-i' )
+assert np+nd+nf == 1
+
+out,np,nd,nf,nn = run_vvtest( '-F --keys' )
+L = extract_keywords(out)
+print "keywords", L
+assert L == ['fast', 'jupiter', 'mars']
+
+out,np,nd,nf,nn = run_vvtest( '-i --keys' )
+L = extract_keywords(out)
+print "keywords", L
+assert L == ['fast', 'jupiter', 'mars']
+
+out,np,nd,nf,nn = run_vvtest( '-i --files' )
+L = extract_files(out, rootd)
+print "files", L
+assert L == ['sdir/skeys.xml']

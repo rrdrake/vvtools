@@ -1,0 +1,162 @@
+#!/usr/bin/env python
+
+import os, sys
+import string
+
+# Each test script is run with one argument -- the directory containing
+# this script.  The output of each script is redirected to a ".out" file.
+# If a baseline filename is given for the test, it is compared to the ".out"
+# file.
+
+testlist = [ \
+  'nulltest',
+  'options',
+  'generate',
+  'execute',
+  'exclude',
+  'timeout',
+  'info',
+  'restart',
+  'baseline',
+  'expr',
+  'tspecs',
+  'cspecs',
+  'cshscripts',
+  'analyze',
+  'filter',
+  'params',
+  'extract',
+  'testresults',
+  'runtimes',
+  'config',
+]
+
+optdict = {}  # maps option string to a python list, eg '-h' -> []
+
+exeDir = None  # gets set to the absolute path of this script
+exeName = None  # gets set to the name of this script
+
+###########################################################################
+
+def makeTestDir():
+    """Creates and returns a unique absolute directory path under the current
+    working directory."""
+    
+    pid = os.getpid()
+    dname = "testdir." + str(pid)
+    if os.path.exists(dname):
+      # add additional numbers to make a unique name
+      for n in range(100):
+        if not os.path.exists( dname + '.' + str(n) ):
+          dname = dname + '.' + str(n)
+          break
+    
+    os.mkdir(dname)
+    
+    return os.path.abspath(dname)
+
+
+def prependPATH(d):
+    if os.environ.has_key('PATH'):
+      if os.environ['PATH']:
+        os.environ['PATH'] = d + ':' + os.environ['PATH']
+      else:
+        os.environ['PATH'] = d
+    else:
+      os.environ['PATH'] = d
+
+###########################################################################
+
+def getHelpString():
+    s = \
+"""
+NAME
+      runtests - run the self tests in a subdirectory
+
+SYNOPSIS
+      1.  runtests { -h | --help }
+      2.  runtests [ testname ... ]
+
+DESCRIPTION
+      Runs tests on the scripts.  Without any arguments, it runs all the
+      tests.  If arguments are given, they are the test names to run.
+"""
+    return s
+
+###########################################################################
+
+if __name__ == '__main__':
+    
+    try:
+      sys.argv.index('-help')
+      print getHelpString()
+      sys.exit(0)
+    except ValueError:
+      pass
+    
+    exeDir = sys.path[0]
+    if not exeDir:                  exeDir = os.getcwd()
+    elif not os.path.isabs(exeDir): exeDir = os.path.abspath(exeDir)
+    exeName = os.path.basename( sys.argv[0] )
+    
+    import getopt
+    try: opts, args = getopt.getopt( sys.argv[1:], 'h', longopts=['help'] )
+    except getopt.error, e:
+      sys.stderr.write('*** error: ' + exeName + ': ' + str(e) + '\n')
+      sys.exit(1)
+    
+    for optpair in opts:
+      if not optdict.has_key(optpair[0]):
+        optdict[optpair[0]] = [optpair[1]]
+      else:
+        optdict[optpair[0]].append(optpair[1])
+    
+    if optdict.has_key('-h') or optdict.has_key('--help'):
+      print getHelpString()
+      sys.exit(0)
+    
+    prependPATH( os.path.abspath( exeDir + '/..' ) )
+    
+    tdir = makeTestDir()
+    os.chdir(tdir)
+    
+    thinlist = {}
+    for t in args:
+      thinlist[t] = None
+    
+    failed = []
+    
+    for tname in testlist:
+      
+      if len(thinlist) > 0 and not thinlist.has_key(tname):
+        continue
+      
+      cmd = [ exeDir + '/' + tname ]
+      print "RUN: " + string.join(cmd)
+      sys.stdout.flush()
+      
+      pid = os.fork()
+      
+      if pid == 0:
+        os.mkdir( tname + '_dir' )
+        os.chdir( tname + '_dir' )
+        outfile = open( '../' + tname + '.out', "w+" )
+        os.dup2( outfile.fileno(), sys.stdout.fileno() )
+        os.dup2( outfile.fileno(), sys.stderr.fileno() )
+        os.environ['TOOLSET_RUNDIR'] = tdir
+        os.execve( cmd[0], cmd, os.environ )
+      
+      cid, exit_status = os.wait()
+      
+      assert pid == cid
+      
+      if exit_status != 0:
+        failed.append( tname )
+    
+    if len(failed) > 0:
+      print "*** these tests failed:"
+      for t in failed:
+        print "    ", t
+    
+    if len(failed) == 0:
+      print "ALL TESTS PASSED"

@@ -1,0 +1,218 @@
+#!/usr/bin/env python
+
+import os, sys
+import string, re
+
+from testutils import *
+
+rmallfiles()
+
+# run one to get the platform name
+
+writefile( "none.xml", """
+<rtest name="none">
+  <execute>
+echo "in test none"
+sleep 1
+  </execute>
+</rtest>""" )
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+platname = platform_name( out )
+print "Extracted platname =", platname
+
+rmallfiles()
+
+# exclude the current platform
+
+writefile( "exclude.xml", """
+<rtest name="exclude">
+  <include platforms="not """+platname+""""/>'
+  <execute>
+echo "in test none"
+sleep 1
+  </execute>
+</rtest>""")
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+rmallfiles()
+
+# include the current platform
+
+writefile( "include.xml", '''
+<rtest name="include">
+  <include platforms="'''+platname+'''"/>
+  <execute>
+echo "in test none"
+sleep 1
+  </execute>
+</rtest>''')
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+rmallfiles()
+
+# add both an include and an exclude
+
+writefile( "both.xml", '''
+<rtest name="both">
+  <include platforms="'''+platname+'''"/>
+  <exclude platforms="'''+platname+'''"/>
+  <execute>
+echo "in test none"
+sleep 1
+  </execute>
+</rtest>''')
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+# add -A option to ignore the include/exclude tags
+
+out,np,nd,nf,nn = run_vvtest( '-A' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+rmallfiles()
+
+# an empty include
+
+writefile( "include.xml", '''
+<rtest name="include">
+  <include platforms=""/>
+  <execute>
+echo "in test include"
+sleep 1
+  </execute>
+</rtest>''')
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+rmallfiles()
+
+# use platform to exclude an execute block
+
+writefile( "exe_exclude.xml", '''
+<rtest name="exe_exclude">
+  <execute platforms="not '''+platname+'''">
+echo "findme line not excluded"
+  </execute>
+  <execute>
+echo "findme line number two included"
+sleep 1
+  </execute>
+</rtest>''')
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+L = filegrep( results_dir()+'/exe_exclude/execute.log', "findme" )
+assert len(L) == 1
+
+rmallfiles()
+
+# build options exclude/include
+
+writefile( "opt_exclude.xml", '''
+<rtest name="opt_exclude">
+  <build_options> 2D+tridev|tri8 </build_options>
+  <execute>
+    echo "findme line number one executed"
+    sleep 1
+  </execute>
+</rtest>''')
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tridev' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tri8' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-w -o 2D -o tri8' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-w -o 3D -o tri8' )
+assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+rmallfiles()
+
+writefile( "opt_exclude.xml", '''
+<rtest name="opt_exclude">
+  <build_options> 2D+tdev|t8 </build_options>
+  <execute>
+    echo "findme line number one executed"
+    sleep 1
+  </execute>
+</rtest>''')
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tdev' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+rmallfiles()
+
+if platname == "Linux": otherplatname = "Cray"
+else:                   otherplatname = "Linux"
+
+writefile( "plats.xml", '''
+  <rtest name="plats">
+  <include platforms="'''+otherplatname+'''"/>
+  </rtest>''')
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-x '+otherplatname )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+rmallfiles()
+
+writefile( "plats.xml", '''
+  <rtest name="plats">
+  <include platforms="'''+otherplatname+''' or Dummy"/>
+  </rtest>''')
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-x '+otherplatname )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+remove_results()
+
+out,np,nd,nf,nn = run_vvtest( '-x '+platname+'/Junk' )
+assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-x '+otherplatname+'/Junk' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+rmallfiles()
+
+writefile( "plats.xml", '''
+  <rtest name="plats">
+  </rtest>''')
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+remove_results()
+
+out,np,nd,nf,nn = run_vvtest( '-x '+otherplatname )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+remove_results()
+
+out,np,nd,nf,nn = run_vvtest( '-X '+otherplatname )
+assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-x '+platname+' -X '+otherplatname )
+assert np == 0 and nd == 0 and nf == 0 and nn == 0

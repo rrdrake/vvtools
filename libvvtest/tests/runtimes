@@ -1,0 +1,95 @@
+#!/usr/bin/env python
+
+import os, sys
+import string, re
+import time
+import filecmp
+import shutil
+import glob
+
+from testutils import *
+
+import results
+import TestSpec
+import TestSpecCreator
+import xmlwrapper
+
+timesfname = results.runtimes_filename
+multifname = results.multiruntimes_filename
+
+xreader = xmlwrapper.XmlDocReader()
+
+def get_platform_compiler( resultsfname ):
+    """
+    """
+    fmt,vers,hdr,nskip = results.read_file_header( resultsfname )
+    pn = hdr['PLATFORM']
+    cp = hdr['COMPILER']
+    return pn,cp
+
+
+#######################################################################
+
+rmallfiles()
+
+writefile( "tests/dir1/one.xml", """
+<rtest name="one">
+  <execute>
+sleep 1
+  </execute>
+</rtest>""")
+writefile( "tests/dir1/two.xml", """
+<rtest name="two">
+  <execute>
+sleep 2
+  </execute>
+</rtest>""")
+writefile( "tests/dir2/three.xml", """
+<rtest name="three">
+  <execute>
+sleep 3
+  </execute>
+</rtest>""")
+
+out,np,nd,nf,nn = run_vvtest('tests')
+assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+tdir = os.path.join( os.getcwd(), results_dir() )
+platname = platform_name(out)
+
+# create a test source tree runtimes file but without any test results
+tr = results.TestResults()
+tr.writeRuntimes( 'tests', None )
+
+# even though a rootrel directory could be determined, no runtime is available
+xdoc = xreader.readDoc('tests/dir1/one.xml')
+tst = TestSpecCreator.createTestObjects( \
+                            xdoc, os.getcwd()+'/tests', 'dir1/one.xml' )[0]
+tm,tv = results.get_execution_time( tst, platname, 'cplr', results.LookupCache() )
+print "time", tm
+assert tm == None
+
+# re-save the testing results (this time the test rootrels can be determined)
+# and create a multiplatform results file
+os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
+os.mkdir('testing')
+run_vvtest( '--save-results' )
+resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+plat,cplr = get_platform_compiler( resultsfname )
+ok,out = run_cmd( resultspy + ' merge '+resultsfname, directory='testing' )
+assert ok
+
+# leave the source tree runtimes file empty and use the multiplatform results
+tm,tv = results.get_execution_time( tst, plat, cplr,
+                                 results.LookupCache(os.getcwd()+'/testing') )
+print "time", tm
+assert tm != None and tm > 0 and tm < 10
+
+# populate the test source tree runtimes file
+tr.readResults( resultsfname )
+tr.writeRuntimes( 'tests', None )
+
+# a time for the test should be found from the source tree runtimes file
+tm,tv = results.get_execution_time( tst, platname, 'cplr', results.LookupCache() )
+print "time", tm
+assert tm != None and tm > 0 and tm < 10

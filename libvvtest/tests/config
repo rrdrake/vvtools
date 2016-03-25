@@ -1,0 +1,91 @@
+#!/usr/bin/env python
+
+import os, sys, re
+import time, glob
+
+# this will os.chdir() to a subdirectory
+from testutils import *
+
+import CommonSpec
+import xmlwrapper
+
+xreader = xmlwrapper.XmlDocReader()
+
+
+def main():
+    """
+    """
+    argL = get_arg_list()
+
+    if len(argL) == 0:
+        argL = """test01
+               """.split()
+
+    for func in argL:
+        rmallfiles()
+        time.sleep(1)
+        print3( '====> ', func )
+        eval( func+'()' )
+
+
+########################################################################
+
+def test01():
+    """
+    use a file idplatform.py in a specified config directory
+    """
+    writefile( "cat.xml", """
+        <rtest name="cat">
+          <execute> sleep 1 </execute>
+        </rtest>""" )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    L = glob.glob( 'TestResults.*' )
+    assert len(L) == 1
+    tdir = L[0]
+
+    writefile( "config/idplatform.py", """
+        def platform( opts ):
+            return "XBox"
+        def compiler( platname, opts ):
+            return "BASIC"
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest( '--config config' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    L = glob.glob( 'TestResults.*' )
+    assert tdir in L
+    L.remove( tdir )
+    assert len(L) == 1
+    tdir2 = L[0]
+    assert tdir2.find( "XBox" ) >= 0
+    xlog = os.path.join( tdir2, 'cat', 'execute.log' )
+    assert len( filegrep( xlog, "COMPILER = BASIC" ) ) == 1
+
+    writefile( "nonsense/idplatform.py", """
+        def platform( opts ):
+            return "PlayStation"
+        def compiler( platname, opts ):
+            return "Fortran"
+        """ )
+
+    os.environ['VVTEST_CONFIGDIR'] = 'nonsense'
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    L = glob.glob( 'TestResults.*' )
+    assert tdir in L and tdir2 in L
+    L.remove( tdir ) ; L.remove( tdir2 )
+    assert len(L) == 1
+    tdir3 = L[0]
+    assert tdir3.find( "PlayStation" ) >= 0
+    xlog = os.path.join( tdir3, 'cat', 'execute.log' )
+    assert len( filegrep( xlog, "COMPILER = Fortran" ) ) == 1
+
+
+########################################################################
+
+main()

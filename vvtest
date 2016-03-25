@@ -1,0 +1,2416 @@
+#!/usr/bin/env python
+
+import sys, os
+import re, string
+import exceptions
+import stat
+import time
+import signal
+import shutil
+import types
+
+version = '27'  # version number; used to check format and for information
+
+usagepage = \
+'''
+  vvtest { -h | -H | --help | -v | --version }
+  vvtest [OPTIONS] [directory ...]
+  vvtest -i [OPTIONS]
+  vvtest -g [kKpP] [directory ...]
+  vvtest -b [OPTIONS]
+  vvtest --extract <to_directory> [OPTIONS] [source_directory ...]
+
+Use -H or --help to get the full man page.
+'''
+
+manpage = \
+'''
+NAME
+      vvtest - generate and/or run a set of execution tests
+      
+      Version = ''' + version + '''
+
+SYNOPSIS
+      1.  vvtest { -h | -H | --help | -v | --version }
+      2.  vvtest [OPTIONS] [directory ...]
+      3.  vvtest -i [OPTIONS]
+      4.  vvtest -g [kKpP] [directory ...]
+      5.  vvtest -b [OPTIONS]
+      6.  vvtest --extract <to_directory> [OPTIONS] [source_directory ...]
+
+DESCRIPTION
+      1. -h gives short usage help, while --help or -H gives long man page.
+      Get the version number with -v or --version.
+
+      2. Execute a set of tests.  The list of tests is determined by recursively
+      scanning the given directories (or the current working directory if no
+      directories are given).  If this is a repeat call and a test results
+      directory already exists, then any new tests are merged into the
+      existing list.  Also in this case, if no directory is given, a scan of
+      the current working directory is not done.
+      
+      The tests are run in a directory whose name starts with TestResults
+      and is appended with the platform (usually uname) and the -o and -O
+      options.  Therefore, the -o and -O options must be specified for each
+      invocation of vvtest (unless the current working directory is one of
+      the TestResults directories).
+
+      If the current working directory is a TestResults directory, then the
+      original options are used.
+      
+      Only those tests are run that show "notrun" or "notdone" and that
+      satisfy the filtering options.  However, if the -k or -K options are
+      used, they take precedence.  Also, if the -F option is used, all the
+      tests are run after being filtered by -kK keyword options.
+      
+      3. Display information on a previous test run.  The same on/off
+      options must be given on the command line when the current working
+      directory is not a TestResults directory.  Also, to get the results of
+      a platform other than the current platform, the --plat option must be
+      used (unless the current working directory is a TestResults directory).
+      
+      4. Generate a test list for later execution by recursively scanning the
+      given directories the same as in number 2.  The test directory will be
+      populated with the test scripts but no tests will be launched.
+
+      5. Rebaseline generated files from a previous run by copying them over
+      the top of the files in the directory which contain the XML test
+      description.  Keywords and parameter options can be given to control
+      which tests get rebaselined, including results keywords like "diff".
+      If no keyword options are specified, then all tests that show a diff
+      status are rebaselined, which would be equivalent to running the
+      command "vvtest -b -k diff".
+      
+      The rebaseline option can be given when the current working directory is
+      a TestResults directory with the same behavior.
+      
+      6. Extract tests from a test tree.  This mode copies the files from the
+      test source directory into the 'to_directory' given as the argument to
+      the --extract option.  Keyword filtering can be applied, and is often
+      used to pull tests that can be distributed to various customers.
+
+OPTIONS
+      -o on_options
+      -O off_options
+            Options are arbitrary and may be used by the execution launch
+            script.  Also, the TestResults directory contains the options.
+      
+      -k keyword
+            Filter the set of tests by including those with keyword.  Multiple
+            -k keyword options are logically ANDed together.  Keywords
+            separated with a "/" are ORed together.  Eg, "-k key1/key2" means
+            if key1 or key2 is contained in the test keyword list, then the
+            test is included.
+            
+            Note that implicit results keywords are available:
+            
+            notrun  : test was in the test list but was not launched
+            notdone : test was launched but did not finish
+            fail    : test finished and returned a fail status
+            diff    : test finished with a diff status
+            pass    : test finished with a pass status
+            timeout : test finished by running out of time
+      
+            For example, "vvtest -k diff" would run all tests that
+            finished with a diff status.  If no keywords are specified,
+            then all tests "notrun" or "notdone" will be run.  If a test times
+            out, it will receive the "fail" and "timeout" implicit keywords.
+      
+      -K keyword
+            Filter the set of tests by excluding those with keyword.  Multiple
+            -K keyword options are logically ANDed together.  Keywords
+            separated with a "/" are ORed together after applying the exclusion
+            operator.  Eg, "-K key1/key2" means "(!key1) OR (!key2)" where
+            "!key" means "key" is not in the test keyword list.
+            
+            Note that if both -k and -K options are given, the expressions are
+            evaluated left to right.
+      
+      --keys
+            Collect the tests in an existing TestResults directory if it exists,
+            or scan the directories given on the command line.  Then gather all
+            the keywords for each of the tests and write them to stdout.  Note
+            that keyword filtering is applied before the keywords are gathered.
+      
+      --files
+            Same as --keys except the collection of test file names is written
+            instead.
+      
+      -w    Wipe out previous test list and test results, if present.  By
+            default, previous tests are only modified or appended to.
+      
+      -p param=value[/param2=value2...]
+            Filter the set of tests by including those whose given parameter
+            has the given value.  If a test does not know the parameter, it
+            is filtered out.  If a value is not given, eg. "-p np=" or "-p np",
+            then any test that does not have the parameter name, eg. "np", is
+            filtered out.  Can also use "np<=4", "np<4", "np>4", "np!=4", etc.
+            Specifications separated by '/' character are OR'ed together, and
+            multiple -p/-P options are AND'ed together.
+      
+      -P param=value[/param2=value2...]
+            Filter the set of tests by excluding those whose given parameter
+            has the given value.  If a test does not know the parameter, it
+            is not filtered out.  If a value is not given, eg. "-P np=" or
+            "-P np", then any test that has the parameter name, eg. "np", is
+            filtered out.  Can also use inequalities.  Specifications separated
+            by '/' character are OR'ed together, and multiple -p/-P options
+            are AND'ed together.
+      
+      -S param=value
+            Set parameter to value.  More than one is accumulated and 'value'
+            can be a space separated list.  Example: -S np=2 -S np="5 8".
+      
+      -x platform[/platform...]
+            Include tests that would be included for the given platform name.
+            Platform names separated by '/' mean OR.  This can be used to run
+            the tests that would run on another platform.  Multiple -x and -X
+            are allowed.  So "-x Linux -X SunOS" would run all tests that would
+            normally run on Linux but not on SunOS.
+      
+      -X platform[/platform...]
+            Exclude tests that would be included for the given platform name.
+            Platform names separated by '/' mean OR.  This can be used to run
+            the tests that are NOT run on another platform.
+      
+      -s <regular expression>, --search <regular expression>
+            Search for the regular expression in the input file(s).  The files
+            specified for soft link or copy are searched for the given regular
+            expression.  May be repeated.  If any regular expressions match
+            in any of the input files, then the test is included; otherwise it
+            is filtered out.  This search is case insensitive.
+      
+      -F    Force tests.  If a test has been already been run, then by default
+            it will not be run again.  This option forces all such tests to be
+            run again.
+
+      -j directory
+            Passed along to the test launch scripts for use in finding the
+            executables to run.  This defines the PROJECT variable available
+            in the test scripts.
+
+      -m    Do not overwrite existing scripts and no clean out.  By default,
+            the individual test scripts are always overritten and all files
+            in the test directory are removed.  Turning this option on
+            will prevent a test script that exists from being overwritten
+            and the test directory will not be cleaned out.
+      
+      -C, --postclean
+            Clean out the test directory of each test after it shows a "pass".
+            Only those tests that "pass" are cleaned out after they run.  The
+            execute.log file is not removed.
+      
+      -A    Force inactive tests.  If a test has been marked inactive by the
+            include/exclude XML tags, this option ignores the mark and the
+            test will appear active.
+
+      -M directory
+            Use the given directory to actually contain the test results.
+            The tests will run faster if a local disk is used to write to.
+            The special value "any" will search for a scratch disk.
+
+      -n integer
+            Set the number of processers to the given value.  By default, an
+            attempt is made to determine the full number of processors
+            available on a machine and utilize all of them.
+      
+      --plat platform_name
+            Use the given platform name for the plugin and defaults.
+            This can be used to specify the platform name, thus overriding
+            the default platform name.  For example, you could use "--plat Linux".
+      
+      --platopt <optname>[=value]
+            Platform options.  Some platform plugins understand special
+            options.  Use this to send command line options into the platform
+            plugin.  For example, use "--platopt ppn=4" to set the number
+            of processors per node to an artificial value of 4.
+      
+      -T timeout
+            Apply a timeout value in seconds to each test.  Zero means no
+            timeout.
+      
+      --timeout-multiplier mult
+            Apply a float multiplier to the timeout value for each test.
+      
+      -L    Do not use log files.  By default, each test output is sent to
+            a log file contained in the run directory.  This option turns
+            off this redirection.  This can be used to debug a single test
+            for example, so that the results of the run are seen immediately.
+            Note that "-n 1" can be used with the -L option to send many test
+            results to stdout/stderr without interleaving the output (the
+            "-n 1" prevents multiple tests from being run simultaneously).
+      
+      -e    Use environment variable overrides.  By default, all environment
+            variables that can influence the execution of the tests are
+            cleared.  This switch will allow certain environment variables
+            to take precedence over the defaults determined by each platform
+            plugin.
+      
+      -a, --analyze
+            Only execute the analysis portions of the tests (and skip running
+            the main code again).  This is only useful if the tests have
+            already been run previously.
+      
+      --pipeline
+            Collect tests in sequential pipelines and submit them to a batch
+            queue rather than executing individual tests as resources become
+            open.  In order to use the qsub capability of batch systems, the
+            plugin for the platform must be set up to launch batch jobs.
+      
+      --qsub-limit <integer>
+            Used in conjunction with the --pipeline switch, this will limit
+            the number of pipelines submitted to the queue at any one time.
+            The default is 5 pipelines.
+      
+      --qsub-length=<integer>
+            Used in conjunction with the --pipeline switch, the qsub-length
+            value specifies (in seconds) how long each batch job should take.
+            The default is 10 minutes.  The longer the length, the more tests
+            will go in each batch job; the shorter the length, the fewer.  A
+            value of zero will force each test to run in a separate batch job.
+            The batch job time is a sum of the execution time of each test.
+      
+      --check=<name>
+            Activates optional sections in the test files.  The execution
+            blocks in the test files may have an ifdef="CHECK_NAME" attribute,
+            where the NAME portion is just upper case of <name>.  Those blocks
+            are not active by default.  Using this option will cause those
+            blocks to be executed as part of the test.
+      
+      --save-results
+            Saves test results for an existing run to the testing directory in
+            a file called 'results.<date>.<platform>.<compiler>.<tag>' where
+            the "tag" is an optional, arbitrary string determined by the
+            --results-tag option.  The testing directory is determined by the
+            platform plugins, but can be overridden by defining the environment
+            variable TESTING_DIRECTORY to the desired absolute path name.
+      
+      --results-tag=<string>
+            When used with --save-results, this adds a string to the results
+            file name within the testing directory.
+      
+      --vg, -vg
+            Pass the -vg option to the test launch script.
+'''
+
+############################################################################
+
+toolsdir = None
+exeName = None
+
+# the globally available option dictionary
+optdict = {}
+
+search_fnmatch = ['*.inp','*.apr','*.i']
+
+testlist_name = 'testlist'
+
+# a FilterExpressions.WordExpression() object filled with the command line
+# -k and -K specifications
+keyword_expr = None
+
+class Configuration:
+    
+    defaults = { \
+                 'toolsdir':None,  # the top level tools directory
+                 'configdir':None,  # the configuration directory
+                 'exepath':None,  # the path to the executables
+                 'onopts':[],
+                 'offopts':[],
+                 'refresh':1,
+                 'postclean':0,
+                 'timeout':None,
+                 'multiplier':1.0,
+                 'preclean':1,
+                 'analyze':0,
+                 'logfile':1,
+               }
+    
+    def get(self, name):
+        """
+        """
+        return self.attrs[name]
+    
+    def set(self, name, value):
+        """
+        """
+        if value == None:
+          self.attrs[name] = Configuration.defaults[name]
+        else:
+          self.attrs[name] = value
+    
+    def __init__(self):
+        self.attrs = {}
+        for n,v in Configuration.defaults.items():
+          self.attrs[n] = v
+
+
+config = Configuration()
+
+
+############################################################################
+
+def XstatusChar(t):
+    
+    if isinstance(t, TestExec.TestExec): ref = t.atest
+    else:                        ref = t
+    
+    if ref.getAttr('state') != "notrun":
+      
+      if ref.getAttr('state') == "done":
+        if ref.getAttr('result') == "timeout": return 'T'
+        return 'X'
+      return 'R'
+    
+    return 'N'  # not run
+
+def XstatusString(t, add_date, test_dir, cwd):
+    """
+    Returns a formatted string containing the job and its status.  If the
+    add_date argument is true, it adds the date the job finished to the
+    returned string.
+    """
+    
+    if isinstance(t, TestExec.TestExec):
+      ref = t.atest
+      s = "%-20s " % ref.getName()
+    else:
+      ref = t
+      s = "%-20s " % t.getName()
+    
+    state = ref.getAttr('state')
+    if state != "notrun":
+      
+      if state == "done":
+        result = ref.getAttr('result')
+        if result == 'diff':
+          s = s + "%-7s %-8s" % ("Exit", "diff")
+        elif result ==  'pass':
+          s = s + "%-7s %-8s" % ("Exit", "pass")
+        elif result == "timeout":
+          s = s + "%-7s %-8s" % ("TimeOut", 'SIGINT')
+        else:
+          s = s + "%-7s %-8s" % ("Exit", "fail(1)")
+        
+        xtime = ref.getAttr('xtime')
+        if xtime >= 0: s = s + (" %-4s" % (str(xtime)+'s'))
+        else:          s = s + "     "
+      else:
+        s = s + "%-7s %-8s     " % ("Running", "")
+    
+    else:
+      s = s + "%-7s %-8s     " % ("NotRun", "")
+    
+    if add_date:
+      xdate = ref.getAttr('xdate')
+      if xdate > 0:
+        s = s + time.strftime( " %m/%d %H:%M:%S", time.localtime(xdate) )
+      else:
+        s = s + "               "
+    
+    if test_dir == None:
+      s = s + " " + ref.getExecuteDirectory()
+    else:
+      d = os.path.join( test_dir, ref.getExecuteDirectory() )
+      sdir = issubdir( cwd, d )
+      if sdir == None or sdir == "":
+        s = s + " " + os.path.basename( ref.getExecuteDirectory() )
+      else:
+        s = s + " " + sdir
+    
+    return s
+
+
+def XstatusResult(t):
+    
+    if isinstance(t, TestExec.TestExec): ref = t.atest
+    else:                        ref = t
+    
+    state = ref.getAttr('state')
+    if state == "notrun" or state == "notdone":
+      return state
+    
+    return ref.getAttr('result')
+
+
+##############################################################################
+#
+# generation of tests
+ 
+def generateTestList( dirs, plat, ufilter ):
+    """
+    """
+    # default scan directory is the current working directory
+    if len(dirs) == 0: dirs = ['.']
+    
+    tlist = TestList.TestList( ufilter )
+    for d in dirs:
+      if not os.path.exists(d):
+        sys.stderr.write('*** ' + exeName + \
+            ': error: directory does not exist: ' + d + '\n')
+        sys.exit(1);
+      tlist.scanDirectory( d, optdict.get('-S',None) )
+    
+    tlist.loadTests()
+    
+    cwd = None
+    test_dir = None
+    cwd = os.getcwd()
+    toprundir = testResultsDir( plat.getName() )
+    test_dir = os.path.join( cwd, toprundir )
+    
+    # TODO: clean up the way/when lists are printed;  in this case, the
+    #       createTestScripts() also prints
+    
+    print "\n   =================================================="
+    sorted_list = tlist.active.values()
+    sorted_list.sort()
+    for atest in sorted_list:
+      print XstatusString(atest, 0, test_dir, cwd)
+    print "   =================================================="
+    
+    createTestDir(toprundir)
+    writeCommandInfo(test_dir, plat)
+    createTestScripts( tlist, test_dir, plat )
+    tlist.stringFileWrite( os.path.join(test_dir, testlist_name) )
+    
+    print "test directory:", toprundir
+
+
+def extractTestFiles( dirs, plat, target_dir, ufilter ):
+    """
+    Uses all the regular filtering mechanisms to gather tests from a test
+    source area and copies the files used for each test into a separate
+    directory.
+    """
+    # default scan directory is the current working directory
+    if len(dirs) == 0: dirs = ['.']
+    
+    tlist = TestList.TestList( ufilter )
+    for d in dirs:
+      if not os.path.exists(d):
+        sys.stderr.write('*** ' + exeName + \
+            ': error: directory does not exist: ' + d + '\n')
+        sys.exit(1);
+      tlist.scanDirectory( d, optdict.get('-S',None) )
+    
+    tlist.loadTests()
+    
+    if not os.path.isabs(target_dir):
+      target_dir = os.path.abspath(target_dir)
+    if not os.path.exists(target_dir):
+      os.makedirs( target_dir )
+    
+    uniqD = {}
+    
+    for xdir,t in tlist.active.items():
+      
+      tname = t.getName()
+      T = (tname, t.getFilename())
+      
+      from_dir = os.path.dirname( t.getFilename() )
+      p = os.path.dirname( t.getFilepath() )
+      if p: to_dir = os.path.normpath( os.path.join( target_dir, p ) )
+      else: to_dir = target_dir
+      
+      if not os.path.exists( to_dir ):
+        os.makedirs( to_dir )
+      tof = os.path.join( target_dir, t.getFilepath() )
+      
+      if not uniqD.has_key(tof):
+        uniqD[tof] = None
+        try: shutil.copy2( t.getFilename(), tof )
+        except IOError, e: pass
+      
+      for f in t.getSourceFiles():
+        fromf = os.path.join( from_dir, f )
+        tof = os.path.join( to_dir, f )
+        tod = os.path.dirname(tof)
+        if not uniqD.has_key(tof):
+          uniqD[tof] = None
+          if not os.path.exists(tod):
+            os.makedirs(tod)
+          
+          if os.path.isdir(fromf):
+            
+            # copy a directory tree, but leave out version control files
+            
+            def wvisit( arg, dname, files ):
+                for n in ['CVS','.cvsignore','.svn','.git','.gitignore']:
+                  while (n in files): files.remove(n)
+                fd = os.path.normpath( os.path.join( arg[0], dname ) )
+                td = os.path.normpath( os.path.join( arg[1], dname ) )
+                if not os.path.exists(td):
+                  os.makedirs(td)
+                for f in files:
+                  ff = os.path.join(fd,f)
+                  if not os.path.isdir(ff):
+                    tf = os.path.join(td,f)
+                    shutil.copy2( ff, tf )
+            
+            saved = os.getcwd()
+            os.chdir(fromf)
+            os.path.walk( '.', wvisit, (fromf, tof) )
+            os.chdir(saved)
+            
+          else:
+            try: shutil.copy2( fromf, tof )
+            except IOError, e: pass
+
+
+##############################################################################
+
+def keywordInformation(tlist):
+    
+    if optdict.has_key('--keys'):
+      print "\nresults keywords: " + string.join( TestSpec.results_keywords )
+      kd = {}
+      for t in tlist.active.values():
+        for k in t.getKeywords():
+          if k not in TestSpec.results_keywords and k != t.getName():
+            kd[k] = None
+      L = kd.keys()
+      L.sort()
+      print "\ntest keywords: "
+      while len(L) > 0:
+        k1 = L.pop(0)
+        if len(L) > 0: k2 = L.pop(0)
+        else:          k2 = ''
+        if len(L) > 0: k3 = L.pop(0)
+        else:          k3 = ''
+        print "  %-20s %-20s %-20s" % (k1,k2,k3)
+    else:
+      assert optdict.has_key('--files')
+      D = {}
+      for t in tlist.active.values():
+        d = os.path.normpath( t.getFilename() )
+        D[d] = None
+      L = D.keys()
+      L.sort()
+      for d in L:
+        print d
+
+##############################################################################
+
+
+def testResultsDir(platform_name):
+    """
+    Generates the directory to hold test results, which is unique up to
+    the platform and on/off options.
+    """
+    toprundir = 'TestResults'
+    toprundir = toprundir + "." + platform_name
+    if optdict.has_key('-o'):
+      toprundir = toprundir + '.ON=' + string.join( optdict['-o'], '_' )
+    if optdict.has_key('-O'):
+      toprundir = toprundir + '.OFF=' + string.join( optdict['-O'], '_' )
+    
+    return toprundir
+
+
+def createTestDir(toprundir):
+    
+    if optdict.has_key('-M'):
+      if makeMirrorDirectory(optdict['-M'], toprundir):
+        return
+    
+    if not os.path.exists(toprundir):
+      os.mkdir(toprundir)
+
+
+def makeMirrorDirectory(Mval, toprundir):
+    # create a directory in a different location and add a link to it
+    if Mval == 'any':
+      
+      for d in ['/var/scratch', '/scratch', '/var/scratch1', '/scratch1', \
+                '/var/scratch2', '/scratch2', '/var/scrl1','/gpfs1']:
+        ud = os.path.join(d, getUserName())
+        if os.path.exists(d) and \
+              ( os.path.exists(ud) or os.access(d, os.W_OK) ):
+          if not os.path.exists(ud):
+            os.mkdir(ud)
+          Mval = ud
+          break
+      if Mval == 'any':
+        return 0  # a scratch dir could be found
+      
+      # also append the current directory name and toprundir name
+      Mval = os.path.join( Mval, os.path.basename( os.getcwd() ),
+                                 os.path.basename(toprundir) )
+    
+    else:
+      Mval = os.path.join( Mval, os.path.basename(toprundir) )
+    
+    if not os.path.exists(Mval):
+      os.makedirs(Mval)
+    
+    if os.path.exists(toprundir) or os.path.islink(toprundir):
+      if os.path.islink(toprundir):
+        os.remove(toprundir)
+      else:
+        if os.path.samefile(Mval, toprundir):
+          raise Exception( \
+                  "mirror directory and test results directory are the same" )
+        print exeName + ": removing directory tree " + toprundir
+        shutil.rmtree(toprundir)
+    
+    os.symlink(Mval, toprundir)
+    
+    return 1
+
+
+def writeCommandInfo(test_dir, plat):
+    """
+    Creates the test results information file.
+    """
+    f = os.path.join(test_dir, 'test.cache')
+    if not os.path.exists( f ):
+      fp = open( f, "w" )
+      fp.write( 'VERSION=' + str(version) + '\n' )
+      fp.write( 'DIR=' + os.getcwd() + '\n' )
+      if optdict.has_key('--plat'):
+        fp.write( 'PLATFORM=' + string.strip(optdict['--plat']) + '\n' )
+      else:
+        fp.write( 'PLATFORM=' + plat.getName() + '\n' )
+      # only write the non-results expression to the info file
+      expr = keyword_expr.getNonResultsExpression()
+      if expr and expr.strip():
+        fp.write( 'KEYWORDS=' + expr + '\n' )
+      if optdict.has_key('-p'):
+        fp.write( 'PARAMETERS=' + string.join( optdict['-p'] ) + '\n' )
+      if config.get('exepath'):
+        fp.write( \
+            'PROJECT=' + os.path.abspath( config.get('exepath') ) + '\n' )
+      if optdict.has_key('-o'):
+        fp.write( 'ONOPTS=' + string.join(optdict['-o'], '+') + '\n' )
+      if optdict.has_key('-O'):
+        fp.write( 'OFFOPTS=' + string.join(optdict['-O'], '+') + '\n' )
+      if optdict.has_key('-T'):
+        fp.write( 'TIMEOUT=' + string.strip( str(optdict['-T']) ) + '\n' )
+      if optdict.has_key('--timeout-multiplier'):
+        fp.write( 'TIMEOUT_MULTIPLIER=' + \
+             string.strip( str(optdict['--timeout-multiplier']) ) + '\n' )
+      if optdict.has_key('-e'):
+        fp.write( 'USE_ENV=1\n' )
+      if optdict.has_key('-A'):
+        fp.write( 'ALL_PLATFORMS=1\n' )
+      if optdict.has_key('--check'):
+        fp.write( 'CHECK=' + string.join( optdict['--check'] ) + '\n' )
+      fp.close()
+
+
+def readCommandInfo():
+    """
+    Check for a file called 'test.cache' that indicates whether the
+    current working directory is a TestResults directory (or subdirectory)
+    then open that file for information.  The test results directory is
+    returned, or None if not in a TestRestults directory.
+    """
+    test_dir = None
+    
+    d = os.getcwd()
+    
+    while d != '/':
+      test_cache = os.path.join(d,'test.cache')
+      if os.path.exists( test_cache ):
+        test_dir = d
+        break
+      # TODO: remove this test after a few months [Jan 21, 2016]
+      test_cache = os.path.join(d,'testAlegra.info')
+      if os.path.exists( test_cache ):
+        test_dir = d
+        break
+      d = os.path.dirname(d)
+    
+    if test_dir != None:
+      
+      if optdict.has_key('-o') or optdict.has_key('-O') or \
+         optdict.has_key('-g'):
+        sys.stderr.write('*** ' + exeName + \
+            ': error: the -g, -o, and -O options are not allowed ' + \
+            'in a TestResults directory\n')
+        sys.exit(1);
+      
+      fp = open( test_cache, "r" )
+      write_version = 0
+      for line in fp.readlines():
+        line = string.strip(line)
+        kvpair = string.split(line, '=', 1)
+        if kvpair[0] == 'VERSION':
+          write_version = int(kvpair[1])
+        elif kvpair[0] == 'DIR':
+          previous_run_dir = kvpair[1]
+        elif kvpair[0] == 'PLATFORM':
+          optdict['--plat'] = kvpair[1]
+        elif kvpair[0] == 'KEYWORDS':
+          if write_version < 27:
+            L = string.split(kvpair[1])
+            if len(L) > 0:
+              keyword_expr.append( L, 'and' )
+          else:
+            expr = kvpair[1].strip()
+            if expr:
+              keyword_expr.append( expr, 'and' )
+          
+        elif kvpair[0] == 'PARAMETERS':
+          L = string.split( kvpair[1] )
+          if optdict.has_key('-p'): optdict['-p'].extend(L)
+          else:                     optdict['-p'] = L
+        elif kvpair[0] == 'PROJECT':
+          # do not replace if the command line contains -j
+          if not optdict.has_key('-j'):
+            optdict['-j'] = kvpair[1]
+            config.set( 'exepath', kvpair[1] )
+        elif kvpair[0] == 'ONOPTS':
+          optdict['-o'] = string.split( kvpair[1], '+' )
+          config.set( 'onopts', optdict['-o'] )
+        elif kvpair[0] == 'OFFOPTS':
+          optdict['-O'] = string.split( kvpair[1], '+' )
+          config.set( 'offopts', optdict['-O'] )
+        elif kvpair[0] == 'TIMEOUT':
+          # do not replace if the command line contains -T
+          if not optdict.has_key('-T'):
+            optdict['-T'] = float(kvpair[1])
+            config.set( 'timeout', optdict['-T'] )
+        elif kvpair[0] == 'TIMEOUT_MULTIPLIER':
+          if not optdict.has_key('--timeout-multiplier'):
+            optdict['--timeout-multiplier'] = float(kvpair[1])
+            config.set( 'multiplier', optdict['--timeout-multiplier'] )
+        elif kvpair[0] == 'USE_ENV':
+          optdict['-e'] = ''
+        elif kvpair[0] == 'ALL_PLATFORMS':
+          optdict['-A'] = ''
+        elif kvpair[0] == 'CHECK':
+          optdict['--check'] = string.split( kvpair[1] )
+      fp.close()
+    
+    return test_dir
+
+
+def runTests( dirs, plat, ufilter ):
+    """
+    Executes a list of tests.
+    """
+    # determine the directory that stores the test results then create it
+    toprundir = testResultsDir(plat.getName())
+    createTestDir(toprundir)
+    test_dir = os.path.join( os.getcwd(), toprundir )
+    
+    if optdict.has_key('-w'):
+      print '/bin/rm -rf ' + toprundir + '/*'
+      for f in os.listdir(toprundir):
+        df = os.path.join( toprundir, f )
+        if os.path.isdir(df):
+          shutil.rmtree( df, 0 )
+        else:
+          try: os.remove(df)
+          except: pass
+    
+    writeCommandInfo(test_dir, plat)
+    
+    # create test list
+    
+    tlist = TestList.TestList( ufilter )
+    
+    # generate test list by scanning directories
+    if len(dirs) == 0:
+      dirs = ['.']
+    for d in dirs:
+      if not os.path.exists(d):
+        sys.stderr.write('*** ' + exeName + \
+            ': error: directory does not exist: ' + d + '\n')
+        sys.exit(1);
+      tlist.scanDirectory( d, optdict.get('-S',None) )
+    
+    if os.path.exists( os.path.join(test_dir, testlist_name) ):
+      # merge in existing test results
+      readRestartFiles( test_dir, tlist )
+    
+    tlist.loadTests( analyze_only=optdict.has_key('-a') )
+    
+    loadExecutionTimes( tlist, plat )
+    
+    # save the test list in the TestResults directory
+    tlist.stringFileWrite( os.path.join(test_dir, testlist_name) )
+    
+    if len(tlist.active) > 0:
+      
+      createTestScripts( tlist, test_dir, plat )
+      
+      if not optdict.has_key('--pipeline'):
+        
+        executeTestList( tlist, test_dir, plat )
+        
+        print "test directory:", toprundir
+      
+      else:
+        
+        pipeLineTestList( tlist, test_dir, plat )
+    
+    else:
+      print "\n--------- no tests to run -----------\n"
+
+
+def createTestScripts(tlist, test_dir, plat):
+    
+    # create directories and generate test scripts
+    
+    if not optdict.has_key('-g') and not optdict.has_key('--pipeline'):
+      plat.initProcs( test_dir )
+    
+    if len(tlist.active) > 0:
+      
+      if not optdict.has_key('-g'):
+        
+        cwd = os.getcwd()
+        
+        # dump out the tests that will be run
+        print "\n-------- running these tests ---------"
+        sorted_list = tlist.active.values()
+        sorted_list.sort()
+        for atest in sorted_list:
+          print XstatusString(atest, 0, test_dir, cwd)
+        print "--------------------------------------\n"
+      
+      tlist.createTestExecs( test_dir, plat, config )
+
+
+def printResults( atestlist, add_date, test_dir, do_html ):
+    """
+    Prints a summary to the screen and also creates an HTML summary file.
+    """
+    cwd = os.getcwd()
+    sorted_list = atestlist.active.values()
+    sorted_list.sort()
+    Lfail = []; Ltime = []; Ldiff = []; Lpass = []; Lnrun = []; Lndone = []
+    print "=================================================="
+    for atest in sorted_list:
+      statr = XstatusResult(atest)
+      if   statr == "fail":    Lfail.append(atest)
+      elif statr == "timeout": Ltime.append(atest)
+      elif statr == "diff":    Ldiff.append(atest)
+      elif statr == "pass":    Lpass.append(atest)
+      elif statr == "notrun":  Lnrun.append(atest)
+      elif statr == "notdone": Lndone.append(atest)
+      print XstatusChar(atest), XstatusString(atest, add_date, test_dir, cwd)
+    print "=================================================="
+    sumstr = str(len(Lpass)) + " pass, " + \
+             str(len(Ltime)) + " timeout, " + \
+             str(len(Ldiff)) + " diff, " + \
+             str(len(Lfail)) + " fail, " + \
+             str(len(Lnrun)) + " notrun, " + \
+             str(len(Lndone)) + " notdone"
+    print "Summary: " + sumstr
+    
+    if do_html:
+      printHTMLResults( sumstr, test_dir,
+                        Lfail, Ltime, Ldiff, Lpass, Lnrun, Lndone )
+
+
+def printHTMLResults( sumstr, test_dir,
+                      Lfail, Ltime, Ldiff, Lpass, Lnrun, Lndone ):
+    """
+    Opens and writes an HTML summary file in the test directory.
+    """
+    
+    if test_dir == ".":
+      test_dir = os.getcwd()
+    if not os.path.isabs(test_dir):
+      test_dir = os.path.abspath(test_dir)
+    
+    fp = open("summary.htm","w")
+    fp.write( "<html>\n<head>\n<title>Test Results</title>\n" )
+    fp.write( "</head>\n<body>\n" )
+    
+    # a summary section
+    
+    fp.write( "<h1>Summary</h1>\n" )
+    fp.write( "  <ul>\n" )
+    fp.write( "  <li> Directory: " + test_dir + "\n" )
+    fp.write( "  <li> Options: " )
+    if optdict.has_key('-o'):
+      fp.write( ' -o ' + string.join(optdict['-o'],'+') )
+    if optdict.has_key('-O'):
+      fp.write( ' -O ' + string.join(optdict['-O'],'+') )
+    if optdict.has_key('-j'):
+      fp.write( ' -j ' + optdict['-j'] )
+    if optdict.has_key('--plat'):
+      fp.write( ' --plat ' + optdict['--plat'] )
+    if optdict.has_key('-T'):
+      fp.write( ' -T ' + str(optdict['-T']) )
+    if optdict.has_key('--timeout-multiplier'):
+      fp.write( ' --timeout-multiplier ' + \
+                        str(optdict['--timeout-multiplier']) )
+    if optdict.has_key('-e'):
+      fp.write( ' -e ' )
+    fp.write( "  </li>\n" )
+    fp.write( "  <li> " + sumstr + "</li>\n" )
+    fp.write( "  </ul>\n" )
+    
+    # segregate the tests into implicit keywords, such as fail and diff
+    
+    fp.write( '<h1>Tests that showed "fail"</h1>\n' )
+    writeHTMLTestList( fp, test_dir, Lfail )
+    fp.write( '<h1>Tests that showed "timeout"</h1>\n' )
+    writeHTMLTestList( fp, test_dir, Ltime )
+    fp.write( '<h1>Tests that showed "diff"</h1>\n' )
+    writeHTMLTestList( fp, test_dir, Ldiff )
+    fp.write( '<h1>Tests that showed "notdone"</h1>\n' )
+    writeHTMLTestList( fp, test_dir, Lndone )
+    fp.write( '<h1>Tests that showed "pass"</h1>\n' )
+    writeHTMLTestList( fp, test_dir, Lpass )
+    fp.write( '<h1>Tests that showed "notrun"</h1>\n' )
+    writeHTMLTestList( fp, test_dir, Lnrun )
+    
+    fp.write( "</body>\n</html>\n" )
+    fp.close()
+
+
+def writeHTMLTestList( fp, test_dir, tlist ):
+    """
+    Used by printHTMLResults().  Writes the HTML for a list of tests to the
+    HTML summary file.
+    """
+    cwd = os.getcwd()
+    
+    fp.write( '  <ul>\n' )
+    
+    for atest in tlist:
+      
+      fp.write( '  <li><code>' + XstatusString(atest, 1, test_dir, cwd) + '</code>\n' )
+      
+      if isinstance(atest, TestExec.TestExec): ref = atest.atest
+      else:                            ref = atest
+      
+      tdir = os.path.join( test_dir, ref.getExecuteDirectory() )
+      assert cwd == tdir[:len(cwd)]
+      reltdir = tdir[len(cwd)+1:]
+      
+      fp.write( "<ul>\n" )
+      thome = atest.getRootpath()
+      xfile = os.path.join( thome, atest.getFilepath() )
+      fp.write( '  <li>XML: <a href="file://' + xfile + '" ' + \
+                       'type="text/plain">' + xfile + "</a></li>\n" )
+      fp.write( '  <li>Parameters:<code>' )
+      for (k,v) in atest.getParameters().items():
+        fp.write( ' ' + k + '=' + v )
+      fp.write( '</code></li>\n' )
+      fp.write( '  <li>Keywords: <code>' + string.join(atest.getKeywords()) + \
+                 ' ' + string.join( atest.getResultsKeywords() ) + \
+                 '</code></li>\n' )
+      fp.write( '  <li>Status: <code>' + XstatusString(atest, 1, test_dir, cwd) + \
+                 '</code></li>\n' )
+      fp.write( '  <li> Files:' )
+      if os.path.exists(reltdir):
+        for f in os.listdir(reltdir):
+          fp.write( ' <a href="file:' + os.path.join(reltdir,f) + \
+                    '" type="text/plain">' + f + '</a>' )
+      fp.write( '</li>\n' )
+      fp.write( "</ul>\n" )
+      fp.write( "</li>\n" )
+    fp.write( '  </ul>\n' )
+
+
+def pipelineInfo( test_dir, plat ):
+    """
+    Extracts information from a previous pipeline run.  In particular,
+    pipelines that had notdone or notrun tests are given more detail.
+    """
+    qidL = []
+    for f in os.listdir(test_dir):
+      if f[:5] == 'pipe.':
+        try: qid = int( string.split( f, '.', 1 )[1] )
+        except: pass
+        else:
+          qidL.append( qid )
+    qidL.sort()
+    print "Found", len(qidL), "pipelines"
+    
+    numt = {}
+    for qid in qidL:
+      f = 'testlist.'+str(qid)
+      try:
+        fp = open( f, 'r' )
+      except:
+        print "*** pipeline " + str(qid) + ": could not open", f
+        numt[qid] = 0
+        continue
+      n = 0
+      for line in fp.readlines():
+        line = string.strip(line)
+        if line and line[0] != '#':
+          n = n + 1
+      fp.close()
+      numt[qid] = n
+    s = "Pipeline id/num tests"
+    for qid in qidL: s = s + ' ' + str(qid) + '/' + str(numt[qid])
+    print s
+    
+    L = []
+    for qid in qidL:
+      if not os.path.exists( 'pipe-out.'+str(qid) ):
+        L.append( str(qid) )
+    if len(L) > 0:
+      print "Didn't start: " + string.join(L)
+    
+    L = []
+    for qid in qidL:
+      f = 'pipe-out.'+str(qid)
+      if os.path.exists(f):
+        try:
+          sz = os.path.getsize(f)
+          fp = open(f,'r')
+          fp.seek( max(sz-512, 0) )
+          buf = fp.read(512)
+          fp.close()
+        except:
+          print "*** pipeline " + str(qid) + ": could not read", f
+          continue
+        if buf.find("queue job finished cleanly") < 0:
+          L.append( str(qid) )
+    if len(L) > 0:
+      print "Didn't finish: " + string.join(L)
+    
+    cwd = os.getcwd()
+    
+    for qid in qidL:
+      f = 'testlist.'+str(qid)
+      if os.path.exists(f):
+        
+        tl = TestList.TestList()
+        tl.readFile(f)
+        
+        f = 'launched.'+str(qid)
+        if os.path.exists(f):
+          tl.readFile(f)
+        else:
+          print "Pipe", qid, "launched no tests; test list:"
+          for xdir,t in tl.filed.items():
+            print "     ", t.getExecuteDirectory()
+          continue
+        
+        f = 'finished.'+str(qid)
+        if os.path.exists(f):
+          tl.readFile(f)
+        
+        for xdir,t in tl.filed.items():
+          if XstatusResult(t) in ['notdone','notrun']:
+            
+            print "Pipe", qid, "has notrun or notdone tests; test list:"
+            for tline in tl.readFileLines( 'testlist.'+str(qid) ):
+              t1 = TestSpecCreator.fromString(tline)
+              xdir = t1.getExecuteDirectory()
+              t2 = tl.filed[ xdir ]
+              statstr = XstatusString( t2, 1, test_dir, cwd )
+              
+              # get a past run time from the 'runtimes' file, if available
+              rt = '?'
+              
+              print "     %-90s"%statstr + " runtimes time =", rt
+            
+            break
+
+
+def executeTestList( tlist, test_dir, plat, fsuffix='' ):
+    """
+    """
+    plat.display()
+    starttime = time.time()
+    print "Start time:", time.ctime( starttime )
+    
+    totnum = tlist.numTestExec()  # total number of tests to be run
+    numrun = 0
+
+    # execute tests
+    
+    launchfname = os.path.join(test_dir, "launched" + fsuffix)
+    launchfile = tlist.openFileForWrite( launchfname )
+    launchfile.close()
+    
+    donefname = os.path.join(test_dir, "finished" + fsuffix)
+    donefile = tlist.openFileForWrite( donefname )
+    donefile.close()
+    
+    cwd = os.getcwd()
+    
+    run_list = []
+    done_list = []
+    only_analyze_left = 0
+    
+    while 1:
+      
+      new_run_list = []
+      doneL = []
+      for t in run_list:
+        if t.poll():
+          doneL.append( TestSpecCreator.toString(t.atest) + os.linesep )
+          print "%-12s" % "finished:", XstatusString(t, 0, test_dir, cwd)
+          done_list.append(t)
+        else:
+          new_run_list.append(t)
+      if len(doneL) > 0:
+        # append the test lines to the done file
+        donefile = open( donefname, "a" )
+        for s in doneL:
+          donefile.write( s )
+        donefile.close()
+      run_list = new_run_list
+      
+      if len(run_list) == 0 and tlist.numTestExec() == 0:
+        # no tests running and no more tests to run, so we are done
+        break
+      
+      # the --intr option is used for testing and interrupt
+      if optdict.has_key('--intr') and \
+            len(run_list)+len(done_list) == optdict['--intr']:
+        time.sleep(1.0)
+        print exeName + ": interrupting after", optdict['--intr'], \
+              "tests due to the --intr option"
+        os.kill( os.getpid(), signal.SIGINT )
+        time.sleep(60)
+        sys.exit(1)
+      
+      # find next test to run
+      
+      next = tlist.popNonFastNonParentTestExec( plat )
+      
+      if next == None:
+        next = tlist.popNonParentTestExec( plat )
+      
+      if next == None and len(run_list) == 0:
+        # no test is selected but no tests are running, so must be analyze
+        # tests left or tests that require more processors than
+        # the platform has .. try for the later
+        next = tlist.popNonParentTestExec()
+      
+      if next == None and plat.queryProcs(1) and \
+         (only_analyze_left or len(run_list) == 0):
+        only_analyze_left = 1  # true
+        while 1:
+          next = tlist.popTestExec()
+          if next == None:
+            break
+          k = next.badChild()
+          if k != None:
+            print 'Note: skipping analyze for "' + \
+                  next.atest.getExecuteDirectory() + \
+                  '" due to child "' + k.atest.getExecuteDirectory() + '"'
+          else:
+            break
+      
+      if next != None:
+        
+        if optdict.has_key('-L'):
+          print "\n****************************************************"
+          print "******************** BEGIN TEST ********************"
+          print "****************************************************\n"
+        
+        next.start( config )
+        launchfile = open( launchfname, "a" )
+        launchfile.write( TestSpecCreator.toString(next.atest) + '\n' )
+        launchfile.close()
+        
+        numrun = numrun + 1
+        s = "%-12s" % ("(" + str(numrun) + " of " + str(totnum) + ")")
+        print s, XstatusString(next, 0, test_dir, cwd)
+        
+        run_list.append(next)
+        
+#        time.sleep(1)  # give the system some breathing room
+      
+      else:
+        # more tests but not enough free resources .. wait a few
+        time.sleep(1)
+    
+    if optdict.has_key('-L'):
+      print "\n****************************************************"
+      print "********************* END TESTS ********************"
+      print "****************************************************\n"
+    
+    elapsed = time.time() - starttime
+    h = int( elapsed / 3600 )
+    m = int( (elapsed - h * 3600) / 60 )
+    if h == 0 and m == 0: m = 1
+    print "Finish time:", time.ctime( time.time() ) + \
+          " (elapsed %dh %dm)" % (h,m)
+    
+    printResults( tlist, 0, test_dir, 1 )
+    
+    print "Finish time:", time.ctime( time.time() ) + \
+          " (elapsed %dh %dm)" % (h,m)
+
+
+def pipeLineTestList( tlist, test_dir, plat ):
+    """
+    The 'tlist' is a TestList class instance.
+    """
+    pipes = Pipelines( plat, tlist )
+    
+    plat.display()
+    starttime = time.time()
+    print "Start time:", time.ctime( starttime )
+    
+    # clean up old pipeline files
+    print "rm pipe*"
+    for f in os.listdir(test_dir):
+      if f[:4] == 'pipe':
+        os.remove( os.path.join(test_dir,f) )
+    
+    # write testlist files for each qsub
+    
+    qsubids = pipes.writeQsubScripts( test_dir )
+    
+    qsubs_started = {}  # maps qid to (queue job id, submit time)
+    qsubs_stopped = {}  # maps qid to None
+    
+    # determine a limit on the number of processors to use
+    
+    if optdict.has_key('-n'):
+      proc_limit = int(optdict['-n'])
+      # make sure limit is able to handle all tests
+      for qid,np in qsubids.items():
+        if np > proc_limit:
+          print "*** "+exeName+": error: -n option specified", proc_limit, \
+                "processors but at least one test requires", np
+          sys.exit(1)
+    else:
+      # no limit given, just add up all numbers of processors
+      proc_limit = 0
+      for qid,np in qsubids.items():
+        assert np > 0
+        proc_limit += np
+    
+    if optdict.has_key('-g'):
+      return
+    
+    # manage the qsubs by looking for special files
+    
+    procs_used = 0
+    
+    qsublimit = optdict.get( '--qsub-limit', plat.getDefaultQsubLimit() )
+    
+    qidL = qsubids.keys()
+    
+    while len(qsubs_stopped) < len(qsubids):
+      
+      sleep = 1  # flag to sleep (below) for a few seconds when no activity
+      
+      # check for finished qsubs
+      
+      D = {}
+      for qid in qidL:
+        if qsubs_started.has_key(qid) and not qsubs_stopped.has_key(qid):
+          D[qid] = qsubs_started[qid][0]
+      if len(D) > 0:
+        statusD = plat.Qquery( D.values() )
+        for qid,jobid in D.items():
+          if not statusD[jobid]:
+            # empty status means its not in the queue, but double check
+            # that either the out file exists or enough time has elapsed
+            # since the submit occurred
+            pout = os.path.join( test_dir, 'pipe-out.' + str(qid) )
+            elapse = time.time() - qsubs_started[qid][1]
+            if elapse > 30 or os.path.exists(pout):
+              sleep = 0
+              qsubs_stopped[qid] = None
+              print 'finished: pipeline "' + str(qid) + \
+                    '", number remaining:', len(qsubids) - len(qsubs_stopped)
+              procs_used = procs_used - qsubids[qid]
+              if procs_used < 0: procs_used = 0
+      
+      # see if another qsub can be submitted
+      
+      if len(qsubs_stopped) < len(qsubids) and \
+         len(qsubs_started) - len(qsubs_stopped) < qsublimit:
+        
+        # start another qsub
+        for newqid in qidL:
+          if not qsubs_started.has_key(newqid) and \
+             ( newqid != -1 or len(qsubs_stopped) == len(qsubids)-1 ):
+            if procs_used + qsubids[newqid] <= proc_limit:
+              sleep = 0
+              
+              if newqid == -1:
+                # before running all the analyze tests, check if children
+                # failed, did not finish, or did not run
+                
+                # first, update the test list with current results
+                time.sleep(5)
+                for qid in qidL:
+                  fname = os.path.join(test_dir, "launched" + '.' + str(qid))
+                  if os.path.exists( fname ):
+                    tlist.readFile( fname )
+                  fname = os.path.join(test_dir, "finished" + '.' + str(qid))
+                  if os.path.exists( fname ):
+                    tlist.readFile( fname )
+                # thin down analyze list by whether children have a bad state
+                Lanalyze2 = []
+                for xt in pipes.Lanalyze:
+                  k = xt.badChild()
+                  if k != None:
+                    print 'Note: skipping analyze in final pipeline for "' + \
+                          xt.atest.getExecuteDirectory() + '" due to child "' + \
+                          k.atest.getExecuteDirectory() + '"'
+                  else:
+                    Lanalyze2.append(xt)
+                if len(Lanalyze2) == 0:
+                  qsubs_stopped[-1] = None
+                  break
+                # write a new analyze pipeline out
+                pipes.writeQsubScripts( test_dir, Lanalyze2 )
+              
+              print 'launching: pipeline "' + str(newqid) + '"'
+              pout = os.path.join( test_dir, 'pipe-out.' + str(newqid) )
+              pin = os.path.join( test_dir, 'pipe.' + str(newqid) )
+              jobid = plat.Qsubmit( test_dir, pout, pin )
+              qsubs_started[newqid] = (jobid,time.time())
+              procs_used = procs_used + qsubids[newqid]
+              break
+      
+      if sleep and len(qsubs_stopped) < len(qsubids):
+        time.sleep(2)
+    
+    # when all are finished, combine results into "finished" file
+    
+    NF = []
+    NS = []
+    time.sleep(5)  # allow file system to propogate finished.* files
+    for qid in qidL:
+      fname = os.path.join(test_dir, "launched" + '.' + str(qid))
+      if os.path.exists( fname ):
+        tlist.readFile( fname )
+      fname = os.path.join(test_dir, "finished" + '.' + str(qid))
+      if os.path.exists( fname ):
+        tlist.readFile( fname )
+      pout = os.path.join( test_dir, 'pipe-out.' + str(qid) )
+      if os.path.exists(pout):
+        sz = os.path.getsize(pout)
+        off = max(sz-512, 0)
+        fp = open( pout, 'rb' )
+        fp.seek(off)
+        buf = fp.read(512)
+        fp.close()
+        if buf.find("queue job finished cleanly") < 0:
+          NF.append(str(qid))
+      else:
+        NS.append(str(qid))
+    
+    # print results
+    
+    elapsed = time.time() - starttime
+    h = int( elapsed / 3600 )
+    m = int( (elapsed - h * 3600) / 60 )
+    if h == 0 and m == 0: m = 1
+    print "Finish time:", time.ctime( time.time() ) + \
+          " (elapsed %dh %dm)" % (h,m)
+    
+    printResults( tlist, 1, test_dir, 1 )
+    
+    if len(NS) > 0:
+      print "*** Warning: these pipe numbers did not seem to start:", \
+            string.join(NS)
+    if len(NF) > 0:
+      print "*** Warning: these pipe numbers may have timed out:", \
+            string.join(NF)
+    
+    print "Finish time:", time.ctime( time.time() ) + \
+          " (elapsed %dh %dm)" % (h,m)
+
+
+def loadExecutionTimes( tlist, plat ):
+    """
+    For each test, a 'runtimes' file will be read (if it exists) and the
+    run time for this platform extracted.  This run time is saved in the
+    test as the 'runtime' data member.
+    """
+    pname = plat.getName()
+    cplr = plat.getCompiler()
+    
+    cache = results.LookupCache( plat.testingDirectory() )
+    
+    for t in tlist.active.values():
+      
+      # grab explicit timeout value, if the test specifies it
+      tout = t.getTimeout()
+      
+      # look for a previous runtime value
+      tlen,tresult = results.get_execution_time( t, pname, cplr, cache )
+      
+      if tlen != None:
+        if tresult == "timeout":
+          # for tests that timed out, apply a large multiplier
+          if tlen < 10*60: tlen = 30*60
+          elif tlen < 60*60: tlen = 60*60
+          elif t.hasKeyword("long"):
+            # only let long tests achieve times longer than an hour
+            if tlen < 60*60: tlen = 2*60*60
+            else: tlen = 2*tlen
+          if tout == None:
+            tout = tlen
+        elif tout == None:
+          # try to allow for test runtime variability
+          if tlen < 120:
+            if 2*tlen < 60:
+              tout = 60
+            else:
+              tout = tlen * 2
+          else:
+            tout = int( float(tlen)*1.3 )
+      
+      else:
+        
+        if tout != None:
+          # use the explicit timeout value to approximate the runtime
+          tlen = tout
+        else:
+          # the default depends on if the 'long' keyword is present
+          if t.hasKeyword("long"):
+            tlen = 60*60  # one hour
+          else:
+            tlen = 10*60  # 10 minutes
+          if tout == None:
+            tout = tlen
+      
+      t.setAttr( 'runtime', int(tlen) )
+      
+      tout = int( optdict.get( '-T', tout ) )
+      tout = int( float(tout) * optdict.get('--timeout-multiplier',1.0) )
+      t.setAttr( 'timeout', tout )
+    
+    cache = None
+
+
+class Pipelines:
+    
+    def __init__(self, plat, tlist):
+        """
+        The 'tlist' is a TestList class instance.
+        """
+        self.plat = plat
+        self.tlist = tlist
+        self.Tzero = 21*60*60  # no timeout in pipeline mode is 21 hours
+        
+        self.createTestGroups()
+    
+    def createTestGroups(self):
+        """
+        """
+        qlen = optdict.get( '--qsub-length', 10*60 )
+        qL = []
+        self.Lanalyze = []
+        for np in self.tlist.getTestExecProcList():
+          xL = []
+          for tx in self.tlist.getTestExecList(np):
+            if tx.isParent():
+              self.Lanalyze.append(tx)
+            else:
+              xL.append( (tx.atest.getAttr('runtime'),tx) )
+          xL.sort()
+          L = []
+          tsum = 0
+          for rt,tx in xL:
+            if tx.atest.getAttr('timeout') == 0:
+              # tests without a timeout get their own group
+              qL.append( [ self.Tzero, len(qL), [tx] ] )
+            else:
+              if len(L) > 0 and tsum + rt > qlen:
+                qL.append( [ tsum, len(qL), L ] )
+                L = []
+                tsum = 0
+              L.append( tx )
+              tsum += rt
+          if len(L) > 0:
+            qL.append( [ tsum, len(qL), L ] )
+        
+        qL.sort()
+        qL.reverse()
+        self.qsublists = map( lambda L: L[2], qL )
+    
+    def writeQsubScripts( self, test_dir, analyzeL=None):
+        """
+        """
+        if analyzeL == None:
+          for i in range(len(self.qsublists)):
+            try: os.unlink( os.path.join( test_dir, 'testlist.' + str(i) ) )
+            except: pass
+            try: os.unlink( os.path.join( test_dir, 'launched.' + str(i) ) )
+            except: pass
+            try: os.unlink( os.path.join( test_dir, 'finished.' + str(i) ) )
+            except: pass
+        
+        commonopts = ''
+        if optdict.has_key('-e'): commonopts = commonopts + '-e '
+        if optdict.has_key('-C'): commonopts = commonopts + '-C '
+        for k,v in optdict.get('--platopt',{}).items():
+          commonopts = commonopts + '--platopt ' + k + '=' + v + ' '
+        
+        qsubids = {}  # maps qpipe id to max number of processors for that pipe
+        
+        if analyzeL == None:
+          qid = 0
+          for qL in self.qsublists:
+            self.do_queue_pipe( qid, qL, qsubids, test_dir, commonopts )
+            qid = qid + 1
+          if len(self.Lanalyze) > 0:
+            self.do_queue_pipe( -1, self.Lanalyze, qsubids, test_dir, commonopts )
+        
+        elif len(analyzeL) > 0:
+          self.do_queue_pipe( -1, analyzeL, qsubids, test_dir, commonopts )
+        
+        if analyzeL == None:
+          L = qsubids.keys() ; L.sort()
+          self.tlist.pipelineFileWrite( os.path.join(test_dir, "launched"), L )
+          self.tlist.pipelineFileWrite( os.path.join(test_dir, "finished"), L )
+        
+        return qsubids
+    
+    def do_queue_pipe(self, qnumber, qlist, npD, tdir, comopts):
+        """
+        """
+        qidstr = str(qnumber)
+        
+        tl = TestList.TestList()
+        maxnp = 0
+        qtime = 0
+        for tx in qlist:
+          np = int( tx.atest.getParameters().get('np', 0) )
+          if np <= 0: np = 1
+          maxnp = max( maxnp, np )
+          tl.addTest(tx.atest)
+          qtime += int( tx.atest.getAttr('timeout') )
+        
+        if qtime == 0:
+          qtime = self.Tzero  # give it the "no timeout" length of time
+        else:
+          # allow more time in the queue than calculated
+          if qtime < 60:
+            qtime = 120
+          elif qtime < 600:
+            qtime *= 2
+          else:
+            qtime = int( float(qtime) * 1.3 )
+        
+        npD[qnumber] = maxnp
+        
+        tl.stringFileWrite( os.path.join( tdir, 'testlist.' + qidstr ) )
+        
+        fp = open( os.path.join( tdir, 'pipe.' + qidstr ), "w" )
+        
+        pout = os.path.join( tdir, 'pipe-out.' + qidstr )
+        hdr = self.plat.getQsubScriptHeader( maxnp, qtime, tdir, pout )
+        fp.writelines( [ hdr + '\n\n',
+                         'cd ' + tdir + ' || exit 1\n',
+                         'echo "job start time = `date`"\n' + \
+                         'echo "job time limit = ' + str(qtime) + '"\n' ] )
+        
+        # set the environment variables from the platform into the script
+        for k,v in self.plat.getEnvironment().items():
+          fp.write( 'setenv ' + k + ' "' + v  + '"\n' )
+        
+        # collect relevant options to pass to the qsub vvtest invocation
+        taopts = '--qsub-id=' + qidstr + ' '
+        taopts += comopts
+        if len(qlist) == 1:
+          # force a timeout for pipes with only one test
+          if qtime < 600: taopts += ' -T ' + str(qtime*0.90)
+          else:           taopts += ' -T ' + str(qtime-120)
+        
+        fp.writelines( [ 'vvtest ' + taopts + ' || exit 1\n\n' ] )
+        
+        # put in an echo to help debug when jobs timeout
+        fp.writelines( [ 'echo "queue job finished cleanly"\n' ] )
+        
+        fp.close()
+
+
+def saveResults( tlist, plat, test_dir, tag ):
+    """
+    Option is
+    
+      --save-results
+    
+    which writes to the platform config testing directory (which looks first at
+    the TESTING_DIRECTORY env var).  Can add
+    
+      --results-tag <string>
+    
+    which is appended to the results file name.
+    """
+    pname = plat.getName()
+    cplr = plat.getCompiler()
+    
+    L = []
+    for o in optdict.get('-o',[]):
+      if o != cplr:
+        L.append(o)
+    L.sort()
+    L.insert( 0, cplr )
+    optstag = '+'.join(L)
+    
+    rdir = plat.testingDirectory()
+    if rdir == None or not os.path.isdir(rdir):
+      raise Exception( "invalid testing directory: " + str(rdir) )
+    
+    # uses the minimum date of all the tests to determine the date stamp
+    curdate = time.time()
+    mindate = curdate
+    tr = results.TestResults()
+    for t in tlist.active.values():
+      tr.addTest(t)
+      d = t.getAttr('xdate',-1)
+      if d > 0:
+        mindate = min( mindate, d )
+    
+    if mindate == curdate:
+      # no test was started, so no date is available from the test list;
+      # use the date stamp on the testlist file instead
+      if test_dir != None:
+        tl = os.path.join( test_dir, 'testlist' )
+        if os.path.exists(tl):
+          mindate = os.path.getmtime(tl)
+      else:
+        raise Exception( \
+               "Could not determine date stamp for test results file name" )
+    
+    datestr = time.strftime( "%Y_%m_%d", time.localtime(mindate) )
+    L = ['results',datestr,pname,optstag]
+    if tag != None: L.append(tag)
+    fname = os.path.join( rdir, string.join( L, '.' ) )
+    
+    mach = os.uname()[1]
+    tr.writeResults( fname, pname, cplr, mach, test_dir )
+
+
+def readRestartFiles( test_dir, tlist, fname_suffix='' ):
+    """
+    Read the files produced by a previous run and return the resulting
+    TestList object.  Returns the TestList object and true if the scan
+    directory was given as an absolute path.
+    """
+    fname = os.path.join(test_dir, testlist_name) + fname_suffix
+    tlist.readFile( fname )
+    
+    fname = os.path.join(test_dir, "launched") + fname_suffix
+    if os.path.exists( fname ):
+      tlist.readFile( fname )
+    
+    fname = os.path.join(test_dir, "finished") + fname_suffix
+    if os.path.exists( fname ):
+      tlist.readFile( fname )
+
+
+def restartTests( test_dir, plat, ufilter ):
+    
+    assert test_dir != None
+    
+    path_filter = os.getcwd()
+    
+    fsuffix = ''
+    if optdict.has_key('--qsub-id'):
+      fsuffix = '.' + optdict['--qsub-id']
+    
+    tlist = TestList.TestList( ufilter )
+    readRestartFiles( test_dir, tlist, fsuffix )
+    
+    reld = computeRelativePath( os.path.abspath(test_dir), os.getcwd() )
+    
+    tlist.loadTests( filter_dir=reld, analyze_only=optdict.has_key('-a') )
+    
+    if '--qsub-id' not in optdict:
+      loadExecutionTimes( tlist, plat )
+    
+    tlist.stringFileWrite( os.path.join(test_dir, "testlist") + fsuffix )
+    
+    if len(tlist.active) > 0:
+      
+      cwd = os.getcwd()
+      
+      # dump out the tests that will actually be run
+      print "\n-------- running these tests ---------"
+      sorted_list = tlist.active.values()
+      sorted_list.sort()
+      for atest in sorted_list:
+        print XstatusString(atest, 0, test_dir, cwd)
+      print "--------------------------------------\n"
+      
+      if not optdict.has_key('--pipeline'):
+        
+        plat.initProcs( test_dir )
+        
+        tlist.createTestExecs( test_dir, plat, config )
+        
+        executeTestList( tlist, test_dir, plat, fsuffix )
+      
+      else:
+        
+        tlist.createTestExecs( test_dir, plat, config )
+        pipeLineTestList( tlist, test_dir, plat )
+    
+    else:
+      print "\n--------- no tests to run -----------\n"
+
+
+def baselineTests( test_dir, plat, ufilter ):
+    
+    cwd = os.getcwd()
+    
+    path_filter = None
+    if test_dir == None:
+      test_dir = os.path.join( cwd, testResultsDir(plat.getName()) )
+    else:
+      path_filter = os.getcwd()
+    
+    tlist = TestList.TestList( ufilter )
+    readRestartFiles( test_dir, tlist )
+    
+    filter_dir = None
+    if path_filter != None:
+      filter_dir = computeRelativePath( test_dir, path_filter )
+    
+    # if the keyword expression does not include a results keyword, then
+    # add the 'diff' keyword so that only diffs are rebaselined by default
+    if not keyword_expr.containsResultsKeywords():
+      keyword_expr.append( ['diff'], 'and' )
+    
+    tlist.loadTests( filter_dir=filter_dir )
+    
+    if len(tlist.active) > 0:
+      
+      print "\n-------- baselining these tests ---------"
+      sorted_list = tlist.active.values()
+      sorted_list.sort()
+      for atest in sorted_list:
+        print XstatusString(atest, 0, test_dir, cwd)
+      print "--------------------------------------\n"
+      
+      plat.initProcs( test_dir )
+      
+      tlist.createTestExecs( test_dir, plat, config )
+      
+      failures = 0
+      for tx in tlist.getTestExecList():
+        if isinstance(tx, TestExec.TestExec): ref = tx.atest
+        else:                         ref = tx
+        sys.stdout.write("baselining " + ref.getExecuteDirectory() + "...")
+        sys.stdout.flush()
+        tx.start( config, baseline=1 )
+        for i in range(30):
+          time.sleep(1)
+          if tx.poll():
+            if tx.atest.getAttr('result') == "pass":
+              sys.stdout.write("done\n")
+              sys.stdout.flush()
+            else:
+              failures = 1
+              sys.stdout.write("FAILED\n")
+              sys.stdout.flush()
+            break
+        if not tx.isDone():
+          tx.killJob()
+          failures = 1
+          sys.stdout.write("TIMED OUT\n")
+          sys.stdout.flush()
+      
+      if failures:
+        print "\n\n !!!!!!!!!!!!!!  THERE WERE FAILURES  !!!!!!!!!!!!! \n\n"
+    
+    else:
+      print "\n--------- no tests to baseline -----------\n"
+
+
+###########################################################################
+
+def getUserName():
+    """
+    Retrieves the user name associated with this process.
+    """
+    try:
+      import getpass
+      return getpass.getuser()
+    except:
+      # try manually checking the environment
+      for n in ['USER', 'LOGNAME', 'LNAME', 'USERNAME']:
+        if os.environ.get(n, ''):
+          return os.environ[n]
+      # try just returning the user id
+      try: return 'uid' + str(os.getuid())
+      except: pass
+
+    raise NameError, "could not determine this process's user name"
+
+
+def computeRelativePath(d1, d2):
+    """
+    Compute relative path from directory d1 to directory d2.
+    """
+    
+    assert os.path.isabs(d1)
+    assert os.path.isabs(d2)
+    
+    d1 = os.path.normpath(d1)
+    d2 = os.path.normpath(d2)
+    
+    list1 = string.split( d1, os.sep )
+    list2 = string.split( d2, os.sep )
+    
+    while 1:
+      try: list1.remove('')
+      except: break
+    while 1:
+      try: list2.remove('')
+      except: break
+    
+    i = 0
+    while i < len(list1) and i < len(list2):
+      if list1[i] != list2[i]:
+        break
+      i = i + 1
+    
+    p = []
+    j = i
+    while j < len(list1):
+      p.append('..')
+      j = j + 1
+    
+    j = i
+    while j < len(list2):
+      p.append(list2[j])
+      j = j + 1
+    
+    if len(p) > 0:
+      return os.path.normpath( string.join(p, os.sep) )
+    
+    return "."
+
+
+def issubdir(parent_dir, subdir):
+    """
+    TODO: test for relative paths
+    """
+    lp = len(parent_dir)
+    ls = len(subdir)
+    if ls > lp and parent_dir + '/' == subdir[0:lp+1]:
+      return subdir[lp+1:]
+    return None
+
+
+###########################################################################
+#
+# main
+
+def parseOptionsAndGenerateOptionDictionary():
+    """
+    Generates a dictionary of the options.  Multiple values for an option are
+    appended to a list.  Checks are performed for the correct usage of the
+    options.  Options that are expected to only have one value are entered
+    as a single value, rather than a list with one element.
+    """
+    argL = []
+    for s in sys.argv[1:]:
+      if s in ['-h']:
+        optdict['-h'] = ''
+        return []
+      elif s in ['-H','-help','--help']:
+        optdict['-H'] = ''
+        return []
+      elif s =='-vg':
+        argL.append( '--vg' )
+      else:
+        argL.append(s)
+    
+    import getopt
+    try: opts, dirs = getopt.getopt( argL,
+                        'hHvgGk:K:p:P:S:o:O:wr:R:Aj:FM:n:ibT:Lmeas:x:X:C',
+                        longopts=['version','intr=','plat=','platopt=',
+                                  'keys', 'files', 'pipeline',
+                                  'qsub-id=', 'qsub-limit=', 'qsub-length=',
+                                  'html', 'check=', 'analyze', 'cdir=',
+                                  'search=', 'extract=',
+                                  'timeout-multiplier=', 'postclean',
+                                  'vg', 'save-results', 'results-tag=',
+                                  'config=' ] )
+    except getopt.error, e:
+      sys.stderr.write('*** ' + exeName + ': error: ' + str(e) + '\n')
+      sys.exit(1)
+    
+    for optpair in opts:
+      n = optpair[0]
+      if   n == '--analyze': n = '-a'
+      elif n == '--search' : n = '-s'
+      elif n == '--postclean': n = '-C'
+      if n == '--results-tag':
+        optdict[n] = optpair[1]
+      elif not optdict.has_key(n):
+        optdict[n] = [optpair[1]]
+      else:
+        optdict[n].append(optpair[1])
+    
+    if optdict.has_key('-h'): return []
+    if optdict.has_key('-H'): return []
+    
+    if optdict.has_key('-v') or optdict.has_key('--version'):
+      print version
+      sys.exit(0)
+    
+    if optdict.has_key('-G'):
+      # the -g and -G options changed into the same thing (now just -g)
+      optdict['-g'] = None
+    
+    if optdict.has_key('-g') and ( optdict.has_key('--plat') or \
+                                   optdict.has_key('-i') or \
+                                   optdict.has_key('-b') or \
+                                   optdict.has_key('-n') or \
+                                   optdict.has_key('-m') or \
+                                   optdict.has_key('-L') ):
+      sys.stderr.write('*** ' + exeName + \
+            ': error: the only options allowed with -g are -oOMfkKpPS\n')
+      sys.exit(1)
+    
+    if optdict.has_key('-i') and ( optdict.has_key('-L') or \
+                                   optdict.has_key('-g') or \
+                                   optdict.has_key('-F') or \
+                                   optdict.has_key('-w') or \
+                                   optdict.has_key('-S') or \
+                                   optdict.has_key('-b') ):
+      sys.stderr.write('*** ' + exeName + \
+            ': error: the options -fLgbRSF cannot be used with -i\n')
+      sys.exit(1)
+    
+    if optdict.has_key('-b') and ( optdict.has_key('-A') or \
+                                   optdict.has_key('-g') or \
+                                   optdict.has_key('-w') or \
+                                   optdict.has_key('-S') or \
+                                   optdict.has_key('-M') ):
+      sys.stderr.write('*** ' + exeName + \
+            ': error: the options -glfMARS cannot be used with -b\n')
+      sys.exit(1)
+    
+    # parse -k & -K options into two convenient objects
+    
+    # first, include -r & -R for backward compatibility
+    if optdict.has_key('-k') or optdict.has_key('-r'):
+      optdict['-k'] = optdict.get('-k',[]) + optdict.get('-r',[])
+    if optdict.has_key('-K') or optdict.has_key('-R'):
+      optdict['-K'] = optdict.get('-K',[]) + optdict.get('-R',[])
+    
+    keywL = []
+    if optdict.has_key('-k'):
+      keywL.extend( optdict['-k'] )
+    
+    # change -K into -k expressions by using the '!' operator
+    for s in optdict.get('-K',[]):
+      bangL = map( lambda k: '!'+k, s.split('/') )
+      keywL.append( string.join( bangL, '/' ) )
+    
+    if len(keywL) > 0:
+      keyword_expr.append( keywL, 'and' )
+    
+    # check validity of -p & -P options and combine them
+    try:
+      pf = FilterExpressions.ParamFilter( optdict.get('-p',None) )
+    except ValueError, e:
+      sys.stderr.write('*** ' + exeName + \
+            ': error: in -p specification: ' + str(e) + '\n')
+      sys.exit(1)
+    try:
+      pf = FilterExpressions.ParamFilter( optdict.get('-P',None) )
+    except ValueError, e:
+      sys.stderr.write('*** ' + exeName + \
+            ': error: in -P specification: ' + str(e) + '\n')
+      sys.exit(1)
+    
+    if optdict.has_key('-P'):
+      # convert -P values into -p values
+      for s in optdict['-P']:
+        s = string.strip(s)
+        if s:
+          orL = []
+          for k in string.split(s,'/'):
+            k = string.strip(k)
+            if k:
+              orL.append( '!' + k )
+          if not optdict.has_key('-p'):
+            optdict['-p'] = []
+          optdict['-p'].append( string.join( orL, '/' ) )
+      del optdict['-P']
+    
+    if optdict.has_key('-X'):
+      for s in optdict['-X']:
+        s = string.strip(s)
+        if s:
+          orL = []
+          for p in string.split(s,'/'):
+            p = string.strip(p)
+            if p:
+              orL.append( '!' + p )
+          if not optdict.has_key('-x'):
+            optdict['-x'] = []
+          optdict['-x'].append( string.join( orL, '/' ) )
+    
+    if optdict.has_key('-s'):
+      for pat in optdict['-s']:
+        try:
+          c = re.compile(pat)
+        except:
+          sys.stderr.write( '*** ' + exeName + ': error: -s option ' + \
+                            'specified an invalid regular expression: ' + pat )
+          sys.exit(1)
+    
+    if optdict.has_key('-S'):
+      # -S should be a list of param=value strings, which we convert into
+      # a dictionary of param name -> list of values
+      sdict = {}
+      for s in optdict['-S']:
+        L = string.split(s,'=',1)
+        if len(L) < 2 or not L[0] or not L[1]:
+          sys.stderr.write('*** ' + exeName + \
+              ': error: -S option values must be "param=value"\n')
+          sys.exit(1)
+        if sdict.has_key(L[0]): sdict[L[0]].extend( string.split(L[1]) )
+        else:                   sdict[L[0]] = string.split( L[1] )
+      optdict['-S'] = sdict
+    
+    if optdict.has_key('--plat'):
+      if len(optdict['--plat']) > 1:
+        sys.stderr.write('*** ' + exeName + \
+              ': error: only one --plat option allowed\n')
+        sys.exit(1)
+      optdict['--plat'] = optdict['--plat'][0]
+    
+    if optdict.has_key('--platopt'):
+      # create a dictionary storing option->value pairs
+      popts = {}
+      for po in optdict['--platopt']:
+        tmp = string.split(po, '=', 1)
+        if len(tmp) == 1: popts[ po ] = ''
+        else:             popts[ tmp[0] ] = tmp[1]
+      # reset the platopt option with the dictionary
+      optdict['--platopt'] = popts
+    
+    if optdict.has_key('--qsub-id'):
+      if len(optdict['--qsub-id']) > 1:
+        sys.stderr.write('*** ' + exeName + \
+              ': error: only one --qsub-id option allowed\n')
+        sys.exit(1)
+      optdict['--qsub-id'] = optdict['--qsub-id'][0]
+    
+    if optdict.has_key('--qsub-limit'):
+      if len(optdict['--qsub-limit']) > 1:
+        sys.stderr.write('*** ' + exeName + \
+              ': error: only one --qsub-limit option allowed\n')
+        sys.exit(1)
+      try: val = int(optdict['--qsub-limit'][0])
+      except:
+          sys.stderr.write('*** ' + exeName + \
+            ': error: the --qsub-limit option must be followed by an integer\n')
+          sys.exit(1)
+      if val <= 0:
+          sys.stderr.write('*** ' + exeName + \
+            ': error: the --qsub-limit value must be a positive integer\n')
+          sys.exit(1)
+      optdict['--qsub-limit'] = val
+    
+    if optdict.has_key('--qsub-length'):
+      if len(optdict['--qsub-length']) > 1:
+        sys.stderr.write('*** ' + exeName + \
+              ': error: only one --qsub-length option allowed\n')
+        sys.exit(1)
+      try: val = int(optdict['--qsub-length'][0])
+      except:
+          sys.stderr.write('*** ' + exeName + \
+            ': error: the --qsub-length option must be followed by an integer\n')
+          sys.exit(1)
+      if val < 0:
+          sys.stderr.write('*** ' + exeName + \
+            ': error: the --qsub-length value cannot be negative\n')
+          sys.exit(1)
+      optdict['--qsub-length'] = val
+    
+    # clean up option strings
+    
+    if optdict.has_key('-o'):
+      on = {}
+      for o1 in optdict.get('-o',[]):
+        for o2 in string.split( o1, '+' ):
+          for o3 in string.split(o2):
+            on[o3] = ''
+      on = on.keys()
+      on.sort()
+      optdict['-o'] = on
+      config.set( 'onopts', on )
+    
+    if optdict.has_key('-O'):
+      off = {}
+      for o1 in optdict.get('-O'):
+        for o2 in string.split( o1, '+' ):
+          for o3 in string.split(o2):
+            off[o3] = ''
+      off = off.keys()
+      off.sort()
+      optdict['-O'] = off
+      config.set( 'offopts', off )
+    
+    if optdict.has_key('-j') and len(optdict['-j']) > 1:
+      sys.stderr.write('*** ' + exeName + \
+            ': error: only one -j option allowed\n')
+      sys.exit(1)
+    
+    if optdict.has_key('-M') and len(optdict['-M']) > 1:
+      sys.stderr.write('*** ' + exeName + \
+            ': error: only one -M option allowed\n')
+      sys.exit(1)
+    
+    if optdict.has_key('-n'):
+      if len(optdict['-n']) > 1:
+          sys.stderr.write('*** ' + exeName + \
+                ': error: only one -n option is allowed\n')
+          sys.exit(1)
+      try: val = int(optdict['-n'][0])
+      except:
+          sys.stderr.write('*** ' + exeName + \
+                ': error: the -n option must be followd by an integer\n')
+          sys.exit(1)
+      if val <= 0:
+        sys.stderr.write('*** ' + exeName + \
+              ': error: the -n option must specify a positive integer\n')
+        sys.exit(1);
+     
+    if optdict.has_key('-T'):
+      if len(optdict['-T']) > 1:
+          sys.stderr.write('*** ' + exeName + \
+                ': error: only one -T option is allowed\n')
+          sys.exit(1)
+      try: val = float(optdict['-T'][0])
+      except:
+          sys.stderr.write('*** ' + exeName + \
+                ': error: the -T option must be followd by a number\n')
+          sys.exit(1);
+      if val < 0.0: optdict['-T'] = 0.0
+      else:         optdict['-T'] = val
+    
+    if optdict.has_key('--timeout-multiplier'):
+      if len(optdict['--timeout-multiplier']) > 1:
+          sys.stderr.write('*** ' + exeName + \
+                ': error: only one --timeout-multiplier option is allowed\n')
+          sys.exit(1)
+      try: val = float(optdict['--timeout-multiplier'][0])
+      except:
+          sys.stderr.write('*** ' + exeName + \
+               ': error: the --timeout-multiplier option must be ' + \
+               'followd by a number\n')
+          sys.exit(1);
+      if val <= 0.0:
+        sys.stderr.write('*** ' + exeName + \
+             ': error: the --timeout-multiplier option must be ' + \
+             'followd by a positive number\n')
+        sys.exit(1);
+      optdict['--timeout-multiplier'] = val
+     
+    if optdict.has_key('--intr'):
+      if len(optdict['--intr']) > 1:
+          sys.stderr.write('*** ' + exeName + \
+                ': error: only one --intr option is allowed\n')
+          sys.exit(1);
+      try: val = int(optdict['--intr'][0])
+      except:
+          sys.stderr.write('*** ' + exeName + \
+             ': error: the --intr option must be followd by an integer\n')
+          sys.exit(1)
+      if val <= 0:
+        sys.stderr.write('*** ' + exeName + \
+             ': error: the --intr option must specify a positive integer\n')
+        sys.exit(1);
+      optdict['--intr'] = val
+    
+    # collapse the list of length one for single argument options
+    
+    if optdict.has_key('-j'):
+      d = optdict['-j'][0]
+      if not os.path.exists(d):
+        sys.stderr.write('*** ' + exeName + ': error: project directory ' + \
+                         'does not exist: ' + d + os.linesep )
+        sys.exit(1)
+      d = os.path.abspath(d)
+      optdict['-j'] = d
+      config.set( 'exepath', d )
+    
+    if optdict.has_key('-M'):
+      optdict['-M'] = optdict['-M'][0]
+    
+    if optdict.has_key('-n'):
+      optdict['-n'] = optdict['-n'][0]
+    
+    if optdict.has_key('--extract'):
+      optdict['--extract'] = optdict['--extract'][-1]
+    
+    if '--config' in optdict:
+        config.set( 'configdir', os.path.abspath( optdict['--config'][-1] ) )
+    else:
+        d = os.getenv( 'VVTEST_CONFIGDIR' )
+        if d == None:
+            d = os.path.join( config.get('toolsdir'), 'config' )
+        config.set( 'configdir', os.path.abspath(d) )
+
+    config.set( 'refresh', not optdict.has_key('-m') )
+    config.set( 'postclean', optdict.has_key('-C') )
+    if optdict.has_key('-T'):
+      config.set( 'timeout', optdict['-T'] )
+    if optdict.has_key('--timeout-multiplier'):
+      config.set( 'multiplier', optdict['--timeout-multiplier'] )
+    config.set( 'preclean', not optdict.has_key('-m') )
+    config.set( 'analyze', optdict.has_key('-a') )
+    config.set( 'logfile', not optdict.has_key('-L') )
+    
+    return dirs
+
+
+def getExeDirAndName():
+    d = sys.path[0]
+    if not d:                  d = os.getcwd()
+    elif not os.path.isabs(d): d = os.path.abspath(d)
+    n = os.path.basename( sys.argv[0] )
+    return d, n
+
+
+##############################################################################
+
+
+if __name__ == '__main__':
+  
+  # get directory containing this script and the script name itself
+  toolsdir, exeName = getExeDirAndName()
+  
+  sys.path.insert( 1, toolsdir + '/platforms' )
+  sys.path.insert( 1, toolsdir + '/compilers' )
+  sys.path.insert( 1, toolsdir + '/makemflib' )
+  sys.path.insert( 1, toolsdir + '/libvvtest' )
+  
+  import platform
+  import TestSpec
+  import TestExec
+  import TestList
+  import TestSpecCreator
+  import FilterExpressions
+  import results
+  
+  keyword_expr = FilterExpressions.WordExpression()
+  
+  # set this before options are parsed
+  config.set( 'toolsdir', toolsdir )
+  
+  # this creates the global "optdict" dictionary and returns non-option args
+  dirs = parseOptionsAndGenerateOptionDictionary()
+  
+  # set this after options are parsed
+  sys.path.insert( 1, config.get('configdir') )
+  
+  # the help option quits immediately
+  if optdict.has_key('-h'):
+    print usagepage
+    sys.exit(0)
+  if optdict.has_key('-H'):
+    print manpage
+    sys.exit(0)
+  
+  # 'test_dir' non-None only if the CWD is in a TestResults.* directory
+  test_dir = readCommandInfo()
+  
+  if optdict.has_key( '--check' ):
+    for n in optdict['--check']:
+      os.environ[ 'CHECK_' + string.upper(n) ] = ''
+  
+  if optdict.has_key( '--vg' ):
+    os.environ[ 'CHECK_VALGRIND' ] = ''
+  
+  if test_dir and optdict.has_key('-S'):
+    print "*** error: cannot use -S in a TestResults directory"
+    sys.exit(1)
+  
+  if test_dir and optdict.has_key('-g'):
+    print "*** error: cannot use -g in a TestResults directory"
+    sys.exit(1)
+  
+  # construct platform
+  plat = platform.construct_Platform( toolsdir, optdict )
+  
+  ufilter = FilterExpressions.ExpressionSet( \
+                param_expr_list=optdict.get('-p', None),
+                keyword_expr=keyword_expr,
+                option_list=optdict.get('-o', []) + [plat.getCompiler()],
+                platform_name=plat.getName(),
+                ignore_platforms=optdict.has_key('-A'),
+                platform_expr_list=optdict.get('-x', None),
+                search_file_globs=search_fnmatch,
+                search_patterns=optdict.get('-s',None) )
+  if optdict.has_key('--qsub-id'):
+    ufilter.setAttr( 'include_all', 1 )
+  
+  info = ( optdict.has_key('-i') or \
+           optdict.has_key('--files') or \
+           optdict.has_key('--keys') or \
+           optdict.has_key('--save-results') )
+  
+  if optdict.has_key('-g') and not info:
+    assert test_dir == None
+    generateTestList( dirs, plat, ufilter )
+  
+  elif optdict.has_key('-i') and optdict.has_key('--pipeline'):
+    if test_dir == None:
+      test_dir = os.path.join( os.getcwd(), testResultsDir(plat.getName()) )
+    if os.path.exists( test_dir ):
+      pipelineInfo( test_dir, plat )
+    else:
+      print "*** error: TestResults directory does not exist:", test_dir
+      sys.exit(1)
+  
+  elif info:
+    
+    tlist = TestList.TestList( ufilter )
+    if test_dir != None:
+      readRestartFiles( test_dir, tlist )
+      tlist.loadTests( filter_dir=computeRelativePath( test_dir, os.getcwd() ) )
+    elif os.path.exists( testResultsDir(plat.getName()) ):
+      test_dir = os.path.join( os.getcwd(), testResultsDir(plat.getName()) )
+      readRestartFiles( test_dir, tlist )
+      tlist.loadTests()
+    elif optdict.has_key('--keys') or optdict.has_key('--files'):
+      if len(dirs) == 0:
+        dirs = ['.']
+      for d in dirs:
+        if os.path.exists(d):
+          tlist.scanDirectory( d, optdict.get('-S',None) )
+      tlist.loadTests()
+    else:
+      print "*** warning: previous TestResults directory not found"
+      test_dir = os.path.join( os.getcwd(), testResultsDir(plat.getName()) )
+      tlist.loadTests()
+    
+    if optdict.has_key('--keys') or optdict.has_key('--files'):
+      keywordInformation(tlist)
+    elif optdict.has_key('--save-results'):
+      saveResults( tlist, plat, test_dir, optdict.get('--results-tag',None) )
+    else:
+      printResults( tlist, 1, test_dir, optdict.has_key('--html') )
+ 
+  elif optdict.has_key('-b'):
+    
+    if optdict.has_key('-F') or optdict.has_key('-w'):
+      print "*** error: cannot use -F or -w with -b (baseline)"
+      sys.exit(1)
+    
+    baselineTests( test_dir, plat, ufilter )
+  
+  elif optdict.has_key('--extract'):
+    extractTestFiles( dirs, plat, optdict['--extract'], ufilter )
+  
+  else:
+    
+    # if no results keywords are specified, then add -k notrun/notdone
+    if not keyword_expr.containsResultsKeywords() and \
+       not optdict.has_key('-w') and not optdict.has_key('-F'):
+      keyword_expr.append( ['notrun/notdone'], 'and' )
+    
+    if test_dir != None:
+      restartTests( test_dir, plat, ufilter )
+    else:
+      runTests( dirs, plat, ufilter )

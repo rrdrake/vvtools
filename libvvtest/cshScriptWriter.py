@@ -1,0 +1,433 @@
+#!/usr/bin/env python
+
+import os
+import string
+import re
+import stat
+
+diffExitStatus = 64
+
+content_replace_re = re.compile('[$][(]CONTENT[)]')
+expect_status_replace_re = re.compile('[$][(]EXPECT_STATUS[)]')
+
+
+def writeScript( tspec, xdb, plat, \
+                 toolsdir, projdir, srcdir, \
+                 onopts, offopts,
+                 scriptname, postclean ):
+    """
+      tspec is a TestSpec object
+      xdb is a CommonSpecDB object
+      plat is a Platform object
+      toolsdir is the top level toolset directory containing this script
+      projdir is the directory to the executables
+      srcdir is the directory containing the test description
+      onopts is a list of -o options (not a dictionary)
+      offopts is a list of -O options (not a dictionary)
+    """
+    
+    scriptbasename = os.path.basename( scriptname )
+    
+    idstr = tspec.getName()
+    for (n,v) in tspec.getParameters().items():
+      idstr = idstr + ' ' + n + '=' + v
+    
+    line_list = []
+    
+    # start the csh script
+    
+    line_list.extend([ \
+      '#!/bin/csh -f', '',
+      '# clear variables and aliases to prevent the users',
+      '# environment from interferring with the test',
+      'unalias rm',
+      'unalias ls',
+      'unalias cp',
+      'unalias ln',
+      'unalias mv',
+      'unalias set',
+      'unalias setenv',
+      'unalias echo',
+      'unset newbaseline',
+      'unsetenv newbaseline', '',
+      'set cleanout = 1', '',
+      'set analyze = 0',
+      'echo "++++++++++++++++ begin ' + idstr + '"', '',
+      'echo " "',
+      'set have_diff = no', '' ])
+    
+    # the common database might have variables to clear from the environment
+    
+    s = xdb.getClear()
+    if s != None:
+      line_list.append( s )
+    
+    # option parsing is for things that can only be known during invocation
+    
+    line_list.extend( [ \
+      '',
+      '# parse command line options',
+      '@ i = 1',
+      'while ($i <= $#argv)',
+      '  switch ("$argv[$i]")',
+      '    case --baseline:',
+      '      set newbaseline = 1',
+      '      breaksw',
+      '    case --mpirun_opts:',
+      '      @ i += 1',
+      '      setenv MPI_OPT "$argv[$i]"',
+      '      echo "MPI_OPT=$MPI_OPT"',
+      '      breaksw',
+      '    case --prerun:',
+      '      @ i += 1',
+      '      set PRERUN = "$argv[$i]"',
+      '      breaksw',
+      '    case --postrun:',
+      '      @ i += 1',
+      '      set POSTRUN = "$argv[$i]"',
+      '      breaksw',
+      '    case --noclean:',
+      '      set cleanout = 0',
+      '      breaksw',
+      '    case --analyze:',
+      '      set analyze = 1',
+      '      set cleanout = 0',
+      '      breaksw',
+      '  endsw',
+      '  @ i += 1',
+      'end', '',
+      '' ] )
+    
+    # set variables guaranteed to be defined for each test
+    
+    line_list.extend( [ \
+      '',
+      '# variables defined for all tests',
+      'set NAME = "' + tspec.getName() + '"',
+      'set PLATFORM = ' + plat.getName(),
+      'echo "PLATFORM = $PLATFORM"',
+      'set COMPILER = ' + plat.getCompiler(),
+      'echo "COMPILER = $COMPILER"',
+      'set TOOLSET_DIR = ' + toolsdir,
+      'echo "TOOLSET_DIR = $TOOLSET_DIR"' ] )
+    if projdir:
+      line_list.append( 'set PROJECT = ' + projdir )
+    else:
+      line_list.append( 'set PROJECT =' )
+    line_list.extend( [ \
+      'echo "PROJECT = $PROJECT"',
+      'set ON = "'  + string.join(onopts,'+') + '"',
+      'echo ON = "$ON"',
+      'set OFF = "' + string.join(offopts,'+') + '"',
+      'echo OFF = "$OFF"',
+      'set np = ' + str(tspec.getParameters().get('np',0)),
+      'set XMLDIR = "' + srcdir + '"',
+      'echo "XMLDIR = $XMLDIR"' ] )
+    
+    # set variables defined by the platform
+    
+    line_list.extend( [ '', '# variables defined by the platform' ] )
+    for (k,v) in plat.getEnvironment().items():
+      line_list.extend( [ \
+        'setenv ' + k + ' "' + v + '"',
+        'echo "' + k + ' = $' + k + '"' ] )
+    
+    # set defines and variables contained in the common database
+    
+    line_list.extend( [ '',
+                 '######## common database definitions ########', '' ] )
+    
+    for cs in xdb.getDefines():
+      dfn = cs.getDefine( plat.getName() )
+      assert dfn != None
+      line_list.append( dfn )
+    
+    for cs in xdb.getVariables():
+      
+      varL = cs.getVariable( plat.getName() )
+      assert varL != None
+      assert len(varL) == 2
+      
+      vname = varL[0]
+      if len(varL[1]) == 2:
+        # a path list is to be used to define the variable
+        assert vname != None
+        paths = varL[1][0]
+        flags = varL[1][1]
+        line_list.extend( [ \
+          'foreach p (' + string.join(paths) + ')',
+          '  if ( -e $p ) then',
+          '    set ' + vname + ' = "$p ' + flags + '"',
+          '    break',
+          '  endif',
+          'end' ] )
+      else:
+        # a script fragment is to be used to define the variable
+        assert len(varL[1]) == 1
+        line_list.append( varL[1][0] )
+      
+      if vname != None:
+        line_list.extend( [ \
+          'if ( $?' + vname + ' ) then',
+          '  echo "' + vname + ' = $' + vname + '"',
+          'else',
+          '  echo "' + vname + ' is not defined"',
+          'endif', '' ] )
+    
+    # set the problem parameter variables
+    
+    line_list.extend( [ '', '# parameters defined by the test' ] )
+    for (k,v) in tspec.getParameters().items():
+      line_list.extend( [ \
+        'set ' + k + ' = ' + v,
+        'echo "' + k + ' = $' + k + '"' ] )
+    
+    # put the baseline fragment in before the file removal occurs
+    
+    line_list.extend( [ '',
+          '# copy baseline files if this is a rebaselining execution' ] )
+    line_list.extend( [ \
+      'if ($?newbaseline) then',
+      '  set echo', '' ] )
+    
+    # TODO: add file globbing for baseline files
+    for testname, srcname in tspec.getBaselineFiles():
+      line_list.append( \
+        'cp -f ' + testname + ' $XMLDIR/' + srcname + ' || exit 1' )
+    for frag in tspec.getBaselineFragments():
+      line_list.append( frag )
+    
+    line_list.extend( [ \
+      '  exit 0',
+      'endif', '' ] )
+    
+    # remove all files in the current (test) directory
+    
+    line_list.extend( [ '',
+      'if ( $cleanout == 1 ) then',
+      '  # remove all files in the current (test) directory',
+      '  echo ">> removing all unknown files..."',
+      '  foreach file (`ls -a`)',
+      '    if ("$file" != "." && "$file" != ".." && \\',
+      '        "$file" != "execute.log" && "$file" != "baseline.log" && \\',
+      '        "$file" != "'+scriptbasename+'" && "$file" != "machinefile") then',
+      '      echo "rm -rf $file"',
+      '      rm -rf $file',
+      '    endif',
+      '  end',
+      'endif',
+      '' ] )
+    
+    line_list.extend( [ '', 'if ( $analyze == 0 ) then', '' ] )
+    
+    # link and copy files into the test directory
+    
+    line_list.extend( [ \
+          '  # link and copy files into the test directory', '' ] )
+    line_list.append( 'echo ">> linking and copying working files..."' )
+    for (srcname, testname) in tspec.getLinkFiles():
+      if testname != None:
+        line_list.extend( [ \
+          '  if ( -e $XMLDIR/' + srcname + ' ) then',
+          '    if ( ! -e ' + testname + ' ) then',
+          '      echo "ln -s $XMLDIR/' + srcname + ' ' + testname + '"',
+          '      ln -s $XMLDIR/' + srcname + ' ' + testname + ' || exit 1',
+          '    endif',
+          '  else',
+          '    echo "*** error: the test requested to soft link a ' + \
+                           'non-existent file: $XMLDIR/' + srcname + '"',
+          '  endif' ] )
+      else:
+        line_list.extend( [ \
+          '  set flist = ( `ls -d $XMLDIR/' + srcname + '` )',
+          '  if ( $#flist == 0 ) then',
+          '    echo "*** error: the test requested to soft link a ' + \
+                           'non-existent file: $XMLDIR/' + srcname + '"',
+          '    exit 1',
+          '  else',
+          '    foreach srcf ( $flist )',
+          '      set testf = $srcf:t',
+          '      if ( ! -e $testf ) then',
+          '        echo "ln -s $srcf $testf"',
+          '        ln -s $srcf $testf || exit 1',
+          '      endif',
+          '    end',
+          '  endif' ] )
+    for (srcname, testname) in tspec.getCopyFiles():
+      if testname != None:
+        line_list.extend( [ \
+          '  if ( -e $XMLDIR/' + srcname + ' ) then',
+          '    if ( ! -e ' + testname + ' ) then',
+          '      echo "cp -f $XMLDIR/' + srcname + ' ' + testname + '"',
+          '      cp -f $XMLDIR/' + srcname + ' ' + testname + ' || exit 1',
+          '    endif',
+          '  else',
+          '    echo "*** error: the test requested to copy a ' + \
+                           'non-existent file: $XMLDIR/' + srcname + '"',
+          '  endif' ] )
+      else:
+        line_list.extend( [ \
+          '  set flist = ( `ls -d $XMLDIR/' + srcname + '` )',
+          '  if ( $#flist == 0 ) then',
+          '    echo "*** error: the test requested to copy a ' + \
+                           'non-existent file: $XMLDIR/' + srcname + '"',
+          '    exit 1',
+          '  else',
+          '    foreach srcf ( $flist )',
+          '      set testf = $srcf:t',
+          '      if ( ! -e $testf ) then',
+          '        echo "cp -f $srcf $testf"',
+          '        cp -f $srcf $testf || exit 1',
+          '      endif',
+          '    end',
+          '  endif' ] )
+    
+    # provide a mechanism for the launcher to run a command before
+    # executables get launched
+    
+    line_list.extend( [ \
+      '  # platform may need to run something before executing MPI programs',
+      '  if ($?PRERUN) then',
+      '    echo "$PRERUN"',
+      '    eval "$PRERUN"',
+      '  endif' ] )
+    
+    # end the if conditional on $analyze
+    line_list.extend( [ '', 'endif', '' ] )
+    
+    # finally, add the main execution fragments
+    
+    just_analyze = 0
+    if tspec.getAnalyzeScript() != None and tspec.getParent() == None:
+      just_analyze = 1
+    
+    if not just_analyze:
+      
+      line_list.extend( [ '',
+                   '######## main execution fragments ########', '' ] )
+      
+      for name,content,exitstat,analyze in tspec.getExecutionList():
+        
+        if name == None:
+          if not analyze:
+            line_list.extend( [ '', 'if ( $analyze == 0 ) then' ] )
+          
+          # a raw csh script fragment
+          line_list.append( content )
+          
+          if not analyze:
+            line_list.extend( [ 'endif', '' ] )
+        
+        else:
+          # a named executable block
+          cs = xdb.findContent( name )
+          if cs != None:
+            
+            # get the common script fragment from the common specification
+            frag = cs.getContent( plat.getName() )
+            
+            if frag != None and frag:
+              # substitute the content from the test into $(CONTENT) patterns
+              frag = content_replace_re.sub( content, frag )
+              
+              # the invocation of the script fragment may expect and handle
+              # non-zero exit statuses
+              x = "0"
+              if exitstat != None:
+                if exitstat == "fail": x = "1"
+                elif exitstat == "anyexit" or exitstat == "any": x = "-1"
+              frag = expect_status_replace_re.sub( x, frag )
+              
+              if not cs.isAnalyze():
+                line_list.extend( [ '', 'if ( $analyze == 0 ) then' ] )
+              
+              line_list.append( frag )
+              
+              if not cs.isAnalyze():
+                line_list.extend( [ 'endif', '' ] )
+          
+          else:
+            # could not find the name in the database; make sure the test fails
+            line_list.extend( [ \
+              '''echo "*** error: the test specification file refers to the "'"'"''' + \
+                                                               name +'"'+ """'"'""",
+              'echo "           execute fragment, but the fragment database did"',
+              'echo "           not contain that fragment name"',
+              'exit 1', '' ] )
+    
+    else:
+      line_list.append('################ begin analyze script')
+      line_list.append('')
+
+      D = tspec.getParameterSet()
+      if len(D) > 0:
+        # provide the parameter names and values that formed the children tests
+        for n,L in D.items():
+          if ',' in n:
+            n2 = '_'.join( n.split(',') )
+            L2 = [ '/'.join( v.split(',') ) for v in L ]
+            line_list.append( 'set PARAM_'+n2+' = ( ' + ' '.join(L2) + ' )' )
+            line_list.append( 'echo "PARAM_'+n2+' = $PARAM_'+n2+'"' )
+          else:
+            line_list.append( 'set PARAM_'+n+' = ( ' + ' '.join(L) + ' )' )
+            line_list.append( 'echo "PARAM_'+n+' = $PARAM_'+n+'"' )
+        line_list.append('')
+
+      line_list.extend( string.split( tspec.getAnalyzeScript(), os.linesep ) )
+      line_list.append('')
+      line_list.append('################ end analyze script')
+      line_list.append('')
+    
+    # provide a mechanism for the launcher to run a command after
+    # all executions have taken place
+    
+    line_list.extend( [ \
+      'if ( $analyze == 0 ) then',
+      '  # platform may need to run something to cleanup after executing MPI programs',
+      '  if ($?POSTRUN) then',
+      '    eval "$POSTRUN"',
+      '  endif',
+      'endif' ] )
+    
+    # lastly, check for a diff status
+    
+    line_list.extend( [ \
+      '',
+      '# check for a diff status before quitting',
+      'echo " "',
+      'if ( "$have_diff" != "no" ) then',
+      '  echo "*** at least one diff test showed differences; exiting diff"',
+      '  exit ' + str(diffExitStatus),
+      'endif',
+      'echo "++++++++++++++++ SUCCESS: ' + idstr + '"' ] )
+    
+    if postclean:
+      line_list.extend( [ '',
+        '# remove all files in the test directory after a success run',
+        'echo " "',
+        'echo ">> cleaning files after successfull test..."',
+        'foreach file (`ls -a`)',
+        '  if ("$file" != "." && "$file" != ".." && \\',
+        '      "$file" != "execute.log" && "$file" != "baseline.log" && \\',
+        '      "$file" != "'+scriptbasename+'" && "$file" != "machinefile") then',
+        '    echo "rm -rf $file"',
+        '    rm -rf $file',
+        '  endif',
+        'end',
+        '' ] )
+    
+    line_list.append( 'exit 0' )
+    
+    fp = open( scriptname, 'w' )
+    
+    for l in line_list:
+      fp.write( l + '\n' )
+    
+    fp.close()
+    
+    perm = stat.S_IMODE( os.stat(scriptname)[stat.ST_MODE] )
+    perm = perm | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+    try:
+      os.chmod( scriptname, perm )
+    except:
+      pass

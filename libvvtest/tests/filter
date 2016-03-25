@@ -1,0 +1,237 @@
+#!/usr/bin/env python
+
+import os, sys
+import string, re
+
+from testutils import *
+
+rmallfiles()
+
+
+########################
+
+writefile( 'atest.xml', """
+<rtest name="atest">
+  <parameterize np="1 3 6"/>
+  <execute>
+    set echo
+    touch execute_file.np=$np || exit 1
+    unset echo
+  </execute>
+</rtest>""" )
+
+
+out,np,nd,nf,nn = run_vvtest()
+testdir = results_dir()
+
+out,np,nd,nf,nn = run_vvtest( '-i' )
+assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+remove_results()
+
+out,np,nd,nf,nn = run_vvtest( '-p np=1' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+savedir = os.getcwd()
+
+os.chdir( testdir ) ; print "cd", testdir
+
+out,np,nd,nf,nn = run_vvtest( '-F' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+os.chdir( savedir ) ; print "cd .."
+
+os.system( "ls -l" )
+remove_results()
+os.system( "ls -ltr" )
+
+out,np,nd,nf,nn = run_vvtest( "-p np<=3" )
+assert np == 2 and nd == 0 and nf == 0 and nn == 0
+assert len( greptestlist(out,'pass.*np=1') ) == 1
+assert len( greptestlist(out,'pass.*np=3') ) == 1
+assert len( greptestlist(out,'pass.*np=6') ) == 0
+
+remove_results()
+
+out,np,nd,nf,nn = run_vvtest( "-p np!=3" )
+assert np == 2 and nd == 0 and nf == 0 and nn == 0
+assert len( greptestlist(out,'pass.*np=1') ) == 1
+assert len( greptestlist(out,'pass.*np=3') ) == 0
+assert len( greptestlist(out,'pass.*np=6') ) == 1
+
+remove_results()
+
+out,np,nd,nf,nn = run_vvtest( "-p np>=3" )
+assert np == 2 and nd == 0 and nf == 0 and nn == 0
+assert len( greptestlist(out,'pass.*np=1') ) == 0
+assert len( greptestlist(out,'pass.*np=3') ) == 1
+assert len( greptestlist(out,'pass.*np=6') ) == 1
+
+remove_results()
+
+out,np,nd,nf,nn = run_vvtest( "-p np>3" )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( greptestlist(out,'pass.*np=1') ) == 0
+assert len( greptestlist(out,'pass.*np=3') ) == 0
+assert len( greptestlist(out,'pass.*np=6') ) == 1
+
+remove_results()
+
+out,np,nd,nf,nn = run_vvtest( "-p np<3" )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( greptestlist(out,'pass.*np=1') ) == 1
+assert len( greptestlist(out,'pass.*np=3') ) == 0
+assert len( greptestlist(out,'pass.*np=6') ) == 0
+
+remove_results()
+
+out,np,nd,nf,nn = run_vvtest( "-p np=1/np=3" )
+assert np == 2 and nd == 0 and nf == 0 and nn == 0
+assert len( greptestlist(out,'pass.*np=1') ) == 1
+assert len( greptestlist(out,'pass.*np=3') ) == 1
+assert len( greptestlist(out,'pass.*np=6') ) == 0
+
+remove_results()
+
+out,np,nd,nf,nn = run_vvtest( "-p np>1 -p np<6" )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( greptestlist(out,'pass.*np=1') ) == 0
+assert len( greptestlist(out,'pass.*np=3') ) == 1
+assert len( greptestlist(out,'pass.*np=6') ) == 0
+
+remove_results()
+
+writefile( 'atest.xml', """
+<rtest name="atest">
+  <parameterize nx="1 4"/>
+  <execute>
+    set echo
+    touch execute_file.np=$np || exit 1
+    if ( "$nx" == 4 ) then
+      echo "exiting for nx 4"
+      exit 1
+    endif
+    unset echo
+  </execute>
+</rtest>""" )
+
+writefile( 'btest.xml', """
+<rtest name="btest">
+  <parameterize nx="1 4"/>
+  <execute>
+    set echo
+    touch execute_file.np=$np || exit 1
+    if ( "$nx" == 4 ) then
+      echo "exiting for nx 4"
+      exit 1
+    endif
+    unset echo
+  </execute>
+</rtest>""" )
+
+
+out,np,nd,nf,nn = run_vvtest()
+assert np == 2 and nd == 0 and nf == 2 and nn == 0
+assert len( greptestlist(out,'pass.*atest\.nx=1') ) == 1
+assert len( greptestlist(out,'pass.*btest\.nx=1') ) == 1
+assert len( greptestlist(out,'fail.*atest\.nx=4') ) == 1
+assert len( greptestlist(out,'fail.*btest\.nx=4') ) == 1
+
+out,np,nd,nf,nn = run_vvtest( '-k atest/fail' )
+assert np == 1 and nd == 0 and nf == 2 and nn == 0
+assert len( greptestlist( out, 'atest.*pass.*\.nx=1' ) ) == 1
+assert len( greptestlist( out, 'atest.*fail.*\.nx=4' ) ) == 1
+assert len( greptestlist( out, 'btest.*pass.*\.nx='  ) ) == 0
+assert len( greptestlist( out, 'btest.*fail.*\.nx=4' ) ) == 1
+
+
+#######################################################################
+
+rmallfiles()
+
+# filter tests out by command line keyword expression
+
+writefile( 'solar.xml', """
+<rtest name="solar">
+  <keywords> earth mars </keywords>
+  <execute> echo "solar ran" </execute>
+</rtest>""" )
+
+out,np,nd,nf,nn = run_vvtest( '-k earth' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-w -K earth' )
+assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-w -k earth -K mars' )
+assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-w -k earth/mars' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+out,np,nd,nf,nn = run_vvtest( '-w -k venus/mars' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+
+#######################################################################
+
+rmallfiles()
+
+# check usage of special characters in the keywords
+
+writefile( 'extra.xml', """
+<rtest name="extra">
+  <keywords> blah-1 foo.2 bar+3 baz=4 mars#5 sun%6 pluto^7 venus:8
+             jupiter~9 </keywords>
+  <execute keywords="blah-1"> echo "dash ran" </execute>
+  <execute keywords="foo.2 "> echo "dot ran" </execute>
+  <execute keywords="bar+3"> echo "plus ran" </execute>
+  <execute keywords="baz=4"> echo "equals ran" </execute>
+  <execute keywords="mars#5"> echo "sharp ran" </execute>
+  <execute keywords="sun%6 "> echo "percent ran" </execute>
+  <execute keywords="pluto^7"> echo "carrot ran" </execute>
+  <execute keywords="venus:8"> echo "colon ran" </execute>
+  <execute keywords="jupiter~9"> echo "tilde ran" </execute>
+  <execute keywords="jupiter@0"> echo "atsign ran" </execute>
+</rtest>""" )
+
+out,np,nd,nf,nn = run_vvtest( '-k blah-1' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+rdir = results_dir()
+assert len( filegrep( rdir+'/extra/execute.log', 'dash ran' ) ) == 1
+
+out,np,nd,nf,nn = run_vvtest( '-w -k foo.2' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( filegrep( rdir+'/extra/execute.log', 'dot ran' ) ) == 1
+
+out,np,nd,nf,nn = run_vvtest( '-w -k bar+3' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( filegrep( rdir+'/extra/execute.log', 'plus ran' ) ) == 1
+
+out,np,nd,nf,nn = run_vvtest( '-w -k baz=4' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( filegrep( rdir+'/extra/execute.log', 'equals ran' ) ) == 1
+
+out,np,nd,nf,nn = run_vvtest( '-w -k mars#5' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( filegrep( rdir+'/extra/execute.log', 'sharp ran' ) ) == 1
+
+out,np,nd,nf,nn = run_vvtest( '-w -k sun%6' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( filegrep( rdir+'/extra/execute.log', 'percent ran' ) ) == 1
+
+out,np,nd,nf,nn = run_vvtest( '-w -k pluto^7' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( filegrep( rdir+'/extra/execute.log', 'carrot ran' ) ) == 1
+
+out,np,nd,nf,nn = run_vvtest( '-w -k venus:8' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( filegrep( rdir+'/extra/execute.log', 'colon ran' ) ) == 1
+
+out,np,nd,nf,nn = run_vvtest( '-w -k jupiter~9' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( filegrep( rdir+'/extra/execute.log', 'tilde ran' ) ) == 1
+
+out,np,nd,nf,nn = run_vvtest( '-w -k jupiter@0' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+assert len( filegrep( rdir+'/extra/execute.log', 'atsign ran' ) ) == 1

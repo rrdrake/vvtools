@@ -1,0 +1,76 @@
+#!/usr/bin/env python
+
+import os, sys
+import string, re
+
+from testutils import *
+
+rmallfiles()
+
+#set ta = "$srcdir/../../vvtest -n 2"
+
+writefile( "param.xml", """
+<rtest name="param">
+  <parameterize hello="world mars"/>
+  <execute> <![CDATA[
+sleep 1
+echo "parm=$hello"
+]]>
+  </execute>
+</rtest>""" )
+
+writefile( "FailTest.xml", """
+<rtest name="FailTest">
+  <execute> <![CDATA[
+sleep 1
+echo "Exiting with failure status"
+exit 1
+]]>
+  </execute>
+</rtest>""")
+
+writefile( "DiffTest.xml", """
+<rtest name="DiffTest">
+  <execute> <![CDATA[
+sleep 1
+echo "Exiting with diff status"
+set have_diff = yes
+]]>
+  </execute>
+</rtest>""")
+
+# run the test set but provide a false interruption
+out,np,nd,nf,nn = run_vvtest( "-n 2 --intr 2", ignore_errors=1 )
+
+# restart with no keywords
+out,np,nd,nf,nn = run_vvtest( '-n 2' )
+assert np == 2 and nd == 1 and nf == 1 and nn == 0
+
+# restart on a keyword
+out,np,nd,nf,nn = run_vvtest( '-n 2 -w --intr 2', ignore_errors=1 )
+out,np,nd,nf,nn = run_vvtest( '-n 2 -k notrun' )
+assert np+nd+nf+nn == 2
+
+# restart on not done and use -r instead of -k
+out,np,nd,nf,nn = run_vvtest( '-n 2 -r notdone' )
+assert np+nd+nf+nn == 2
+
+# none should restart now
+out,np,nd,nf,nn = run_vvtest( '-n 2' )
+assert np+nd+nf+nn == 0
+
+# all of them should run again
+out,np,nd,nf,nn = run_vvtest( '-n 2 -F' )
+assert np+nd+nf+nn == 4
+
+# place a file in a test dir and make sure it gets deleted
+dtdir = results_dir() + '/DiffTest'
+assert os.path.exists( dtdir )
+writefile( dtdir+'/badfile', """the simpsons""" )
+out,np,nd,nf,nn = run_vvtest( '-n 2 -F -k DiffTest' )
+assert not os.path.exists( dtdir+'/badfile' )
+
+# same thing but with the -m option, the file should still be there
+writefile( dtdir+'/badfile', """the simpsons""" )
+out,np,nd,nf,nn = run_vvtest( '-n 2 -F -k DiffTest -m' )
+assert os.path.exists( dtdir+'/badfile' )

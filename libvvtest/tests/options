@@ -1,0 +1,64 @@
+#!/usr/bin/env python
+
+import os, sys
+import string, re
+
+from testutils import *
+
+rmallfiles()
+
+
+writefile( "null.xml", """
+<rtest name="null">
+</rtest>""" )
+
+# quick check of each main mode of operation
+
+run_vvtest( ' -h' )
+run_vvtest( ' -H' )
+run_vvtest( ' --help' )
+run_vvtest( ' -g' )
+out,np,nd,nf,nn = run_vvtest()
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+L = []
+for f in os.listdir('.'):
+  if f[:11] == "TestResults":
+    L.append(L)
+assert len(L) == 1
+out,np,nd,nf,nn = run_vvtest( ' -i' )
+assert np == 1 and nd == 0 and nf == 0 and nn == 0
+run_vvtest( ' -b' )
+
+remove_results()
+
+# check mode combinations that are not allowed
+
+x,out = run_cmd( vvtest + ' -gr' )
+assert not x
+x,out = run_cmd( vvtest + ' -gi' )
+assert not x
+x,out = run_cmd( vvtest + ' -gb' )
+assert not x
+x,out = run_cmd( vvtest + ' -gf file1 -f file2' )
+assert not x
+x,out = run_cmd( vvtest + ' -lf file1' )
+assert not x
+x,out = run_cmd( vvtest + ' -Fi' )
+assert not x
+x,out = run_cmd( vvtest + ' -Fb' )
+assert not x
+x,out = run_cmd( vvtest + ' -ib' )
+assert not x
+
+# # check some bad option values
+
+x,out = run_cmd( vvtest + ' -j dir1 -j dir2' )
+assert not x
+x,out = run_cmd( vvtest + ' -M dir1 -M dir2' )
+assert not x
+x,out = run_cmd( vvtest + ' -n 1 -n 2' )
+assert not x
+x,out = run_cmd( vvtest + ' -n text' )
+assert not x
+x,out = run_cmd( vvtest + ' -n -3' )
+assert not x
