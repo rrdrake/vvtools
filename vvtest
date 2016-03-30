@@ -1539,10 +1539,12 @@ class Pipelines:
             except: pass
         
         commonopts = ''
-        if optdict.has_key('-e'): commonopts = commonopts + '-e '
-        if optdict.has_key('-C'): commonopts = commonopts + '-C '
+        if optdict.has_key('-e'): commonopts += ' -e'
+        if optdict.has_key('-C'): commonopts += ' -C'
+        if config.get('configdir'):
+          commonopts += ' --config='+config.get('configdir')
         for k,v in optdict.get('--platopt',{}).items():
-          commonopts = commonopts + '--platopt ' + k + '=' + v + ' '
+          commonopts += ' --platopt ' + k + '=' + v
         
         qsubids = {}  # maps qpipe id to max number of processors for that pipe
         
