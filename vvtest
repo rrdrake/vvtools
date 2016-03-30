@@ -278,12 +278,17 @@ OPTIONS
             blocks to be executed as part of the test.
       
       --save-results
-            Saves test results for an existing run to the testing directory in
-            a file called 'results.<date>.<platform>.<compiler>.<tag>' where
-            the "tag" is an optional, arbitrary string determined by the
-            --results-tag option.  The testing directory is determined by the
-            platform plugins, but can be overridden by defining the environment
+            If used with the -i option, this saves test results for an
+            existing run to the testing directory in a file called
+            'results.<date>.<platform>.<compiler>.<tag>' where the "tag" is
+            an optional, arbitrary string determined by the --results-tag
+            option.  The testing directory is determined by the platform
+            plugins, but can be overridden by defining the environment
             variable TESTING_DIRECTORY to the desired absolute path name.
+
+            If used without the -i option, this causes an empty results
+            file to be written at the start of the testing sequence, and a
+            final results file to be written when the test sequence finishes.
       
       --results-tag=<string>
             When used with --save-results, this adds a string to the results
@@ -832,15 +837,20 @@ def runTests( dirs, plat, ufilter ):
       
       createTestScripts( tlist, test_dir, plat )
       
+      if optdict.has_key('--save-results'):
+        tag = optdict.get('--results-tag',None)
+        saveResults( tlist, plat, test_dir, tag, inprogress=True )
+
       if not optdict.has_key('--pipeline'):
-        
         executeTestList( tlist, test_dir, plat )
-        
         print "test directory:", toprundir
       
       else:
-        
         pipeLineTestList( tlist, test_dir, plat )
+    
+      if optdict.has_key('--save-results'):
+        tag = optdict.get('--results-tag',None)
+        saveResults( tlist, plat, test_dir, tag )
     
     else:
       print "\n--------- no tests to run -----------\n"
@@ -1620,7 +1630,7 @@ class Pipelines:
         fp.close()
 
 
-def saveResults( tlist, plat, test_dir, tag ):
+def saveResults( tlist, plat, test_dir, tag, inprogress=False ):
     """
     Option is
     
@@ -1675,7 +1685,7 @@ def saveResults( tlist, plat, test_dir, tag ):
     fname = os.path.join( rdir, string.join( L, '.' ) )
     
     mach = os.uname()[1]
-    tr.writeResults( fname, pname, cplr, mach, test_dir )
+    tr.writeResults( fname, pname, cplr, mach, test_dir, inprogress )
 
 
 def readRestartFiles( test_dir, tlist, fname_suffix='' ):
@@ -1730,18 +1740,22 @@ def restartTests( test_dir, plat, ufilter ):
         print XstatusString(atest, 0, test_dir, cwd)
       print "--------------------------------------\n"
       
+      if optdict.has_key('--save-results'):
+        tag = optdict.get('--results-tag',None)
+        saveResults( tlist, plat, test_dir, tag, inprogress=True )
+      
       if not optdict.has_key('--pipeline'):
-        
         plat.initProcs( test_dir )
-        
         tlist.createTestExecs( test_dir, plat, config )
-        
         executeTestList( tlist, test_dir, plat, fsuffix )
       
       else:
-        
         tlist.createTestExecs( test_dir, plat, config )
         pipeLineTestList( tlist, test_dir, plat )
+    
+      if optdict.has_key('--save-results'):
+        tag = optdict.get('--results-tag',None)
+        saveResults( tlist, plat, test_dir, tag )
     
     else:
       print "\n--------- no tests to run -----------\n"
@@ -2341,8 +2355,7 @@ if __name__ == '__main__':
   
   info = ( optdict.has_key('-i') or \
            optdict.has_key('--files') or \
-           optdict.has_key('--keys') or \
-           optdict.has_key('--save-results') )
+           optdict.has_key('--keys') )
   
   if optdict.has_key('-g') and not info:
     assert test_dir == None

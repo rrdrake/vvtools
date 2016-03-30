@@ -884,10 +884,11 @@ class TestResults:
                 # assume TestResults object, which mergeRuntimes() can handle
                 self.mergeRuntimes( results_filename )
     
-    def platform(self):  return self.hdr.get('PLATFORM',None)
-    def compiler(self):  return self.hdr.get('COMPILER',None)
-    def machine (self):  return self.hdr.get('MACHINE',None)
-    def testdir (self):  return self.hdr.get('TEST_DIRECTORY',None)
+    def platform  (self): return self.hdr.get('PLATFORM',None)
+    def compiler  (self): return self.hdr.get('COMPILER',None)
+    def machine   (self): return self.hdr.get('MACHINE',None)
+    def testdir   (self): return self.hdr.get('TEST_DIRECTORY',None)
+    def inProgress(self): return 'IN_PROGRESS' in self.hdr
     
     def addTest(self, testspec):
         """
@@ -994,28 +995,46 @@ class TestResults:
         return 'pass='+str(np) + ' diff='+str(nd) + ' fail='+str(nf) + \
                ' timeout='+str(nt) + ' notrun='+str(nr) + ' ?='+str(unk)
 
-    def collect(self, *args, **kwargs):
+    def collectResults(self, *args):
         """
-        All tests that contain a result in the given list of result keywords
-        are collected into a string and returned.  If the keyword argument
-        'limit' is given, the list will stop collecting at that amount and
-        return (the default is 50).
-        """
-        lim = kwargs.get( 'limit', 50 )
+        Collects all the test results into a dictionary mapping
 
-        tL = []
+            ( test directory, test name ) -> ( run date, results string )
+
+        where the "run date" is zero if the test did not get run, and the
+        "results string" is:
+
+                state=<state>   : if the state matches one of the 'args'
+                result=<result> : if the result matches one of the 'args'
+                <empty string>  : if niether state nor result matches
+
+        The dictionary is returned plus the number of tests that match the
+        'args'.
+        """
+        nmatch = 0
+        resD = {}
         for d,tD in self.dataD.items():
             for tn,aD in tD.items():
+                
                 st = aD.get( 'state', '' )
                 rs = aD.get( 'result', '' )
-                if st in args or rs in args:
-                    if len(tL) < lim:
-                        tL.append( (d,tn) )
-        tL.sort()
-        return tL
+                if st in args:
+                    res = 'state='+st
+                    nmatch += 1
+                elif rs in args:
+                    res = 'result='+rs
+                    nmatch += 1
+                else:
+                    res = ''
+
+                xd = aD.get( 'xdate', 0 )
+
+                resD[ (d,tn) ] = ( xd, res )
+
+        return resD,nmatch
 
     def writeResults(self, filename, plat_name, cplr_name,
-                           mach_name, test_dir):
+                           mach_name, test_dir, inprogress=False):
         """
         Writes out test results for all tests, with a header that includes the
         directory in which the tests were run, the platform name, and the
@@ -1029,17 +1048,21 @@ class TestResults:
         fp.write( 'MACHINE=' + str(mach_name) + os.linesep )
         fp.write( 'TEST_DIRECTORY=' + str(test_dir) + os.linesep )
         
-        fp.write( os.linesep )
-        dL = self.dataD.keys()
-        dL.sort()
-        for d in dL:
-          tD = self.dataD[d]
-          tL = tD.keys()
-          tL.sort()
-          for tn in tL:
-            aD = tD[tn]
-            s = d+'/'+tn + ' ' + make_attr_string( aD )
-            fp.write( s + os.linesep )
+        if inprogress:
+            fp.write( 'IN_PROGRESS=True' + os.linesep )
+
+        else:
+            fp.write( os.linesep )
+            dL = self.dataD.keys()
+            dL.sort()
+            for d in dL:
+              tD = self.dataD[d]
+              tL = tD.keys()
+              tL.sort()
+              for tn in tL:
+                aD = tD[tn]
+                s = d+'/'+tn + ' ' + make_attr_string( aD )
+                fp.write( s + os.linesep )
         
         fp.close()
     
@@ -1891,6 +1914,10 @@ def report_generation( optD, fileL ):
         else:
             rmat.add( ftime, tr )
 
+    if len( rmat.platcplrs() ) == 0:
+        print3( 'No files to process (after filtering)' )
+        return []
+    
     # the DateMap object helps format the test results output
     dmin = min( curtm-optD['-d']*24*60*60, rmat.minFileDate() )
     dmax = max( 0                        , rmat.maxFileDate() )
@@ -1900,7 +1927,7 @@ def report_generation( optD, fileL ):
     # and location of the run to separate the vvtest executions
 
     print3( "A summary by platform/compiler is next." )
-    print3( "An 'r' code means a vvtest execution was run on that date." )
+    print3( "vvtest run codes: s=started, r=ran and finished." )
 
     pclen = 0
     redD = {}
@@ -1909,13 +1936,17 @@ def report_generation( optD, fileL ):
         # find max plat/cplr string length for below
         pclen = max( pclen, len(pc) )
 
+        testD = {}  # (testdir,testname) -> (xdate,result)
+
         for loc in rmat.locations(pc):
             
             print3()
             print3( pc, '@', loc )
             
-            dL = rmat.dateList( pc, loc )
-            rL = zip( dL, [ 'run' for i in range(len(dL)) ] )
+            rL = []
+            for fdate,tr in rmat.resultsList( pc, loc ):
+                if tr.inProgress(): rL.append( (fdate,'started') )
+                else:               rL.append( (fdate,'run') )
             hist = dmap.history(rL)
 
             fdate,tr = rmat.latestResults( pc, loc )
@@ -1925,12 +1956,21 @@ def report_generation( optD, fileL ):
 
             # limit itemization of tests to results that ran recently enough
             if fdate > curtm - showage*24*60*60:
-                L = tr.collect( 'fail', 'diff', 'timeout' )
+                
+                resD,nmatch = tr.collectResults( 'fail', 'diff', 'timeout' )
+                
                 # do not report individual test results for a test
                 # execution that has massive failures
-                if len(L) <= maxreport:
-                    for d,tn in L:
-                        redD[ (d,tn) ] = None
+                if nmatch <= maxreport:
+                    for k,T in resD.items():
+                        xd,res = T
+                        if xd > 0 and ( k not in testD or testD[k][0] < xd ):
+                            testD[k] = T
+
+        for k,T in testD.items():
+            xd,res = T
+            if res:
+                redD[k] = res
     
     print3()
     print3( 'Tests that have diffed, failed, or timed out are next.' )
@@ -1949,8 +1989,9 @@ def report_generation( optD, fileL ):
         print3( d+'/'+tn )
         print3( pcfmt % ' ', dmap.legend() )
 
+        res = redD[ (d,tn) ]
         for pc in rmat.platcplrs():
-            tests,location = rmat.resultsForTest( pc, d, tn )
+            tests,location = rmat.resultsForTest( pc, d, tn, result=res )
             rL = []
             for fd,aD in tests:
                 st = aD.get( 'state', '' )
@@ -2035,28 +2076,36 @@ class ResultsMatrix:
         L.sort()
         return L
 
-    def dateList(self, platcplr, location):
+    def resultsList(self, platcplr, location):
         """
-        Returns a list of file dates for the test results in the 'platcplr'
-        row and 'location' column.  The list is sorted by increasing date.
+        Returns a list of (file date, results) pairs for the test results in
+        the 'platcplr' row and 'location' column.  The list is sorted by
+        increasing date.
         """
-        L = [ pair[0] for pair in self.matrixD[platcplr][location] ]
-        return L
+        return [] + self.matrixD[platcplr][location]
 
     def latestResults(self, platcplr, location):
         """
         Returns the (file date, TestResults) pair with the most recent file
         date stamp for the given 'platcplr' row and 'location' column.
         """
-        L = self.matrixD[platcplr][location]
-        return L[-1]
+        L = [] + self.matrixD[platcplr][location]
+        L.reverse()
+        # pick the most recent which is not in-progress
+        for fd,tr in L:
+            if not tr.inProgress():
+                return (fd,tr)
+        return L[0]
 
-    def resultsForTest(self, platcplr, testdir, testname):
+    def resultsForTest(self, platcplr, testdir, testname, result=None):
         """
         For each entry in the 'platcplr' row, collect the attributes of the
         test containing the test ID 'testdir' plus 'testname'.  That is, all
         tests with the given ID are collected across each of the locations
         for the given platcplr.
+
+        If 'result' is given, it must be a string "state=<state>" or
+        "result=<result>" (as produced by TestResults.collectResults()).
 
         The collection is gathered as a list of (file date, test attributes)
         pairs (and sorted).
@@ -2071,19 +2120,23 @@ class ResultsMatrix:
             for filedate,results in L:
                 attrD = results.testAttrs( testdir, testname )
                 if len(attrD) > 0:
-                    D[ filedate ] = attrD
+                    
+                    if filedate in D:
+                        i = self._tie_break( D[filedate], attrD, result )
+                        if i > 0:
+                            D[filedate] = attrD  # prefer new test results
+                    else:
+                        D[filedate] = attrD
+
                     if maxloc == None:
                         maxloc = [ filedate, loc, attrD ]
                     elif filedate > maxloc[0]:
                         maxloc = [ filedate, loc, attrD ]
                     elif abs( filedate - maxloc[0] ) < 2:
-                        # the test appears in more than one results file, so
-                        # choose the test that executed most recently
-                        d1 = attrD.get( 'xdate', None )
-                        d2 = maxloc[2].get( 'xdate', None )
-                        if d1 == None:
-                            pass
-                        elif d2 == None or d1 > d2:
+                        # the test appears in more than one results file on
+                        # the same file date, so try to break the tie
+                        i = self._tie_break( maxloc[2], attrD, result )
+                        if i > 0:
                             maxloc = [ filedate, loc, attrD ]
         
         L = D.items()
@@ -2093,6 +2146,45 @@ class ResultsMatrix:
         else:              loc = maxloc[1]
         
         return L,loc
+
+    def _tie_break(self, attrs1, attrs2, result):
+        """
+        Given the result attributes from two different executions of the same
+        test, this returns -1 if the first execution wins, 1 if the second
+        execution wins, or zero if the tie could not be broken.  The 'result'
+        argument is None or a result string produced from the
+        TestResults.collectResults() method.
+        """
+        if result != None:
+            # break tie using the preferred result
+            if result.startswith( 'state=' ):
+                rs = result.split( 'state=' )[1]
+                r1 = attrs1.get( 'state', '' )
+                r2 = attrs2.get( 'state', '' )
+            else:
+                assert result.startswith( 'result=' )
+                rs = result.split( 'result=' )[1]
+                r1 = attrs1.get( 'result', '' )
+                r2 = attrs2.get( 'result', '' )
+            if r1 == rs and r2 != rs:
+                # only previous entry has preferred result
+                return -1
+            elif r2 == rs and r1 != rs:
+                # only new entry has preferred result
+                return 1
+
+        d1 = attrs1.get( 'xdate', None )
+        d2 = attrs2.get( 'xdate', None )
+        if d2 == None:
+            # new entry does not have an execution date
+            return -1
+        elif d1 == None or d2 > d1:
+            # old entry does not have an execution date or new entry
+            # executed more recently
+            return 1
+
+        # unable to break the tie
+        return 0
 
 
 class DateMap:
@@ -2190,6 +2282,7 @@ class DateMap:
         if result == 'fail': return 'F'
         if result == 'timeout': return 'T'
         if result == 'notrun': return 'n'
+        if result == 'started': return 's'   # this is for vvtest runs
         if result == 'run': return 'r'   # this is for vvtest runs
         return '?'
 

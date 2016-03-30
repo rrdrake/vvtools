@@ -30,6 +30,7 @@ def main():
                   runtimes01 runtimes02
                   list01
                   files01 report01
+                  inprogress
                """.split()
 
     for func in argL:
@@ -100,7 +101,7 @@ def results01():
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
     tdir = os.path.abspath( results_dir() )
 
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
     resultsfname = glob.glob('results.*')[0]
 
     # without a runtimes file, no tests should have been added (because the
@@ -118,7 +119,7 @@ def results01():
     ok,out = run_cmd( resultspy + ' save' )
     assert ok
     # rerun vvtest with to save the test results
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
     tr = results.TestResults( resultsfname )
     assert tr.testdir() == tdir
     assert len( tr.dirList() ) == 2
@@ -139,7 +140,7 @@ def results01():
     assert ok
     ok,out = run_cmd( resultspy + ' save', directory='two' )
     assert ok
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
     # this time the tests should have different root-relative paths
     tr = results.TestResults( resultsfname )
     assert tr.dirList() == ['one','two']
@@ -191,7 +192,7 @@ def results02():
     # bootstrap with runtimes files then save the test results
     ok,out = run_cmd( resultspy + ' save' )
     assert ok
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
 
     resultsfname = glob.glob('results.*')[0]
     tr = results.TestResults( resultsfname )
@@ -227,7 +228,7 @@ def results03():
     # bootstrap with runtimes files then save the test results
     ok,out = run_cmd( resultspy + ' save' )
     assert ok
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
 
     resultsfname = glob.glob('results.*')[0]
     tr = results.TestResults( resultsfname )
@@ -259,7 +260,7 @@ def results04():
     # bootstrap with runtimes files then save the test results
     ok,out = run_cmd( resultspy + ' save' )
     assert ok
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
 
     resultsfname = glob.glob('results.*')[0]
     tr = results.TestResults( resultsfname )
@@ -292,7 +293,7 @@ def results05():
     # bootstrap with runtimes files then save the test results
     ok,out = run_cmd( resultspy + ' save' )
     assert ok
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
 
     resultsfname = glob.glob('results.*')[0]
     tr = results.TestResults( resultsfname )
@@ -336,7 +337,7 @@ def multi01():
     assert ok
     ok,out = run_cmd( resultspy + ' save', directory='two' )
     assert ok
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
 
     resultsfname = glob.glob('results.*')[0]
     tr = results.TestResults( resultsfname )
@@ -386,7 +387,7 @@ def multi01():
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
     # merge over the top of the multi platform file
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
     ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
     assert ok
     # now check the 'dog' test time
@@ -427,7 +428,7 @@ def multi02():
 
     # create a multiplatform timings file
     run_cmd( resultspy + ' save' )
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
     resultsfname = glob.glob('results.*')[0]
     ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
     assert ok
@@ -454,7 +455,7 @@ def multi02():
     assert np == 0 and nd == 1 and nf == 0 and nn == 0
 
     # save a second results file
-    run_vvtest( '--save-results --results-tag diffs' )
+    run_vvtest( '-i --save-results --results-tag diffs' )
     results2fname = None
     for f in glob.glob('results.*'):
       if f != resultsfname:
@@ -573,7 +574,7 @@ def multi03():
     os.mkdir( 'testing' )
     os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
 
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
     resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
 
     # create initial multiplat file
@@ -641,7 +642,7 @@ def multi04():
     os.mkdir( 'testing' )
     os.environ['TESTING_DIRECTORY'] = os.path.join( os.getcwd(), 'testing' )
 
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
     resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
 
     # use the results.py script to save the results to the runtimes file
@@ -666,7 +667,7 @@ def multi04():
         </rtest>""" )
     out,np,nd,nf,nn = run_vvtest( '-w -k cat tsrc' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    run_vvtest( '--save-results --results-tag 2nd' )
+    run_vvtest( '-i --save-results --results-tag 2nd' )
 
     rfn2 = os.path.abspath( glob.glob( 'testing/results.*.2nd' )[0] )
 
@@ -696,7 +697,7 @@ def multi04():
         </rtest>""" )
     out,np,nd,nf,nn = run_vvtest( '-w tsrc' )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    run_vvtest( '--save-results --results-tag 3rd' )
+    run_vvtest( '-i --save-results --results-tag 3rd' )
     rfn3 = os.path.abspath( glob.glob( 'testing/results.*.3rd' )[0] )
     # force the results to be a different platform/compiler
     tr = results.TestResults( rfn3 )
@@ -744,7 +745,7 @@ def multi05():
     run_cmd( resultspy + ' save' )  # bootstrap runtimes
 
     # create a multiplatform timings file
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
     resultsfname = os.path.abspath( glob.glob('results.*')[0] )
     ok,out = run_cmd( resultspy + ' merge '+resultsfname )
     assert ok
@@ -768,7 +769,7 @@ def multi05():
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
     # save a second results file
-    run_vvtest( '--save-results --results-tag faster' )
+    run_vvtest( '-i --save-results --results-tag faster' )
     results2fname = None
     for f in glob.glob('results.*'):
         f = os.path.abspath(f)
@@ -806,7 +807,7 @@ def multi05():
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
     # save a third results file
-    run_vvtest( '--save-results --results-tag slower' )
+    run_vvtest( '-i --save-results --results-tag slower' )
     results3fname = None
     for f in glob.glob('results.*slower*'):
         f = os.path.abspath(f)
@@ -860,7 +861,7 @@ def multi06():
     run_cmd( resultspy + ' save' )  # bootstrap runtimes
 
     # create a multiplatform timings file
-    run_vvtest( '--save-results --results-tag first' )
+    run_vvtest( '-i --save-results --results-tag first' )
     resultsfname = os.path.abspath( glob.glob('results.*')[0] )
 
     # get the platform name & compiler
@@ -882,7 +883,7 @@ def multi06():
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
     # save a second results file
-    run_vvtest( '--save-results --results-tag second' )
+    run_vvtest( '-i --save-results --results-tag second' )
     results2fname = os.path.abspath( glob.glob('results.*.second')[0] )
     assert results2fname != resultsfname
 
@@ -900,7 +901,7 @@ def multi06():
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
     # save a second results file
-    run_vvtest( '--save-results --results-tag third' )
+    run_vvtest( '-i --save-results --results-tag third' )
     results3fname = os.path.abspath( glob.glob('results.*.third')[0] )
     assert results3fname != resultsfname and results3fname != results2fname
 
@@ -970,7 +971,7 @@ def runtimes01():
     run_cmd( resultspy + ' save', directory='tsrc' )
 
     # save the results
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
     resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
 
     # create a runtimes file in a subdirectory
@@ -996,7 +997,7 @@ def runtimes01():
     out,np,nd,nf,nn = run_vvtest( '-w tsrc' )
     assert np == 4 and nd == 0 and nf == 0 and nn == 0
 
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
     ok,out = run_cmd( resultspy + ' save ' + resultsfname, directory='tsrc' )
     assert ok
 
@@ -1044,7 +1045,7 @@ def runtimes02():
     run_cmd( resultspy + ' save', directory='tsrc' )
 
     # save the results
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
     resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
 
     resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
@@ -1064,7 +1065,7 @@ def runtimes02():
     out,np,nd,nf,nn = run_vvtest( '-w tsrc' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
     ok,out = run_cmd( resultspy+' save -w '+resultsfname, directory='tsrc' )
     assert ok
 
@@ -1109,7 +1110,7 @@ def list01():
     os.mkdir( 'testing' )
     os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
 
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
     resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
 
     # create a duplicate results file with known platform/compiler names
@@ -1338,7 +1339,7 @@ def report01():
     # bootstrap with runtimes files then save the test results
     ok,out = run_cmd( resultspy + ' save', directory='one' )
     assert ok
-    run_vvtest( '--save-results' )
+    run_vvtest( '-i --save-results' )
     
     rf1 = glob.glob('results.*')[0]
     tr = results.TestResults( rf1 )
@@ -1357,6 +1358,49 @@ def report01():
     assert len( grep( out, 'fail=1 ' ) ) == 2
     assert len( grep( out, 'one/dog' ) ) == 1
     assert len( grep( out, 'one/ferret' ) ) == 1
+
+
+############################################################################
+
+def inprogress():
+    """
+    in-progress results file
+    """
+    writefile( "cat.xml", """
+        <rtest name="cat">
+          <execute>
+            sleep 1
+          </execute>
+        </rtest>""" )
+    writefile( "dog.xml", """
+        <rtest name="dog">
+          <execute>
+            sleep 2
+          </execute>
+        </rtest>""" )
+    writefile( "circle.xml", """
+        <rtest name="circle">
+          <execute>
+            sleep 3
+          </execute>
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest( '--intr 2 --save-results', ignore_errors=1 )
+    tdir = os.path.abspath( results_dir() )
+
+    resultsfname = glob.glob('results.*')[0]
+    
+    ok,out = run_cmd( resultspy + ' report ' + resultsfname )
+    assert ok
+
+    tr = results.TestResults( resultsfname )
+    assert tr.inProgress()
+
+    for line in grep( out, ' [.]' ):
+        if line.strip().startswith('.'):
+            s = line.split('pass')[0].strip()
+            assert s[-1] == 's'
+            break
 
 
 ############################################################################
