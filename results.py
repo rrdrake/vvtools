@@ -1051,18 +1051,17 @@ class TestResults:
         if inprogress:
             fp.write( 'IN_PROGRESS=True' + os.linesep )
 
-        else:
-            fp.write( os.linesep )
-            dL = self.dataD.keys()
-            dL.sort()
-            for d in dL:
-              tD = self.dataD[d]
-              tL = tD.keys()
-              tL.sort()
-              for tn in tL:
-                aD = tD[tn]
-                s = d+'/'+tn + ' ' + make_attr_string( aD )
-                fp.write( s + os.linesep )
+        fp.write( os.linesep )
+        dL = self.dataD.keys()
+        dL.sort()
+        for d in dL:
+          tD = self.dataD[d]
+          tL = tD.keys()
+          tL.sort()
+          for tn in tL:
+            aD = tD[tn]
+            s = d+'/'+tn + ' ' + make_attr_string( aD )
+            fp.write( s + os.linesep )
         
         fp.close()
     
@@ -1949,13 +1948,14 @@ def report_generation( optD, fileL ):
                 else:               rL.append( (fdate,'run') )
             hist = dmap.history(rL)
 
-            fdate,tr = rmat.latestResults( pc, loc )
+            fdate,tr,started = rmat.latestResults( pc, loc )
             
             print3( '  ', dmap.legend() )
             print3( '  ', hist, '  ', tr.getSummary() )
 
-            # limit itemization of tests to results that ran recently enough
-            if fdate > curtm - showage*24*60*60:
+            # don't itemize tests if they are still running, or if they
+            # ran too long ago
+            if not started and fdate > curtm - showage*24*60*60:
                 
                 resD,nmatch = tr.collectResults( 'fail', 'diff', 'timeout' )
                 
@@ -1994,10 +1994,13 @@ def report_generation( optD, fileL ):
             tests,location = rmat.resultsForTest( pc, d, tn, result=res )
             rL = []
             for fd,aD in tests:
-                st = aD.get( 'state', '' )
-                rs = aD.get( 'result', '' )
-                if rs: rL.append( (fd,rs) )
-                else: rL.append( (fd,st) )
+                if aD == None:
+                    rL.append( (fd,'started') )
+                else:
+                    st = aD.get( 'state', '' )
+                    rs = aD.get( 'result', '' )
+                    if rs: rL.append( (fd,rs) )
+                    else: rL.append( (fd,st) )
             print3( pcfmt%pc, dmap.history( rL ), location )
 
         print3()
@@ -2086,16 +2089,24 @@ class ResultsMatrix:
 
     def latestResults(self, platcplr, location):
         """
-        Returns the (file date, TestResults) pair with the most recent file
-        date stamp for the given 'platcplr' row and 'location' column.
+        For the given platform/compiler and location, finds the test results
+        with the most recent date stamp, but that is not in progress.  Returns
+        a triple
+
+            ( file date, TestResults, started )
+
+        where 'started' is True if the most recent test results are in
+        progress.
         """
         L = [] + self.matrixD[platcplr][location]
         L.reverse()
+        started = L[0][1].inProgress()
         # pick the most recent which is not in-progress
         for fd,tr in L:
             if not tr.inProgress():
-                return (fd,tr)
-        return L[0]
+                return fd,tr,started
+        fd,tr = L[0]  # all are in progress? just choose most recent
+        return fd,tr,started
 
     def resultsForTest(self, platcplr, testdir, testname, result=None):
         """
@@ -2108,7 +2119,8 @@ class ResultsMatrix:
         "result=<result>" (as produced by TestResults.collectResults()).
 
         The collection is gathered as a list of (file date, test attributes)
-        pairs (and sorted).
+        pairs (and sorted).  The 'test attributes' dictionary will be None
+        if and only if a test results run was in progress on that date.
 
         Also computed is the location of the most recent execution of the test.
 
@@ -2118,26 +2130,33 @@ class ResultsMatrix:
         maxloc = None
         for loc,L in self.matrixD[platcplr].items():
             for filedate,results in L:
+                
                 attrD = results.testAttrs( testdir, testname )
                 if len(attrD) > 0:
                     
-                    if filedate in D:
-                        i = self._tie_break( D[filedate], attrD, result )
-                        if i > 0:
-                            D[filedate] = attrD  # prefer new test results
+                    if 'xdate' not in attrD and results.inProgress():
+                        if filedate not in D:
+                            # mark the test on this date as in progress
+                            D[filedate] = None
+                    
                     else:
-                        D[filedate] = attrD
+                        if filedate in D:
+                            i = self._tie_break( D[filedate], attrD, result )
+                            if i > 0:
+                                D[filedate] = attrD  # prefer new test results
+                        else:
+                            D[filedate] = attrD
 
-                    if maxloc == None:
-                        maxloc = [ filedate, loc, attrD ]
-                    elif filedate > maxloc[0]:
-                        maxloc = [ filedate, loc, attrD ]
-                    elif abs( filedate - maxloc[0] ) < 2:
-                        # the test appears in more than one results file on
-                        # the same file date, so try to break the tie
-                        i = self._tie_break( maxloc[2], attrD, result )
-                        if i > 0:
+                        if maxloc == None:
                             maxloc = [ filedate, loc, attrD ]
+                        elif filedate > maxloc[0]:
+                            maxloc = [ filedate, loc, attrD ]
+                        elif abs( filedate - maxloc[0] ) < 2:
+                            # the test appears in more than one results file
+                            # on the same file date, so try to break the tie
+                            i = self._tie_break( maxloc[2], attrD, result )
+                            if i > 0:
+                                maxloc = [ filedate, loc, attrD ]
         
         L = D.items()
         L.sort()
@@ -2155,6 +2174,13 @@ class ResultsMatrix:
         argument is None or a result string produced from the
         TestResults.collectResults() method.
         """
+        # None is used as an "in progress" mark; in this case, always
+        # choose the other one
+        if attrs1 == None:
+            return 1
+        elif attrs2 == None:
+            return -1
+
         if result != None:
             # break tie using the preferred result
             if result.startswith( 'state=' ):
