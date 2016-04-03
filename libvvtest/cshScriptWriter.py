@@ -419,14 +419,12 @@ def writeScript( tspec, xdb, plat, \
     line_list.append( 'exit 0' )
     
     fp = open( scriptname, 'w' )
-    
     for l in line_list:
       fp.write( l + '\n' )
-    
     fp.close()
     
     perm = stat.S_IMODE( os.stat(scriptname)[stat.ST_MODE] )
-    perm = perm | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+    perm |= stat.S_IXUSR
     try:
       os.chmod( scriptname, perm )
     except:

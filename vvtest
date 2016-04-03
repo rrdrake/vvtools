@@ -195,6 +195,16 @@ OPTIONS
             will prevent a test script that exists from being overwritten
             and the test directory will not be cleaned out.
       
+      --perms <permissions>
+            Apply permission settings to files and directories in the test
+            execution area.  Multiple --perms options can be used and/or the
+            specifications can be comma separated.  If the specifcation starts
+            with "g=" then the group permissions are set.  If it starts with
+            "o=" then the world permissions are set.  If not one of these,
+            then it must be the name of a UNIX group, and the files and
+            directories have their group set.  Examples are "o=-", "g=rx,o=",
+            "wg-alegra,g=rws,o=---".
+
       -C, --postclean
             Clean out the test directory of each test after it shows a "pass".
             Only those tests that "pass" are cleaned out after they run.  The
@@ -468,8 +478,12 @@ def generateTestList( dirs, plat, ufilter ):
     cwd = None
     test_dir = None
     cwd = os.getcwd()
-    toprundir = testResultsDir( plat.getName() )
-    test_dir = os.path.join( cwd, toprundir )
+    testdirname = testResultsDir( plat.getName() )
+    test_dir = os.path.join( cwd, testdirname )
+
+    perms = None
+    if '--perms' in optdict:
+        perms = PermissionSetter( test_dir, optdict['--perms'] )
     
     # TODO: clean up the way/when lists are printed;  in this case, the
     #       createTestScripts() also prints
@@ -481,12 +495,17 @@ def generateTestList( dirs, plat, ufilter ):
       print XstatusString(atest, 0, test_dir, cwd)
     print "   =================================================="
     
-    createTestDir(toprundir)
-    writeCommandInfo(test_dir, plat)
-    createTestScripts( tlist, test_dir, plat )
-    tlist.stringFileWrite( os.path.join(test_dir, testlist_name) )
+    createTestDir( testdirname, perms )
+    writeCommandInfo( test_dir, plat, perms )
+    createTestScripts( tlist, test_dir, plat, perms )
+
+    tf = os.path.join( test_dir, testlist_name )
+    tlist.stringFileWrite( tf )
+
+    if perms != None:
+        perms.set( os.path.abspath( tf ) )
     
-    print "test directory:", toprundir
+    print "test directory:", testdirname
 
 
 def extractTestFiles( dirs, plat, target_dir, ufilter ):
@@ -605,73 +624,128 @@ def keywordInformation(tlist):
 ##############################################################################
 
 
-def testResultsDir(platform_name):
+def testResultsDir( platform_name ):
     """
-    Generates the directory to hold test results, which is unique up to
-    the platform and on/off options.
+    Generates and returns the directory name to hold test results, which is
+    unique up to the platform and on/off options.
     """
-    toprundir = 'TestResults'
-    toprundir = toprundir + "." + platform_name
-    if optdict.has_key('-o'):
-      toprundir = toprundir + '.ON=' + string.join( optdict['-o'], '_' )
-    if optdict.has_key('-O'):
-      toprundir = toprundir + '.OFF=' + string.join( optdict['-O'], '_' )
+    testdirname = 'TestResults.' + platform_name
+    if '-o' in optdict:
+      testdirname += '.ON=' + '_'.join( optdict['-o'] )
+    if '-O' in optdict:
+      testdirname += '.OFF=' + '_'.join( optdict['-O'] )
     
-    return toprundir
+    return testdirname
 
 
-def createTestDir(toprundir):
-    
-    if optdict.has_key('-M'):
-      if makeMirrorDirectory(optdict['-M'], toprundir):
-        return
-    
-    if not os.path.exists(toprundir):
-      os.mkdir(toprundir)
-
-
-def makeMirrorDirectory(Mval, toprundir):
-    # create a directory in a different location and add a link to it
-    if Mval == 'any':
-      
-      for d in ['/var/scratch', '/scratch', '/var/scratch1', '/scratch1', \
-                '/var/scratch2', '/scratch2', '/var/scrl1','/gpfs1']:
-        ud = os.path.join(d, getUserName())
-        if os.path.exists(d) and \
-              ( os.path.exists(ud) or os.access(d, os.W_OK) ):
-          if not os.path.exists(ud):
-            os.mkdir(ud)
-          Mval = ud
-          break
-      if Mval == 'any':
-        return 0  # a scratch dir could be found
-      
-      # also append the current directory name and toprundir name
-      Mval = os.path.join( Mval, os.path.basename( os.getcwd() ),
-                                 os.path.basename(toprundir) )
+def createTestDir( testdirname, perms ):
+    """
+    Create the given directory name.  If -M is given in the command line
+    options, then a mirror directory is created and 'testdirname' will be
+    created as a soft link pointing to the mirror directory.
+    """
+    if '-M' in optdict and \
+            makeMirrorDirectory( optdict['-M'], testdirname, perms ):
+        pass
     
     else:
-      Mval = os.path.join( Mval, os.path.basename(toprundir) )
-    
-    if not os.path.exists(Mval):
-      os.makedirs(Mval)
-    
-    if os.path.exists(toprundir) or os.path.islink(toprundir):
-      if os.path.islink(toprundir):
-        os.remove(toprundir)
-      else:
-        if os.path.samefile(Mval, toprundir):
-          raise Exception( \
-                  "mirror directory and test results directory are the same" )
-        print exeName + ": removing directory tree " + toprundir
-        shutil.rmtree(toprundir)
-    
-    os.symlink(Mval, toprundir)
-    
-    return 1
+        if os.path.exists( testdirname ):
+            if not os.path.isdir( testdirname ):
+                # replace regular file with a directory
+                os.remove( testdirname )
+                os.mkdir( testdirname )
+        else:
+            if os.path.islink( testdirname ):
+                os.remove( testdirname )  # remove broken softlink
+            os.mkdir( testdirname )
+
+        if perms:
+            perms.set( os.path.abspath( testdirname ) )
 
 
-def writeCommandInfo(test_dir, plat):
+def makeMirrorDirectory( Mval, testdirname, perms ):
+    """
+    Create a directory in another location then soft link 'testdirname' to it.
+    Returns False only if 'Mval' is the word "any" and a suitable scratch
+    directory could not be found.
+    """
+    assert testdirname == os.path.basename( testdirname )
+
+    if Mval == 'any':
+      
+        usr = getUserName()
+        for d in ['/var/scratch', '/scratch', '/var/scratch1', '/scratch1', \
+                  '/var/scratch2', '/scratch2', '/var/scrl1', '/gpfs1']:
+            if os.path.exists(d) and os.path.isdir(d):
+                ud = os.path.join( d, usr )
+                if os.path.exists(ud):
+                    if os.path.isdir(ud) and \
+                       os.access( ud, os.X_OK ) and os.access( ud, os.W_OK ):
+                        Mval = ud
+                        break
+                elif os.access( d, os.X_OK ) and os.access( d, os.W_OK ):
+                    try:
+                        os.mkdir(ud)
+                    except:
+                        pass
+                    else:
+                        Mval = ud
+                        break
+        
+        if Mval == 'any':
+            return False  # a scratch dir could not be found
+        
+        # include the current directory name in the mirror location
+        curdir = os.path.basename( os.getcwd() )
+        Mval = os.path.join( Mval, curdir )
+
+        if not os.path.exists( Mval ):
+            os.mkdir( Mval )
+
+    else:
+        Mval = os.path.abspath( Mval )
+    
+    if not os.path.exists( Mval ) or not os.path.isdir( Mval ) or \
+       not os.access( Mval, os.X_OK ) or not os.access( Mval, os.W_OK ):
+        raise Exception( "invalid or non-existent mirror directory: "+Mval )
+
+    if os.path.samefile( Mval, os.getcwd() ):
+        raise Exception( "mirror directory and current working directory " + \
+                "are the same: "+Mval+' == '+os.getcwd() )
+
+    mirdir = os.path.join( Mval, testdirname )
+
+    if os.path.exists( mirdir ):
+        if not os.path.isdir( mirdir ):
+            # replace regular file with a directory
+            os.remove( mirdir )
+            os.mkdir( mirdir )
+    else:
+        if os.path.islink( mirdir ):
+            os.remove( mirdir )  # remove broken softlink
+        os.mkdir( mirdir )
+    
+    if perms:
+        perms.set( os.path.abspath( mirdir ) )
+
+    if os.path.islink( testdirname ):
+        path = os.readlink( testdirname )
+        if path != mirdir:
+            os.remove( testdirname )
+            os.symlink( mirdir, testdirname )
+
+    else:
+        if os.path.exists( testdirname ):
+            if os.path.isdir( testdirname ):
+                shutil.rmtree( testdirname )
+            else:
+                os.remove( testdirname )
+        os.symlink( mirdir, testdirname )
+    
+    return True
+
+
+def writeCommandInfo( test_dir, plat, perms ):
     """
     Creates the test results information file.
     """
@@ -709,6 +783,9 @@ def writeCommandInfo(test_dir, plat):
       if optdict.has_key('--check'):
         fp.write( 'CHECK=' + string.join( optdict['--check'] ) + '\n' )
       fp.close()
+
+    if perms != None:
+        perms.set( os.path.abspath(f) )
 
 
 def readCommandInfo():
@@ -794,26 +871,229 @@ def readCommandInfo():
     return test_dir
 
 
+class PermissionSetter:
+    
+    def __init__(self, topdir, spec):
+        """
+        The 'spec' can be a list or a comma separate string.  If a spec
+        starts with "g=" or "o=" then set permissions.  Otherwise, set the
+        group name to that string.
+
+        Examples of 'spec': "wg-alegra,g=r-x,o=---"
+                            ['wg-alegra','g=rx','o=']
+                            ['wg-alegra', 'g=rx,o=rx']
+        """
+        self.topdir = topdir
+        self.spec = spec
+        self.cache = {}
+
+        self.grpid = None
+        self.gperm = None
+        self.operm = None
+        try:
+            self._parse_spec( spec )
+        except:
+            raise Exception( "invalid permissions specification: "+spec )
+
+    def set(self, path):
+        """
+        If 'path' is an absolute path, then set the permissions on the base
+        path segment only.
+
+        If 'path' is a relative path, then it must be relative to 'topdir'
+        and the permissions are set on the path and all intermediate
+        directories at or below the 'topdir'.
+
+        An instance of this class caches the paths that have their permissions
+        set and will not set them more than once.
+        """
+        if os.path.isabs( path ):
+            assert os.path.exists( path )
+            self._setperms( path )
+            
+        else:
+            path = os.path.normpath( path )
+            assert not path.startswith( '..' )
+            
+            fp = os.path.join( self.topdir, path )
+            assert os.path.exists( fp )
+
+            # split the path into a list of directory segments
+            L = []
+            p = path
+            while True:
+                d,b = os.path.split( p )
+                L.append( b )
+                if d:
+                    p = d
+                else:
+                    break
+            L.reverse()
+
+            rel = '.'
+            for b in L:
+                rel = os.path.normpath( os.path.join( rel, b ) )
+                if rel not in self.cache:
+                    self.cache[ rel ] = None
+                    fp = os.path.join( self.topdir, rel )
+                    self._setperms( fp )
+
+    def recurse(self, path):
+        """
+        If 'path' is a regular file, then permissions are applied to it.
+        If 'path' is a directory, then permissions are applied recursively
+        to the each entry in the directory.  Soft links are left untouched
+        and not followed.
+        """
+        if os.path.isdir( path ):
+            def walker( arg, dirname, fnames ):
+                rmL = []
+                for f in fnames:
+                    p = os.path.join( dirname, f )
+                    if os.path.islink(p):
+                        rmL.append(f)
+                    else:
+                        arg._setperms(p)
+                for f in rmL:
+                    fnames.remove(f)
+            os.path.walk( path, walker, self )
+        
+        elif not os.path.islink( path ):
+            self._setperms( path )
+
+    GRP_MASK = (stat.S_ISGID|stat.S_IRWXG)
+    GRP_PERMS = { ''    : 0,
+                  '---' : 0,
+                  '-'   : 0,
+                  'r'   : stat.S_IRGRP,
+                  'w'   : stat.S_IWGRP,
+                  'x'   : stat.S_IXGRP,
+                  's'   : stat.S_IXGRP|stat.S_ISGID,
+                  'r--' : stat.S_IRGRP,
+                  '-w-' : stat.S_IWGRP,
+                  '--x' : stat.S_IXGRP,
+                  '--s' : stat.S_IXGRP|stat.S_ISGID,
+                  'rw'  : stat.S_IRGRP|stat.S_IWGRP,
+                  'rx'  : stat.S_IRGRP|stat.S_IXGRP,
+                  'rs'  : stat.S_IRGRP|stat.S_IXGRP|stat.S_ISGID,
+                  'wx'  : stat.S_IWGRP|stat.S_IXGRP,
+                  'rw-' : stat.S_IRGRP|stat.S_IWGRP,
+                  'r-x' : stat.S_IRGRP|stat.S_IXGRP,
+                  'r-s' : stat.S_IRGRP|stat.S_IXGRP|stat.S_ISGID,
+                  '-wx' : stat.S_IWGRP|stat.S_IXGRP,
+                  '-ws' : stat.S_IWGRP|stat.S_IXGRP|stat.S_ISGID,
+                  'rwx' : stat.S_IRWXG,
+                  'rws' : stat.S_IRWXG|stat.S_ISGID }
+    
+    OTH_MASK = stat.S_IRWXO
+    OTH_PERMS = { ''    : 0,
+                  '---' : 0,
+                  '-'   : 0,
+                  'r'   : stat.S_IROTH,
+                  'w'   : stat.S_IWOTH,
+                  'x'   : stat.S_IXOTH,
+                  'r--' : stat.S_IROTH,
+                  '-w-' : stat.S_IWOTH,
+                  '--x' : stat.S_IXOTH,
+                  'rw'  : stat.S_IROTH|stat.S_IWOTH,
+                  'rx'  : stat.S_IROTH|stat.S_IXOTH,
+                  'wx'  : stat.S_IWOTH|stat.S_IXOTH,
+                  'rw-' : stat.S_IROTH|stat.S_IWOTH,
+                  'r-x' : stat.S_IROTH|stat.S_IXOTH,
+                  '-wx' : stat.S_IWOTH|stat.S_IXOTH,
+                  'rwx' : stat.S_IRWXO }
+    
+    def _parse_spec(self, spec):
+        """
+        Sets self.grpid, self.gperm, and self.operm based on the command
+        line specification.
+        """
+        if type(spec) == type(''):
+            spec = [ spec ]
+        for item in spec:
+            for s in item.split(','):
+                s = s.strip()
+                if s:
+                    if s.startswith( 'g=' ):
+                        self.gperm = PermissionSetter.GRP_PERMS[ s[2:] ]
+                    elif s.startswith( 'o=' ):
+                        self.operm = PermissionSetter.OTH_PERMS[ s[2:] ]
+                    else:
+                        import grp
+                        self.grpid = grp.getgrnam( s ).gr_gid
+    
+    def _setperms(self, path):
+        """
+        Applies the permissions stored in this class to the give path.
+        """
+        if self.grpid != None:
+            uid = os.stat( path ).st_uid
+            os.chown( path, uid, self.grpid )
+        
+        if self.gperm != None or self.operm != None:
+            
+            fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+            
+            if os.path.isdir( path ):
+                # for directories, just set the permissions to the values
+                # given at construction
+                if self.gperm != None:
+                    fm &= ( ~(PermissionSetter.GRP_MASK) )
+                    fm |= self.gperm
+                if self.operm != None:
+                    fm &= ( ~(PermissionSetter.OTH_MASK) )
+                    fm |= self.operm
+            
+            else:
+                # for regular files, give execute permission if read is
+                # allowed AND the owner has execute permission
+                
+                if self.gperm != None:
+                    fm &= ( ~(PermissionSetter.GRP_MASK) )
+                    if int( self.gperm & stat.S_IRGRP ):
+                        fm |= stat.S_IRGRP
+                        if int( fm & stat.S_IXUSR ):
+                            fm |= stat.S_IXGRP
+                    if int( self.gperm & stat.S_IWGRP ):
+                        fm |= stat.S_IWGRP
+                
+                if self.operm != None:
+                    fm &= ( ~(PermissionSetter.OTH_MASK) )
+                    if int( self.operm & stat.S_IROTH ):
+                        fm |= stat.S_IROTH
+                        if int( fm & stat.S_IXUSR ):
+                            fm |= stat.S_IXOTH
+                    if int( self.operm & stat.S_IWOTH ):
+                        fm |= stat.S_IWOTH
+            
+            os.chmod( path, fm )
+
+
 def runTests( dirs, plat, ufilter ):
     """
     Executes a list of tests.
     """
     # determine the directory that stores the test results then create it
-    toprundir = testResultsDir(plat.getName())
-    createTestDir(toprundir)
-    test_dir = os.path.join( os.getcwd(), toprundir )
+    testdirname = testResultsDir( plat.getName() )
+    test_dir = os.path.join( os.getcwd(), testdirname )
+    
+    perms = None
+    if '--perms' in optdict:
+      perms = PermissionSetter( test_dir, optdict['--perms'] )
+    
+    createTestDir( testdirname, perms )
     
     if optdict.has_key('-w'):
-      print '/bin/rm -rf ' + toprundir + '/*'
-      for f in os.listdir(toprundir):
-        df = os.path.join( toprundir, f )
+      print '/bin/rm -rf ' + testdirname + '/*'
+      for f in os.listdir(testdirname):
+        df = os.path.join( testdirname, f )
         if os.path.isdir(df):
           shutil.rmtree( df, 0 )
         else:
           try: os.remove(df)
           except: pass
     
-    writeCommandInfo(test_dir, plat)
+    writeCommandInfo( test_dir, plat, perms )
     
     # create test list
     
@@ -838,22 +1118,26 @@ def runTests( dirs, plat, ufilter ):
     loadExecutionTimes( tlist, plat )
     
     # save the test list in the TestResults directory
-    tlist.stringFileWrite( os.path.join(test_dir, testlist_name) )
+    tf = os.path.join( test_dir, testlist_name )
+    tlist.stringFileWrite( tf )
+
+    if perms != None:
+        perms.set( os.path.abspath( tf ) )
     
     if len(tlist.active) > 0:
       
-      createTestScripts( tlist, test_dir, plat )
+      createTestScripts( tlist, test_dir, plat, perms )
       
       if optdict.has_key('--save-results'):
         tag = optdict.get('--results-tag',None)
         saveResults( tlist, plat, test_dir, tag, inprogress=True )
 
       if not optdict.has_key('--pipeline'):
-        executeTestList( tlist, test_dir, plat )
-        print "test directory:", toprundir
+        executeTestList( tlist, test_dir, plat, perms )
+        print "test directory:", testdirname
       
       else:
-        pipeLineTestList( tlist, test_dir, plat )
+        pipeLineTestList( tlist, test_dir, plat, perms )
     
       if optdict.has_key('--save-results'):
         tag = optdict.get('--results-tag',None)
@@ -863,7 +1147,7 @@ def runTests( dirs, plat, ufilter ):
       print "\n--------- no tests to run -----------\n"
 
 
-def createTestScripts(tlist, test_dir, plat):
+def createTestScripts( tlist, test_dir, plat, perms ):
     
     # create directories and generate test scripts
     
@@ -884,10 +1168,10 @@ def createTestScripts(tlist, test_dir, plat):
           print XstatusString(atest, 0, test_dir, cwd)
         print "--------------------------------------\n"
       
-      tlist.createTestExecs( test_dir, plat, config )
+      tlist.createTestExecs( test_dir, plat, config, perms )
 
 
-def printResults( atestlist, add_date, test_dir, do_html ):
+def printResults( atestlist, add_date, test_dir, do_html, perms ):
     """
     Prints a summary to the screen and also creates an HTML summary file.
     """
@@ -915,11 +1199,11 @@ def printResults( atestlist, add_date, test_dir, do_html ):
     print "Summary: " + sumstr
     
     if do_html:
-      printHTMLResults( sumstr, test_dir,
+      printHTMLResults( sumstr, test_dir, perms,
                         Lfail, Ltime, Ldiff, Lpass, Lnrun, Lndone )
 
 
-def printHTMLResults( sumstr, test_dir,
+def printHTMLResults( sumstr, test_dir, perms,
                       Lfail, Ltime, Ldiff, Lpass, Lnrun, Lndone ):
     """
     Opens and writes an HTML summary file in the test directory.
@@ -976,6 +1260,9 @@ def printHTMLResults( sumstr, test_dir,
     
     fp.write( "</body>\n</html>\n" )
     fp.close()
+
+    if perms != None:
+        perms.set( os.path.abspath( 'summary.htm' ) )
 
 
 def writeHTMLTestList( fp, test_dir, tlist ):
@@ -1123,7 +1410,7 @@ def pipelineInfo( test_dir, plat ):
             break
 
 
-def executeTestList( tlist, test_dir, plat, fsuffix='' ):
+def executeTestList( tlist, test_dir, plat, perms, fsuffix='' ):
     """
     """
     plat.display()
@@ -1142,7 +1429,11 @@ def executeTestList( tlist, test_dir, plat, fsuffix='' ):
     donefname = os.path.join(test_dir, "finished" + fsuffix)
     donefile = tlist.openFileForWrite( donefname )
     donefile.close()
-    
+
+    if perms != None:
+        perms.set( os.path.abspath( launchfname ) )
+        perms.set( os.path.abspath( donefname ) )
+
     cwd = os.getcwd()
     
     run_list = []
@@ -1246,17 +1537,17 @@ def executeTestList( tlist, test_dir, plat, fsuffix='' ):
     print "Finish time:", time.ctime( time.time() ) + \
           " (elapsed %dh %dm)" % (h,m)
     
-    printResults( tlist, 0, test_dir, 1 )
+    printResults( tlist, 0, test_dir, 1, perms )
     
     print "Finish time:", time.ctime( time.time() ) + \
           " (elapsed %dh %dm)" % (h,m)
 
 
-def pipeLineTestList( tlist, test_dir, plat ):
+def pipeLineTestList( tlist, test_dir, plat, perms ):
     """
     The 'tlist' is a TestList class instance.
     """
-    pipes = Pipelines( plat, tlist )
+    pipes = Pipelines( plat, tlist, perms )
     
     plat.display()
     starttime = time.time()
@@ -1329,6 +1620,8 @@ def pipeLineTestList( tlist, test_dir, plat ):
                     '", number remaining:', len(qsubids) - len(qsubs_stopped)
               procs_used = procs_used - qsubids[qid]
               if procs_used < 0: procs_used = 0
+            if perms != None and os.path.exists( pout ):
+                perms.set( pout )
       
       # see if another qsub can be submitted
       
@@ -1416,7 +1709,7 @@ def pipeLineTestList( tlist, test_dir, plat ):
     print "Finish time:", time.ctime( time.time() ) + \
           " (elapsed %dh %dm)" % (h,m)
     
-    printResults( tlist, 1, test_dir, 1 )
+    printResults( tlist, 1, test_dir, 1, perms )
     
     if len(NS) > 0:
       print "*** Warning: these pipe numbers did not seem to start:", \
@@ -1494,12 +1787,13 @@ def loadExecutionTimes( tlist, plat ):
 
 class Pipelines:
     
-    def __init__(self, plat, tlist):
+    def __init__(self, plat, tlist, perms):
         """
         The 'tlist' is a TestList class instance.
         """
         self.plat = plat
         self.tlist = tlist
+        self.perms = perms
         self.Tzero = 21*60*60  # no timeout in pipeline mode is 21 hours
         
         self.createTestGroups()
@@ -1553,10 +1847,13 @@ class Pipelines:
         commonopts = ''
         if optdict.has_key('-e'): commonopts += ' -e'
         if optdict.has_key('-C'): commonopts += ' -C'
+        if '--perms' in optdict:
+            val = ','.join( optdict['--perms'] )
+            commonopts += ' --perms '+val
         if config.get('configdir'):
-          commonopts += ' --config='+config.get('configdir')
+            commonopts += ' --config='+config.get('configdir')
         for k,v in optdict.get('--platopt',{}).items():
-          commonopts += ' --platopt ' + k + '=' + v
+            commonopts += ' --platopt ' + k + '=' + v
         
         qsubids = {}  # maps qpipe id to max number of processors for that pipe
         
@@ -1576,6 +1873,13 @@ class Pipelines:
           self.tlist.pipelineFileWrite( os.path.join(test_dir, "launched"), L )
           self.tlist.pipelineFileWrite( os.path.join(test_dir, "finished"), L )
         
+        if self.perms != None:
+            for f in os.listdir( test_dir ):
+                if f.startswith( 'pipe' ) or f.startswith( 'testlist' ) or \
+                   f.startswith( 'launched' ) or f.startswith( 'finished' ):
+                    p = os.path.abspath( os.path.join( test_dir, f ) )
+                    self.perms.set( p )
+
         return qsubids
     
     def do_queue_pipe(self, qnumber, qlist, npD, tdir, comopts):
@@ -1608,7 +1912,8 @@ class Pipelines:
         
         tl.stringFileWrite( os.path.join( tdir, 'testlist.' + qidstr ) )
         
-        fp = open( os.path.join( tdir, 'pipe.' + qidstr ), "w" )
+        fn = os.path.join( tdir, 'pipe.' + qidstr )
+        fp = open( fn, "w" )
         
         pout = os.path.join( tdir, 'pipe-out.' + qidstr )
         hdr = self.plat.getQsubScriptHeader( maxnp, qtime, tdir, pout )
@@ -1733,7 +2038,15 @@ def restartTests( test_dir, plat, ufilter ):
     if '--qsub-id' not in optdict:
       loadExecutionTimes( tlist, plat )
     
-    tlist.stringFileWrite( os.path.join(test_dir, "testlist") + fsuffix )
+    perms = None
+    if '--perms' in optdict:
+        perms = PermissionSetter( test_dir, optdict['--perms'] )
+      
+    tf = os.path.join( test_dir, "testlist" ) + fsuffix
+    tlist.stringFileWrite( tf )
+
+    if perms != None:
+        perms.set( os.path.abspath( tf ) )
     
     if len(tlist.active) > 0:
       
@@ -1753,12 +2066,12 @@ def restartTests( test_dir, plat, ufilter ):
       
       if not optdict.has_key('--pipeline'):
         plat.initProcs( test_dir )
-        tlist.createTestExecs( test_dir, plat, config )
-        executeTestList( tlist, test_dir, plat, fsuffix )
+        tlist.createTestExecs( test_dir, plat, config, perms )
+        executeTestList( tlist, test_dir, plat, perms, fsuffix )
       
       else:
-        tlist.createTestExecs( test_dir, plat, config )
-        pipeLineTestList( tlist, test_dir, plat )
+        tlist.createTestExecs( test_dir, plat, config, perms )
+        pipeLineTestList( tlist, test_dir, plat, perms )
     
       if optdict.has_key('--save-results'):
         tag = optdict.get('--results-tag',None)
@@ -1801,9 +2114,13 @@ def baselineTests( test_dir, plat, ufilter ):
         print XstatusString(atest, 0, test_dir, cwd)
       print "--------------------------------------\n"
       
+      perms = None
+      if '--perms' in optdict:
+          perms = PermissionSetter( test_dir, optdict['--perms'] )
+      
       plat.initProcs( test_dir )
       
-      tlist.createTestExecs( test_dir, plat, config )
+      tlist.createTestExecs( test_dir, plat, config, perms )
       
       failures = 0
       for tx in tlist.getTestExecList():
@@ -1842,19 +2159,40 @@ def getUserName():
     """
     Retrieves the user name associated with this process.
     """
+    usr = None
     try:
-      import getpass
-      return getpass.getuser()
+        import getpass
+        usr = getpass.getuser()
     except:
-      # try manually checking the environment
-      for n in ['USER', 'LOGNAME', 'LNAME', 'USERNAME']:
-        if os.environ.get(n, ''):
-          return os.environ[n]
-      # try just returning the user id
-      try: return 'uid' + str(os.getuid())
-      except: pass
+        usr = None
+    
+    if usr == None:
+        try:
+            uid = os.getuid()
+            import pwd
+            usr = pwd.getpwuid( uid )[0]
+        except:
+            usr = None
+    
+    if usr == None:
+        try:
+            p = os.path.expanduser( '~' )
+            if p != '~':
+                usr = os.path.basename( p )
+        except:
+            usr = None
+    
+    if usr == None:
+        # try manually checking the environment
+        for n in ['USER', 'LOGNAME', 'LNAME', 'USERNAME']:
+            if os.environ.get(n,'').strip():
+                usr = os.environ[n]
+                break
 
-    raise NameError, "could not determine this process's user name"
+    if usr == None:
+        raise Exception( "could not determine this process's user name" )
+
+    return usr
 
 
 def computeRelativePath(d1, d2):
@@ -1946,7 +2284,7 @@ def parseOptionsAndGenerateOptionDictionary():
                                   'search=', 'extract=',
                                   'timeout-multiplier=', 'postclean',
                                   'vg', 'save-results', 'results-tag=',
-                                  'config=' ] )
+                                  'config=', 'perms=' ] )
     except getopt.error, e:
       sys.stderr.write('*** ' + exeName + ': error: ' + str(e) + '\n')
       sys.exit(1)
@@ -2404,7 +2742,7 @@ if __name__ == '__main__':
     elif optdict.has_key('--save-results'):
       saveResults( tlist, plat, test_dir, optdict.get('--results-tag',None) )
     else:
-      printResults( tlist, 1, test_dir, optdict.has_key('--html') )
+      printResults( tlist, 1, test_dir, optdict.has_key('--html'), None )
  
   elif optdict.has_key('-b'):
     

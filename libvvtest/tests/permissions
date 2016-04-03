@@ -1,0 +1,148 @@
+#!/usr/bin/env python
+
+import os, sys
+import re
+import time
+import filecmp
+import shutil
+import glob
+import stat
+
+# this will os.chdir() to a subdirectory
+from testutils import *
+
+
+def main():
+    """
+    """
+    argL = get_arg_list()
+
+    if len(argL) == 0:
+        argL = """test01 test02
+               """.split()
+
+    for func in argL:
+        
+        rmallfiles()
+        time.sleep(1)
+        
+        print3( '====> ', func )
+        eval( func+'()' )
+
+
+########################################################################
+
+def test01():
+    """
+    turn off all group and world permissions
+    """
+    writefile( "one/cat.xml", """
+        <rtest name="cat">
+          <execute>
+        sleep 1
+          </execute>
+        </rtest>""" )
+    writefile( "one/dog.xml", """
+        <rtest name="dog">
+          <execute>
+        sleep 2
+          </execute>
+        </rtest>""" )
+    writefile( "two/circle.xml", """
+        <rtest name="circle">
+          <execute>
+        sleep 3
+          </execute>
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest( '--perms g=,o=' )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+    tdir = os.path.abspath( results_dir() )
+
+    m = stat.S_IMODE( os.stat(tdir)[stat.ST_MODE] )
+    assert int( m & stat.S_IRWXG ) == 0
+    assert int( m & stat.S_IRWXO ) == 0
+
+    for f in 'test.cache testlist one two'.split():
+        p = os.path.join( tdir, f )
+        m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+        assert int( m & stat.S_IRWXG ) == 0
+        assert int( m & stat.S_IRWXO ) == 0
+
+    for f in 'cat dog'.split():
+        p = os.path.join( tdir, 'one', f )
+        m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+        assert int( m & stat.S_IRWXG ) == 0
+        assert int( m & stat.S_IRWXO ) == 0
+
+    for f in 'execute.log runscript'.split():
+        p = os.path.join( tdir, 'one', 'dog', f )
+        m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+        assert int( m & stat.S_IRWXG ) == 0
+        assert int( m & stat.S_IRWXO ) == 0
+
+def test02():
+    """
+    turn on group and world permissions
+    """
+    writefile( "one/cat.xml", """
+        <rtest name="cat">
+          <execute>
+        sleep 1
+          </execute>
+        </rtest>""" )
+    writefile( "one/dog.xml", """
+        <rtest name="dog">
+          <execute>
+        sleep 2
+          </execute>
+        </rtest>""" )
+    writefile( "two/circle.xml", """
+        <rtest name="circle">
+          <execute>
+        sleep 3
+          </execute>
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest( '--perms g=rws,o=rwx' )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+    tdir = os.path.abspath( results_dir() )
+
+    m = stat.S_IMODE( os.stat(tdir)[stat.ST_MODE] )
+    assert int( m & (stat.S_IRWXG|stat.S_ISGID) ) == int( stat.S_IRWXG|stat.S_ISGID )
+    assert int( m & stat.S_IRWXO ) == stat.S_IRWXO
+
+    for f in 'test.cache testlist'.split():
+        p = os.path.join( tdir, f )
+        m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+        assert int( m & stat.S_IRWXG ) == int( stat.S_IRGRP|stat.S_IWGRP )
+        assert int( m & stat.S_IRWXO ) == int( stat.S_IROTH|stat.S_IWOTH )
+
+    for f in 'one two'.split():
+        p = os.path.join( tdir, f )
+        m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+        assert int( m & (stat.S_IRWXG|stat.S_ISGID) ) == int( stat.S_IRWXG|stat.S_ISGID )
+        assert int( m & stat.S_IRWXO ) == stat.S_IRWXO
+
+    for f in 'cat dog'.split():
+        p = os.path.join( tdir, 'one', f )
+        m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+        assert int( m & (stat.S_IRWXG|stat.S_ISGID) ) == int( stat.S_IRWXG|stat.S_ISGID )
+        assert int( m & stat.S_IRWXO ) == stat.S_IRWXO
+
+    for f in 'execute.log'.split():
+        p = os.path.join( tdir, 'one', 'dog', f )
+        m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+        assert int( m & stat.S_IRWXG ) == int( stat.S_IRGRP|stat.S_IWGRP )
+        assert int( m & stat.S_IRWXO ) == int( stat.S_IROTH|stat.S_IWOTH )
+
+    for f in 'runscript'.split():
+        p = os.path.join( tdir, 'one', 'dog', f )
+        m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+        assert int( m & stat.S_IRWXG ) == int( stat.S_IRGRP|stat.S_IWGRP|stat.S_IXGRP )
+        assert int( m & stat.S_IRWXO ) == int( stat.S_IROTH|stat.S_IWOTH|stat.S_IXOTH )
+
+
+############################################################################
+
+main()

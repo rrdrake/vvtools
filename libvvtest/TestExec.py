@@ -20,11 +20,13 @@ class TestExec:
     The status and test results are saved in the TestSpec object.
     """
     
-    def __init__(self, atest):
+    def __init__(self, atest, perms):
         """
-        Constructs a test execution object.  
+        Constructs a test execution object which references a TestSpec obj.
+        The 'perms' argument is a Permissions object, or None.
         """
         self.atest = atest
+        self.perms = perms
         
         self.platform = None
         self.timeout = 0
@@ -43,18 +45,18 @@ class TestExec:
         self.timeout = self.atest.getAttr( 'timeout', 0 )
         
         self.xdir = os.path.join( test_dir, self.atest.getExecuteDirectory() )
-        if os.path.exists(self.xdir) and \
-           os.path.samefile( os.getcwd(), self.xdir ):
-          self.xdir = '.'
         
-        if not os.path.exists(self.xdir):
-          os.makedirs(self.xdir)
+        if not os.path.exists( self.xdir ):
+          os.makedirs( self.xdir )
+        
+        if self.perms != None:
+          self.perms.set( self.atest.getExecuteDirectory() )
         
         script_file = os.path.join( self.xdir, 'runscript' )
         
         if config.get('refresh') or not os.path.exists(script_file):
           
-          assert os.path.isabs(self.atest.getRootpath())
+          assert os.path.isabs( self.atest.getRootpath() )
           
           srcdir = os.path.join( self.atest.getRootpath(),
                                  os.path.dirname(self.atest.getFilepath()) )
@@ -71,6 +73,8 @@ class TestExec:
                                        config.get('onopts'),
                                        config.get('offopts'),
                                        script_file, postclean )
+          if self.perms != None:
+            self.perms.set( os.path.abspath( script_file ) )
     
     def start(self, config, baseline=0 ):
         """
@@ -143,11 +147,16 @@ class TestExec:
               # reassign stdout & stderr to the log file
               os.dup2(ofile.fileno(), sys.stdout.fileno())
               os.dup2(ofile.fileno(), sys.stderr.fileno())
+              
+              if self.perms != None:
+                self.perms.set( os.path.abspath( logfname ) )
             
             if hasattr(self.plugin_obj, 'machinefile'):
               f = open("machinefile", "w")
               f.write(self.plugin_obj.machinefile)
               f.close()
+              if self.perms != None:
+                self.perms.set( os.path.abspath( "machinefile" ) )
             
             if hasattr(self.plugin_obj, 'sshcmd'):
               
@@ -215,6 +224,9 @@ class TestExec:
           
           if self.timedout > 0:
             self.atest.setAttr('result', "timeout")
+
+          if self.perms != None:
+            self.perms.recurse( self.xdir )
           
         # not done .. check for timeout
         elif self.timeout > 0 and (time.time() - self.tzero) > self.timeout:

@@ -271,7 +271,7 @@ class TestSpec:
         
         # initial execute directory; recomputed by setParameters()
         self.xdir = os.path.normpath( \
-                              os.path.join( os.path.dirname(filepath), name ) )
+                        os.path.join( os.path.dirname(filepath), name ) )
         
         # set the default attributes
         self.attrs[ 'state' ] = 'notrun'

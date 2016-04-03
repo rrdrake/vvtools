@@ -307,19 +307,19 @@ class TestList:
         if self.filed.has_key(xdir):
           del self.filed[xdir]
     
-    def createTestExecs(self, test_dir, platform, config ):
+    def createTestExecs(self, test_dir, platform, config, perms):
         """
         """
         d = os.path.join( config.get('toolsdir'), 'libvvtest' )
         c = config.get('configdir')
         xdb = CommonSpec.loadCommonSpec( d, c )
         
-        self._createTextExecList()
+        self._createTextExecList( perms )
         
         for xt in self.getTestExecList():
           xt.init( test_dir, platform, xdb, config )
     
-    def _createTextExecList(self):
+    def _createTextExecList(self, perms):
         """
         """
         self.xtlist = {}
@@ -329,7 +329,7 @@ class TestList:
           
           assert self.scand.has_key( t.getExecuteDirectory() )
           
-          xt = TestExec.TestExec(t)
+          xt = TestExec.TestExec( t, perms )
           
           np = int( t.getParameters().get('np', 0) )
           if self.xtlist.has_key(np):
