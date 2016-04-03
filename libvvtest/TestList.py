@@ -15,7 +15,7 @@ class TestList:
     file and to read from a test XML file.
     """
     
-    version = '27'
+    version = '28'
     
     def __init__(self, ufilter=None):
         
@@ -41,24 +41,27 @@ class TestList:
           f.write( TestSpecCreator.toString(t) + os.linesep )
         f.close()
     
-    def pipelineFileWrite(self, filename, qidL):
+    def AddIncludeFile(self, filename, include_file):
         """
-        Write a file out as a placeholder for pipelining. It saves the
-        pipeline queue id list so stringFileRead will pick up all the files.
+        Appends the file 'filename' with a marker that causes the
+        readFileLines() method to also read the given file 'include_file'.
         """
-        fp = open( filename, 'w' )
-        s = '\n### PipeLine'
-        for qid in qidL:
-          s = s + ' ' + str(qid)
-        fp.write( s + '\n' )
+        s = '\n# INCLUDE ' + include_file + '\n'
+        fp = open( filename, 'a' )
+        fp.write( s )
         fp.close()
     
     def openFileForWrite(self, filename):
         """
         Opens and writes the file header.
         """
-        filename = os.path.normpath(filename)
-        fp = open(filename, 'w')
+        filename = os.path.normpath( filename )
+        d,b = os.path.split( filename )
+        if d and d != '.':
+          # allow that one directory level must be created
+          if not os.path.exists(d):
+            os.mkdir( d )
+        fp = open( filename, 'w' )
         fp.write("\n# Version " + TestList.version + "\n\n")
         return fp
     
@@ -81,6 +84,8 @@ class TestList:
               line = fp.readline()
               break
             elif line[0:13] == "### PipeLine ":
+              # TODO: this method for PipeLine include files is deprecated;
+              #       remove after a month or so [Apr 04, 2016]
               fp.close()
               lineL = []
               wv = self.write_version
@@ -99,7 +104,17 @@ class TestList:
         lineL = []
         while line:
           line = string.strip(line)
-          if line and line[0] != "#":
+          if line.startswith( "# INCLUDE " ):
+            # read the contents of the included file name
+            f = line[10:].strip()
+            if not os.path.isabs(f):
+              # a relative path is relative to the original file directory
+              d = os.path.dirname( filename )
+              f = os.path.join( d, f )
+            if os.path.exists(f):
+              inclL = self.readFileLines(f)
+              lineL.extend( inclL )
+          elif line and line[0] != "#":
             lineL.append( line )
           line = fp.readline()
         

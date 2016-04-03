@@ -96,29 +96,24 @@ class Platform:
     def getQsubScriptHeader(self, np, queue_time, workdir, qout_file):
         """
         """
-        if self.batch:
+        if not self.batch:
+            # construct a default processor batch system
+            import procbatch
+            self.batch = procbatch.ProcessBatch( 1 )
 
-            qt = self.attrs.get( 'walltime', queue_time )
+        qt = self.attrs.get( 'walltime', queue_time )
 
-            hdr = '#!/bin/csh -f\n' + \
-                  self.batch.header( np, qt, workdir, qout_file ) + '\n'
+        hdr = '#!/bin/csh -f\n' + \
+              self.batch.header( np, qt, workdir, qout_file ) + '\n'
 
-            if qout_file:
-                hdr += 'touch '+qout_file + '\n'
+        if qout_file:
+            hdr += 'touch '+qout_file + ' || exit 1\n'
 
-            # add in the shim if specified for this platform
-            s = self.attrs.get( 'batchshim', None )
-            if s:
-                hdr += '\n'+s
-            hdr += '\n'
-        
-        else:
-            qt = int(queue_time)  # must be number of seconds
-            hdr = '#!/bin/csh -f\n' + \
-                  'touch ' + qout_file + '\n' + \
-                  'set path = ( '+self.vvtesthome+' $path )\n' + \
-                  'rehash\n' + \
-                  '( sleep '+str(qt)+' ; kill $$ ) &\n'
+        # add in the shim if specified for this platform
+        s = self.attrs.get( 'batchshim', None )
+        if s:
+            hdr += '\n'+s
+        hdr += '\n'
 
         return hdr
     
@@ -131,55 +126,24 @@ class Platform:
     def Qsubmit(self, workdir, outfile, scriptname):
         """
         """
-        if self.batch:
-            q = self.attrs.get( 'queue', None )
-            acnt = self.attrs.get( 'account', None )
-            cmd, out, jobid, err = \
-                    self.batch.submit( scriptname, workdir, outfile, q, acnt )
-            if err:
-                print cmd + os.linesep + out + os.linesep + err
-            else:
-                print "Job script", scriptname, "submitted with id", jobid
-            
+        q = self.attrs.get( 'queue', None )
+        acnt = self.attrs.get( 'account', None )
+        cmd, out, jobid, err = \
+                self.batch.submit( scriptname, workdir, outfile, q, acnt )
+        if err:
+            print cmd + os.linesep + out + os.linesep + err
         else:
-            sys.stdout.flush(); sys.stderr.flush()
-            jobid = os.fork()
-            if jobid == 0:
-                os.chdir(workdir)
-                fpout = open( outfile, 'wb' )
-                os.dup2(fpout.fileno(), sys.stdout.fileno())
-                os.dup2(fpout.fileno(), sys.stderr.fileno())
-                os.execv( '/bin/csh', ['/bin/csh', '-f', scriptname] )
-            # keep the child process ids as the queue ids
-            if not hasattr(self, 'childids'):
-                self.childids = []
-            self.childids.append(jobid)
+            print "Job script", scriptname, "submitted with id", jobid
         
         return jobid
     
     def Qquery(self, jobidL):
         """
         """
-        if self.batch:
-            cmd, out, err, jobD = self.batch.query( jobidL )
-            if err:
-                print cmd + os.linesep + out + os.linesep + err
-            return jobD
-
-        else:
-            jobD = {}
-            if hasattr( self, 'childids' ):
-                for jobid in jobidL:
-                    if jobid in self.childids:
-                        cpid,xcode = os.waitpid(jobid, os.WNOHANG)
-                        if cpid > 0:
-                            # child finished; empty string means done
-                            jobD[jobid] = ''
-                            self.childids.remove(jobid)
-                        else:
-                            jobD[jobid] = 'running'
-                    else:
-                        jobD[jobid] = ''
+        cmd, out, err, jobD = self.batch.query( jobidL )
+        if err:
+            print cmd + os.linesep + out + os.linesep + err
+        return jobD
         
         return jobD
     

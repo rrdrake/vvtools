@@ -871,204 +871,6 @@ def readCommandInfo():
     return test_dir
 
 
-class PermissionSetter:
-    
-    def __init__(self, topdir, spec):
-        """
-        The 'spec' can be a list or a comma separate string.  If a spec
-        starts with "g=" or "o=" then set permissions.  Otherwise, set the
-        group name to that string.
-
-        Examples of 'spec': "wg-alegra,g=r-x,o=---"
-                            ['wg-alegra','g=rx','o=']
-                            ['wg-alegra', 'g=rx,o=rx']
-        """
-        self.topdir = topdir
-        self.spec = spec
-        self.cache = {}
-
-        self.grpid = None
-        self.gperm = None
-        self.operm = None
-        try:
-            self._parse_spec( spec )
-        except:
-            raise Exception( "invalid permissions specification: "+spec )
-
-    def set(self, path):
-        """
-        If 'path' is an absolute path, then set the permissions on the base
-        path segment only.
-
-        If 'path' is a relative path, then it must be relative to 'topdir'
-        and the permissions are set on the path and all intermediate
-        directories at or below the 'topdir'.
-
-        An instance of this class caches the paths that have their permissions
-        set and will not set them more than once.
-        """
-        if os.path.isabs( path ):
-            assert os.path.exists( path )
-            self._setperms( path )
-            
-        else:
-            path = os.path.normpath( path )
-            assert not path.startswith( '..' )
-            
-            fp = os.path.join( self.topdir, path )
-            assert os.path.exists( fp )
-
-            # split the path into a list of directory segments
-            L = []
-            p = path
-            while True:
-                d,b = os.path.split( p )
-                L.append( b )
-                if d:
-                    p = d
-                else:
-                    break
-            L.reverse()
-
-            rel = '.'
-            for b in L:
-                rel = os.path.normpath( os.path.join( rel, b ) )
-                if rel not in self.cache:
-                    self.cache[ rel ] = None
-                    fp = os.path.join( self.topdir, rel )
-                    self._setperms( fp )
-
-    def recurse(self, path):
-        """
-        If 'path' is a regular file, then permissions are applied to it.
-        If 'path' is a directory, then permissions are applied recursively
-        to the each entry in the directory.  Soft links are left untouched
-        and not followed.
-        """
-        if os.path.isdir( path ):
-            def walker( arg, dirname, fnames ):
-                rmL = []
-                for f in fnames:
-                    p = os.path.join( dirname, f )
-                    if os.path.islink(p):
-                        rmL.append(f)
-                    else:
-                        arg._setperms(p)
-                for f in rmL:
-                    fnames.remove(f)
-            os.path.walk( path, walker, self )
-        
-        elif not os.path.islink( path ):
-            self._setperms( path )
-
-    GRP_MASK = (stat.S_ISGID|stat.S_IRWXG)
-    GRP_PERMS = { ''    : 0,
-                  '---' : 0,
-                  '-'   : 0,
-                  'r'   : stat.S_IRGRP,
-                  'w'   : stat.S_IWGRP,
-                  'x'   : stat.S_IXGRP,
-                  's'   : stat.S_IXGRP|stat.S_ISGID,
-                  'r--' : stat.S_IRGRP,
-                  '-w-' : stat.S_IWGRP,
-                  '--x' : stat.S_IXGRP,
-                  '--s' : stat.S_IXGRP|stat.S_ISGID,
-                  'rw'  : stat.S_IRGRP|stat.S_IWGRP,
-                  'rx'  : stat.S_IRGRP|stat.S_IXGRP,
-                  'rs'  : stat.S_IRGRP|stat.S_IXGRP|stat.S_ISGID,
-                  'wx'  : stat.S_IWGRP|stat.S_IXGRP,
-                  'rw-' : stat.S_IRGRP|stat.S_IWGRP,
-                  'r-x' : stat.S_IRGRP|stat.S_IXGRP,
-                  'r-s' : stat.S_IRGRP|stat.S_IXGRP|stat.S_ISGID,
-                  '-wx' : stat.S_IWGRP|stat.S_IXGRP,
-                  '-ws' : stat.S_IWGRP|stat.S_IXGRP|stat.S_ISGID,
-                  'rwx' : stat.S_IRWXG,
-                  'rws' : stat.S_IRWXG|stat.S_ISGID }
-    
-    OTH_MASK = stat.S_IRWXO
-    OTH_PERMS = { ''    : 0,
-                  '---' : 0,
-                  '-'   : 0,
-                  'r'   : stat.S_IROTH,
-                  'w'   : stat.S_IWOTH,
-                  'x'   : stat.S_IXOTH,
-                  'r--' : stat.S_IROTH,
-                  '-w-' : stat.S_IWOTH,
-                  '--x' : stat.S_IXOTH,
-                  'rw'  : stat.S_IROTH|stat.S_IWOTH,
-                  'rx'  : stat.S_IROTH|stat.S_IXOTH,
-                  'wx'  : stat.S_IWOTH|stat.S_IXOTH,
-                  'rw-' : stat.S_IROTH|stat.S_IWOTH,
-                  'r-x' : stat.S_IROTH|stat.S_IXOTH,
-                  '-wx' : stat.S_IWOTH|stat.S_IXOTH,
-                  'rwx' : stat.S_IRWXO }
-    
-    def _parse_spec(self, spec):
-        """
-        Sets self.grpid, self.gperm, and self.operm based on the command
-        line specification.
-        """
-        if type(spec) == type(''):
-            spec = [ spec ]
-        for item in spec:
-            for s in item.split(','):
-                s = s.strip()
-                if s:
-                    if s.startswith( 'g=' ):
-                        self.gperm = PermissionSetter.GRP_PERMS[ s[2:] ]
-                    elif s.startswith( 'o=' ):
-                        self.operm = PermissionSetter.OTH_PERMS[ s[2:] ]
-                    else:
-                        import grp
-                        self.grpid = grp.getgrnam( s ).gr_gid
-    
-    def _setperms(self, path):
-        """
-        Applies the permissions stored in this class to the give path.
-        """
-        if self.grpid != None:
-            uid = os.stat( path ).st_uid
-            os.chown( path, uid, self.grpid )
-        
-        if self.gperm != None or self.operm != None:
-            
-            fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
-            
-            if os.path.isdir( path ):
-                # for directories, just set the permissions to the values
-                # given at construction
-                if self.gperm != None:
-                    fm &= ( ~(PermissionSetter.GRP_MASK) )
-                    fm |= self.gperm
-                if self.operm != None:
-                    fm &= ( ~(PermissionSetter.OTH_MASK) )
-                    fm |= self.operm
-            
-            else:
-                # for regular files, give execute permission if read is
-                # allowed AND the owner has execute permission
-                
-                if self.gperm != None:
-                    fm &= ( ~(PermissionSetter.GRP_MASK) )
-                    if int( self.gperm & stat.S_IRGRP ):
-                        fm |= stat.S_IRGRP
-                        if int( fm & stat.S_IXUSR ):
-                            fm |= stat.S_IXGRP
-                    if int( self.gperm & stat.S_IWGRP ):
-                        fm |= stat.S_IWGRP
-                
-                if self.operm != None:
-                    fm &= ( ~(PermissionSetter.OTH_MASK) )
-                    if int( self.operm & stat.S_IROTH ):
-                        fm |= stat.S_IROTH
-                        if int( fm & stat.S_IXUSR ):
-                            fm |= stat.S_IXOTH
-                    if int( self.operm & stat.S_IWOTH ):
-                        fm |= stat.S_IWOTH
-            
-            os.chmod( path, fm )
-
-
 def runTests( dirs, plat, ufilter ):
     """
     Executes a list of tests.
@@ -1109,20 +911,19 @@ def runTests( dirs, plat, ufilter ):
         sys.exit(1);
       tlist.scanDirectory( d, optdict.get('-S',None) )
     
-    if os.path.exists( os.path.join(test_dir, testlist_name) ):
-      # merge in existing test results
-      readRestartFiles( test_dir, tlist )
+    tfile = os.path.join( test_dir, testlist_name )
+    if os.path.exists( tfile ):
+        tlist.readFile( tfile )  # merge in existing test results
     
     tlist.loadTests( analyze_only=optdict.has_key('-a') )
     
     loadExecutionTimes( tlist, plat )
     
     # save the test list in the TestResults directory
-    tf = os.path.join( test_dir, testlist_name )
-    tlist.stringFileWrite( tf )
+    tlist.stringFileWrite( tfile )
 
     if perms != None:
-        perms.set( os.path.abspath( tf ) )
+        perms.set( os.path.abspath( tfile ) )
     
     if len(tlist.active) > 0:
       
@@ -1133,7 +934,7 @@ def runTests( dirs, plat, ufilter ):
         saveResults( tlist, plat, test_dir, tag, inprogress=True )
 
       if not optdict.has_key('--pipeline'):
-        executeTestList( tlist, test_dir, plat, perms )
+        executeTestList( tlist, test_dir, plat, perms, tfile )
         print "test directory:", testdirname
       
       else:
@@ -1310,107 +1111,7 @@ def writeHTMLTestList( fp, test_dir, tlist ):
     fp.write( '  </ul>\n' )
 
 
-def pipelineInfo( test_dir, plat ):
-    """
-    Extracts information from a previous pipeline run.  In particular,
-    pipelines that had notdone or notrun tests are given more detail.
-    """
-    qidL = []
-    for f in os.listdir(test_dir):
-      if f[:5] == 'pipe.':
-        try: qid = int( string.split( f, '.', 1 )[1] )
-        except: pass
-        else:
-          qidL.append( qid )
-    qidL.sort()
-    print "Found", len(qidL), "pipelines"
-    
-    numt = {}
-    for qid in qidL:
-      f = 'testlist.'+str(qid)
-      try:
-        fp = open( f, 'r' )
-      except:
-        print "*** pipeline " + str(qid) + ": could not open", f
-        numt[qid] = 0
-        continue
-      n = 0
-      for line in fp.readlines():
-        line = string.strip(line)
-        if line and line[0] != '#':
-          n = n + 1
-      fp.close()
-      numt[qid] = n
-    s = "Pipeline id/num tests"
-    for qid in qidL: s = s + ' ' + str(qid) + '/' + str(numt[qid])
-    print s
-    
-    L = []
-    for qid in qidL:
-      if not os.path.exists( 'pipe-out.'+str(qid) ):
-        L.append( str(qid) )
-    if len(L) > 0:
-      print "Didn't start: " + string.join(L)
-    
-    L = []
-    for qid in qidL:
-      f = 'pipe-out.'+str(qid)
-      if os.path.exists(f):
-        try:
-          sz = os.path.getsize(f)
-          fp = open(f,'r')
-          fp.seek( max(sz-512, 0) )
-          buf = fp.read(512)
-          fp.close()
-        except:
-          print "*** pipeline " + str(qid) + ": could not read", f
-          continue
-        if buf.find("queue job finished cleanly") < 0:
-          L.append( str(qid) )
-    if len(L) > 0:
-      print "Didn't finish: " + string.join(L)
-    
-    cwd = os.getcwd()
-    
-    for qid in qidL:
-      f = 'testlist.'+str(qid)
-      if os.path.exists(f):
-        
-        tl = TestList.TestList()
-        tl.readFile(f)
-        
-        f = 'launched.'+str(qid)
-        if os.path.exists(f):
-          tl.readFile(f)
-        else:
-          print "Pipe", qid, "launched no tests; test list:"
-          for xdir,t in tl.filed.items():
-            print "     ", t.getExecuteDirectory()
-          continue
-        
-        f = 'finished.'+str(qid)
-        if os.path.exists(f):
-          tl.readFile(f)
-        
-        for xdir,t in tl.filed.items():
-          if XstatusResult(t) in ['notdone','notrun']:
-            
-            print "Pipe", qid, "has notrun or notdone tests; test list:"
-            for tline in tl.readFileLines( 'testlist.'+str(qid) ):
-              t1 = TestSpecCreator.fromString(tline)
-              xdir = t1.getExecuteDirectory()
-              t2 = tl.filed[ xdir ]
-              statstr = XstatusString( t2, 1, test_dir, cwd )
-              
-              # get a past run time from the 'runtimes' file, if available
-              rt = '?'
-              
-              print "     %-90s"%statstr + " runtimes time =", rt
-            
-            break
-
-
-def executeTestList( tlist, test_dir, plat, perms, fsuffix='' ):
+def executeTestList( tlist, test_dir, plat, perms, tfile ):
     """
     """
     plat.display()
@@ -1421,18 +1122,9 @@ def executeTestList( tlist, test_dir, plat, perms, fsuffix='' ):
     numrun = 0
 
     # execute tests
-    
-    launchfname = os.path.join(test_dir, "launched" + fsuffix)
-    launchfile = tlist.openFileForWrite( launchfname )
-    launchfile.close()
-    
-    donefname = os.path.join(test_dir, "finished" + fsuffix)
-    donefile = tlist.openFileForWrite( donefname )
-    donefile.close()
 
     if perms != None:
-        perms.set( os.path.abspath( launchfname ) )
-        perms.set( os.path.abspath( donefname ) )
+        perms.set( os.path.abspath( tfile ) )
 
     cwd = os.getcwd()
     
@@ -1453,10 +1145,10 @@ def executeTestList( tlist, test_dir, plat, perms, fsuffix='' ):
           new_run_list.append(t)
       if len(doneL) > 0:
         # append the test lines to the done file
-        donefile = open( donefname, "a" )
+        fp = open( tfile, "a" )
         for s in doneL:
-          donefile.write( s )
-        donefile.close()
+          fp.write( s )
+        fp.close()
       run_list = new_run_list
       
       if len(run_list) == 0 and tlist.numTestExec() == 0:
@@ -1509,9 +1201,9 @@ def executeTestList( tlist, test_dir, plat, perms, fsuffix='' ):
           print "****************************************************\n"
         
         next.start( config )
-        launchfile = open( launchfname, "a" )
-        launchfile.write( TestSpecCreator.toString(next.atest) + '\n' )
-        launchfile.close()
+        fp = open( tfile, "a" )
+        fp.write( TestSpecCreator.toString(next.atest) + '\n' )
+        fp.close()
         
         numrun = numrun + 1
         s = "%-12s" % ("(" + str(numrun) + " of " + str(totnum) + ")")
@@ -1537,7 +1229,8 @@ def executeTestList( tlist, test_dir, plat, perms, fsuffix='' ):
     print "Finish time:", time.ctime( time.time() ) + \
           " (elapsed %dh %dm)" % (h,m)
     
-    printResults( tlist, 0, test_dir, 1, perms )
+    do_html = ( '--qsub-id' not in optdict )
+    printResults( tlist, 0, test_dir, do_html, perms )
     
     print "Finish time:", time.ctime( time.time() ) + \
           " (elapsed %dh %dm)" % (h,m)
@@ -1547,21 +1240,21 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
     """
     The 'tlist' is a TestList class instance.
     """
-    pipes = Pipelines( plat, tlist, perms )
+    pipes = Pipelines( plat, test_dir, tlist, perms )
     
     plat.display()
     starttime = time.time()
     print "Start time:", time.ctime( starttime )
     
     # clean up old pipeline files
-    print "rm pipe*"
-    for f in os.listdir(test_dir):
-      if f[:4] == 'pipe':
-        os.remove( os.path.join(test_dir,f) )
+    print "rm -rf batchset*"
+    for f in os.listdir( test_dir ):
+      if f.startswith( 'batchset' ):
+        shutil.rmtree( os.path.join( test_dir, f ) )
     
     # write testlist files for each qsub
     
-    qsubids = pipes.writeQsubScripts( test_dir )
+    qsubids = pipes.writeQsubScripts()
     
     qsubs_started = {}  # maps qid to (queue job id, submit time)
     qsubs_stopped = {}  # maps qid to None
@@ -1611,7 +1304,7 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
             # empty status means its not in the queue, but double check
             # that either the out file exists or enough time has elapsed
             # since the submit occurred
-            pout = os.path.join( test_dir, 'pipe-out.' + str(qid) )
+            pout = pipes.filename( 'pipe-out', qid )
             elapse = time.time() - qsubs_started[qid][1]
             if elapse > 30 or os.path.exists(pout):
               sleep = 0
@@ -1642,10 +1335,7 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
                 # first, update the test list with current results
                 time.sleep(5)
                 for qid in qidL:
-                  fname = os.path.join(test_dir, "launched" + '.' + str(qid))
-                  if os.path.exists( fname ):
-                    tlist.readFile( fname )
-                  fname = os.path.join(test_dir, "finished" + '.' + str(qid))
+                  fname = pipes.filename( testlist_name, qid )
                   if os.path.exists( fname ):
                     tlist.readFile( fname )
                 # thin down analyze list by whether children have a bad state
@@ -1662,14 +1352,16 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
                   qsubs_stopped[-1] = None
                   break
                 # write a new analyze pipeline out
-                pipes.writeQsubScripts( test_dir, Lanalyze2 )
+                pipes.writeQsubScripts( Lanalyze2 )
               
               print 'launching: pipeline "' + str(newqid) + '"'
-              pout = os.path.join( test_dir, 'pipe-out.' + str(newqid) )
-              pin = os.path.join( test_dir, 'pipe.' + str(newqid) )
+              
+              pout = pipes.filename( 'pipe-out', newqid )
+              pin = pipes.filename( 'pipe', newqid )
               jobid = plat.Qsubmit( test_dir, pout, pin )
               qsubs_started[newqid] = (jobid,time.time())
               procs_used = procs_used + qsubids[newqid]
+              
               break
       
       if sleep and len(qsubs_stopped) < len(qsubids):
@@ -1679,15 +1371,12 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
     
     NF = []
     NS = []
-    time.sleep(5)  # allow file system to propogate finished.* files
+    time.sleep(5)  # give file system a chance to sync
     for qid in qidL:
-      fname = os.path.join(test_dir, "launched" + '.' + str(qid))
+      fname = pipes.filename( testlist_name, qid )
       if os.path.exists( fname ):
         tlist.readFile( fname )
-      fname = os.path.join(test_dir, "finished" + '.' + str(qid))
-      if os.path.exists( fname ):
-        tlist.readFile( fname )
-      pout = os.path.join( test_dir, 'pipe-out.' + str(qid) )
+      pout = pipes.filename( 'pipe-out', qid )
       if os.path.exists(pout):
         sz = os.path.getsize(pout)
         off = max(sz-512, 0)
@@ -1787,11 +1476,12 @@ def loadExecutionTimes( tlist, plat ):
 
 class Pipelines:
     
-    def __init__(self, plat, tlist, perms):
+    def __init__(self, plat, test_dir, tlist, perms):
         """
         The 'tlist' is a TestList class instance.
         """
         self.plat = plat
+        self.test_dir = test_dir
         self.tlist = tlist
         self.perms = perms
         self.Tzero = 21*60*60  # no timeout in pipeline mode is 21 hours
@@ -1832,17 +1522,30 @@ class Pipelines:
         qL.reverse()
         self.qsublists = map( lambda L: L[2], qL )
     
-    def writeQsubScripts( self, test_dir, analyzeL=None):
+    def filename(self, basename, pipeid, relative=False):
+        """
+        Given a base file name and a pipe/batch id, this function returns
+        the file name in the batchset subdirectory and with the id appended.
+        If 'relative' is true, then the path is relative to the TestResults
+        directory.
+        """
+        subd = batchset( pipeid )
+        if relative:
+            fn = os.path.join( subd, basename+'.'+str(pipeid) )
+        else:
+            fn = os.path.join( self.test_dir, subd, basename+'.'+str(pipeid) )
+        return fn
+
+    def writeQsubScripts(self, analyzeL=None):
         """
         """
         if analyzeL == None:
           for i in range(len(self.qsublists)):
-            try: os.unlink( os.path.join( test_dir, 'testlist.' + str(i) ) )
-            except: pass
-            try: os.unlink( os.path.join( test_dir, 'launched.' + str(i) ) )
-            except: pass
-            try: os.unlink( os.path.join( test_dir, 'finished.' + str(i) ) )
-            except: pass
+            f = self.filename( testlist_name, i )
+            try:
+                os.unlink( f )
+            except:
+                pass
         
         commonopts = ''
         if optdict.has_key('-e'): commonopts += ' -e'
@@ -1860,29 +1563,30 @@ class Pipelines:
         if analyzeL == None:
           qid = 0
           for qL in self.qsublists:
-            self.do_queue_pipe( qid, qL, qsubids, test_dir, commonopts )
+            self.do_queue_pipe( qid, qL, qsubids, commonopts )
             qid = qid + 1
           if len(self.Lanalyze) > 0:
-            self.do_queue_pipe( -1, self.Lanalyze, qsubids, test_dir, commonopts )
+            self.do_queue_pipe( -1, self.Lanalyze, qsubids, commonopts )
         
         elif len(analyzeL) > 0:
-          self.do_queue_pipe( -1, analyzeL, qsubids, test_dir, commonopts )
+          self.do_queue_pipe( -1, analyzeL, qsubids, commonopts )
         
         if analyzeL == None:
+          fn = os.path.join( self.test_dir, testlist_name )
           L = qsubids.keys() ; L.sort()
-          self.tlist.pipelineFileWrite( os.path.join(test_dir, "launched"), L )
-          self.tlist.pipelineFileWrite( os.path.join(test_dir, "finished"), L )
+          for i in L:
+            incl = self.filename( testlist_name, i, relative=True )
+            self.tlist.AddIncludeFile( fn, incl )
         
         if self.perms != None:
-            for f in os.listdir( test_dir ):
-                if f.startswith( 'pipe' ) or f.startswith( 'testlist' ) or \
-                   f.startswith( 'launched' ) or f.startswith( 'finished' ):
-                    p = os.path.abspath( os.path.join( test_dir, f ) )
-                    self.perms.set( p )
+            for f in os.listdir( self.test_dir ):
+                if f.startswith( 'batchset' ):
+                    p = os.path.join( self.test_dir, f )
+                    self.perms.recurse( p )
 
         return qsubids
     
-    def do_queue_pipe(self, qnumber, qlist, npD, tdir, comopts):
+    def do_queue_pipe(self, qnumber, qlist, npD, comopts):
         """
         """
         qidstr = str(qnumber)
@@ -1910,15 +1614,16 @@ class Pipelines:
         
         npD[qnumber] = maxnp
         
-        tl.stringFileWrite( os.path.join( tdir, 'testlist.' + qidstr ) )
+        fn = self.filename( testlist_name, qidstr )
+        tl.stringFileWrite( fn )
         
-        fn = os.path.join( tdir, 'pipe.' + qidstr )
+        fn = self.filename( 'pipe', qidstr )
         fp = open( fn, "w" )
         
-        pout = os.path.join( tdir, 'pipe-out.' + qidstr )
-        hdr = self.plat.getQsubScriptHeader( maxnp, qtime, tdir, pout )
+        pout = self.filename( 'pipe-out', qidstr )
+        hdr = self.plat.getQsubScriptHeader( maxnp, qtime, self.test_dir, pout )
         fp.writelines( [ hdr + '\n\n',
-                         'cd ' + tdir + ' || exit 1\n',
+                         'cd ' + self.test_dir + ' || exit 1\n',
                          'echo "job start time = `date`"\n' + \
                          'echo "job time limit = ' + str(qtime) + '"\n' ] )
         
@@ -1940,6 +1645,14 @@ class Pipelines:
         fp.writelines( [ 'echo "queue job finished cleanly"\n' ] )
         
         fp.close()
+
+
+def batchset( qid ):
+    """
+    Given a queue/batch/pipe id, this function returns the corresponding
+    subdirectory name.  The 'qid' argument can be a string or integer.
+    """
+    return 'batchset' + str( int( float(qid)/50 + 0.5 ) )
 
 
 def saveResults( tlist, plat, test_dir, tag, inprogress=False ):
@@ -1984,7 +1697,7 @@ def saveResults( tlist, plat, test_dir, tag, inprogress=False ):
       # no test was started, so no date is available from the test list;
       # use the date stamp on the testlist file instead
       if test_dir != None:
-        tl = os.path.join( test_dir, 'testlist' )
+        tl = os.path.join( test_dir, testlist_name )
         if os.path.exists(tl):
           mindate = os.path.getmtime(tl)
       else:
@@ -2000,36 +1713,21 @@ def saveResults( tlist, plat, test_dir, tag, inprogress=False ):
     tr.writeResults( fname, pname, cplr, mach, test_dir, inprogress )
 
 
-def readRestartFiles( test_dir, tlist, fname_suffix='' ):
-    """
-    Read the files produced by a previous run and return the resulting
-    TestList object.  Returns the TestList object and true if the scan
-    directory was given as an absolute path.
-    """
-    fname = os.path.join(test_dir, testlist_name) + fname_suffix
-    tlist.readFile( fname )
-    
-    fname = os.path.join(test_dir, "launched") + fname_suffix
-    if os.path.exists( fname ):
-      tlist.readFile( fname )
-    
-    fname = os.path.join(test_dir, "finished") + fname_suffix
-    if os.path.exists( fname ):
-      tlist.readFile( fname )
-
-
 def restartTests( test_dir, plat, ufilter ):
     
     assert test_dir != None
     
     path_filter = os.getcwd()
     
-    fsuffix = ''
-    if optdict.has_key('--qsub-id'):
-      fsuffix = '.' + optdict['--qsub-id']
+    if '--qsub-id' in optdict:
+        qid = optdict['--qsub-id']
+        subd = batchset( qid )
+        tfile = os.path.join( test_dir, subd, testlist_name+'.'+qid )
+    else:
+        tfile = os.path.join( test_dir, testlist_name )
     
     tlist = TestList.TestList( ufilter )
-    readRestartFiles( test_dir, tlist, fsuffix )
+    tlist.readFile( tfile )
     
     reld = computeRelativePath( os.path.abspath(test_dir), os.getcwd() )
     
@@ -2041,12 +1739,11 @@ def restartTests( test_dir, plat, ufilter ):
     perms = None
     if '--perms' in optdict:
         perms = PermissionSetter( test_dir, optdict['--perms'] )
-      
-    tf = os.path.join( test_dir, "testlist" ) + fsuffix
-    tlist.stringFileWrite( tf )
+
+    tlist.stringFileWrite( tfile )
 
     if perms != None:
-        perms.set( os.path.abspath( tf ) )
+        perms.set( os.path.abspath( tfile ) )
     
     if len(tlist.active) > 0:
       
@@ -2067,7 +1764,7 @@ def restartTests( test_dir, plat, ufilter ):
       if not optdict.has_key('--pipeline'):
         plat.initProcs( test_dir )
         tlist.createTestExecs( test_dir, plat, config, perms )
-        executeTestList( tlist, test_dir, plat, perms, fsuffix )
+        executeTestList( tlist, test_dir, plat, perms, tfile )
       
       else:
         tlist.createTestExecs( test_dir, plat, config, perms )
@@ -2091,8 +1788,10 @@ def baselineTests( test_dir, plat, ufilter ):
     else:
       path_filter = os.getcwd()
     
+    tfile = os.path.join( test_dir, testlist_name )
+
     tlist = TestList.TestList( ufilter )
-    readRestartFiles( test_dir, tlist )
+    tlist.readFile( tfile )
     
     filter_dir = None
     if path_filter != None:
@@ -2645,6 +2344,7 @@ if __name__ == '__main__':
   import TestSpecCreator
   import FilterExpressions
   import results
+  from PermissionSetter import PermissionSetter
   
   keyword_expr = FilterExpressions.WordExpression()
   
@@ -2706,24 +2406,17 @@ if __name__ == '__main__':
     assert test_dir == None
     generateTestList( dirs, plat, ufilter )
   
-  elif optdict.has_key('-i') and optdict.has_key('--pipeline'):
-    if test_dir == None:
-      test_dir = os.path.join( os.getcwd(), testResultsDir(plat.getName()) )
-    if os.path.exists( test_dir ):
-      pipelineInfo( test_dir, plat )
-    else:
-      print "*** error: TestResults directory does not exist:", test_dir
-      sys.exit(1)
-  
   elif info:
     
     tlist = TestList.TestList( ufilter )
     if test_dir != None:
-      readRestartFiles( test_dir, tlist )
+      tfile = os.path.join( test_dir, testlist_name )
+      tlist.readFile( tfile )
       tlist.loadTests( filter_dir=computeRelativePath( test_dir, os.getcwd() ) )
     elif os.path.exists( testResultsDir(plat.getName()) ):
       test_dir = os.path.join( os.getcwd(), testResultsDir(plat.getName()) )
-      readRestartFiles( test_dir, tlist )
+      tfile = os.path.join( test_dir, testlist_name )
+      tlist.readFile( tfile )
       tlist.loadTests()
     elif optdict.has_key('--keys') or optdict.has_key('--files'):
       if len(dirs) == 0:
