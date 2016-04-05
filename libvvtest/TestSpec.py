@@ -277,6 +277,9 @@ class TestSpec:
         self.attrs[ 'state' ] = 'notrun'
         self.attrs[ 'xtime' ] = -1
         self.attrs[ 'xdate' ] = -1
+
+        # always add the test specification file to the linked file list
+        self.lnfiles.append( (os.path.basename(self.filepath),None) )
     
     def __cmp__(self, rhs):
         if rhs == None: return 1  # None objects are always less
@@ -378,10 +381,17 @@ class TestSpec:
         where the test name may be None.
         """
         self.lnfiles = []
+        D = {}
         for src,tst in link_file_list:
           assert src and not os.path.isabs(src)
           assert tst == None or not os.path.isabs(tst)
           self.lnfiles.append( (src, tst) )
+          D[ src ] = None
+        
+        # always include the test specification file
+        src = os.path.basename( self.filepath )
+        if src not in D:
+            self.lnfiles.append( (src,None) )
     
     def setCopyFiles(self, copy_files_list):
         """

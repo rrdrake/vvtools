@@ -1124,8 +1124,9 @@ assert cpL[1] == ("file2", None)
 lnL = tL[0].getLinkFiles()
 lnL.sort()
 print "link files", lnL
-assert len(lnL) == 1
+assert len(lnL) == 2
 assert lnL[0] == ("file3", "file3.in")
+assert lnL[1] == ("ok26.xml", None)
 
 fp = open('ok27.xml',"w")
 fp.writelines( [
@@ -1143,15 +1144,19 @@ for t in tL:
     assert len( t.getCopyFiles() ) == 0
     lnL = t.getLinkFiles()
     print "np=1 linked files", lnL
-    assert len(lnL) == 1
+    assert len(lnL) == 2
+    lnL.sort()
     assert lnL[0] == ("file.1", "file")
+    assert lnL[1] == ("ok27.xml", None)
   else:
     assert t.getParameterValue('np') == '4'
     assert len( t.getCopyFiles() ) == 0
     lnL = t.getLinkFiles()
     print "np=2 linked files", lnL
-    assert len(lnL) == 1
+    assert len(lnL) == 2
+    lnL.sort()
     assert lnL[0] == ("file.4", "file")
+    assert lnL[1] == ("ok27.xml", None)
 
 fp = open('ok28.xml',"w")
 fp.writelines( [
@@ -1166,14 +1171,14 @@ tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok28.xml', None, nofltr )
 assert len(tL) == 2
 for t in tL:
   if t.getParameterValue('np') == '1':
-    assert len( t.getLinkFiles() ) == 0
+    assert len( t.getLinkFiles() ) == 1
     cpL = t.getCopyFiles()
     print "np=1 copied files", cpL
     assert len(cpL) == 1
     assert cpL[0] == ("file.1", "file")
   else:
     assert t.getParameterValue('np') == '4'
-    assert len( t.getLinkFiles() ) == 0
+    assert len( t.getLinkFiles() ) == 1
     cpL = t.getCopyFiles()
     print "np=2 copied files", cpL
     assert len(cpL) == 1
@@ -1412,8 +1417,10 @@ for t in tL:
   assert cpL[0] == ("file1.C",None)
   assert cpL[1] == ("file2.F",None)
   lnL = t.getLinkFiles()
-  assert len(lnL) == 1
+  assert len(lnL) == 2
+  lnL.sort()
   assert lnL[0] == ("lnfile","file")
+  assert lnL[1] == ("ok34.xml",None)
 print "==========="
 fp = open('ok34.xml',"w")
 fp.writelines( [
@@ -1445,8 +1452,10 @@ for t in tL:
   cpL.sort()
   assert cpL[0] == ("file1.C",None)
   lnL = t.getLinkFiles()
-  assert len(lnL) == 1
+  assert len(lnL) == 2
+  lnL.sort()
   assert lnL[0] == ("lnfile",None)
+  assert lnL[1] == ("ok34.xml",None)
 
 
 print "1010101010101010101010101010101010101010101010101010101"
@@ -1938,7 +1947,8 @@ L = tL[0].getCopyFiles() ; L.sort()
 assert L == [('globfile1.txt',None),('globfile2.txt',None)]
 L = tL[0].getLinkFiles() ; L.sort()
 assert L == [ ('conditional_glob.txt',None),
-              ('link2_glob.txt',None), ('link_glob.txt',None) ]
+              ('link2_glob.txt',None), ('link_glob.txt',None),
+              ('ok51.xml',None) ]
 
 fp = open( 'baseline_glob.txt', "w" )
 fp.writelines( [ 'some other file' ] )
@@ -1961,7 +1971,7 @@ assert len(tL) == 1
 L = tL[0].getSourceFiles() ; L.sort()
 assert L == ['baseline_glob.base_txt', 'conditional_glob.txt',
              'globfile1.txt', 'globfile2.txt', 'link_glob.txt',
-             'notme_glob.txt']
+             'notme_glob.txt', 'ok52.xml']
 
 fp = open('bad31.xml',"w")
 fp.writelines( [

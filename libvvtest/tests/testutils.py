@@ -161,7 +161,7 @@ def remove_results():
 def rmallfiles():
     for f in os.listdir("."):
       if f != "conflicts.out":
-        if os.path.isdir(f):
+        if not os.path.islink(f) and os.path.isdir(f):
           shutil.rmtree(f)
         else:
           os.remove(f)

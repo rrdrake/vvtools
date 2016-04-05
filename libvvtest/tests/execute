@@ -3,315 +3,385 @@
 import os, sys
 import string, re
 import glob
+import time
 
-# sys.path.insert( 0, os.path.dirname( os.path.abspath(sys.argv[0]) ) )
+# this will os.chdir() to a subdirectory
 from testutils import *
 
-rmallfiles()
+
+def main():
+    """
+    """
+    argL = get_arg_list()
+
+    if len(argL) == 0:
+        argL = """null script links exitstat xmldir options params
+                  keywords autolink
+               """.split()
+
+    for func in argL:
+        
+        rmallfiles()
+        time.sleep(1)
+        
+        print3( '====> ', func )
+        eval( func+'()' )
 
 
 #####################################################################
 
-# check the null test
-
-writefile( "null.xml", """
-<rtest name="null">
-</rtest>""" )
-
-out,np,nd,nf,nn = run_vvtest()
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-tL = testlist(out)
-assert len(tL) == 1
-p = tL[0][-1]
-assert os.path.exists(p)
-
-rmallfiles()
-
-
-# check simple execute script test
-
-writefile( 'helloworld.xml', """
-<rtest name="helloworld">
-  <execute> <![CDATA[
-${XMLDIR}/helloworld.csh
-]]>
-  </execute>
-</rtest>""" )
-
-writescript( 'helloworld.csh', """
-#!/bin/csh -f
-echo "hello world"
-exit 0""" )
-
-out,np,nd,nf,nn = run_vvtest()
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-tL = testlist(out)
-assert len(tL) == 1
-p = tL[0][-1]
-assert os.path.exists(p)
-assert len( filegrep( p+'/execute.log', "^hello world$" ) ) == 1
-
-rmallfiles()
-
-
-# check link & copy file globbing
-
-writefile( "glob1.txt", """
-this is glob1.txt
-""")
-
-writefile( "glob2.txt", """
-this is glob2.txt
-""")
-
-writefile( "Aglob.txt", """
-this is Aglob2.txt
-""")
-
-writefile( "glob.xml", """
-<rtest name="glob">
-  <link_files> glob?.txt </link_files>
-  <copy_files> Aglob.* </copy_files>
-  <execute> <![CDATA[
-cat glob1.txt || exit 1
-cat glob2.txt || exit 1
-cat Aglob.txt || exit 1
-]]>  </execute>
-</rtest>""")
-
-out,np,nd,nf,nn = run_vvtest()
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-rmallfiles()
-
-
-# check different exit statuses
-
-writefile( "PassTest.xml", """
-<rtest name="PassTest">
-  <execute> <![CDATA[
-sleep 1
-echo "Exiting with pass status"
-]]>
-  </execute>
-</rtest>""")
-
-writefile( "FailTest.xml", """
-<rtest name="FailTest">
-  <execute> <![CDATA[
-sleep 1
-echo "Exiting with failure status"
-exit 1
-]]>
-  </execute>
-</rtest>""")
-
-writefile( "DiffTest.xml", """
-<rtest name="DiffTest">
-  <execute> <![CDATA[
-sleep 1
-echo "Exiting with diff status"
-set have_diff = yes
-]]>
-  </execute>
-</rtest>""")
-
-out,np,nd,nf,nn = run_vvtest()
-assert np == 1 and nd == 1 and nf == 1 and nn == 0
-
-# use -L option (and wipe)
-
-out,np,nd,nf,nn = run_vvtest( "-w -L -n 1" )
-assert np == 1 and nd == 1 and nf == 1 and nn == 0
-L = re.findall( "Starting test:", out )
-assert len(L) == 3, "three tests should have run; got "+str(len(L))
-
-# check running within the test results directory
-
-cwd = os.getcwd()
-tdir = results_dir()
-os.chdir(tdir+"/PassTest")
-
-out,np,nd,nf,nn = run_vvtest( "-F" )
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-os.chdir( cwd )
-
-rmallfiles()
-
-
-# check the XMLDIR variable
-
-cwd = os.getcwd()
-writefile( "xdir.xml", """
-<rtest name="xdir">
-  <execute> <![CDATA[
-set echo
-cd $XMLDIR || exit 1
-set xdir = `pwd`
-cd """+cwd+""" || exit 1
-set cdir = `pwd`
-if ( $xdir != $cdir ) then
-  echo "*** XMLDIR not equal to """+cwd+""""
-  exit 1
-endif
-]]>
-  </execute>
-</rtest>""")
-
-out,np,nd,nf,nn = run_vvtest()
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-tdir = results_dir()
-remove_results()
-
-# check using the -M option
-
-out,np,nd,nf,nn = run_vvtest( "-M any" )
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-# cd into a test and run it
-
-os.chdir( tdir + '/xdir' )
-out,np,nd,nf,nn = run_vvtest( "-F" )
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-os.chdir(cwd)
-
-remove_results()
-rmallfiles()
-
-
-# check option -gG
-
-cwd = os.getcwd()
-writefile( 'helloworld.xml', """
-<rtest name="helloworld">
-  <execute> <![CDATA[
-${XMLDIR}/helloworld.csh
-]]>
-  </execute>
-</rtest>""" )
-
-writescript( 'helloworld.csh', """
-#!/bin/csh -f
-echo "hello world"
-exit 0""" )
-
-out,np,nd,nf,nn = run_vvtest( "-gG" )
-tdir = results_dir()
-os.chdir(tdir+'/helloworld')
-out,np,nd,nf,nn = run_vvtest()
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-tL = testlist(out)
-assert len(tL) == 1
-assert len( filegrep( 'execute.log', "^hello world$" ) ) == 1
-os.chdir(cwd)
-
-rmallfiles()
-
-
-# check specifying parameters
-
-writefile( "param.xml", """
-<rtest name="param">
-  <parameterize hello="world mars"/>
-  <execute> <![CDATA[
-sleep 1
-echo "parm=$hello"
-]]>
-  </execute>
-</rtest>""" )
-
-out,np,nd,nf,nn = run_vvtest()
-assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-# force a parameter to take on a user defined value
-
-out,np,nd,nf,nn = run_vvtest( "-S hello=jupiter" )
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-out,np,nd,nf,nn = run_vvtest( "-i" )
-assert np == 3 and nd == 0 and nf == 0 and nn == 0
-tL = testlist(out)
-nj = 0 ; nm = 0 ; nw = 0
-for line in tL:
-  if line[-1].find( "hello=jupiter" ) >= 0: nj = nj + 1
-  if line[-1].find( "hello=mars" ) >= 0: nm = nm + 1
-  if line[-1].find( "hello=world" ) >= 0: nw = nw + 1
-assert nj == 1 and nm == 1 and nw == 1
-
-
-########################################################################
-
-rmallfiles()
-
-# use keywords in <execute> blocks
-
-writefile( "keys.xml", """
-<rtest name="keys">
-  <keywords> mars venus </keywords>
-  <execute> echo "in execute" </execute>
-</rtest>""" )
-
-out,np,nd,nf,nn = run_vvtest()
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-fL = glob.glob( 'TestResults.*/keys/execute.log' )
-assert len(fL) == 1
-assert len( filegrep( fL[0], 'in execute' ) ) >= 1
-
-# note how this one leaves out the <keywords> block (they test keywords
-# should include mars & venus in this case)
-writefile( "keys.xml", """
-<rtest name="keys">
-  <execute keywords="mars"> echo "execute mars" </execute>
-  <execute keywords="venus"> echo "execute venus" </execute>
-</rtest>""" )
-
-out,np,nd,nf,nn = run_vvtest( '-w' )
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-fL = glob.glob( 'TestResults.*/keys/execute.log' )
-assert len(fL) == 1
-assert len( filegrep( fL[0], 'execute mars' ) ) == 0
-assert len( filegrep( fL[0], 'execute venus' ) ) == 0
-
-out,np,nd,nf,nn = run_vvtest( '-w -k mars' )
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-fL = glob.glob( 'TestResults.*/keys/execute.log' )
-assert len(fL) == 1
-assert len( filegrep( fL[0], 'execute mars' ) ) >= 1
-assert len( filegrep( fL[0], 'execute venus' ) ) == 0
-
-out,np,nd,nf,nn = run_vvtest( '-w -k venus' )
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-fL = glob.glob( 'TestResults.*/keys/execute.log' )
-assert len(fL) == 1
-assert len( filegrep( fL[0], 'execute mars' ) ) == 0
-assert len( filegrep( fL[0], 'execute venus' ) ) >= 1
-
-writefile( "keys.xml", """
-<rtest name="keys">
-  <keywords> mars venus </keywords>
-  <execute keywords="mars"> echo "execute mars" </execute>
-  <execute not_keywords="mars"> echo "execute venus" </execute>
-</rtest>""" )
-
-out,np,nd,nf,nn = run_vvtest( '-w -k venus' )
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-fL = glob.glob( 'TestResults.*/keys/execute.log' )
-assert len(fL) == 1
-assert len( filegrep( fL[0], 'execute mars' ) ) == 0
-assert len( filegrep( fL[0], 'execute venus' ) ) >= 1
-
-out,np,nd,nf,nn = run_vvtest( '-w' )
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-fL = glob.glob( 'TestResults.*/keys/execute.log' )
-assert len(fL) == 1
-assert len( filegrep( fL[0], 'execute mars' ) ) == 0
-assert len( filegrep( fL[0], 'execute venus' ) ) >= 1
-
-out,np,nd,nf,nn = run_vvtest( '-w -k mars' )
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-fL = glob.glob( 'TestResults.*/keys/execute.log' )
-assert len(fL) == 1
-assert len( filegrep( fL[0], 'execute mars' ) ) >= 1
-assert len( filegrep( fL[0], 'execute venus' ) ) == 0
+def null():
+    """
+    check the null test
+    """
+    writefile( "null.xml", """
+        <rtest name="null">
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tL = testlist(out)
+    assert len(tL) == 1
+    p = tL[0][-1]
+    assert os.path.exists(p)
+
+
+#####################################################################
+
+def script():
+    """
+    check simple execute script test
+    """
+    writefile( 'helloworld.xml', """
+        <rtest name="helloworld">
+          <execute> <![CDATA[
+        ${XMLDIR}/helloworld.csh
+        ]]>
+          </execute>
+        </rtest>""" )
+
+    writescript( 'helloworld.csh', """
+        #!/bin/csh -f
+        echo "hello world"
+        exit 0""" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tL = testlist(out)
+    assert len(tL) == 1
+    p = tL[0][-1]
+    assert os.path.exists(p)
+    assert len( filegrep( p+'/execute.log', "^hello world$" ) ) == 1
+
+
+#####################################################################
+
+def links():
+    """
+    check link & copy file globbing
+    """
+    writefile( "glob1.txt", """
+        this is glob1.txt
+        """)
+
+    writefile( "glob2.txt", """
+        this is glob2.txt
+        """)
+
+    writefile( "Aglob.txt", """
+        this is Aglob2.txt
+        """)
+
+    writefile( "glob.xml", """
+        <rtest name="glob">
+          <link_files> glob?.txt </link_files>
+          <copy_files> Aglob.* </copy_files>
+          <execute> <![CDATA[
+        cat glob1.txt || exit 1
+        cat glob2.txt || exit 1
+        cat Aglob.txt || exit 1
+        ]]>  </execute>
+        </rtest>""")
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+
+#####################################################################
+
+def exitstat():
+    """
+    check different exit statuses
+    """
+    writefile( "PassTest.xml", """
+        <rtest name="PassTest">
+          <execute> <![CDATA[
+        sleep 1
+        echo "Exiting with pass status"
+        ]]>
+          </execute>
+        </rtest>""")
+
+    writefile( "FailTest.xml", """
+        <rtest name="FailTest">
+          <execute> <![CDATA[
+        sleep 1
+        echo "Exiting with failure status"
+        exit 1
+        ]]>
+          </execute>
+        </rtest>""")
+
+    writefile( "DiffTest.xml", """
+        <rtest name="DiffTest">
+          <execute> <![CDATA[
+        sleep 1
+        echo "Exiting with diff status"
+        set have_diff = yes
+        ]]>
+          </execute>
+        </rtest>""")
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 1 and nf == 1 and nn == 0
+
+    # use -L option (and wipe)
+
+    out,np,nd,nf,nn = run_vvtest( "-w -L -n 1" )
+    assert np == 1 and nd == 1 and nf == 1 and nn == 0
+    L = re.findall( "Starting test:", out )
+    assert len(L) == 3, "three tests should have run; got "+str(len(L))
+
+    # check running within the test results directory
+
+    cwd = os.getcwd()
+    tdir = results_dir()
+    os.chdir(tdir+"/PassTest")
+
+    out,np,nd,nf,nn = run_vvtest( "-F" )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    os.chdir( cwd )
+
+
+#####################################################################
+
+def xmldir():
+    """
+    check the XMLDIR variable
+    """
+    cwd = os.getcwd()
+
+    writefile( "xdir.xml", """
+        <rtest name="xdir">
+          <execute> <![CDATA[
+        set echo
+        cd $XMLDIR || exit 1
+        set xdir = `pwd`
+        cd """+cwd+""" || exit 1
+        set cdir = `pwd`
+        if ( $xdir != $cdir ) then
+          echo "*** XMLDIR not equal to """+cwd+""""
+          exit 1
+        endif
+        ]]>
+          </execute>
+        </rtest>""")
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    tdir = results_dir()
+    remove_results()
+
+    # check using the -M option
+
+    os.mkdir( 'mir' )
+    out,np,nd,nf,nn = run_vvtest( "-M "+cwd+"/mir" )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    # cd into a test and run it
+
+    os.chdir( tdir + '/xdir' )
+    out,np,nd,nf,nn = run_vvtest( "-F" )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    os.chdir(cwd)
+
+
+#####################################################################
+
+def options():
+    """
+    check option -gG
+    """
+    cwd = os.getcwd()
+
+    writefile( 'helloworld.xml', """
+        <rtest name="helloworld">
+          <execute> <![CDATA[
+        ${XMLDIR}/helloworld.csh
+        ]]>
+          </execute>
+        </rtest>""" )
+
+    writescript( 'helloworld.csh', """
+        #!/bin/csh -f
+        echo "hello world"
+        exit 0""" )
+
+    out,np,nd,nf,nn = run_vvtest( "-gG" )
+    tdir = results_dir()
+    os.chdir(tdir+'/helloworld')
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tL = testlist(out)
+    assert len(tL) == 1
+    assert len( filegrep( 'execute.log', "^hello world$" ) ) == 1
+    os.chdir(cwd)
+
+
+#####################################################################
+
+def params():
+    """
+    check specifying parameters
+    """
+    writefile( "param.xml", """
+        <rtest name="param">
+          <parameterize hello="world mars"/>
+          <execute> <![CDATA[
+        sleep 1
+        echo "parm=$hello"
+        ]]>
+          </execute>
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+    # force a parameter to take on a user defined value
+
+    out,np,nd,nf,nn = run_vvtest( "-S hello=jupiter" )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( "-i" )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+    tL = testlist(out)
+    nj = 0 ; nm = 0 ; nw = 0
+    for line in tL:
+      if line[-1].find( "hello=jupiter" ) >= 0: nj = nj + 1
+      if line[-1].find( "hello=mars" ) >= 0: nm = nm + 1
+      if line[-1].find( "hello=world" ) >= 0: nw = nw + 1
+    assert nj == 1 and nm == 1 and nw == 1
+
+
+#####################################################################
+
+def keywords():
+    """
+    use keywords in <execute> blocks
+    """
+    writefile( "keys.xml", """
+        <rtest name="keys">
+          <keywords> mars venus </keywords>
+          <execute> echo "in execute" </execute>
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    fL = glob.glob( 'TestResults.*/keys/execute.log' )
+    assert len(fL) == 1
+    assert len( filegrep( fL[0], 'in execute' ) ) >= 1
+
+    # note how this one leaves out the <keywords> block (the test keywords
+    # should include mars & venus in this case)
+    writefile( "keys.xml", """
+        <rtest name="keys">
+          <execute keywords="mars"> echo "execute mars" </execute>
+          <execute keywords="venus"> echo "execute venus" </execute>
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest( '-w' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    fL = glob.glob( 'TestResults.*/keys/execute.log' )
+    assert len(fL) == 1
+    assert len( filegrep( fL[0], 'execute mars' ) ) == 0
+    assert len( filegrep( fL[0], 'execute venus' ) ) == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-w -k mars' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    fL = glob.glob( 'TestResults.*/keys/execute.log' )
+    assert len(fL) == 1
+    assert len( filegrep( fL[0], 'execute mars' ) ) >= 1
+    assert len( filegrep( fL[0], 'execute venus' ) ) == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-w -k venus' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    fL = glob.glob( 'TestResults.*/keys/execute.log' )
+    assert len(fL) == 1
+    assert len( filegrep( fL[0], 'execute mars' ) ) == 0
+    assert len( filegrep( fL[0], 'execute venus' ) ) >= 1
+
+    writefile( "keys.xml", """
+        <rtest name="keys">
+          <keywords> mars venus </keywords>
+          <execute keywords="mars"> echo "execute mars" </execute>
+          <execute not_keywords="mars"> echo "execute venus" </execute>
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest( '-w -k venus' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    fL = glob.glob( 'TestResults.*/keys/execute.log' )
+    assert len(fL) == 1
+    assert len( filegrep( fL[0], 'execute mars' ) ) == 0
+    assert len( filegrep( fL[0], 'execute venus' ) ) >= 1
+
+    out,np,nd,nf,nn = run_vvtest( '-w' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    fL = glob.glob( 'TestResults.*/keys/execute.log' )
+    assert len(fL) == 1
+    assert len( filegrep( fL[0], 'execute mars' ) ) == 0
+    assert len( filegrep( fL[0], 'execute venus' ) ) >= 1
+
+    out,np,nd,nf,nn = run_vvtest( '-w -k mars' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    fL = glob.glob( 'TestResults.*/keys/execute.log' )
+    assert len(fL) == 1
+    assert len( filegrep( fL[0], 'execute mars' ) ) >= 1
+    assert len( filegrep( fL[0], 'execute venus' ) ) == 0
+
+
+#####################################################################
+
+def autolink():
+    """
+    the test specification file should be automatically linked
+    """
+    writefile( "auto1.xml", """
+        <rtest name="auto1">
+          <execute>
+            set echo=1
+            ls -l $NAME.xml || exit 1
+          </execute>
+        </rtest>""" )
+
+    writefile( "auto2.xml", """
+        <rtest name="auto2">
+          <link> $NAME.xml </link>
+          <execute>
+            set echo=1
+            ls -l $NAME.xml || exit 1
+          </execute>
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    fL = glob.glob( 'TestResults.*/auto1/auto1.xml' )
+    assert len(fL) == 1
+    fL = glob.glob( 'TestResults.*/auto2/auto2.xml' )
+    assert len(fL) == 1
+
+
+############################################################################
+
+main()
