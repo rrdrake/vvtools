@@ -1639,7 +1639,8 @@ class Pipelines:
           if qtime < 600: taopts += ' -T ' + str(qtime*0.90)
           else:           taopts += ' -T ' + str(qtime-120)
         
-        fp.writelines( [ 'vvtest ' + taopts + ' || exit 1\n\n' ] )
+        cmd = toolsdir+'/vvtest ' + taopts + ' || exit 1'
+        fp.writelines( [ cmd+'\n\n' ] )
         
         # put in an echo to help debug when jobs timeout
         fp.writelines( [ 'echo "queue job finished cleanly"\n' ] )
