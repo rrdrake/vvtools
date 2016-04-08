@@ -136,6 +136,22 @@ OPTIONS
             Same as --keys except the collection of test file names is written
             instead.
       
+      --sort <character(s)>
+            When test results are printed to the screen, they are sorted by
+            their test name by default.  Use this option to sort by other
+            fields:
+                    n : test name (the default)
+                    x : execution directory name
+                    t : test run time
+                    d : execution date
+                    s : test status (such as pass, fail, diff, etc)
+                    r : reverse the order
+            If more than one character is given, then ties on the first
+            ordering are broken by subsquent orderings.  For example,
+            "--sort txr" would sort first by runtime, then by execution
+            directory name, and would reverse the order (so largest runtimes
+            first, smallest runtimes last).
+
       -w    Wipe out previous test list and test results, if present.  By
             default, previous tests are only modified or appended to.
       
@@ -237,7 +253,9 @@ OPTIONS
       
       -T timeout
             Apply a timeout value in seconds to each test.  Zero means no
-            timeout.
+            timeout.  In pipeline/batch mode, note that the time given to
+            the batch queue for each batch job is the sum of the timeouts
+            of each test.
       
       --timeout-multiplier mult
             Apply a float multiplier to the timeout value for each test.
@@ -277,15 +295,16 @@ OPTIONS
       --qsub-limit <integer>
             Used in conjunction with the --pipeline switch, this will limit
             the number of pipelines submitted to the queue at any one time.
-            The default is 5 pipelines.
+            The default is 5 concurrent pipelines.
       
       --qsub-length=<integer>
-            Used in conjunction with the --pipeline switch, the qsub-length
-            value specifies (in seconds) how long each batch job should take.
-            The default is 10 minutes.  The longer the length, the more tests
-            will go in each batch job; the shorter the length, the fewer.  A
-            value of zero will force each test to run in a separate batch job.
-            The batch job time is a sum of the execution time of each test.
+            Used in conjunction with the --pipeline switch, this limits the
+            number of tests that are placed into each pipeline batch.  The
+            sum of the (estimated) runtimes of the tests in each batch will
+            be less than the given number of seconds.  The default is 10
+            minutes.  The longer the length, the more tests will go in each
+            batch job; the shorter the length, the fewer.  A value of zero
+            will force each test to run in a separate batch job.
       
       --check=<name>
             Activates optional sections in the test files.  The execution
@@ -371,20 +390,6 @@ config = Configuration()
 
 
 ############################################################################
-
-def XstatusChar(t):
-    
-    if isinstance(t, TestExec.TestExec): ref = t.atest
-    else:                        ref = t
-    
-    if ref.getAttr('state') != "notrun":
-      
-      if ref.getAttr('state') == "done":
-        if ref.getAttr('result') == "timeout": return 'T'
-        return 'X'
-      return 'R'
-    
-    return 'N'  # not run
 
 def XstatusString(t, add_date, test_dir, cwd):
     """
@@ -475,7 +480,6 @@ def generateTestList( dirs, plat, ufilter ):
     
     tlist.loadTests()
     
-    cwd = None
     test_dir = None
     cwd = os.getcwd()
     testdirname = testResultsDir( plat.getName() )
@@ -485,19 +489,10 @@ def generateTestList( dirs, plat, ufilter ):
     if '--perms' in optdict:
         perms = PermissionSetter( test_dir, optdict['--perms'] )
     
-    # TODO: clean up the way/when lists are printed;  in this case, the
-    #       createTestScripts() also prints
-    
-    print "\n   =================================================="
-    sorted_list = tlist.active.values()
-    sorted_list.sort()
-    for atest in sorted_list:
-      print XstatusString(atest, 0, test_dir, cwd)
-    print "   =================================================="
-    
     createTestDir( testdirname, perms )
     writeCommandInfo( test_dir, plat, perms )
-    createTestScripts( tlist, test_dir, plat, perms )
+    printResults( tlist, False, test_dir, False, perms )
+    tlist.createTestExecs( test_dir, plat, config, perms )
 
     tf = os.path.join( test_dir, testlist_name )
     tlist.stringFileWrite( tf )
@@ -505,7 +500,7 @@ def generateTestList( dirs, plat, ufilter ):
     if perms != None:
         perms.set( os.path.abspath( tf ) )
     
-    print "test directory:", testdirname
+    print "Test directory:", testdirname
 
 
 def extractTestFiles( dirs, plat, target_dir, ufilter ):
@@ -596,7 +591,7 @@ def keywordInformation(tlist):
     if optdict.has_key('--keys'):
       print "\nresults keywords: " + string.join( TestSpec.results_keywords )
       kd = {}
-      for t in tlist.active.values():
+      for t in tlist.getActiveTests():
         for k in t.getKeywords():
           if k not in TestSpec.results_keywords and k != t.getName():
             kd[k] = None
@@ -613,7 +608,7 @@ def keywordInformation(tlist):
     else:
       assert optdict.has_key('--files')
       D = {}
-      for t in tlist.active.values():
+      for t in tlist.getActiveTests():
         d = os.path.normpath( t.getFilename() )
         D[d] = None
       L = D.keys()
@@ -927,7 +922,13 @@ def runTests( dirs, plat, ufilter ):
     
     if len(tlist.active) > 0:
       
-      createTestScripts( tlist, test_dir, plat, perms )
+      if '--pipeline' not in optdict:
+        plat.initProcs( test_dir )
+
+      print "Running these tests:"
+      printResults( tlist, True, test_dir, False, perms, True )
+
+      tlist.createTestExecs( test_dir, plat, config, perms )
       
       if optdict.has_key('--save-results'):
         tag = optdict.get('--results-tag',None)
@@ -935,11 +936,12 @@ def runTests( dirs, plat, ufilter ):
 
       if not optdict.has_key('--pipeline'):
         executeTestList( tlist, test_dir, plat, perms, tfile )
-        print "test directory:", testdirname
       
       else:
         pipeLineTestList( tlist, test_dir, plat, perms )
     
+      print "Test directory:", testdirname
+      
       if optdict.has_key('--save-results'):
         tag = optdict.get('--results-tag',None)
         saveResults( tlist, plat, test_dir, tag )
@@ -948,60 +950,48 @@ def runTests( dirs, plat, ufilter ):
       print "\n--------- no tests to run -----------\n"
 
 
-def createTestScripts( tlist, test_dir, plat, perms ):
-    
-    # create directories and generate test scripts
-    
-    if not optdict.has_key('-g') and not optdict.has_key('--pipeline'):
-      plat.initProcs( test_dir )
-    
-    if len(tlist.active) > 0:
-      
-      if not optdict.has_key('-g'):
-        
-        cwd = os.getcwd()
-        
-        # dump out the tests that will be run
-        print "\n-------- running these tests ---------"
-        sorted_list = tlist.active.values()
-        sorted_list.sort()
-        for atest in sorted_list:
-          print XstatusString(atest, 0, test_dir, cwd)
-        print "--------------------------------------\n"
-      
-      tlist.createTestExecs( test_dir, plat, config, perms )
-
-
-def printResults( atestlist, add_date, test_dir, do_html, perms ):
+def printResults( atestlist, add_date, test_dir, do_html, perms, short=False ):
     """
     Prints a summary to the screen and also creates an HTML summary file.
+    If 'short' is True, then only a handfull of tests are written to the
+    screen.
     """
-    cwd = os.getcwd()
-    sorted_list = atestlist.active.values()
-    sorted_list.sort()
+    rawlist = atestlist.getActiveTests( optdict.get( '--sort', '' ) )
+    
     Lfail = []; Ltime = []; Ldiff = []; Lpass = []; Lnrun = []; Lndone = []
-    print "=================================================="
-    for atest in sorted_list:
-      statr = XstatusResult(atest)
-      if   statr == "fail":    Lfail.append(atest)
-      elif statr == "timeout": Ltime.append(atest)
-      elif statr == "diff":    Ldiff.append(atest)
-      elif statr == "pass":    Lpass.append(atest)
-      elif statr == "notrun":  Lnrun.append(atest)
-      elif statr == "notdone": Lndone.append(atest)
-      print XstatusChar(atest), XstatusString(atest, add_date, test_dir, cwd)
-    print "=================================================="
+    for atest in rawlist:
+        statr = XstatusResult(atest)
+        if   statr == "fail":    Lfail.append(atest)
+        elif statr == "timeout": Ltime.append(atest)
+        elif statr == "diff":    Ldiff.append(atest)
+        elif statr == "pass":    Lpass.append(atest)
+        elif statr == "notrun":  Lnrun.append(atest)
+        elif statr == "notdone": Lndone.append(atest)
     sumstr = str(len(Lpass)) + " pass, " + \
              str(len(Ltime)) + " timeout, " + \
              str(len(Ldiff)) + " diff, " + \
              str(len(Lfail)) + " fail, " + \
              str(len(Lnrun)) + " notrun, " + \
              str(len(Lndone)) + " notdone"
-    print "Summary: " + sumstr
+    
+    cwd = os.getcwd()
+    print3( "==================================================" )
+    if short and len(rawlist) > 16:
+        for atest in rawlist[:8]:
+            print3( XstatusString( atest, add_date, test_dir, cwd ) )
+        print3( "..." )
+        for atest in rawlist[-8:]:
+            print3( XstatusString( atest, add_date, test_dir, cwd ) )
+    else:
+        for atest in rawlist:
+            print3( XstatusString( atest, add_date, test_dir, cwd ) )
+    print3( "==================================================" )
+    print3( "Summary:", sumstr )
+    print3()
     
     if do_html:
-      printHTMLResults( sumstr, test_dir, perms,
-                        Lfail, Ltime, Ldiff, Lpass, Lnrun, Lndone )
+        printHTMLResults( sumstr, test_dir, perms,
+                          Lfail, Ltime, Ldiff, Lpass, Lnrun, Lndone )
 
 
 def printHTMLResults( sumstr, test_dir, perms,
@@ -1230,7 +1220,7 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
           " (elapsed %dh %dm)" % (h,m)
     
     do_html = ( '--qsub-id' not in optdict )
-    printResults( tlist, 0, test_dir, do_html, perms )
+    printResults( tlist, True, test_dir, do_html, perms )
     
     print "Finish time:", time.ctime( time.time() ) + \
           " (elapsed %dh %dm)" % (h,m)
@@ -1398,7 +1388,7 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
     print "Finish time:", time.ctime( time.time() ) + \
           " (elapsed %dh %dm)" % (h,m)
     
-    printResults( tlist, 1, test_dir, 1, perms )
+    printResults( tlist, True, test_dir, 1, perms )
     
     if len(NS) > 0:
       print "*** Warning: these pipe numbers did not seem to start:", \
@@ -1415,61 +1405,63 @@ def loadExecutionTimes( tlist, plat ):
     """
     For each test, a 'runtimes' file will be read (if it exists) and the
     run time for this platform extracted.  This run time is saved in the
-    test as the 'runtime' data member.
+    test as the 'runtime' attribute.  Also, a timeout is calculated for
+    each test and placed in the 'timeout' attribute.
     """
     pname = plat.getName()
     cplr = plat.getCompiler()
     
     cache = results.LookupCache( plat.testingDirectory() )
     
-    for t in tlist.active.values():
+    for t in tlist.getActiveTests():
       
-      # grab explicit timeout value, if the test specifies it
-      tout = t.getTimeout()
-      
-      # look for a previous runtime value
-      tlen,tresult = results.get_execution_time( t, pname, cplr, cache )
-      
-      if tlen != None:
-        if tresult == "timeout":
-          # for tests that timed out, apply a large multiplier
-          if tlen < 10*60: tlen = 30*60
-          elif tlen < 60*60: tlen = 60*60
-          elif t.hasKeyword("long"):
-            # only let long tests achieve times longer than an hour
-            if tlen < 60*60: tlen = 2*60*60
-            else: tlen = 2*tlen
-          if tout == None:
-            tout = tlen
-        elif tout == None:
-          # try to allow for test runtime variability
-          if tlen < 120:
-            if 2*tlen < 60:
-              tout = 60
-            else:
-              tout = tlen * 2
-          else:
-            tout = int( float(tlen)*1.3 )
-      
-      else:
+        # grab explicit timeout value, if the test specifies it
+        tout = t.getTimeout()
         
-        if tout != None:
-          # use the explicit timeout value to approximate the runtime
-          tlen = tout
-        else:
-          # the default depends on if the 'long' keyword is present
-          if t.hasKeyword("long"):
-            tlen = 60*60  # one hour
-          else:
-            tlen = 10*60  # 10 minutes
-          if tout == None:
-            tout = tlen
+        # look for a previous runtime value
+        tlen,tresult = results.get_execution_time( t, pname, cplr, cache )
+        
+        if tlen != None:
+            
+            if tout == None:
+                if tresult == "timeout":
+                    # for tests that timed out, make timeout much larger
+                    if t.hasKeyword( "long" ):
+                        # only long tests get timeouts longer than an hour
+                        if tlen < 60*60:
+                            tout = 4*60*60
+                        elif tlen < 5*24*60*60:  # even longs are capped
+                            tout = 4*tlen
+                    else:
+                        tout = 60*60
+            
+                else:
+                    # pick timeout to allow for some runtime variability
+                    if tlen < 300:
+                        tout = max( 600, 2*tlen )
+                    elif tlen < 4*60*60:
+                        tout = int( float(tlen)*1.5 )
+                    else:
+                        tout = int( float(tlen)*1.3 )
       
-      t.setAttr( 'runtime', int(tlen) )
+        else:  # no previous result
+
+            if tout != None:
+                # use the explicit timeout value as the runtime
+                tlen = tout
+            else:
+                # with no information, the default depends on 'long' keyword
+                if t.hasKeyword("long"):
+                    tlen = 5*60*60  # five hours
+                else:
+                    tlen = 60*60  # one hour
+                tout = tlen
       
-      tout = int( optdict.get( '-T', tout ) )
-      tout = int( float(tout) * optdict.get('--timeout-multiplier',1.0) )
-      t.setAttr( 'timeout', tout )
+        t.setAttr( 'runtime', int(tlen) )
+        
+        tout = int( optdict.get( '-T', tout ) )
+        tout = int( float(tout) * optdict.get('--timeout-multiplier',1.0) )
+        t.setAttr( 'timeout', tout )
     
     cache = None
 
@@ -1484,6 +1476,7 @@ class Pipelines:
         self.test_dir = test_dir
         self.tlist = tlist
         self.perms = perms
+        # TODO: make Tzero a platform plugin thing
         self.Tzero = 21*60*60  # no timeout in pipeline mode is 21 hours
         
         self.createTestGroups()
@@ -1505,8 +1498,8 @@ class Pipelines:
           L = []
           tsum = 0
           for rt,tx in xL:
-            if tx.atest.getAttr('timeout') == 0:
-              # tests without a timeout get their own group
+            if tx.atest.getAttr('timeout') < 1:
+              # tests with no timeout get their own group
               qL.append( [ self.Tzero, len(qL), [tx] ] )
             else:
               if len(L) > 0 and tsum + rt > qlen:
@@ -1688,7 +1681,7 @@ def saveResults( tlist, plat, test_dir, tag, inprogress=False ):
     curdate = time.time()
     mindate = curdate
     tr = results.TestResults()
-    for t in tlist.active.values():
+    for t in tlist.getActiveTests():
       tr.addTest(t)
       d = t.getAttr('xdate',-1)
       if d > 0:
@@ -1748,15 +1741,8 @@ def restartTests( test_dir, plat, ufilter ):
     
     if len(tlist.active) > 0:
       
-      cwd = os.getcwd()
-      
-      # dump out the tests that will actually be run
-      print "\n-------- running these tests ---------"
-      sorted_list = tlist.active.values()
-      sorted_list.sort()
-      for atest in sorted_list:
-        print XstatusString(atest, 0, test_dir, cwd)
-      print "--------------------------------------\n"
+      print "Running these tests:"
+      printResults( tlist, True, test_dir, False, perms, True )
       
       if optdict.has_key('--save-results'):
         tag = optdict.get('--results-tag',None)
@@ -1807,12 +1793,8 @@ def baselineTests( test_dir, plat, ufilter ):
     
     if len(tlist.active) > 0:
       
-      print "\n-------- baselining these tests ---------"
-      sorted_list = tlist.active.values()
-      sorted_list.sort()
-      for atest in sorted_list:
-        print XstatusString(atest, 0, test_dir, cwd)
-      print "--------------------------------------\n"
+      print "Baselining these tests:"
+      printResults( tlist, True, test_dir, False, None, False )
       
       perms = None
       if '--perms' in optdict:
@@ -1950,6 +1932,14 @@ def issubdir(parent_dir, subdir):
     return None
 
 
+def print3( *args, **kwargs ):
+    s = ' '.join( [ str(x) for x in args ] )
+    if len(kwargs) > 0:
+        s += ' ' + ' '.join( [ str(k)+'='+str(v) for k,v in kwargs.items() ] )
+    sys.stdout.write( s + os.linesep )
+    sys.stdout.flush()
+
+
 ###########################################################################
 #
 # main
@@ -1984,7 +1974,7 @@ def parseOptionsAndGenerateOptionDictionary():
                                   'search=', 'extract=',
                                   'timeout-multiplier=', 'postclean',
                                   'vg', 'save-results', 'results-tag=',
-                                  'config=', 'perms=' ] )
+                                  'config=', 'perms=', 'sort=' ] )
     except getopt.error, e:
       sys.stderr.write('*** ' + exeName + ': error: ' + str(e) + '\n')
       sys.exit(1)
@@ -2126,6 +2116,15 @@ def parseOptionsAndGenerateOptionDictionary():
         else:                   sdict[L[0]] = string.split( L[1] )
       optdict['-S'] = sdict
     
+    if '--sort' in optdict:
+        val = ''.join( [ s.strip() for s in optdict['--sort'] ] )
+        for c in val:
+            if c not in 'nxtdsr':
+                sys.stderr.write('*** ' + exeName + \
+                    ': error: invalid --sort character: ' + c + '\n')
+                sys.exit(1)
+        optdict[ '--sort' ] = val
+
     if optdict.has_key('--plat'):
       if len(optdict['--plat']) > 1:
         sys.stderr.write('*** ' + exeName + \
@@ -2436,7 +2435,7 @@ if __name__ == '__main__':
     elif optdict.has_key('--save-results'):
       saveResults( tlist, plat, test_dir, optdict.get('--results-tag',None) )
     else:
-      printResults( tlist, 1, test_dir, optdict.has_key('--html'), None )
+      printResults( tlist, True, test_dir, optdict.has_key('--html'), None )
  
   elif optdict.has_key('-b'):
     

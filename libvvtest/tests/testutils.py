@@ -100,13 +100,18 @@ def run_cmd( cmd, directory=None ):
       return True, out
     return False, out
 
-def run_vvtest( argstr='', ignore_errors=0 ):
+def run_vvtest( argstr='', ignore_errors=0, directory=None ):
     """
     Runs vvtest with the given argument string and returns
       ( command output, num pass, num diff, num fail, num notrun )
     If the exit status is not zero, an assertion is raised.
     """
+    if directory:
+      curdir = os.getcwd()
+      os.chdir( directory )
     x,out = run_cmd( vvtest + ' ' + argstr )
+    if directory:
+      os.chdir( curdir )
     if not x and not ignore_errors:
       raise Exception( "vvtest command failed: " + vvtest + ' ' + argstr )
     return out,numpass(out),numdiff(out),numfail(out),numnotrun(out)
@@ -120,7 +125,7 @@ def platform_name( test_out ):
     platname = None
     for line in test_out.split( os.linesep ):
       line = line.strip()
-      if line.startswith( 'test directory:' ):
+      if line.startswith( 'Test directory:' ):
         L = line.split()
         if len(L) >= 3:
           L2 = L[2].split('.')
@@ -167,11 +172,11 @@ def rmallfiles():
           os.remove(f)
 
 # these have to be modified if/when the output format changes in vvtest
-def check_pass(L): return len(L) >= 6 and L[3] == 'pass'
-def check_fail(L): return len(L) >= 6 and L[3][:4] == 'fail'
-def check_diff(L): return len(L) >= 6 and L[3] == 'diff'
-def check_notrun(L): return len(L) >= 4 and L[2] == 'NotRun'
-def check_timeout(L): return len(L) >= 6 and L[2] == 'TimeOut'
+def check_pass(L): return len(L) >= 5 and L[2] == 'pass'
+def check_fail(L): return len(L) >= 5 and L[2][:4] == 'fail'
+def check_diff(L): return len(L) >= 5 and L[2] == 'diff'
+def check_notrun(L): return len(L) >= 3 and L[1] == 'NotRun'
+def check_timeout(L): return len(L) >= 5 and L[1] == 'TimeOut'
 #def check_pass(L): return len(L) >= 4 and L[1] == 'pass'
 #def check_fail(L): return len(L) >= 4 and L[1] == 'fail'
 #def check_diff(L): return len(L) >= 4 and L[1] == 'diff'
@@ -303,6 +308,20 @@ def greptestlist(out, pat):
         elif repat.search( line.rstrip() ):
           L.append( line.rstrip() )
       elif line[:10] == "==========":
+        mark = 1
+        L = []  # reset list so only last cluster is considered
+    return L
+
+def testlines(out):
+    L = []
+    mark = 0
+    for line in out.split( os.linesep ):
+      if mark:
+        if line.startswith( "==========" ):
+          mark = 0
+        else:
+          L.append( line.rstrip() )
+      elif line.startswith( "==========" ):
         mark = 1
         L = []  # reset list so only last cluster is considered
     return L

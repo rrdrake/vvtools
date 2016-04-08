@@ -205,6 +205,52 @@ class TestList:
         
         return 1
     
+    def getActiveTests(self, sorting=''):
+        """
+        Get a list of the active tests (after filtering).  If 'sorting' is
+        not an empty string, it should be a set of characters that control the
+        way the test sorting is performed.
+                n : test name (the default)
+                x : execution directory name
+                t : test run time
+                d : execution date
+                s : test status (such as pass, fail, diff, etc)
+                r : reverse the order
+        """
+        if not sorting:
+            tL = self.active.values()
+            tL.sort()
+        else:
+            tL = []
+            for t in self.active.values():
+                L = []
+                for c in sorting:
+                    if c == 'n':
+                        L.append( t.getName() )
+                    elif c == 'x':
+                        L.append( t.getExecuteDirectory() )
+                    elif c == 't':
+                        tm = t.getAttr( 'xtime', t.getAttr( 'runtime', 0 ) )
+                        L.append( tm )
+                    elif c == 'd':
+                        L.append( t.getAttr( 'xdate', 0 ) )
+                    elif c == 's':
+                        st = t.getAttr( 'state', 'notrun' )
+                        if st == 'notrun':
+                            L.append( st )
+                        elif st == 'done':
+                            L.append( t.getAttr( 'result', 'unknown' ) )
+                        else:
+                            L.append( 'notdone' )
+                L.append( t )
+                tL.append( L )
+            tL.sort()
+            if 'r' in sorting:
+                tL.reverse()
+            tL = [ L[-1] for L in tL ]
+
+        return tL
+
     def scanDirectory(self, base_directory, force_params=None):
         """
         Recursively scans for test XML files starting at 'base_directory'.
