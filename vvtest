@@ -300,11 +300,11 @@ OPTIONS
       --qsub-length=<integer>
             Used in conjunction with the --pipeline switch, this limits the
             number of tests that are placed into each pipeline batch.  The
-            sum of the (estimated) runtimes of the tests in each batch will
-            be less than the given number of seconds.  The default is 10
-            minutes.  The longer the length, the more tests will go in each
-            batch job; the shorter the length, the fewer.  A value of zero
-            will force each test to run in a separate batch job.
+            sum of the timeouts of the tests in each batch will be less than
+            the given number of seconds.  The default is 30 minutes.  The
+            longer the length, the more tests will go in each batch job; the
+            shorter the length, the fewer.  A value of zero will force each
+            test to run in a separate batch job.
       
       --check=<name>
             Activates optional sections in the test files.  The execution
@@ -1437,8 +1437,10 @@ def loadExecutionTimes( tlist, plat ):
             
                 else:
                     # pick timeout to allow for some runtime variability
-                    if tlen < 300:
-                        tout = max( 600, 2*tlen )
+                    if tlen < 120:
+                        tout = max( 120, 2*tlen )
+                    elif tlen < 300:
+                        tout = max( 300, 1.5*tlen )
                     elif tlen < 4*60*60:
                         tout = int( float(tlen)*1.5 )
                     else:
@@ -1484,7 +1486,7 @@ class Pipelines:
     def createTestGroups(self):
         """
         """
-        qlen = optdict.get( '--qsub-length', 10*60 )
+        qlen = optdict.get( '--qsub-length', 30*60 )
         qL = []
         self.Lanalyze = []
         for np in self.tlist.getTestExecProcList():
@@ -1493,7 +1495,7 @@ class Pipelines:
             if tx.isParent():
               self.Lanalyze.append(tx)
             else:
-              xL.append( (tx.atest.getAttr('runtime'),tx) )
+              xL.append( (tx.atest.getAttr('timeout'),tx) )
           xL.sort()
           L = []
           tsum = 0
