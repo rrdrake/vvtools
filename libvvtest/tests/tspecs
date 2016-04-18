@@ -49,13 +49,13 @@ fp.writelines( [
      '  <!--include platforms="IRIX64"/-->\n',
      '  <!--include platforms=""/-->\n',
      '  <include platforms="not SunOS and not Linux"/>\n',
-     '  <timeout include="SunOS" value="240"/>\n',
-     '  <timeout exclude="IRIX64" value="1200"/>\n',
+     '  <timeout platforms="SunOS" value="240"/>\n',
+     '  <timeout platforms="not IRIX64" value="1200"/>\n',
      '  <mirror_files> file1.inp file1.exo </mirror_files>\n',
-     '  <copy_files test_name="f.inp f2.exo"> file2.inp file2.exo\n',
+     '  <copy_files linkname="f.inp f2.exo"> file2.inp file2.exo\n',
      '  </copy_files>\n',
      '  <execute name="alegra"> -o 2D </execute>\n',
-     '  <execute exclude="SunOS"> # comment </execute>\n',
+     '  <execute platforms="not SunOS"> # comment </execute>\n',
      '  <baseline parameters="np=1" file="atest.exo"\n',
      '                              destination="atest.base_exo"/>\n',
      '  <baseline parameters="np=4"> # script here </baseline>\n',
@@ -430,20 +430,6 @@ print "4444444444444444444444444444444444444"
 
 # test platforms
 
-fp = open('bad8.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include/>\n',
-     '</rtest>\n' ] )
-fp.close()
-xdoc = xreader.readDoc('bad8.xml')
-TestSpecCreator.createTestObjects( xdoc, '.', 'bad8.xml', None, nofltr )
-# an empty <include> block used to be an error, but is not any more
-#try:
-#  TestSpecCreator.createTestObjects( xdoc, '.', 'bad8.xml' )
-#except TestSpecCreator.TestSpecError, e: print e
-#else: raise Exception( "expected a TestSpecError exception" )
-
 fp = open('bad10.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
@@ -459,7 +445,7 @@ else: raise Exception( "expected a TestSpecError exception" )
 fp = open('bad11.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
-     '  <platform include="" parameters="some value"/>\n',
+     '  <include platforms="" parameters="some value"/>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('bad11.xml')
@@ -472,7 +458,7 @@ fp = open('bad12.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
      '  <parameterize some="value"/>\n',
-     '  <platform include="" parameters="some=value =value"/>\n',
+     '  <include platforms="" parameters="some=value =value"/>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('bad12.xml')
@@ -493,7 +479,7 @@ assert len(tL) == 1
 fp = open('ok8.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
-     '  <platform include=""/>\n',
+     '  <include platform=""/>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('ok8.xml')
@@ -532,7 +518,7 @@ assert len(tL) == 0
 fp = open('ok9.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
-     '  <platform include="something"/>\n',
+     '  <include platform="something"/>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('ok9.xml')
@@ -564,7 +550,7 @@ assert len(tL) == 0
 fp = open('ok10.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
-     '  <platform include="something IRIX"/>\n',
+     '  <include platform="something IRIX"/>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('ok10.xml')
@@ -602,7 +588,7 @@ assert len(tL) == 0
 fp = open('ok11.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
-     '  <platform exclude="something IRIX"/>\n',
+     '  <include platforms="not ( something or IRIX )"/>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('ok11.xml')
@@ -644,7 +630,7 @@ assert len(tL) == 1
 fp = open('ok12.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
-     '  <platform exclude=""/>\n',
+     '  <include platforms="not dummy"/>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('ok12.xml')
@@ -655,8 +641,8 @@ assert len(tL) == 1
 fp = open('ok13.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
-     '  <platform include="something IRIX"/>\n',
-     '  <platform exclude="theother"/>\n',
+     '  <include platforms="something IRIX"/>\n',
+     '  <include platforms="not theother"/>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('ok13.xml')
@@ -691,8 +677,8 @@ assert len(tL) == 0
 fp = open('ok14.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
-     '  <platform include="something IRIX"/>\n',
-     '  <platform exclude="IRIX"/>\n',
+     '  <include platforms="something IRIX"/>\n',
+     '  <include platforms="not IRIX"/>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('ok14.xml')
@@ -1060,7 +1046,7 @@ else: raise Exception( "expected a TestSpecError exception" )
 fp = open('bad24.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
-     '  <link_files test_name="file1"> file1 file2 </link_files>\n',
+     '  <link_files linkname="file1"> file1 file2 </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('bad24.xml')
@@ -1084,7 +1070,7 @@ else: raise Exception( "expected a TestSpecError exception" )
 fp = open('bad24c.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
-     '  <link_files test_name="/path/file1"> file1 </link_files>\n',
+     '  <link_files linkname="/path/file1"> file1 </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('bad24c.xml')
@@ -1096,7 +1082,7 @@ else: raise Exception( "expected a TestSpecError exception" )
 fp = open('bad24d.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
-     '  <link_files test_name="/path/file1"> /apath/file1 </link_files>\n',
+     '  <link_files linkname="/path/file1"> /apath/file1 </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('bad24d.xml')
@@ -1105,11 +1091,35 @@ try:
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
-fp = open('ok26.xml',"w")
+# this section tests using test_name attribute for backward compatibility
+fp = open('ok26b.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
      '  <copy_files> file1 file2 </copy_files>\n',
      '  <link_files test_name="file3.in"> file3 </link_files>\n',
+     '</rtest>\n' ] )
+fp.close()
+xdoc = xreader.readDoc('ok26b.xml')
+tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok26b.xml', None, nofltr )
+assert len(tL) == 1
+cpL = tL[0].getCopyFiles()
+cpL.sort()
+print "copy files", cpL
+assert len(cpL) == 2
+assert cpL[0] == ("file1", None)
+assert cpL[1] == ("file2", None)
+lnL = tL[0].getLinkFiles()
+lnL.sort()
+print "link files", lnL
+assert len(lnL) == 2
+assert lnL[0] == ("file3", "file3.in")
+assert lnL[1] == ("ok26b.xml", None)
+
+fp = open('ok26.xml',"w")
+fp.writelines( [
+     '<rtest name="atest">\n',
+     '  <copy_files> file1 file2 </copy_files>\n',
+     '  <link_files linkname="file3.in"> file3 </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('ok26.xml')
@@ -1132,8 +1142,8 @@ fp = open('ok27.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
      '  <parameterize np="1 4"/>\n',
-     '  <link_files parameters="np=1" test_name="file"> file.1 </link_files>\n',
-     '  <link_files parameters="np=4" test_name="file"> file.4 </link_files>\n',
+     '  <link_files parameters="np=1" linkname="file"> file.1 </link_files>\n',
+     '  <link_files parameters="np=4" linkname="file"> file.4 </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('ok27.xml')
@@ -1162,8 +1172,8 @@ fp = open('ok28.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
      '  <parameterize np="1 4"/>\n',
-     '  <copy_files parameters="np=1" test_name="file"> file.1 </copy_files>\n',
-     '  <copy_files parameters="np=4" test_name="file"> file.4 </copy_files>\n',
+     '  <copy_files parameters="np=1" linkname="file"> file.1 </copy_files>\n',
+     '  <copy_files parameters="np=4" linkname="file"> file.4 </copy_files>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('ok28.xml')
@@ -1394,7 +1404,7 @@ fp.writelines( [
      '  <timeout value="120"/>\n',
      '  <execute name="alegra"> content </execute>\n',
      '  <copy_files> file1.C file2.F </copy_files>\n',
-     '  <link_files test_name="file"> lnfile </link_files>\n',
+     '  <link_files linkname="file"> lnfile </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('ok34.xml')
@@ -1507,7 +1517,7 @@ print "11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11"
 fp = open('ok35.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
-     '  <build_options> 2D+tridev|tri8 </build_options>\n',
+     '  <include options="2D and ( tridev or tri8 )"/>\n',
      '</rtest>\n' ] )
 fp.close()
 xdoc = xreader.readDoc('ok35.xml')

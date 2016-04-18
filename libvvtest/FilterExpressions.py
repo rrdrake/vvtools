@@ -73,6 +73,9 @@ class ExpressionSet:
           2. if none of the keywords in 'keyword_list' appear in the keyword
              expression, then false is returned
         """
+        # TODO: is this function needed after removal of keyword expression
+        #       filtering in the test ??
+        #        - or maybe just the keyword_check argument ??
         if self.attrs.has_key('keyword_expr'):
           expr = self.attrs['keyword_expr']
           if keyword_check:
@@ -144,6 +147,13 @@ class ExpressionSet:
         # expression is evaluated using the given 'platform_test_func'
         return platexpr.evaluate( platform_test_func )
     
+    def evauate_testname_expr(self, testname, expr):
+        """
+        """
+        x = WordExpression(expr)
+        L = [ testname ]
+        return x.evaluate( L.count )
+
     def evaluate_option_expr(self, expr):
         """
         Evaluate the given expression against the list of command line options.

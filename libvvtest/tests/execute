@@ -15,8 +15,8 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """null script links exitstat xmldir options params
-                  keywords autolink
+        argL = """null script links1 links2 exitstat xmldir options params
+                  keywords autolink tname1 tname2
                """.split()
 
     for func in argL:
@@ -76,7 +76,7 @@ def script():
 
 #####################################################################
 
-def links():
+def links1():
     """
     check link & copy file globbing
     """
@@ -105,6 +105,70 @@ def links():
 
     out,np,nd,nf,nn = run_vvtest()
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+
+def links2():
+    """
+    link & copy files of files that don't exist
+    """
+    # link/copy a file that does not exist
+
+    writefile( "link1.xml", """
+        <rtest name="link1">
+            <link_files> file.txt </link_files>
+            <execute>
+                foreach f ( `ls` )
+                    echo "lsfile $f"
+                end
+            </execute>
+        </rtest>""")
+    writefile( "copy1.xml", """
+        <rtest name="copy1">
+            <copy_files> file.txt </copy_files>
+            <execute>
+                foreach f ( `ls` )
+                    echo "lsfile $f"
+                end
+            </execute>
+        </rtest>""")
+    writefile( "link2.xml", """
+        <rtest name="link2">
+            <link_files linkname="file.txt"> file.txt </link_files>
+            <execute>
+                foreach f ( `ls` )
+                    echo "lsfile $f"
+                end
+            </execute>
+        </rtest>""")
+    writefile( "copy2.xml", """
+        <rtest name="copy2">
+            <copy_files linkname="file.txt"> file.txt </copy_files>
+            <execute>
+                foreach f ( `ls` )
+                    echo "lsfile $f"
+                end
+            </execute>
+        </rtest>""")
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 0 and nf == 4 and nn == 0
+    fL = glob.glob( 'TestResults.*/*/execute.log' )
+    assert len(fL) == 4
+    for f in fL:
+        assert len( filegrep( f, "lsfile " ) ) == 0
+    
+    # now make it exist and run through to see if the tests work
+
+    writefile( "file.txt", """
+        this is file.txt
+        """)
+
+    out,np,nd,nf,nn = run_vvtest( '-F' )
+    assert np == 4 and nd == 0 and nf == 0 and nn == 0
+    fL = glob.glob( 'TestResults.*/*/execute.log' )
+    assert len(fL) == 4
+    for f in fL:
+        assert len( filegrep( f, "lsfile file.txt" ) ) == 1
 
 
 #####################################################################
@@ -380,6 +444,55 @@ def autolink():
     assert len(fL) == 1
     fL = glob.glob( 'TestResults.*/auto2/auto2.xml' )
     assert len(fL) == 1
+
+
+#####################################################################
+
+def tname1():
+    """
+    filtering execute blocks by testname
+    """
+    writefile( "multi.xml", """
+        <rtest name="multi">
+            <rtest name="multi2"/>
+            <execute testname="multi"> echo "multi only" </execute>
+            <execute testname="multi2"> echo "multi2 only" </execute>
+            <execute testname="multi or multi2"> echo "both tests" </execute>
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    fL = glob.glob( 'TestResults.*/multi/execute.log' )
+    assert len(fL) == 1
+    assert len( filegrep( fL[0], 'multi only' ) ) >= 1
+    assert len( filegrep( fL[0], 'both tests' ) ) >= 1
+    fL = glob.glob( 'TestResults.*/multi2/execute.log' )
+    assert len(fL) == 1
+    assert len( filegrep( fL[0], 'multi2 only' ) ) >= 1
+    assert len( filegrep( fL[0], 'both tests' ) ) >= 1
+
+def tname2():
+    """
+    using "not" in the testname filter
+    """
+    writefile( "multi.xml", """
+        <rtest name="multi">
+            <rtest name="multi2"/>
+            <execute testname="multi"> echo "multi only" </execute>
+            <execute testname="not multi"> echo "multi2 only" </execute>
+            <execute testname="multi or multi2"> echo "both tests" </execute>
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    fL = glob.glob( 'TestResults.*/multi/execute.log' )
+    assert len(fL) == 1
+    assert len( filegrep( fL[0], 'multi only' ) ) >= 1
+    assert len( filegrep( fL[0], 'both tests' ) ) >= 1
+    fL = glob.glob( 'TestResults.*/multi2/execute.log' )
+    assert len(fL) == 1
+    assert len( filegrep( fL[0], 'multi2 only' ) ) >= 1
+    assert len( filegrep( fL[0], 'both tests' ) ) >= 1
 
 
 ############################################################################

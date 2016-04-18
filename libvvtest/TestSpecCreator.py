@@ -31,34 +31,71 @@ def createTestObjects( filedoc, rootpath, filepath, \
     ExpressionSet instance.
     
     Returns a list of TestSpec objects, including a "parent" test if needed.
+
+    Can use a (nested) rtest element to cause another test to be defined.
+        
+        <rtest name="mytest">
+          <rtest name="mytest_fast"/>
+          ...
+        </rtest>
+
+    then use the testname="..." attribute to filter XML elements.
+
+        <keywords testname="mytest_fast"> fast </keywords>
+        <keywords testname="mytest"> long </keywords>
+
+        <parameters testname="mytest" np="1 2 4 8 16 32 64 128 256 512"/>
+        <parameters testname="mytest_fast" np="1 2 4 8"/>
+        
+        <execute testname="mytest_fast" name="exodiff"> ... </execute>
+
+        <analyze testname="mytest">
+          ...
+        </analyze>
+        <analyze testname="mytest_fast">
+          ...
+        </analyze>
     """
-    assert not os.path.isabs(filepath)
+    assert not os.path.isabs( filepath )
     
-    name = testName(filedoc)
-    if name == None:
-      return []
+    nameL = testNameList( filedoc )
+    if nameL == None:
+        return []
     
+    tL = []
+    for tname in nameL:
+        L = createTestName( tname, filedoc, rootpath, filepath,
+                            force_params, ufilter )
+        tL.extend( L )
+
+    return tL
+
+
+def createTestName( tname, filedoc, rootpath, filepath,
+                    force_params, ufilter ):
+    """
+    """
     if ufilter == None:
       ufilter = FilterExpressions.ExpressionSet()
     
-    keywords = parseKeywords( filedoc )
-    
-    if not parseIncludeTest( filedoc, ufilter ):
+    if not parseIncludeTest( filedoc, tname, ufilter ):
       return []
+    
+    combined = parseTestParameters( filedoc, tname, ufilter, force_params )
+    
+    keywords = parseKeywords( filedoc, tname, ufilter )
     
     if not ufilter.getAttr('include_all',0):
       if not ufilter.satisfies_nonresults_keywords( keywords ):
         return []
     
-    # parse the parameters then create the test instances
-    
-    combined = parseTestParameters( filedoc, ufilter, force_params )
+    # create the test instances
     
     testL = []
     
     if len(combined) == 0:
       
-      t = TestSpec.TestSpec( name, rootpath, filepath )
+      t = TestSpec.TestSpec( tname, rootpath, filepath )
       testL.append(t)
     
     else:
@@ -86,7 +123,7 @@ def createTestObjects( filedoc, rootpath, filepath, \
           for j in range(n):
             pdict[ kL.pop(0) ] = sL.pop(0)
         # create the test and add to test list
-        t = TestSpec.TestSpec( name, rootpath, filepath )
+        t = TestSpec.TestSpec( tname, rootpath, filepath )
         t.setParameters( pdict )
         testL.append(t)
     
@@ -138,30 +175,33 @@ def refreshTest( testobj, filedoc, params, ufilter=None ):
     
     Returns false if any of the filtering would exclude this test.
     """
-    name = testName(filedoc)
+    # run through the test name logic to check XML validity
+    nameL = testNameList(filedoc)
     
     testobj.setParameters( params )
+
+    tname = testobj.getName()
     
     if not testobj.getParent():
-      combined = parseTestParameters( filedoc, ufilter, None )
+      combined = parseTestParameters( filedoc, tname, ufilter, None )
       testobj.setParameterSet( combined )
     
     if ufilter == None:
       ufilter = FilterExpressions.ExpressionSet()
     
-    keep = 1
+    keep = True
     
-    if not parseIncludeTest( filedoc, ufilter ):
-      keep = 0
+    if not parseIncludeTest( filedoc, tname, ufilter ):
+      keep = False
     
-    keywords = parseKeywords( filedoc )
+    keywords = parseKeywords( filedoc, tname, ufilter )
     testobj.setKeywords( keywords )
     
     if not ufilter.satisfies_keywords( testobj.getKeywords(1) ):
-      keep = 0
+      keep = False
     
     if not ufilter.evaluate_parameters( testobj.getParameters() ):
-      keep = 0
+      keep = False
     
     parseFiles       ( testobj, filedoc, ufilter )
     parseAnalyze     ( testobj, filedoc, ufilter )
@@ -170,10 +210,10 @@ def refreshTest( testobj, filedoc, params, ufilter=None ):
     parseBaseline    ( testobj, filedoc, ufilter )
     
     if ufilter.getAttr('include_all',0):
-      return 1
+      return True
     
     if not ufilter.file_search(testobj):
-      keep = 0
+      keep = False
     
     return keep
 
@@ -343,25 +383,33 @@ def escape_file(s):
 
 ###########################################################################
 
-def testName( filedoc ):
+def testNameList( filedoc ):
     """
     Determine the test name and check for validity.  If this XML file is not
-    an "rtest" then returns None.
+    an "rtest" then returns None.  Otherwise returns a list of test names.
     """
     if filedoc.name != "rtest":
-      return None
+        return None
     
     # determine the test name
     
-    name = string.strip( filedoc.getAttr('name', '') )
+    name = filedoc.getAttr('name', '').strip()
     if not name or not allowableString(name):
-      raise TestSpecError( 'missing or invalid test name attribute, line ' + \
-                           str(filedoc.line_no) )
+        raise TestSpecError( 'missing or invalid test name attribute, ' + \
+                             'line ' + str(filedoc.line_no) )
     
-    return name
+    L = [ name ]
+    for xnd in filedoc.matchNodes( ['rtest'] ):
+        nm = xnd.getAttr('name', '').strip()
+        if not nm or not allowableString(nm):
+            raise TestSpecError( 'missing or invalid test name attribute, ' + \
+                                 'line ' + str(xnd.line_no) )
+        L.append( nm )
+
+    return L
 
 
-def filterAttr( attrname, attrvalue, paramD, ufilter, lineno ):
+def filterAttr( attrname, attrvalue, testname, paramD, ufilter, lineno ):
     """
     Checks the attribute name for a filtering attributes.  Returns a pair of
     boolean values, (is filter, filter result).  The first is whether the
@@ -370,36 +418,45 @@ def filterAttr( attrname, attrvalue, paramD, ufilter, lineno ):
     """
     try:
       
-      if attrname in ["platform","platforms"]:
-        return 1, ufilter.evaluate_platform_expr( attrvalue )
+      if attrname == "testname":
+        return True, ufilter.evauate_testname_expr( testname, attrvalue )
+      
+      elif attrname in ["platform","platforms"]:
+        return True, ufilter.evaluate_platform_expr( attrvalue )
       
       elif attrname in ["keyword","keywords"]:
+        # TODO: deprecate keyword(s) attributes [Apr 2016]
+        #raise TestSpecError( n + " attribute not allowed here, " + \
+        #                     "line " + str(lineno) )
         L = attrvalue.split()
         if 'and' in L or 'or' in L or 'not' in L or \
            '(' in attrvalue or ')' in attrvalue:
           # allow keyword expressions for backward compatibility
-          return 1, ufilter.evaluate_keyword_expr( attrvalue )
-        return 1, ufilter.satisfies_nonresults_keywords( L, 1 )
+          return True, ufilter.evaluate_keyword_expr( attrvalue )
+        return True, ufilter.satisfies_nonresults_keywords( L, 1 )
       
       elif attrname in ["not_keyword","not_keywords"]:
+        # TODO: deprecate not_keyword(s) attributes [Apr 2016]
+        #raise TestSpecError( n + " attribute not allowed here, " + \
+        #                     "line " + str(lineno) )
         v = not ufilter.satisfies_nonresults_keywords( attrvalue.split(), 1 )
-        return 1, v
+        return True, v
       
       elif attrname in ["option","options"]:
-        return 1, ufilter.evaluate_option_expr( attrvalue )
+        return True, ufilter.evaluate_option_expr( attrvalue )
       
       elif attrname in ["parameter","parameters"]:
         pf = FilterExpressions.ParamFilter(attrvalue)
-        return 1, pf.evaluate( paramD )
+        return True, pf.evaluate( paramD )
     
     except ValueError, e:
       raise TestSpecError( "bad " + attrname + " expression, line " + \
                            lineno + ": " + str(e) )
     
-    return 0, 0  # false, false
+    return False, False  # false, false
 
 
-def parseTestParameters( filedoc, ufilter, force_params ):
+def parseTestParameters( filedoc, tname, ufilter, force_params ):
     """
     Parses the parameter settings for a test XML file.
     
@@ -407,7 +464,6 @@ def parseTestParameters( filedoc, ufilter, force_params ):
       <parameterize paramA="A1 A2"
                     paramB="B1 B2"/>
       <parameterize platforms="Linux or SunOS"
-                    keywords="fast or medium"
                     options="not dbg"
                     paramname="value1 value2"/>
     
@@ -436,7 +492,12 @@ def parseTestParameters( filedoc, ufilter, force_params ):
           raise TestSpecError( n + " attribute not allowed here, " + \
                                "line " + str(nd.line_no) )
         
-        isfa, istrue = filterAttr( n, v, None, ufilter, str(nd.line_no) )
+        # TODO: deprecate keyword(s) attributes [Apr 2016]
+        #if n in ["keywords","keyword"]:
+        #  raise TestSpecError( n + " attribute not allowed here, " + \
+        #                       "line " + str(nd.line_no) )
+        
+        isfa, istrue = filterAttr( n, v, tname, None, ufilter, str(nd.line_no) )
         if isfa:
           if not istrue:
             skip = 1
@@ -487,36 +548,48 @@ def parseTestParameters( filedoc, ufilter, force_params ):
     return combined
 
 
-def parseKeywords( filedoc ):
+def testname_ok( xmlnode, tname, ufilter ):
+    """
+    """
+    tval = xmlnode.getAttr( 'testname', None )
+    if tval != None and not ufilter.evauate_testname_expr( tname, tval ):
+        return False
+    return True
+
+
+def parseKeywords( filedoc, tname, ufilter ):
     """
     Parse the test keywords for the test XML file.
     
       <keywords> key1 key2 </keywords>
+      <keywords testname="mytest"> key3 </keywords>
     
     Also includes the name="..." on <execute> blocks, the parameter names in
     <parameterize> blocks, and the words in keywords="..." attributes.
     """
-    
     keyD = {}
     
-    name = string.strip( filedoc.getAttr('name', '') )
-    if name and allowableString(name):
-      keyD[name] = None
+    keyD[tname] = None
     
     for nd in filedoc.matchNodes(['keywords$']):
+      if not testname_ok( nd, tname, ufilter ):
+        # skip this keyword set (filtered out based on test name)
+        continue
       for key in string.split( nd.getContent() ):
         if allowableString(key):
           keyD[key] = None
         else:
-          raise TestSpecError( 'bad keyword: "' + key + '", line ' + \
+          raise TestSpecError( 'invalid keyword: "' + key + '", line ' + \
                                str(nd.line_no) )
     
     for nd in filedoc.getSubNodes():
+      if not testname_ok( nd, tname, ufilter ):
+        continue
       if nd.name == 'parameterize':
         # the parameter names are included in the test keywords
         for n,v in nd.getAttrs().items():
           if n in ['parameter','parameters','keyword','keywords',
-                   'platform','platforms','option','options']:
+                   'platform','platforms','option','options','testname']:
             pass
           elif allowableVariable(n):
             keyD[ str(n) ] = None
@@ -525,16 +598,19 @@ def parseKeywords( filedoc ):
         n = nd.getAttr('name', None)
         if n != None:
           keyD[ str(n) ] = None
+      
+      # TODO: deprecate keyword(s) attributes [Apr 2016]
       if nd.name in ['parameterize','analyze','execute','timeout',
                      'copy_files','link_files','glob_copy','glob_link',
                      'baseline']:
         # look for keywords attribute and include those as test keywords
         kwstr = nd.getAttr( 'keywords', nd.getAttr( 'keyword', None ) )
         if kwstr != None:
+          # can use this to find out if any tests use keywords attr
+          #print 'NOTE: keyword attr in', nd.name, nd.filename, nd.line_no
           L = kwstr.split()
           if 'and' in L or 'or' in L or 'not' in L or \
              '(' in kwstr or ')' in kwstr:
-            # deprecated now, but keyword expressions used to be allowed here
             try:
               wx = FilterExpressions.WordExpression( kwstr )
               for k in wx.getWordList():
@@ -550,7 +626,7 @@ def parseKeywords( filedoc ):
     return L
 
 
-def parseIncludeTest( filedoc, ufilter ):
+def parseIncludeTest( filedoc, tname, ufilter ):
     """
     Parse syntax that will filter out this test by platform or build option.
     Returns false if the test is to be excluded.
@@ -558,7 +634,7 @@ def parseIncludeTest( filedoc, ufilter ):
     Platform expressions and build options use word expressions.
     
        <include platforms="not SunOS and not Linux"/>
-       <include options="2D and ( tridev or tri8 )"/>
+       <include options="not dbg and ( tridev or tri8 )"/>
        <include platforms="..." options="..."/>
     
     If both platform and option expressions are given, their results are
@@ -567,50 +643,33 @@ def parseIncludeTest( filedoc, ufilter ):
     
     For backward compatibility, allow the following.
     
-      <build_options> 2D+tridev|tri8 </build_options>
-      <options> 2D+tridev|tri8 </options>
-      
-      <platform include="SunOS Linux"/>
-      <platform include=""/>
-      <platform exclude="IRIX64"/>
-    
-      <include platforms="SunOS Linux"/>
-      <exclude platforms="IRIX"/>
-    
-    Note that on November 24, 2014, a scan of Benchmarks showed that the only
-    backward compatibility still being used was <include platforms="..."/>
-    had platforms listed (they had "Linux NWCC", for example).  These last
-    benchmarks were changed to be a valid expression and committed on this
-    date as well.
+       <include platforms="SunOS Linux"/>
+
     """
     if ufilter.getAttr('include_all',0):
       return 1
     
-    pev = PlatformEvaluator( filedoc )
+    # first, evaluate based purely on the platform restrictions
+    pev = PlatformEvaluator( filedoc, tname, ufilter )
     if not ufilter.evaluate_platform_include( pev.satisfies_platform ):
       return 0
     
-    for nd in filedoc.getSubNodes():
+    # second, evaluate based on the "options" attribute of "include"
+    for nd in filedoc.matchNodes(['include$']):
       
-      if nd.name == "build_options":
-        # syntax for backward compatibility
-        s = string.join( string.split( nd.getContent() ) )
-        if s:
-          expr = ''
-          for op in s.split( '+' ):
-            orL = string.join( string.split( op, '|' ), ' or ' )
-            if expr: expr = ' ( ' + expr + ' ) and ( ' + orL + ' )'
-            else:    expr = orL
-          if not ufilter.evaluate_option_expr(expr):
-            return 0
+      if nd.hasAttr( 'parameters' ) or nd.hasAttr( 'parameter' ):
+        raise TestSpecError( 'the "parameters" attribute not allowed '
+                             'here, line ' + str(nd.line_no) )
+
+      if not testname_ok( nd, tname, ufilter ):
+        # the <include> does not apply to this test name
+        continue
       
-      elif nd.name == "include":
-        if nd.hasAttr('options') or nd.hasAttr('option'):
-          if nd.hasAttr('options'): s = nd.getAttr('options')
-          else:                     s = nd.getAttr('option')
-          s = string.strip(s)
-          if s and not ufilter.evaluate_option_expr(s):
-            return 0
+      opexpr = nd.getAttr( 'options', nd.getAttr( 'option', None ) )
+      if opexpr != None:
+        opexpr = opexpr.strip()
+        if opexpr and not ufilter.evaluate_option_expr( opexpr ):
+          return 0
     
     return 1
 
@@ -620,74 +679,50 @@ class PlatformEvaluator:
     This class is a helper to provide UserFilter an evaluator function.
     """
     
-    def __init__(self, xmldoc):
+    def __init__(self, xmldoc, tname, ufilter):
         self.xmldoc = xmldoc
+        self.tname = tname
+        self.ufilter = ufilter
     
     def satisfies_platform(self, plat_name):
         """
         This function parses the test XML file for platform restrictions and
         returns true if the test would run under the given 'plat_name'.
-        Otherwise, returns it false.
+        Otherwise, it returns false.
         """
-        for nd in self.xmldoc.getSubNodes():
+        for nd in self.xmldoc.matchNodes(['include$']):
           
-          if nd.name == "platform":
-            # syntax for backward compatibility
-            if nd.hasAttr('parameters') or nd.hasAttr('parameter'):
-              raise TestSpecError( 'the "parameters" attribute is not allowed '
-                         'in a <platform> block, line ' + str(nd.line_no) )
-            wx = FilterExpressions.WordExpression()
-            s = string.strip( nd.getAttr('exclude','') )
-            if s:
-              L = []
-              for w in string.split(s):
-                L.append( ' not ' + w )
-              wx.append( string.join( L, ' and ' ), 'and' )
-            if nd.hasAttr('include'):
-              s = string.strip( nd.getAttr('include') )
-              wx.append( string.join( string.split(s), ' or ' ), 'and' )
-            if not wx.evaluate( lambda tok: tok == plat_name ):
-              return 0
+          if nd.hasAttr( 'parameters' ) or nd.hasAttr( 'parameter' ):
+            raise TestSpecError( 'the "parameters" attribute not allowed '
+                                 'here, line ' + str(nd.line_no) )
           
-          elif nd.name == "exclude":
-            # syntax for backward compatibility
-            s = string.strip( nd.getAttr('platforms','') )
-            if s:
-              L = []
-              for w in string.split(s):
-                L.append( ' not ' + w )
-              wx = FilterExpressions.WordExpression( string.join(L,' and ') )
-              if not wx.evaluate( lambda tok: tok == plat_name ):
-                return 0
+          if not testname_ok( nd, self.tname, self.ufilter ):
+            # the <include> does not apply to this test name
+            continue
           
-          elif nd.name == "include":
-            if nd.hasAttr('platforms'):
-              # have to check for backward compatible syntax
-              s = string.strip( nd.getAttr('platforms') )
-              if '/' in s:
-                raise TestSpecError( 'invalid "platforms" attribute content '
-                                     ', line ' + str(nd.line_no) )
-              pL = string.split(s)
+          s = nd.getAttr( 'platforms', nd.getAttr( 'platform', None ) )
+          if s != None:
+            s = s.strip()
+            
+            if '/' in s:
+              raise TestSpecError( 'invalid "platforms" attribute content '
+                                   ', line ' + str(nd.line_no) )
+            pL = s.split()
+            if len(pL) > 1:
               if '(' in s or ')' in s or \
                  'or' in pL or 'and' in pL or 'not' in pL:
                 # an expression syntax is being used
                 wx = FilterExpressions.WordExpression(s)
               else:
-                # assume list of platform names to include
-                wx = FilterExpressions.WordExpression( \
-                                   string.join( string.split(s), ' or ' ) )
-              if not wx.evaluate( lambda tok: tok == plat_name ):
-                return 0
-            
-            elif nd.hasAttr('platform'):
-              # without plural spelling, must be current syntax
-              s = nd.getAttr('platform').strip()
-              if '/' in s:
-                raise TestSpecError( 'invalid "platform" attribute content '
-                                     ', line ' + str(nd.line_no) )
+                # assume list of platform names to include; this is for
+                # backward compatibility (no uses since December 2014)
+                wx = FilterExpressions.WordExpression( ' or '.join( pL ) )
+            else:
               wx = FilterExpressions.WordExpression(s)
-              if not wx.evaluate( lambda tok: tok == plat_name ):
-                return 0
+            
+              wx.evaluate( lambda tok: tok == plat_name )
+            if not wx.evaluate( lambda tok: tok == plat_name ):
+              return 0
         
         return 1
 
@@ -714,7 +749,7 @@ def parseAnalyze( t, filedoc, ufilter ):
                                '"parameters=..." attribute: ' + \
                                ', line ' + str(nd.line_no) )
         
-        isfa, istrue = filterAttr( n, v, t.getParameters(),
+        isfa, istrue = filterAttr( n, v, t.getName(), t.getParameters(),
                                    ufilter, str(nd.line_no) )
         if isfa and not istrue:
           skip = 1
@@ -739,13 +774,8 @@ def parseTimeouts( t, filedoc, ufilter ):
     Parse test timeouts for the test XML file.
     
       <timeout value="120"/>
-      <timeout include="SunOS" value="240"/>
+      <timeout platforms="SunOS" value="240"/>
       <timeout parameters="hsize=0.01" value="320"/>
-    
-    "Multiplier" is deprecated.
-    
-      <timeout exclude="Linux" multiplier="2"/>
-      <timeout parameters="hsize=0.01" multiplier="2"/>
     """
     specL = []
     
@@ -753,7 +783,7 @@ def parseTimeouts( t, filedoc, ufilter ):
       
       skip = 0
       for n,v in nd.getAttrs().items():
-        isfa, istrue = filterAttr( n, v, t.getParameters(),
+        isfa, istrue = filterAttr( n, v, t.getName(), t.getParameters(),
                                    ufilter, str(nd.line_no) )
         if isfa and not istrue:
           skip = 1
@@ -782,8 +812,7 @@ def parseExecuteList( t, filedoc, ufilter ):
     
       <execute> script language </execute>
       <execute name="aname"> arguments </execute>
-      <execute include="SunOS" name="aname"> arguments </execute>
-      <execute exclude="SunOS"> script language </execute>
+      <execute platforms="SunOS" name="aname"> arguments </execute>
       <execute ifdef="ENVNAME"> arguments </execute>
       <execute expect="fail"> script </execute>
     
@@ -802,7 +831,7 @@ def parseExecuteList( t, filedoc, ufilter ):
       
       skip = 0
       for n,v in nd.getAttrs().items():
-        isfa, istrue = filterAttr( n, v, t.getParameters(),
+        isfa, istrue = filterAttr( n, v, t.getName(), t.getParameters(),
                                    ufilter, str(nd.line_no) )
         if isfa and not istrue:
           skip = 1
@@ -909,18 +938,18 @@ def variableExpansion( tname, platname, paramD, fL ):
 
 def collectFileNames( nd, flist, tname, paramD, ufilter ):
     """
-    Helper function that parses file names in content with optional test_name
+    Helper function that parses file names in content with optional linkname
     attribute:
     
         <something platforms="SunOS"> file1.C file2.C </something>
     
     or
     
-        <something test_name="file1_copy.dat file2_copy.dat">
+        <something linkname="file1_copy.dat file2_copy.dat">
           file1.C file2.C
         </something>
     
-    Returns a list of (source filename, test filename).
+    Returns a list of (source filename, link filename).
     """
     
     fileL = string.split( nd.getContent() )
@@ -928,7 +957,8 @@ def collectFileNames( nd, flist, tname, paramD, ufilter ):
       
       skip = 0
       for n,v in nd.getAttrs().items():
-        isfa, istrue = filterAttr( n, v, paramD, ufilter, str(nd.line_no) )
+        isfa, istrue = filterAttr( n, v, tname, paramD,
+                                   ufilter, str(nd.line_no) )
         if isfa and not istrue:
           skip = 1
           break
@@ -936,13 +966,13 @@ def collectFileNames( nd, flist, tname, paramD, ufilter ):
       if not skip:
         
         fL = []
-        tnames = nd.getAttr('test_name',None)
+        tnames = nd.getAttr( 'linkname', nd.getAttr('test_name',None) )
         if tnames != None:
           
           tnames = string.split(tnames)
           if len(tnames) != len(fileL):
             raise TestSpecError( 'the number of file names in the ' + \
-               '"test_name" attribute must equal the number of names in ' + \
+               '"linkname" attribute must equal the number of names in ' + \
                'the content (' + str(len(tnames)) + ' != ' + str(len(fileL)) + \
                '), line ' + str(nd.line_no) )
           for i in range(len(fileL)):
@@ -985,7 +1015,8 @@ def globFileNames( nd, flist, t, ufilter, nofilter=0 ):
       
       skip = 0
       for n,v in nd.getAttrs().items():
-        isfa, istrue = filterAttr( n, v, paramD, ufilter, str(nd.line_no) )
+        isfa, istrue = filterAttr( n, v, tname, paramD,
+                                   ufilter, str(nd.line_no) )
         if nofilter and isfa:
           raise TestSpecError( 'filter attributes not allowed here' + \
                                ', line ' + str(nd.line_no) )
@@ -1015,13 +1046,16 @@ def parseFiles( t, filedoc, ufilter ):
     Parse the files to copy and soft link for the test XML file.
     
       <copy_files> file1.C file2.F </copy_files>
-      <copy_files test_name="f1.C f2.F"> file1.C file2.F </copy_files>
-      <copy_files include="SunOS"> file1.C file2.F </copy_files>
-      <copy_files exclude="SunOS"> file1.C file2.F </copy_files>
-      <copy_files parameters="np=4" test_name="in4.exo"> in.exo </copy_files>
+      <copy_files linkname="f1.C f2.F"> file1.C file2.F </copy_files>
+      <copy_files platforms="SunOS"> file1.C file2.F </copy_files>
+      <copy_files parameters="np=4" linkname="in4.exo"> in.exo </copy_files>
       
       <glob_link> ${NAME}_data.txt </glob_link>
       <glob_copy> files_to_glob.* </glob_copy>
+    
+    For backward compatibility, "test_name" is accepted:
+
+      <copy_files test_name="f1.C f2.F"> file1.C file2.F </copy_files>
     
     Also here is parsing of test source files
     
@@ -1080,7 +1114,7 @@ def parseBaseline( t, filedoc, ufilter ):
       
       skip = 0
       for n,v in nd.getAttrs().items():
-        isfa, istrue = filterAttr( n, v, t.getParameters(),
+        isfa, istrue = filterAttr( n, v, t.getName(), t.getParameters(),
                                    ufilter, str(nd.line_no) )
         if isfa and not istrue:
           skip = 1

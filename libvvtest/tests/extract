@@ -1,98 +1,160 @@
 #!/usr/bin/env python
 
 import os, sys
-import string, re
+import time
+import glob
 
+# this will os.chdir() to a subdirectory
 from testutils import *
 
-rmallfiles()
 
-# check that all files are getting extracted
+def main():
+    """
+    """
+    argL = get_arg_list()
 
-writefile( 'orig/atest.xml', """
-<rtest name="atest">
-  <copy_files> file1.txt </copy_files>
-  <link_files> file2.txt </link_files>
-  <baseline file="file3.txt"/>
-  <source_files> file4.txt </source_files>
-  <execute>
-    set echo
-    cat file1.txt || exit 1
-    cat file2.txt || exit 1
-    cat $XMLDIR/file3.txt || exit 1
-    cat $XMLDIR/file4.txt || exit 1
-    unset echo
-  </execute>
-</rtest>""" )
+    if len(argL) == 0:
+        argL = """test01 test02 test03
+               """.split()
 
-writefile( 'orig/file1.txt', "file one" )
-writefile( 'orig/file2.txt', "file two" )
-writefile( 'orig/file3.txt', "file three" )
-writefile( 'orig/file4.txt', "file four" )
+    cwd = os.getcwd()
+    for func in argL:
+        os.chdir( cwd )
+        rmallfiles()
+        time.sleep(1)
+        print3( '====> ', func )
+        eval( func+'()' )
 
-os.chdir('orig')
 
-out,np,nd,nf,nn = run_vvtest()
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-assert len( greptestlist(out,'pass.*atest') ) == 1
+########################################################################
 
-os.chdir('..')
+def test01():
+    """
+    check that all files are getting extracted
+    """
+    writefile( 'orig/atest.xml', """
+        <rtest name="atest">
+          <copy_files> file1.txt </copy_files>
+          <link_files> file2.txt </link_files>
+          <baseline file="file3.txt"/>
+          <source_files> file4.txt </source_files>
+          <execute>
+            set echo
+            cat file1.txt || exit 1
+            cat file2.txt || exit 1
+            cat $XMLDIR/file3.txt || exit 1
+            cat $XMLDIR/file4.txt || exit 1
+            unset echo
+          </execute>
+        </rtest>""" )
 
-# extract the orig directory then run in the extracted area
+    writefile( 'orig/file1.txt', "file one" )
+    writefile( 'orig/file2.txt', "file two" )
+    writefile( 'orig/file3.txt', "file three" )
+    writefile( 'orig/file4.txt', "file four" )
 
-out,np,nd,nf,nn = run_vvtest( '--extract copy orig' )
+    os.chdir('orig')
 
-os.chdir('copy')
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert len( greptestlist(out,'pass.*atest') ) == 1
 
-out,np,nd,nf,nn = run_vvtest()
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-assert len( greptestlist(out,'pass.*atest') ) == 1
+    os.chdir('..')
 
-os.chdir('..')
+    # extract the orig directory then run in the extracted area
+
+    out,np,nd,nf,nn = run_vvtest( '--extract copy orig' )
+
+    os.chdir('copy')
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert len( greptestlist(out,'pass.*atest') ) == 1
+
 
 ###########################################################################
 
-rmallfiles()
+def test02():
+    """
+    check the three ways name substitution can occur
+    """
+    writefile( 'orig/atest.xml', """
+        <rtest name="atest">
+          <copy_files> $NAME.txt </copy_files>
+          <link_files> NAME.txt </link_files>
+          <baseline file="${NAME}_base.txt"/>
+          <source_files> {$NAME}_src.txt </source_files>
+          <execute>
+            set echo
+            cat atest.txt || exit 1
+            cat NAME.txt || exit 1
+            cat $XMLDIR/atest_base.txt || exit 1
+            cat $XMLDIR/atest_src.txt || exit 1
+            unset echo
+          </execute>
+        </rtest>""" )
 
-# check the three ways name substitution can occur
+    writefile( 'orig/atest.txt', "file one" )
+    writefile( 'orig/NAME.txt', "file two" )
+    writefile( 'orig/atest_base.txt', "file three" )
+    writefile( 'orig/atest_src.txt', "file four" )
 
-writefile( 'orig/atest.xml', """
-<rtest name="atest">
-  <copy_files> $NAME.txt </copy_files>
-  <link_files> NAME.txt </link_files>
-  <baseline file="${NAME}_base.txt"/>
-  <source_files> {$NAME}_src.txt </source_files>
-  <execute>
-    set echo
-    cat atest.txt || exit 1
-    cat NAME.txt || exit 1
-    cat $XMLDIR/atest_base.txt || exit 1
-    cat $XMLDIR/atest_src.txt || exit 1
-    unset echo
-  </execute>
-</rtest>""" )
+    os.chdir('orig')
 
-writefile( 'orig/atest.txt', "file one" )
-writefile( 'orig/NAME.txt', "file two" )
-writefile( 'orig/atest_base.txt', "file three" )
-writefile( 'orig/atest_src.txt', "file four" )
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert len( greptestlist(out,'pass.*atest') ) == 1
 
-os.chdir('orig')
+    os.chdir('..')
 
-out,np,nd,nf,nn = run_vvtest()
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-assert len( greptestlist(out,'pass.*atest') ) == 1
+    # extract the orig directory then run in the extracted area
 
-os.chdir('..')
+    out,np,nd,nf,nn = run_vvtest( '--extract copy orig' )
 
-# extract the orig directory then run in the extracted area
+    os.chdir('copy')
 
-out,np,nd,nf,nn = run_vvtest( '--extract copy orig' )
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert len( greptestlist(out,'pass.*atest') ) == 1
 
-os.chdir('copy')
 
-out,np,nd,nf,nn = run_vvtest()
-assert np == 1 and nd == 0 and nf == 0 and nn == 0
-assert len( greptestlist(out,'pass.*atest') ) == 1
+###########################################################################
 
-os.chdir('..')
+def test03():
+    """
+    check --extract on a test with multiple test names
+    """
+    writefile( 'orig/multi.xml', """
+        <rtest name="multi">
+          <rtest name="multi2"/>
+          <copy_files> common.txt </copy_files>
+          <link_files testname="multi"> m1.txt </link_files>
+          <copy_files testname="multi2"> m2.txt </copy_files>
+          <execute> echo "hello world" </execute>
+        </rtest>""" )
+
+    writefile( 'orig/common.txt', "file one" )
+    writefile( 'orig/m1.txt', "file two" )
+    writefile( 'orig/m2.txt', "file three" )
+    writefile( 'orig/dummy.txt', "file dummy" )
+
+    out,np,nd,nf,nn = run_vvtest( '--extract copy orig' )
+
+    fL = glob.glob( 'copy/*' )
+    assert len( fL ) == 4
+    fL.sort()
+    assert fL == ['copy/common.txt','copy/m1.txt','copy/m2.txt','copy/multi.xml']
+
+    # this time, exclude one of the tests
+
+    out,np,nd,nf,nn = run_vvtest( '-k multi --extract cp2 orig' )
+
+    fL = glob.glob( 'cp2/*' )
+    assert len( fL ) == 3
+    fL.sort()
+    assert fL == ['cp2/common.txt','cp2/m1.txt','cp2/multi.xml']
+
+
+########################################################################
+
+main()

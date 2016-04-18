@@ -1,52 +1,117 @@
 #!/usr/bin/env python
 
 import os, sys
-import string, re
+import time
+import glob
 
+# this will os.chdir() to a subdirectory
 from testutils import *
 
-rmallfiles()
+
+def main():
+    """
+    """
+    argL = get_arg_list()
+
+    if len(argL) == 0:
+        argL = """test01 test02
+               """.split()
+
+    savedir = os.getcwd()
+    for func in argL:
+        os.chdir( savedir )
+        rmallfiles()
+        time.sleep(1)
+        print3( '====> ', func )
+        eval( func+'()' )
+
 
 #####################################################################
 
-writefile( "param.xml", """
-<rtest name="param">
-  <parameterize hello="world mars"/>
-  <execute> <![CDATA[
-sleep 1
-echo "parm=$hello"
-]]>
-  </execute>
-</rtest>""" )
+def test01():
+    """
+    basic rebaselining
+    """
+    writefile( "param.xml", """
+        <rtest name="param">
+          <parameterize hello="world mars"/>
+          <execute> <![CDATA[
+            sleep 1
+            echo "parm=$hello"
+            ]]>
+          </execute>
+        </rtest>""" )
 
-writefile( "bline.xml", """
-<rtest name="bline">
-  <execute> <![CDATA[
-# create a single baseline file to use for the first differencing
-echo "baseline test data file" >! bline.txt
-echo "line two" >> bline.txt
-]]>
-  </execute>
-  <execute name="unixdiff"> bline.txt ${XMLDIR}/bline.txt </execute>
-  <execute> <![CDATA[
-# copy the previous file to a separate name
-cp bline.txt bline2.txt
-]]>
-  </execute>
-  <execute name="unixdiff"> bline2.txt ${XMLDIR}/blinetwo.txt </execute>
-  <baseline file="bline.txt"/>
-  <baseline file="bline2.txt" destination="blinetwo.txt"/>
-</rtest>""" )
+    writefile( "bline.xml", """
+        <rtest name="bline">
+          <execute> <![CDATA[
+            # create a single baseline file to use for the first differencing
+            echo "baseline test data file" >! bline.txt
+            echo "line two" >> bline.txt
+            ]]>
+          </execute>
+          <execute name="unixdiff"> bline.txt ${XMLDIR}/bline.txt </execute>
+          <execute> <![CDATA[
+            # copy the previous file to a separate name
+            cp bline.txt bline2.txt
+            ]]>
+          </execute>
+          <execute name="unixdiff"> bline2.txt ${XMLDIR}/blinetwo.txt </execute>
+          <baseline file="bline.txt"/>
+          <baseline file="bline2.txt" destination="blinetwo.txt"/>
+        </rtest>""" )
 
-writefile( "bline.txt", "" )
-writefile( "bline2.txt", "" )
-writefile( "blinetwo.txt", "" )
+    writefile( "bline.txt", "" )
+    writefile( "bline2.txt", "" )
+    writefile( "blinetwo.txt", "" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 2 and nd == 1 and nf == 0 and nn == 0
+
+    # run baseline and rerun tests
+    out,np,nd,nf,nn = run_vvtest( '-b' )
+    out,np,nd,nf,nn = run_vvtest( '-F' )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
 
-out,np,nd,nf,nn = run_vvtest()
-assert np == 2 and nd == 1 and nf == 0 and nn == 0
+def test02():
+    """
+    filter rebaseline by testname
+    """
+    writefile( 'base1.txt', "" )
+    writefile( 'base2.txt', "" )
 
-# run baseline and rerun tests
-out,np,nd,nf,nn = run_vvtest( '-b' )
-out,np,nd,nf,nn = run_vvtest( '-F' )
-assert np == 3 and nd == 0 and nf == 0 and nn == 0
+    writefile( "multi.xml", """
+        <rtest name="multi">
+          <rtest name="multi2"/>
+          <link_files testname="multi" linkname="base.txt">
+            base1.txt
+          </link_files>
+          <link_files testname="multi2" linkname="base.txt">
+            base2.txt
+          </link_files>
+          <execute testname="multi">
+            echo "new multi contents" > output.txt
+          </execute>
+          <execute testname="multi2">
+            echo "new multi2 contents" > output.txt
+          </execute>
+          <execute name="unixdiff"> base.txt output.txt </execute>
+          <baseline testname="multi" file="output.txt" destination="base1.txt"/>
+        </rtest>""" )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 2 and nf == 0 and nn == 0
+    
+    # run baseline and rerun tests
+    out,np,nd,nf,nn = run_vvtest( '-b' )
+    out,np,nd,nf,nn = run_vvtest( '-F' )
+    assert np == 1 and nd == 1 and nf == 0 and nn == 0
+    
+    assert len( greptestlist( out, 'pass.*/multi$' ) ) == 1
+    assert len( greptestlist( out, 'diff.*/multi2$' ) ) == 1
+
+
+#####################################################################
+
+main()

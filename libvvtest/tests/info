@@ -13,7 +13,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02
+        argL = """test01 test02 test03
                """.split()
 
     cwd = os.getcwd()
@@ -284,6 +284,43 @@ def test02():
     L3 = [] + L2
     L3.sort()
     assert L2 == L3
+
+
+############################################################################
+
+def test03():
+    """
+    using --files with a multi-test xml
+    """
+    writefile( "multi.xml", """
+        <rtest name="zebra">
+          <rtest name="horse"/>
+          <keywords testname="zebra"> stripes </keywords>
+          <keywords testname="horse"> patchwork </keywords>
+          <execute> echo "hello world" </execute>
+        </rtest>""" )
+    
+    cwd = os.getcwd()
+
+    out,np,nd,nf,nn = run_vvtest( '--files' )
+    L = extract_files( out, cwd )
+    print "files", L
+    assert len(L) == 1
+
+    out,np,nd,nf,nn = run_vvtest( '--files -k stripes' )
+    L = extract_files( out, cwd )
+    print "files", L
+    assert len(L) == 1
+
+    out,np,nd,nf,nn = run_vvtest( '--files -k patchwork' )
+    L = extract_files( out, cwd )
+    print "files", L
+    assert len(L) == 1
+
+    out,np,nd,nf,nn = run_vvtest( '--files -k stripes -k patchwork' )
+    L = extract_files( out, cwd )
+    print "files", L
+    assert len(L) == 0
 
 
 ############################################################################

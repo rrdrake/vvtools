@@ -135,14 +135,16 @@ def platform_name( test_out ):
       raise Exception( "Could not determine the platform name from output" )
     return platname
 
-def results_dir():
+def results_dir( pat=None ):
     """
-    After running vvtest, this will return the TestResults directory.
+    After running vvtest, this will return the TestResults directory.  If 'pat'
+    is given, then the test results directory name that contains that pattern
+    will be chosen.
     """
     for f in os.listdir('.'):
       if f[:12] == 'TestResults.':
-        return f
-        break
+        if pat == None or f.find( pat ) >= 0:
+          return f
     return ''
 
 def remove_results():

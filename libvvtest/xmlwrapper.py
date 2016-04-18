@@ -249,7 +249,8 @@ class XmlDocReader:
           elif self.xmlproc_parser != None:
             self.xmlproc_parser.readDoc(filename)
           
-          addParentPointers(self.dom)
+          self.dom.filename = filename
+          addParentPointers( self.dom )
         
         except XmlReadAbort:
           self.dom = None
@@ -312,9 +313,10 @@ class XmlDocReader:
     ###########
 
 
-def addParentPointers(xnd):
+def addParentPointers( xnd ):
     for nd in xnd.getSubNodes():
       nd.parent = xnd
+      nd.filename = xnd.filename
       addParentPointers(nd)
 
 

@@ -236,6 +236,7 @@ def writeScript( tspec, xdb, plat, \
           '  else',
           '    echo "*** error: the test requested to soft link a ' + \
                            'non-existent file: $XMLDIR/' + srcname + '"',
+          '    exit 1',
           '  endif' ] )
       else:
         line_list.extend( [ \
@@ -264,6 +265,7 @@ def writeScript( tspec, xdb, plat, \
           '  else',
           '    echo "*** error: the test requested to copy a ' + \
                            'non-existent file: $XMLDIR/' + srcname + '"',
+          '    exit 1',
           '  endif' ] )
       else:
         line_list.extend( [ \
