@@ -138,9 +138,10 @@ Removes entries from the given file.  The file is modified in place.
 report_help = """
 results.py report [OPTIONS] [file1 ...]
 
-Provides a short summary of results files in the current working directory,
-then details the history on each platform of tests that diff, fail, or timeout
-as the last execution on at least one platform.
+Provides a summary of one or more test results files.  A summary of the
+overall results on each platform/compiler is given, followed by details of
+the history on each platform of tests that diff, fail, or timeout.  Tests
+are only detailed if they diff/fail/timeout the last time they were run.
 
     -d <days back>
             examine results files back this many days; default is 15 days
@@ -151,6 +152,11 @@ as the last execution on at least one platform.
             if the number of tests that fail/diff in a single test results
             file are greater than this value, then don't itemize each test
             from that test execution; default is 25 tests
+    -g <shell glob pattern>
+            use this file glob pattern to specify files to read; may be used
+            with non-option files, and may be repeated
+    -G <shell glob pattern>
+            same as -g but for these files, do not detail the tests
     -p <platform>, --plat <platform>
             restrict the results files to this platform; may be repeated
     -P <platform>
@@ -305,7 +311,7 @@ def report_main( argv ):
     """
     import getopt
     try:
-        optL,argL = getopt.getopt( argv[1:], "d:D:r:o:O:t:T:p:P:g:",
+        optL,argL = getopt.getopt( argv[1:], "d:D:r:o:O:t:T:p:P:g:G:",
                                              longopts=['plat='] )
     except getopt.error, e:
         print3( "*** error:", e )
@@ -313,7 +319,7 @@ def report_main( argv ):
     
     optD = {}
     for n,v in optL:
-        if n in ['-o','-O','-t','-T','-p','-P','--plat','-g']:
+        if n in ['-o','-O','-t','-T','-p','-P','--plat','-g','-G']:
             optD[n] = optD.get( n, [] ) + [v]
         else:
             optD[n] = v
@@ -1333,7 +1339,7 @@ def multiplatform_merge( optD, fileL ):
     wopt = '-w' in optD
     xopt = '-x' in optD
 
-    fileL = process_files( optD, fileL )
+    process_files( optD, fileL )
     
     mr = MultiResults()
     if os.path.exists( multiruntimes_filename ):
@@ -1473,11 +1479,12 @@ def merge_check( existD, newD, dcut, xopt, wopt ):
     return False
 
 
-def process_files( optD, fileL ):
+def process_files( optD, fileL, fileG=None ):
     """
-    Apply -g and -d options to 'fileL', and return a new list.  The order
+    Apply -g and -d options to the 'fileL' list, in place.  The order
     of 'fileL' is retained, but each glob list is sorted by ascending file
-    date stamp.
+    date stamp.  If 'fileG' is not None, it will be filled with the files
+    glob'ed using the -G option, if present.
 
     The -d option applies to files of form "results.YYYY_MM_DD.*".
     The -p option to form "results.YYYY_MM_DD.platform.*".
@@ -1491,98 +1498,113 @@ def process_files( optD, fileL ):
             L = [ (os.path.getmtime(f),f) for f in glob.glob( pat ) ]
             L.sort()
             gL.extend( [ f for t,f in L ] )
-        fileL = gL + fileL
+        tmpL = gL + fileL
+        del fileL[:]
+        fileL.extend( tmpL )
 
-    if '-d' in optD:
-        # filter out results files that are too old
-        cutoff = int( time.time() - optD['-d']*24*60*60 )
-        newL = []
-        for f in fileL:
-            try:
-                L = os.path.basename(f).split('.')
-                T = time.strptime( L[1], '%Y_%m_%d' )
-                ftime = time.mktime( T )
-            except:
-                newL.append( f )  # don't apply filter to this file
-            else:
-                if ftime >= cutoff:
-                    newL.append( f )
-        fileL = newL
+    fLL = [ fileL ]
+    if fileG != None and '-G' in optD:
+        for pat in optD['-G']:
+            L = [ (os.path.getmtime(f),f) for f in glob.glob( pat ) ]
+            L.sort()
+            fileG.extend( [ f for t,f in L ] )
+        fLL.append( fileG )
 
-    platL = None
-    if '-p' in optD or '--plat' in optD:
-        platL = optD.get( '-p', [] ) + optD.get( '--plat', [] )
-    xplatL = optD.get( '-P', None )
-    if platL != None or xplatL != None:
-        # include/exclude results files based on platform name
-        newL = []
-        for f in fileL:
-            try:
-                platname = os.path.basename(f).split('.')[2]
-            except:
-                newL.append( f )  # don't apply filter to this file
-            else:
-                if ( platL == None or platname in platL ) and \
-                   ( xplatL == None or platname not in xplatL ):
-                    newL.append( f )
-        fileL = newL
+    for fL in fLL:
 
-    if '-o' in optD:
-        # keep results files that are in the -o list
-        optnL = '+'.join( optD['-o'] ).split('+')
-        newL = []
-        for f in fileL:
-            try:
-                foptL = os.path.basename(f).split('.')[3].split('+')
-            except:
-                newL.append( f )  # don't apply filter to this file
-            else:
-                # if at least one of the -o values from the command line
-                # is contained in the file name options, then keep the file
-                for op in optnL:
-                    if op in foptL:
+        if '-d' in optD:
+            # filter out results files that are too old
+            cutoff = int( time.time() - optD['-d']*24*60*60 )
+            newL = []
+            for f in fL:
+                try:
+                    L = os.path.basename(f).split('.')
+                    T = time.strptime( L[1], '%Y_%m_%d' )
+                    ftime = time.mktime( T )
+                except:
+                    newL.append( f )  # don't apply filter to this file
+                else:
+                    if ftime >= cutoff:
                         newL.append( f )
-                        break
-        fileL = newL
+            del fL[:]
+            fL.extend( newL )
 
-    if '-O' in optD:
-        # exclude results files that are in the -O list
-        optnL = '+'.join( optD['-O'] ).split('+')
-        newL = []
-        for f in fileL:
-            try:
-                foptL = os.path.basename(f).split('.')[3].split('+')
-            except:
-                newL.append( f )  # don't apply filter to this file
-            else:
-                # if at least one of the -O values from the command line is
-                # contained in the file name options, then exclude the file
-                keep = True
-                for op in optnL:
-                    if op in foptL:
-                        keep = False
-                        break
-                if keep:
-                    newL.append( f )
-        fileL = newL
+        platL = None
+        if '-p' in optD or '--plat' in optD:
+            platL = optD.get( '-p', [] ) + optD.get( '--plat', [] )
+        xplatL = optD.get( '-P', None )
+        if platL != None or xplatL != None:
+            # include/exclude results files based on platform name
+            newL = []
+            for f in fL:
+                try:
+                    platname = os.path.basename(f).split('.')[2]
+                except:
+                    newL.append( f )  # don't apply filter to this file
+                else:
+                    if ( platL == None or platname in platL ) and \
+                       ( xplatL == None or platname not in xplatL ):
+                        newL.append( f )
+            del fL[:]
+            fL.extend( newL )
 
-    tagL = optD.get( '-t', None )
-    xtagL = optD.get( '-T', None )
-    if tagL != None or xtagL != None:
-        # include/exclude based on tag
-        newL = []
-        for f in fileL:
-            try:
-                tag = os.path.basename(f).split('.')[4]
-            except:
-                newL.append( f )  # don't apply filter to this file
-            else:
-                if ( tagL == None or tag in tagL ) and \
-                   ( xtagL == None or tag not in xtagL ):
-                    newL.append( f )
-        fileL = newL
+        if '-o' in optD:
+            # keep results files that are in the -o list
+            optnL = '+'.join( optD['-o'] ).split('+')
+            newL = []
+            for f in fL:
+                try:
+                    foptL = os.path.basename(f).split('.')[3].split('+')
+                except:
+                    newL.append( f )  # don't apply filter to this file
+                else:
+                    # if at least one of the -o values from the command line
+                    # is contained in the file name options, then keep the file
+                    for op in optnL:
+                        if op in foptL:
+                            newL.append( f )
+                            break
+            del fL[:]
+            fL.extend( newL )
 
-    return fileL
+        if '-O' in optD:
+            # exclude results files that are in the -O list
+            optnL = '+'.join( optD['-O'] ).split('+')
+            newL = []
+            for f in fL:
+                try:
+                    foptL = os.path.basename(f).split('.')[3].split('+')
+                except:
+                    newL.append( f )  # don't apply filter to this file
+                else:
+                    # if at least one of the -O values from the command line is
+                    # contained in the file name options, then exclude the file
+                    keep = True
+                    for op in optnL:
+                        if op in foptL:
+                            keep = False
+                            break
+                    if keep:
+                        newL.append( f )
+            del fL[:]
+            fL.extend( newL )
+
+        tagL = optD.get( '-t', None )
+        xtagL = optD.get( '-T', None )
+        if tagL != None or xtagL != None:
+            # include/exclude based on tag
+            newL = []
+            for f in fL:
+                try:
+                    tag = os.path.basename(f).split('.')[4]
+                except:
+                    newL.append( f )  # don't apply filter to this file
+                else:
+                    if ( tagL == None or tag in tagL ) and \
+                       ( xtagL == None or tag not in xtagL ):
+                        newL.append( f )
+            del fL[:]
+            fL.extend( newL )
 
 
 ########################################################################
@@ -1887,30 +1909,20 @@ def report_generation( optD, fileL ):
         maxreport = 25  # default to 25 tests
     
     # this collects the files and applies filters
-    fileL = process_files( optD, fileL )
+    fileG = []
+    process_files( optD, fileL, fileG )
 
     # read all the results files that fall within the -d range
     rmat = ResultsMatrix()
     for f in fileL:
-        try:
-            # get the date stamp on the file
-            L = os.path.basename(f).split('.')
-            T = time.strptime( L[1], '%Y_%m_%d' )
-            ftime = time.mktime( T )
-
-            # try to read the file
-            fmt,vers,hdr,nskip = read_file_header( f )
-            assert fmt == 'results', \
-                    'expected a "results" file format, not "'+str(fmt)+'"'
-            tr = TestResults( f )
-            
-            # the file header contains the platform & compiler names
-            assert tr.platform() != None and tr.compiler() != None
-        
-        except Exception, e:
-            warnL.append( "skipping results file: " + f + \
-                          ", Exception = " + str(e) )
-        else:
+        ftime,tr = read_results_file( f, warnL )
+        if ftime != None:
+            tr.detail_ok = True  # inject a boolean flag to do detailing
+            rmat.add( ftime, tr )
+    for f in fileG:
+        ftime,tr = read_results_file( f, warnL )
+        if ftime != None:
+            tr.detail_ok = False  # inject a boolean flag to NOT do detailing
             rmat.add( ftime, tr )
 
     if len( rmat.platcplrs() ) == 0:
@@ -1952,10 +1964,14 @@ def report_generation( optD, fileL ):
             
             print3( '  ', dmap.legend() )
             print3( '  ', hist, '  ', tr.getSummary() )
+            if not tr.detail_ok:
+                s = '(tests for this platform/compiler are not detailed below)'
+                print3( '  '+s )
 
             # don't itemize tests if they are still running, or if they
             # ran too long ago
-            if not started and fdate > curtm - showage*24*60*60:
+            if not started and tr.detail_ok and \
+               fdate > curtm - showage*24*60*60:
                 
                 resD,nmatch = tr.collectResults( 'fail', 'diff', 'timeout' )
                 
@@ -2006,6 +2022,36 @@ def report_generation( optD, fileL ):
         print3()
 
     return warnL
+
+
+def read_results_file( filename, warnL ):
+    """
+    Constructs a TestResults class and loads it with the contents of
+    'filename', which is expected to be a results.<date>.* file.  Returns
+    the file date and TestResults object.  If the read fails, then None,None
+    is returned and the 'warnL' list is appended with the error message.
+    """
+    try:
+        # get the date stamp on the file
+        L = os.path.basename( filename ).split('.')
+        T = time.strptime( L[1], '%Y_%m_%d' )
+        ftime = time.mktime( T )
+
+        # try to read the file
+        fmt,vers,hdr,nskip = read_file_header( filename )
+        assert fmt == 'results', \
+                'expected a "results" file format, not "'+str(fmt)+'"'
+        tr = TestResults( filename )
+        
+        # the file header contains the platform & compiler names
+        assert tr.platform() != None and tr.compiler() != None
+    
+    except Exception, e:
+        warnL.append( "skipping results file: " + filename + \
+                                ", Exception = " + str(e) )
+        return None,None
+    
+    return ftime,tr
 
 
 class ResultsMatrix:
