@@ -1954,10 +1954,10 @@ xdoc = xreader.readDoc('ok51.xml')
 tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok51.xml', None, nofltr )
 assert len(tL) == 1
 L = tL[0].getCopyFiles() ; L.sort()
-assert L == [('globfile1.txt',None),('globfile2.txt',None)]
+assert L == [('glob*.txt',None)]
 L = tL[0].getLinkFiles() ; L.sort()
-assert L == [ ('conditional_glob.txt',None),
-              ('link2_glob.txt',None), ('link_glob.txt',None),
+assert L == [ ('conditional*_glob.txt',None),
+              ('link*_glob.txt',None),
               ('ok51.xml',None) ]
 
 fp = open( 'baseline_glob.txt', "w" )
@@ -1979,9 +1979,9 @@ xdoc = xreader.readDoc('ok52.xml')
 tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok52.xml', None, nofltr )
 assert len(tL) == 1
 L = tL[0].getSourceFiles() ; L.sort()
-assert L == ['baseline_glob.base_txt', 'conditional_glob.txt',
-             'globfile1.txt', 'globfile2.txt', 'link_glob.txt',
-             'notme_glob.txt', 'ok52.xml']
+assert L == ['baseline_glob.base_txt', 'cond*_glob.txt',
+             'glob*.txt', 'globfile2.txt', 'link_glob.txt',
+             'notme*_glob.txt', 'ok52.xml']
 
 fp = open('bad31.xml',"w")
 fp.writelines( [

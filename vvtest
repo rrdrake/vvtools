@@ -8,6 +8,7 @@ import time
 import signal
 import shutil
 import types
+import glob
 
 version = '27'  # version number; used to check format and for information
 
@@ -529,6 +530,22 @@ def extractTestFiles( dirs, plat, target_dir, ufilter ):
     
     uniqD = {}
     
+    def wvisit( arg, dname, files ):
+        """
+        copy a directory tree, but leave out version control files
+        """
+        for n in ['CVS','.cvsignore','.svn','.git','.gitignore']:
+          while (n in files): files.remove(n)
+        fd = os.path.normpath( os.path.join( arg[0], dname ) )
+        td = os.path.normpath( os.path.join( arg[1], dname ) )
+        if not os.path.exists(td):
+          os.makedirs(td)
+        for f1 in files:
+          f2 = os.path.join(fd,f1)
+          if not os.path.isdir(f2):
+            tf = os.path.join(td,f1)
+            shutil.copy2( f2, tf )
+    
     for xdir,t in tlist.active.items():
       
       tname = t.getName()
@@ -548,40 +565,37 @@ def extractTestFiles( dirs, plat, target_dir, ufilter ):
         try: shutil.copy2( t.getFilename(), tof )
         except IOError, e: pass
       
-      for f in t.getSourceFiles():
-        fromf = os.path.join( from_dir, f )
-        tof = os.path.join( to_dir, f )
-        tod = os.path.dirname(tof)
-        if not uniqD.has_key(tof):
-          uniqD[tof] = None
-          if not os.path.exists(tod):
-            os.makedirs(tod)
-          
-          if os.path.isdir(fromf):
-            
-            # copy a directory tree, but leave out version control files
-            
-            def wvisit( arg, dname, files ):
-                for n in ['CVS','.cvsignore','.svn','.git','.gitignore']:
-                  while (n in files): files.remove(n)
-                fd = os.path.normpath( os.path.join( arg[0], dname ) )
-                td = os.path.normpath( os.path.join( arg[1], dname ) )
-                if not os.path.exists(td):
-                  os.makedirs(td)
-                for f in files:
-                  ff = os.path.join(fd,f)
-                  if not os.path.isdir(ff):
-                    tf = os.path.join(td,f)
-                    shutil.copy2( ff, tf )
-            
-            saved = os.getcwd()
-            os.chdir(fromf)
-            os.path.walk( '.', wvisit, (fromf, tof) )
-            os.chdir(saved)
-            
-          else:
-            try: shutil.copy2( fromf, tof )
-            except IOError, e: pass
+      for srcf in t.getSourceFiles():
+
+        if os.path.exists( os.path.join( from_dir, srcf ) ):
+            fL = [ srcf ]
+        else:
+            cwd = os.getcwd()
+            try:
+                os.chdir( from_dir )
+                fL = glob.glob( srcf )
+            except:
+                fL = []
+            os.chdir( cwd )
+
+        for f in fL:
+            fromf = os.path.join( from_dir, f )
+            tof = os.path.join( to_dir, f )
+            tod = os.path.dirname(tof)
+            if not uniqD.has_key(tof):
+              uniqD[tof] = None
+              if not os.path.exists(tod):
+                os.makedirs(tod)
+              
+              if os.path.isdir(fromf):
+                cwd = os.getcwd()
+                os.chdir(fromf)
+                os.path.walk( '.', wvisit, (fromf, tof) )
+                os.chdir(cwd)
+                
+              else:
+                try: shutil.copy2( fromf, tof )
+                except IOError, e: pass
 
 
 ##############################################################################
@@ -1190,7 +1204,7 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
           print "******************** BEGIN TEST ********************"
           print "****************************************************\n"
         
-        next.start( config )
+        next.start()
         fp = open( tfile, "a" )
         fp.write( TestSpecCreator.toString(next.atest) + '\n' )
         fp.close()
@@ -1812,7 +1826,7 @@ def baselineTests( test_dir, plat, ufilter ):
         else:                         ref = tx
         sys.stdout.write("baselining " + ref.getExecuteDirectory() + "...")
         sys.stdout.flush()
-        tx.start( config, baseline=1 )
+        tx.start( baseline=1 )
         for i in range(30):
           time.sleep(1)
           if tx.poll():

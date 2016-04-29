@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import os, sys
-import string, re
+import re
 import glob
 import time
 
@@ -15,8 +15,9 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """null script links1 links2 exitstat xmldir options params
-                  keywords autolink tname1 tname2
+        argL = """null script links1 links2 links3
+                  exitstat xmldir options params
+                  keywords autolink tname1 tname2 postclean
                """.split()
 
     for func in argL:
@@ -83,11 +84,9 @@ def links1():
     writefile( "glob1.txt", """
         this is glob1.txt
         """)
-
     writefile( "glob2.txt", """
         this is glob2.txt
         """)
-
     writefile( "Aglob.txt", """
         this is Aglob2.txt
         """)
@@ -97,10 +96,11 @@ def links1():
           <link_files> glob?.txt </link_files>
           <copy_files> Aglob.* </copy_files>
           <execute> <![CDATA[
-        cat glob1.txt || exit 1
-        cat glob2.txt || exit 1
-        cat Aglob.txt || exit 1
-        ]]>  </execute>
+            cat glob1.txt || exit 1
+            cat glob2.txt || exit 1
+            cat Aglob.txt || exit 1
+          ]]> 
+          </execute>
         </rtest>""")
 
     out,np,nd,nf,nn = run_vvtest()
@@ -111,8 +111,6 @@ def links2():
     """
     link & copy files of files that don't exist
     """
-    # link/copy a file that does not exist
-
     writefile( "link1.xml", """
         <rtest name="link1">
             <link_files> file.txt </link_files>
@@ -169,6 +167,37 @@ def links2():
     assert len(fL) == 4
     for f in fL:
         assert len( filegrep( f, "lsfile file.txt" ) ) == 1
+
+
+def links3():
+    """
+    link & copy files of files that start with ..
+    """
+    writefile( "subdir/links.xml", """
+        <rtest name="links">
+            <link_files> ../file.txt </link_files>
+            <copy_files> ../files/gfile*.txt </copy_files>
+            <execute>
+                foreach f ( `ls` )
+                    echo "lsfile $f"
+                end
+            </execute>
+        </rtest>""")
+    writefile( "file.txt", """the text file""" )
+    writefile( "files/gfile1.txt", """G text file 1""" )
+    writefile( "files/gfileA.txt", """G text file A""" )
+    
+    out,np,nd,nf,nn = run_vvtest( 'subdir' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    pL = glob.glob( 'TestResults.*' )
+    assert len(pL) == 1
+    f = os.path.join( pL[0], 'links', 'execute.log' )
+    assert len( filegrep( f, "lsfile file.txt" ) ) == 1
+    assert len( filegrep( f, "lsfile gfile1.txt" ) ) == 1
+    assert len( filegrep( f, "lsfile gfileA.txt" ) ) == 1
+    assert os.path.islink( os.path.join( pL[0], 'links', 'file.txt' ) )
+    assert not os.path.islink( os.path.join( pL[0], 'links', 'gfile1.txt' ) )
+    assert not os.path.islink( os.path.join( pL[0], 'links', 'gfileA.txt' ) )
 
 
 #####################################################################
@@ -493,6 +522,31 @@ def tname2():
     assert len(fL) == 1
     assert len( filegrep( fL[0], 'multi2 only' ) ) >= 1
     assert len( filegrep( fL[0], 'both tests' ) ) >= 1
+
+
+#####################################################################
+
+def postclean():
+    """
+    using -C to clean out after the test
+    """
+    writefile( "pclean.xml", """
+        <rtest name="pclean">
+            <execute>
+                echo "Elvis has left the building" > afile.txt || exit 1
+            </execute>
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+    fL = glob.glob( tdir+'/pclean/afile.txt' )
+    assert len(fL) == 1
+
+    out,np,nd,nf,nn = run_vvtest( '-F -C' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    fL = glob.glob( tdir+'/pclean/afile.txt' )
+    assert len(fL) == 0
 
 
 ############################################################################

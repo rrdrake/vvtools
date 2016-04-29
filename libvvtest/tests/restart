@@ -1,76 +1,122 @@
 #!/usr/bin/env python
 
 import os, sys
-import string, re
+import time
 
+# this will os.chdir() to a subdirectory
 from testutils import *
 
-rmallfiles()
+def main():
+    """
+    """
+    argL = get_arg_list()
 
-#set ta = "$srcdir/../../vvtest -n 2"
+    if len(argL) == 0:
+        argL = """test01 test02
+               """.split()
 
-writefile( "param.xml", """
-<rtest name="param">
-  <parameterize hello="world mars"/>
-  <execute> <![CDATA[
-sleep 1
-echo "parm=$hello"
-]]>
-  </execute>
-</rtest>""" )
+    cwd = os.getcwd()
+    for func in argL:
+        os.chdir( cwd )
+        rmallfiles()
+        time.sleep(1)
+        print3( '====> ', func )
+        eval( func+'()' )
 
-writefile( "FailTest.xml", """
-<rtest name="FailTest">
-  <execute> <![CDATA[
-sleep 1
-echo "Exiting with failure status"
-exit 1
-]]>
-  </execute>
-</rtest>""")
 
-writefile( "DiffTest.xml", """
-<rtest name="DiffTest">
-  <execute> <![CDATA[
-sleep 1
-echo "Exiting with diff status"
-set have_diff = yes
-]]>
-  </execute>
-</rtest>""")
+#######################################################################
 
-# run the test set but provide a false interruption
-out,np,nd,nf,nn = run_vvtest( "-n 2 --intr 2", ignore_errors=1 )
+def test01():
+    """
+    tests notrun or notdone get run upon restart
+    """
+    writefile( "param.xml", """
+        <rtest name="param">
+          <parameterize hello="world mars"/>
+          <execute> <![CDATA[
+            sleep 1
+            echo "parm=$hello"
+          ]]>
+          </execute>
+        </rtest>""" )
 
-# restart with no keywords
-out,np,nd,nf,nn = run_vvtest( '-n 2' )
-assert np == 2 and nd == 1 and nf == 1 and nn == 0
+    writefile( "FailTest.xml", """
+        <rtest name="FailTest">
+          <execute> <![CDATA[
+            sleep 1
+            echo "Exiting with failure status"
+            exit 1
+          ]]>
+          </execute>
+        </rtest>""")
 
-# restart on a keyword
-out,np,nd,nf,nn = run_vvtest( '-n 2 -w --intr 2', ignore_errors=1 )
-out,np,nd,nf,nn = run_vvtest( '-n 2 -k notrun' )
-assert np+nd+nf+nn == 2
+    writefile( "DiffTest.xml", """
+        <rtest name="DiffTest">
+          <execute> <![CDATA[
+            sleep 1
+            echo "Exiting with diff status"
+            set have_diff = yes
+          ]]>
+          </execute>
+        </rtest>""")
 
-# restart on not done and use -r instead of -k
-out,np,nd,nf,nn = run_vvtest( '-n 2 -r notdone' )
-assert np+nd+nf+nn == 2
+    # run the test set but provide a false interruption
+    out,np,nd,nf,nn = run_vvtest( "-n 2 --intr 2", ignore_errors=1 )
 
-# none should restart now
-out,np,nd,nf,nn = run_vvtest( '-n 2' )
-assert np+nd+nf+nn == 0
+    # restart with no keywords
+    out,np,nd,nf,nn = run_vvtest( '-n 2' )
+    assert np == 2 and nd == 1 and nf == 1 and nn == 0
 
-# all of them should run again
-out,np,nd,nf,nn = run_vvtest( '-n 2 -F' )
-assert np+nd+nf+nn == 4
+    # restart on a keyword
+    out,np,nd,nf,nn = run_vvtest( '-n 2 -w --intr 2', ignore_errors=1 )
+    out,np,nd,nf,nn = run_vvtest( '-n 2 -k notrun' )
+    assert np+nd+nf+nn == 2
 
-# place a file in a test dir and make sure it gets deleted
-dtdir = results_dir() + '/DiffTest'
-assert os.path.exists( dtdir )
-writefile( dtdir+'/badfile', """the simpsons""" )
-out,np,nd,nf,nn = run_vvtest( '-n 2 -F -k DiffTest' )
-assert not os.path.exists( dtdir+'/badfile' )
+    # restart on not done and use -r instead of -k
+    out,np,nd,nf,nn = run_vvtest( '-n 2 -r notdone' )
+    assert np+nd+nf+nn == 2
 
-# same thing but with the -m option, the file should still be there
-writefile( dtdir+'/badfile', """the simpsons""" )
-out,np,nd,nf,nn = run_vvtest( '-n 2 -F -k DiffTest -m' )
-assert os.path.exists( dtdir+'/badfile' )
+    # none should restart now
+    out,np,nd,nf,nn = run_vvtest( '-n 2' )
+    assert np+nd+nf+nn == 0
+
+    # all of them should run again
+    out,np,nd,nf,nn = run_vvtest( '-n 2 -F' )
+    assert np+nd+nf+nn == 4
+
+
+def test02():
+    """
+    check prerun file cleanout
+    """
+    writefile( "clean.xml", """
+        <rtest name="clean">
+          <execute> <![CDATA[
+            foreach f ( `ls` )
+              echo "existing file = $f"
+            end
+            set noclobber
+            echo "gen file contents" > generated_file.txt || exit 1
+          ]]>
+          </execute>
+        </rtest>""" )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tdir = os.path.abspath( results_dir() )
+    assert os.path.exists( tdir+'/clean/generated_file.txt' )
+
+    # run again should remove the generated file
+    out,np,nd,nf,nn = run_vvtest( '-F' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 0
+
+    # running again with -m option should fail
+    out,np,nd,nf,nn = run_vvtest( '-F -m' )
+    assert np == 0 and nd == 0 and nf == 1 and nn == 0
+    assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 1
+
+
+########################################################################
+
+main()

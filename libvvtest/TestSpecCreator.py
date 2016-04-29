@@ -3,7 +3,6 @@
 import os
 import string, re
 import types
-import fnmatch
 
 import TestSpec
 import FilterExpressions
@@ -966,10 +965,12 @@ def collectFileNames( nd, flist, tname, paramD, ufilter ):
       if not skip:
         
         fL = []
-        tnames = nd.getAttr( 'linkname', nd.getAttr('test_name',None) )
+        tnames = nd.getAttr( 'linkname',
+                 nd.getAttr('copyname',
+                 nd.getAttr('test_name',None) ) )
         if tnames != None:
           
-          tnames = string.split(tnames)
+          tnames = tnames.split()
           if len(tnames) != len(fileL):
             raise TestSpecError( 'the number of file names in the ' + \
                '"linkname" attribute must equal the number of names in ' + \
@@ -979,14 +980,14 @@ def collectFileNames( nd, flist, tname, paramD, ufilter ):
             if os.path.isabs(fileL[i]) or os.path.isabs(tnames[i]):
               raise TestSpecError( 'file names cannot be absolute paths, ' + \
                                    'line ' + str(nd.line_no) )
-            fL.append( [fileL[i], tnames[i]] )
+            fL.append( [str(fileL[i]), str(tnames[i])] )
         
         else:
           for f in fileL:
             if os.path.isabs(f):
               raise TestSpecError( 'file names cannot be absolute paths, ' + \
                                    'line ' + str(nd.line_no) )
-            fL.append( [f, None] )
+            fL.append( [str(f), None] )
         
         variableExpansion( tname, ufilter.platformName(), paramD, fL )
         
@@ -1010,7 +1011,7 @@ def globFileNames( nd, flist, t, ufilter, nofilter=0 ):
     paramD = t.getParameters()
     homedir = t.getDirectory()
     
-    globL = string.split( nd.getContent() )
+    globL = nd.getContent().strip().split()
     if len(globL) > 0:
       
       skip = 0
@@ -1029,12 +1030,8 @@ def globFileNames( nd, flist, t, ufilter, nofilter=0 ):
         # first, substitute variables into the file names
         variableExpansion( tname, ufilter.platformName(), paramD, globL )
         
-        # TODO: implement a file list cache mechanism
-        for fp in os.listdir(homedir):
-          for fg in globL:
-            if fnmatch.fnmatch( fp, fg ):
-              flist.append( [fp,None] )
-              break
+        for fn in globL:
+          flist.append( [str(fn),None] )
     
     else:
       raise TestSpecError( 'expected a list of file names as content' + \
@@ -1045,17 +1042,18 @@ def parseFiles( t, filedoc, ufilter ):
     """
     Parse the files to copy and soft link for the test XML file.
     
-      <copy_files> file1.C file2.F </copy_files>
-      <copy_files linkname="f1.C f2.F"> file1.C file2.F </copy_files>
+      <link_files> file1.C file2.F </link_files>
+      <link_files linkname="f1.C f2.F"> file1.C file2.F </link_files>
       <copy_files platforms="SunOS"> file1.C file2.F </copy_files>
-      <copy_files parameters="np=4" linkname="in4.exo"> in.exo </copy_files>
+      <copy_files parameters="np=4" copyname="in4.exo"> in.exo </copy_files>
       
-      <glob_link> ${NAME}_data.txt </glob_link>
-      <glob_copy> files_to_glob.* </glob_copy>
-    
     For backward compatibility, "test_name" is accepted:
 
       <copy_files test_name="f1.C f2.F"> file1.C file2.F </copy_files>
+    
+    Deprecated:
+      <glob_link> ${NAME}_data.txt </glob_link>
+      <glob_copy> files_to_glob.* </glob_copy>
     
     Also here is parsing of test source files
     
@@ -1078,9 +1076,11 @@ def parseFiles( t, filedoc, ufilter ):
       collectFileNames( nd, lnfiles, t.getName(), t.getParameters(), ufilter )
     
     for nd in filedoc.matchNodes(["glob_link$"]):
+      # This construct is deprecated [April 2016].
       globFileNames( nd, lnfiles, t, ufilter )
     
     for nd in filedoc.matchNodes(["glob_copy$"]):
+      # This construct is deprecated [April 2016].
       globFileNames( nd, cpfiles, t, ufilter )
     
     t.setLinkFiles( lnfiles )
@@ -1130,6 +1130,7 @@ def parseBaseline( t, filedoc, ufilter ):
           fdest = nd.getAttr('destination',None)
           if fdest == None:
             for f in fname:
+              f = str(f)
               fL.append( [f,f] )
             
           else:
@@ -1141,13 +1142,13 @@ def parseBaseline( t, filedoc, ufilter ):
                str(len(fname)) + '), line ' + str(nd.line_no) )
             
             for i in range(len(fname)):
-              fL.append( [fname[i], fdest[i]] )
+              fL.append( [str(fname[i]), str(fdest[i])] )
         
         variableExpansion( t.getName(), ufilter.platformName(),
                            t.getParameters(), fL )
         
         for f,d in fL:
-          t.addBaselineFile( f, d )
+          t.addBaselineFile( str(f), str(d) )
         
         script = string.strip( nd.getContent() )
         if script:

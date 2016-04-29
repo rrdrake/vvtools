@@ -14,7 +14,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02 test03
+        argL = """test01 test02 test03 test04
                """.split()
 
     cwd = os.getcwd()
@@ -153,6 +153,30 @@ def test03():
     assert len( fL ) == 3
     fL.sort()
     assert fL == ['cp2/common.txt','cp2/m1.txt','cp2/multi.xml']
+
+
+########################################################################
+
+def test04():
+    """
+    check that all a glob pattern will be expanded in <source_files>
+    """
+    writefile( 'orig/file1.txt', "f1\n" )
+    writefile( 'orig/file_7.txt', "f7\n" )
+
+    writefile( 'orig/atest.xml', """
+        <rtest name="atest">
+          <source_files> file*.txt </source_files>
+          <execute>
+            echo "hello world"
+          </execute>
+        </rtest>""" )
+    
+    out,np,nd,nf,nn = run_vvtest( '--extract copy orig' )
+    
+    fL = glob.glob( 'copy/*' )
+    fL.sort()
+    assert fL == ['copy/atest.xml', 'copy/file1.txt', 'copy/file_7.txt']
 
 
 ########################################################################

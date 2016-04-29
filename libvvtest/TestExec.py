@@ -3,7 +3,10 @@
 import os, sys
 import signal
 import time
-import types
+import shutil
+import glob
+import traceback
+
 import cshScriptWriter
 
 # this is the exit status that tests use to indicate a diff
@@ -42,6 +45,7 @@ class TestExec:
         the current working directory.
         """
         self.platform = platform
+        self.config = config
         self.timeout = self.atest.getAttr( 'timeout', 0 )
         
         self.xdir = os.path.join( test_dir, self.atest.getExecuteDirectory() )
@@ -62,21 +66,17 @@ class TestExec:
                                  os.path.dirname(self.atest.getFilepath()) )
           srcdir = os.path.normpath( srcdir )
           
-          postclean = config.get('postclean')
-          if self.atest.getParent() != None:
-            postclean = 0  # cannot clean child tests
-          
           cshScriptWriter.writeScript( self.atest, commondb, self.platform,
                                        config.get('toolsdir'),
                                        config.get('exepath'),
                                        srcdir,
                                        config.get('onopts'),
                                        config.get('offopts'),
-                                       script_file, postclean )
+                                       script_file )
           if self.perms != None:
             self.perms.set( os.path.abspath( script_file ) )
     
-    def start(self, config, baseline=0 ):
+    def start(self, baseline=0):
         """
         Launches the child process.
         """
@@ -93,18 +93,13 @@ class TestExec:
         if baseline:
           cmd_list.append('--baseline')
           logfname = 'baseline.log'
-        elif not config.get('logfile'):
+        elif not self.config.get('logfile'):
           logfname = None
         
         if hasattr(self.plugin_obj, "mpi_opts") and self.plugin_obj.mpi_opts:
           cmd_list.extend(['--mpirun_opts', self.plugin_obj.mpi_opts])
-        if hasattr(self.plugin_obj, "prerun") and self.plugin_obj.prerun:
-          cmd_list.extend(['--prerun', self.plugin_obj.prerun])
-        if hasattr(self.plugin_obj, "postrun") and self.plugin_obj.postrun:
-          cmd_list.extend(['--postrun', self.plugin_obj.postrun])
         
-        if not config.get('preclean'): cmd_list.append('--noclean')
-        if config.get('analyze'): cmd_list.append('--analyze')
+        if self.config.get('analyze'): cmd_list.append('--analyze')
         
         self.tzero = time.time()
         
@@ -114,80 +109,102 @@ class TestExec:
         self.atest.setAttr( 'xtime', -1 )
         self.atest.setAttr( 'xdate', int(time.time()) )
         
-        sys.stdout.flush()
+        sys.stdout.flush() ; sys.stderr.flush()
         
         self.pid = os.fork()
         
         if self.pid == 0:  # child
           
-          os.chdir(self.xdir)
-          
-          if self.timeout > 0:
-            # add a timeout environ variable so the test can take steps to
-            # shutdown a running application that is taking too long;  add
-            # a bump factor so it won't shutdown before the test harness
-            # recognizes it as a timeout
-            if self.timeout < 30: t = 60
-            if self.timeout < 120: t = self.timeout * 1.4
-            else: t = self.timeout * 1.2
-            os.environ['TIMEOUT'] = str( int( t ) )
-          
-          if hasattr( self.plugin_obj, 'run' ):
-            self.plugin_obj.run( self.plugin_obj, self.timeout,
-                                 self.xdir, logfname, cmd_list )
+          try:
+            os.chdir(self.xdir)
+            
+            if self.timeout > 0:
+              # add a timeout environ variable so the test can take steps to
+              # shutdown a running application that is taking too long;  add
+              # a bump factor so it won't shutdown before the test harness
+              # recognizes it as a timeout
+              if self.timeout < 30: t = 60
+              if self.timeout < 120: t = self.timeout * 1.4
+              else: t = self.timeout * 1.2
+              os.environ['TIMEOUT'] = str( int( t ) )
+            
+            if hasattr( self.plugin_obj, 'run' ):
+              self.plugin_obj.run( self.plugin_obj, self.timeout,
+                                   self.xdir, logfname, cmd_list )
+              sys.stdout.flush() ; sys.stderr.flush()
+              os._exit(1)
+            
+            else:
+              
+              if logfname != None:
+                
+                # open the output files
+                ofile = open( logfname, "w+" )
+                
+                # reassign stdout & stderr to the log file
+                os.dup2(ofile.fileno(), sys.stdout.fileno())
+                os.dup2(ofile.fileno(), sys.stderr.fileno())
+                
+                if self.perms != None:
+                  self.perms.set( os.path.abspath( logfname ) )
+              
+              sys.stdout.write( "Starting test: "+self.atest.getName()+'\n' )
+              sys.stdout.write( "Directory    : "+os.getcwd()+'\n' )
+              sys.stdout.write( "Command      : "+' '.join( cmd_list )+'\n' )
+              sys.stdout.write( "Timeout      : "+str(self.timeout)+'\n' )
+              sys.stdout.write( '\n' )
+              sys.stdout.flush()
+              
+              if self.config.get('preclean') and \
+                 not self.config.get('analyze') and \
+                 not baseline:
+                self.preclean()
+              
+              if hasattr(self.plugin_obj, 'machinefile'):
+                f = open("machinefile", "w")
+                f.write(self.plugin_obj.machinefile)
+                f.close()
+                if self.perms != None:
+                  self.perms.set( os.path.abspath( "machinefile" ) )
+              
+              if not self.setWorkingFiles():
+                sys.stdout.flush() ; sys.stderr.flush()
+                os._exit(1)
+
+              if hasattr(self.plugin_obj, 'sshcmd'):
+                
+                # turn off X11 forwarding by unsetting the DISPLAY env variable
+                # (should eliminate X authorization errors)
+                if os.environ.has_key('DISPLAY'):
+                  del os.environ['DISPLAY']
+                
+                safecmd = ''
+                for arg in cmd_list:
+                  if len( arg.split() ) > 1:
+                    safecmd = safecmd + ' "' + arg + '"'
+                  else:
+                    safecmd = safecmd + ' ' + arg
+                sshcmd = self.plugin_obj.sshcmd
+                sshcmd.append('cd ' + os.getcwd() + ' &&' + safecmd)
+                cmd_list = sshcmd
+              
+              sys.stdout.write( '\n' )
+              sys.stdout.flush()
+
+              # replace this process with the command
+              os.execve( cmd_list[0], cmd_list, os.environ )
+              
+              raise "os.execv should not return"
+
+          except:
+            sys.stdout.flush() ; sys.stderr.flush()
+            traceback.print_exc()
+            sys.stdout.flush() ; sys.stderr.flush()
             os._exit(1)
-          
-          else:
-            
-            if logfname != None:
-              
-              # open the output files
-              ofile = open( logfname, "w+" )
-              
-              # reassign stdout & stderr to the log file
-              os.dup2(ofile.fileno(), sys.stdout.fileno())
-              os.dup2(ofile.fileno(), sys.stderr.fileno())
-              
-              if self.perms != None:
-                self.perms.set( os.path.abspath( logfname ) )
-            
-            if hasattr(self.plugin_obj, 'machinefile'):
-              f = open("machinefile", "w")
-              f.write(self.plugin_obj.machinefile)
-              f.close()
-              if self.perms != None:
-                self.perms.set( os.path.abspath( "machinefile" ) )
-            
-            if hasattr(self.plugin_obj, 'sshcmd'):
-              
-              # turn off X11 forwarding by unsetting the DISPLAY env variable
-              # (should eliminate X authorization errors)
-              if os.environ.has_key('DISPLAY'):
-                del os.environ['DISPLAY']
-              
-              safecmd = ''
-              for arg in cmd_list:
-                if len( arg.split() ) > 1:
-                  safecmd = safecmd + ' "' + arg + '"'
-                else:
-                  safecmd = safecmd + ' ' + arg
-              sshcmd = self.plugin_obj.sshcmd
-              sshcmd.append('cd ' + os.getcwd() + ' &&' + safecmd)
-              cmd_list = sshcmd
-            
-            print "Starting test:", self.atest.getName()
-            print "Directory    :", os.getcwd()
-            print "Command      :", cmd_list
-            print "Timeout      :", self.timeout
-            sys.stdout.flush()
-            
-            # replace this process with the command
-            os.execve( cmd_list[0], cmd_list, os.environ )
-          
-          raise "os.execv should not return"
     
     def poll(self):
-        
+        """
+        """
         if self.atest.getAttr('state') == "notrun": return 0
         
         if self.atest.getAttr('state') == "done": return 1
@@ -227,6 +244,11 @@ class TestExec:
 
           if self.perms != None:
             self.perms.recurse( self.xdir )
+
+          if self.config.get('postclean') and \
+             self.atest.getAttr('result') == 'pass' and \
+             self.atest.getParent() == None:
+            self.postclean()
           
         # not done .. check for timeout
         elif self.timeout > 0 and (time.time() - self.tzero) > self.timeout:
@@ -293,6 +315,157 @@ class TestExec:
               return tx
         return None
     
+    def preclean(self):
+        """
+        Should only be run just prior to launching the test script.  It
+        removes all files in the execute directory except for a few vvtest
+        files.
+        """
+        sys.stdout.write( "Cleaning execute directory...\n" )
+        sys.stdout.flush()
+
+        for f in os.listdir('.'):
+          if f != 'execute.log' and f != 'baseline.log' and f != 'runscript':
+            if os.path.isdir(f):
+              sys.stdout.write( "rm -r "+f+"\n" ) ; sys.stdout.flush()
+              shutil.rmtree( f )
+            else:
+              sys.stdout.write( "rm "+f+"\n" ) ; sys.stdout.flush()
+              os.remove( f )
+    
+    def setWorkingFiles(self):
+        """
+        Called before the test script is executed, this sets the link and
+        copy files in the test execution directory.  Returns False if certain
+        errors are encountered and written to stderr, otherwise True.
+        """
+        sys.stdout.write( "Linking and copying working files...\n" )
+        sys.stdout.flush()
+
+        srcdir = os.path.normpath(
+                      os.path.join(
+                          self.atest.getRootpath(),
+                          os.path.dirname( self.atest.getFilepath() ) ) )
+        
+        ok = True
+
+        # first establish the soft linked files
+        for srcname,tstname in self.atest.getLinkFiles():
+            
+            f = os.path.normpath( os.path.join( srcdir, srcname ) )
+
+            srcL = []
+            if os.path.exists(f):
+                srcL.append( f )
+            else:
+                fL = glob.glob( f )
+                if len(fL) > 1 and tstname != None:
+                    sys.stderr.write( "*** error: the test requested to " + \
+                          "soft link a file that matched multiple sources " + \
+                          "AND a single linkname was given: " + f + "\n" )
+                    ok = False
+                    continue
+                else:
+                    srcL.extend( fL )
+
+            if len(srcL) > 0:
+                
+                for srcf in srcL:
+
+                    if tstname == None:
+                        tstf = os.path.basename( srcf )
+                    else:
+                        tstf = tstname
+                    
+                    if os.path.islink( tstf ):
+                        lf = os.readlink( tstf )
+                        if lf != srcf:
+                            os.remove( tstf )
+                            sys.stdout.write( 'ln -s '+srcf+' '+tstf+'\n' )
+                            os.symlink( srcf, tstf )
+                    
+                    elif os.path.exists( tstf ):
+                        if os.path.isdir( tstf ):
+                            shutil.rmtree( tstf )
+                        else:
+                            os.remove( tstf )
+                        sys.stdout.write( 'ln -s '+srcf+' '+tstf+'\n' )
+                        os.symlink( srcf, tstf )
+                    
+                    else:
+                        sys.stdout.write( 'ln -s '+srcf+' '+tstf+'\n' )
+                        os.symlink( srcf, tstf )
+            
+            else:
+                sys.stderr.write( "*** error: the test requested to " + \
+                      "soft link a non-existent file: " + f + "\n" )
+                ok = False
+        
+        # files to be copied
+        for srcname,tstname in self.atest.getCopyFiles():
+
+            f = os.path.normpath( os.path.join( srcdir, srcname ) )
+
+            srcL = []
+            if os.path.exists(f):
+                srcL.append( f )
+            else:
+                fL = glob.glob( f )
+                if len(fL) > 1 and tstname != None:
+                    sys.stderr.write( "*** error: the test requested to " + \
+                          "copy a file that matched multiple sources " + \
+                          "AND a single copyname was given: " + f + "\n" )
+                    ok = False
+                    continue
+                else:
+                    srcL.extend( fL )
+
+            if len(srcL) > 0:
+                
+                for srcf in srcL:
+                    
+                    if tstname == None:
+                        tstf = os.path.basename( srcf )
+                    else:
+                        tstf = tstname
+                    
+                    if os.path.islink( tstf ):
+                        os.remove( tstf )
+                    elif os.path.exists( tstf ):
+                        if os.path.isdir( tstf ):
+                            shutil.rmtree( tstf )
+                        else:
+                            os.remove( tstf )
+
+                    if os.path.isdir( srcf ):
+                        sys.stdout.write( 'cp -rp '+srcf+' '+tstf+'\n' )
+                        shutil.copytree( srcf, tstf, symlinks=True )
+                    else:
+                        sys.stdout.write( 'cp -p '+srcf+' '+tstf+'\n' )
+                        shutil.copy2( srcf, tstf )
+            
+            else:
+                sys.stderr.write( "*** error: the test requested to " + \
+                      "copy a non-existent file: " + f + "\n" )
+                ok = False
+
+        return ok
+
+    def postclean(self):
+        """
+        Should only be run right after the test script finishes.  It
+        removes all files in the execute directory except for a few vvtest
+        files.
+        """
+        for f in os.listdir( self.xdir ):
+          if f != 'execute.log' and f != 'baseline.log' and \
+             f != 'runscript' and f != 'machinefile':
+            fp = os.path.join( self.xdir, f )
+            if os.path.isdir(fp):
+              shutil.rmtree( f )
+            else:
+              os.remove( fp )
+
     pscmd = None
     
     def _get_processes(self, rpid=None, psdict=None, pidlist=None):

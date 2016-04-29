@@ -14,7 +14,7 @@ expect_status_replace_re = re.compile('[$][(]EXPECT_STATUS[)]')
 def writeScript( tspec, xdb, plat, \
                  toolsdir, projdir, srcdir, \
                  onopts, offopts,
-                 scriptname, postclean ):
+                 scriptname ):
     """
       tspec is a TestSpec object
       xdb is a CommonSpecDB object
@@ -50,7 +50,6 @@ def writeScript( tspec, xdb, plat, \
       'unalias echo',
       'unset newbaseline',
       'unsetenv newbaseline', '',
-      'set cleanout = 1', '',
       'set analyze = 0',
       'echo "++++++++++++++++ begin ' + idstr + '"', '',
       'echo " "',
@@ -78,20 +77,8 @@ def writeScript( tspec, xdb, plat, \
       '      setenv MPI_OPT "$argv[$i]"',
       '      echo "MPI_OPT=$MPI_OPT"',
       '      breaksw',
-      '    case --prerun:',
-      '      @ i += 1',
-      '      set PRERUN = "$argv[$i]"',
-      '      breaksw',
-      '    case --postrun:',
-      '      @ i += 1',
-      '      set POSTRUN = "$argv[$i]"',
-      '      breaksw',
-      '    case --noclean:',
-      '      set cleanout = 0',
-      '      breaksw',
       '    case --analyze:',
       '      set analyze = 1',
-      '      set cleanout = 0',
       '      breaksw',
       '  endsw',
       '  @ i += 1',
@@ -201,102 +188,6 @@ def writeScript( tspec, xdb, plat, \
       '  exit 0',
       'endif', '' ] )
     
-    # remove all files in the current (test) directory
-    
-    line_list.extend( [ '',
-      'if ( $cleanout == 1 ) then',
-      '  # remove all files in the current (test) directory',
-      '  echo ">> removing all unknown files..."',
-      '  foreach file (`ls -a`)',
-      '    if ("$file" != "." && "$file" != ".." && \\',
-      '        "$file" != "execute.log" && "$file" != "baseline.log" && \\',
-      '        "$file" != "'+scriptbasename+'" && "$file" != "machinefile") then',
-      '      echo "rm -rf $file"',
-      '      rm -rf $file',
-      '    endif',
-      '  end',
-      'endif',
-      '' ] )
-    
-    line_list.extend( [ '', 'if ( $analyze == 0 ) then', '' ] )
-    
-    # link and copy files into the test directory
-    
-    line_list.extend( [ \
-          '  # link and copy files into the test directory', '' ] )
-    line_list.append( 'echo ">> linking and copying working files..."' )
-    for (srcname, testname) in tspec.getLinkFiles():
-      if testname != None:
-        line_list.extend( [ \
-          '  if ( -e $XMLDIR/' + srcname + ' ) then',
-          '    if ( ! -e ' + testname + ' ) then',
-          '      echo "ln -s $XMLDIR/' + srcname + ' ' + testname + '"',
-          '      ln -s $XMLDIR/' + srcname + ' ' + testname + ' || exit 1',
-          '    endif',
-          '  else',
-          '    echo "*** error: the test requested to soft link a ' + \
-                           'non-existent file: $XMLDIR/' + srcname + '"',
-          '    exit 1',
-          '  endif' ] )
-      else:
-        line_list.extend( [ \
-          '  set flist = ( `ls -d $XMLDIR/' + srcname + '` )',
-          '  if ( $#flist == 0 ) then',
-          '    echo "*** error: the test requested to soft link a ' + \
-                           'non-existent file: $XMLDIR/' + srcname + '"',
-          '    exit 1',
-          '  else',
-          '    foreach srcf ( $flist )',
-          '      set testf = $srcf:t',
-          '      if ( ! -e $testf ) then',
-          '        echo "ln -s $srcf $testf"',
-          '        ln -s $srcf $testf || exit 1',
-          '      endif',
-          '    end',
-          '  endif' ] )
-    for (srcname, testname) in tspec.getCopyFiles():
-      if testname != None:
-        line_list.extend( [ \
-          '  if ( -e $XMLDIR/' + srcname + ' ) then',
-          '    if ( ! -e ' + testname + ' ) then',
-          '      echo "cp -f $XMLDIR/' + srcname + ' ' + testname + '"',
-          '      cp -f $XMLDIR/' + srcname + ' ' + testname + ' || exit 1',
-          '    endif',
-          '  else',
-          '    echo "*** error: the test requested to copy a ' + \
-                           'non-existent file: $XMLDIR/' + srcname + '"',
-          '    exit 1',
-          '  endif' ] )
-      else:
-        line_list.extend( [ \
-          '  set flist = ( `ls -d $XMLDIR/' + srcname + '` )',
-          '  if ( $#flist == 0 ) then',
-          '    echo "*** error: the test requested to copy a ' + \
-                           'non-existent file: $XMLDIR/' + srcname + '"',
-          '    exit 1',
-          '  else',
-          '    foreach srcf ( $flist )',
-          '      set testf = $srcf:t',
-          '      if ( ! -e $testf ) then',
-          '        echo "cp -f $srcf $testf"',
-          '        cp -f $srcf $testf || exit 1',
-          '      endif',
-          '    end',
-          '  endif' ] )
-    
-    # provide a mechanism for the launcher to run a command before
-    # executables get launched
-    
-    line_list.extend( [ \
-      '  # platform may need to run something before executing MPI programs',
-      '  if ($?PRERUN) then',
-      '    echo "$PRERUN"',
-      '    eval "$PRERUN"',
-      '  endif' ] )
-    
-    # end the if conditional on $analyze
-    line_list.extend( [ '', 'endif', '' ] )
-    
     # finally, add the main execution fragments
     
     just_analyze = 0
@@ -380,17 +271,6 @@ def writeScript( tspec, xdb, plat, \
       line_list.append('################ end analyze script')
       line_list.append('')
     
-    # provide a mechanism for the launcher to run a command after
-    # all executions have taken place
-    
-    line_list.extend( [ \
-      'if ( $analyze == 0 ) then',
-      '  # platform may need to run something to cleanup after executing MPI programs',
-      '  if ($?POSTRUN) then',
-      '    eval "$POSTRUN"',
-      '  endif',
-      'endif' ] )
-    
     # lastly, check for a diff status
     
     line_list.extend( [ \
@@ -402,21 +282,6 @@ def writeScript( tspec, xdb, plat, \
       '  exit ' + str(diffExitStatus),
       'endif',
       'echo "++++++++++++++++ SUCCESS: ' + idstr + '"' ] )
-    
-    if postclean:
-      line_list.extend( [ '',
-        '# remove all files in the test directory after a success run',
-        'echo " "',
-        'echo ">> cleaning files after successfull test..."',
-        'foreach file (`ls -a`)',
-        '  if ("$file" != "." && "$file" != ".." && \\',
-        '      "$file" != "execute.log" && "$file" != "baseline.log" && \\',
-        '      "$file" != "'+scriptbasename+'" && "$file" != "machinefile") then',
-        '    echo "rm -rf $file"',
-        '    rm -rf $file',
-        '  endif',
-        'end',
-        '' ] )
     
     line_list.append( 'exit 0' )
     
