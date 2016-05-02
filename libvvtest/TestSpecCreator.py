@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
-import os
+import os, sys
 import string, re
 import types
 
+import xmlwrapper
 import TestSpec
 import FilterExpressions
 
@@ -19,15 +20,14 @@ class TestSpecError(Exception):
 
 ###########################################################################
 
-def createTestObjects( filedoc, rootpath, filepath, \
-                       force_params=None, ufilter=None ):
+def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
     """
-    The 'filedoc' argument must be an XmlNode object which contains the test
-    file.  The 'filepath' is relative to 'rootpath' and must not be an absolute
-    filename.  If 'force_params' is not None, then any parameters in the test
-    that are in the 'force_params' dictionary have their values replaced for
-    that parameter name.  The 'ufilter' argument must be None or an
-    ExpressionSet instance.
+    The 'rootpath' is the top directory of the file scan.  The 'relpath' is
+    the name of the test file relative to 'rootpath' (it must not be an
+    absolute path).  If 'force_params' is not None, then any parameters in
+    the test that are in the 'force_params' dictionary have their values
+    replaced for that parameter name.  The 'ufilter' argument must be None
+    or an ExpressionSet instance.
     
     Returns a list of TestSpec objects, including a "parent" test if needed.
 
@@ -55,23 +55,40 @@ def createTestObjects( filedoc, rootpath, filepath, \
           ...
         </analyze>
     """
-    assert not os.path.isabs( filepath )
+    assert not os.path.isabs( relpath )
+
+    ext = os.path.splitext( relpath )[1]
     
-    nameL = testNameList( filedoc )
-    if nameL == None:
-        return []
+    fname = os.path.join( rootpath, relpath )
     
-    tL = []
-    for tname in nameL:
-        L = createTestName( tname, filedoc, rootpath, filepath,
-                            force_params, ufilter )
-        tL.extend( L )
+    if ext == '.xml':
+        
+        try:
+            filedoc = readxml( fname )
+        except xmlwrapper.XmlError:
+            raise TestSpecError( str( sys.exc_info()[1] ) )
+        
+        nameL = testNameList( filedoc )
+        if nameL == None:
+            return []
+        
+        tL = []
+        for tname in nameL:
+            L = createTestName( tname, filedoc, rootpath, relpath,
+                                force_params, ufilter )
+            tL.extend( L )
+    
+    elif ext == '.vvt':
+        pass
+
+    else:
+        raise Exception( "invalid file extension: "+ext )
+
 
     return tL
 
 
-def createTestName( tname, filedoc, rootpath, filepath,
-                    force_params, ufilter ):
+def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
     """
     """
     if ufilter == None:
@@ -94,7 +111,7 @@ def createTestName( tname, filedoc, rootpath, filepath,
     
     if len(combined) == 0:
       
-      t = TestSpec.TestSpec( tname, rootpath, filepath )
+      t = TestSpec.TestSpec( tname, rootpath, relpath )
       testL.append(t)
     
     else:
@@ -122,7 +139,7 @@ def createTestName( tname, filedoc, rootpath, filepath,
           for j in range(n):
             pdict[ kL.pop(0) ] = sL.pop(0)
         # create the test and add to test list
-        t = TestSpec.TestSpec( tname, rootpath, filepath )
+        t = TestSpec.TestSpec( tname, rootpath, relpath )
         t.setParameters( pdict )
         testL.append(t)
     
@@ -164,21 +181,22 @@ def createTestName( tname, filedoc, rootpath, filepath,
     
     return finalL
 
-
-def refreshTest( testobj, filedoc, params, ufilter=None ):
+def refreshTest( testobj, ufilter=None ):
     """
-    Parses the 'filedoc' XmlNode and resets the settings for the given test.
+    Parses the test source file and resets the settings for the given test.
     The test name is not changed.  The parameters in the test XML file are
-    not considered; instead, the given parameters will be used.  If the
-    test XML contains bad syntax, a TestSpecError is raised.
+    not considered; instead, the parameters already defined in the test
+    object are used.
+
+    If the test XML contains bad syntax, a TestSpecError is raised.
     
     Returns false if any of the filtering would exclude this test.
     """
+    filedoc = readxml( testobj.getFilename() )
+
     # run through the test name logic to check XML validity
     nameL = testNameList(filedoc)
     
-    testobj.setParameters( params )
-
     tname = testobj.getName()
     
     if not testobj.getParent():
@@ -291,7 +309,7 @@ def fromString( strid ):
           raise TestSpecError( \
                   "fromString(): corrupt or unknown string format: " + tok )
         params[ L[0] ] = L[1]
-      tspec.setParameters(params)
+      tspec.setParameters( params )
     
     for tok in qtoks:
       nvL = string.split( tok, '=', 1 )
@@ -380,7 +398,21 @@ def escape_file(s):
       else:           s2 = s2 + c
     return s2
 
+
 ###########################################################################
+
+xmldocreader = None
+
+def readxml( filename ):
+    """
+    Uses the XML reader from the xmlwrapper module to read the XML file and
+    return an XML DOM object.
+    """
+    global xmldocreader
+    if xmldocreader == None:
+        xmldocreader = xmlwrapper.XmlDocReader()
+    return xmldocreader.readDoc( filename )
+
 
 def testNameList( filedoc ):
     """

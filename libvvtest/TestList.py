@@ -3,7 +3,6 @@
 import os, sys
 import string
 
-import xmlwrapper
 import TestSpec
 import TestExec
 import TestSpecCreator
@@ -26,8 +25,6 @@ class TestList:
         self.xtlist = {}  # np -> list of TestExec objects
         
         self.ufilter = ufilter
-        
-        self.xmldocreader = None
     
     def stringFileWrite(self, filename):
         """
@@ -155,9 +152,6 @@ class TestList:
     def loadTests(self, filter_dir=None, analyze_only=0 ):
         """
         """
-        if self.xmldocreader == None:
-          self.xmldocreader = xmlwrapper.XmlDocReader()
-        
         self.active = {}
         
         subdir = None
@@ -172,10 +166,7 @@ class TestList:
         
         for xdir,t in self.filed.items():
           if self._apply_filters( xdir, t, subdir, analyze_only ):
-            doc = self.xmldocreader.readDoc( t.getFilename() )
-            keep = TestSpecCreator.refreshTest( t, doc,
-                                                t.getParameters(),
-                                                self.ufilter )
+            keep = TestSpecCreator.refreshTest( t, self.ufilter )
             
             del self.filed[xdir]
             self.scand[xdir] = t
@@ -259,11 +250,8 @@ class TestList:
         a parameter in this dictionary will take on the given values for that
         parameter.
         """
-        if self.xmldocreader == None:
-          self.xmldocreader = xmlwrapper.XmlDocReader()
-        
-        base_dir = os.path.normpath( os.path.abspath(base_directory) )
-        os.path.walk( base_dir, self._scan_recurse, (base_dir,force_params) )
+        bdir = os.path.normpath( os.path.abspath(base_directory) )
+        os.path.walk( bdir, self._scan_recurse, (bdir,force_params) )
     
     def _scan_recurse(self, argtuple, d, files):
         """
@@ -271,15 +259,15 @@ class TestList:
         tree for test XML files.  The 'base_dir' is the directory originally
         sent to the os.path.walk function.
         """
-        base_dir, force_params = argtuple
+        basedir, force_params = argtuple
         
         d = os.path.normpath(d)
         
-        if base_dir == d:
+        if basedir == d:
           reldir = '.'
         else:
-          assert base_dir+os.sep == d[:len(base_dir)+1]
-          reldir = d[len(base_dir)+1:]
+          assert basedir+os.sep == d[:len(basedir)+1]
+          reldir = d[len(basedir)+1:]
         
         # scan all files with extension "xml"; soft links to directories seem
         # to be skipped by os.path.walk so special handling is done for them
@@ -291,18 +279,20 @@ class TestList:
             # avoid descending into build and TestResults directories
             skipL.append(f)
           else:
-            rawfile = os.path.join(d,f)
-            if os.path.splitext(f)[1] == '.xml' and os.path.isfile(rawfile):
-              self.XMLread( base_dir, os.path.join(reldir, f), force_params )
-            elif os.path.islink(rawfile) and os.path.isdir(rawfile):
-              linkdirs.append(f)
+            ext = os.path.splitext(f)[1]
+            df = os.path.join(d,f)
+            if os.path.isdir(df):
+              if os.path.islink(df):
+                linkdirs.append(f)
+            elif ext in ['.xml','.vvt']:
+              self.readTestFile( basedir, os.path.join(reldir,f), force_params )
         
         # TODO: should check that the soft linked directories do not
         #       point to a parent directory of any of the directories
         #       visited thus far (to avoid an infinite scan loop)
-        #       - would have to use inodes or something because the actual
-        #         path may be the softlinked path rather than the path
-        #         obtained by following '..' all the way to root
+        #       - would have to use os.path.realpath() or something because
+        #         the actual path may be the softlinked path rather than the
+        #         path obtained by following '..' all the way to root
         
         # take the soft linked directories out of the list just in case some
         # version of os.path.walk actually does recurse into them automatically
@@ -316,33 +306,28 @@ class TestList:
         for f in linkdirs:
           os.path.walk( os.path.join(d,f), self._scan_recurse, argtuple )
     
-    def XMLread(self, basepath, xmlfile, force_params):
+    def readTestFile(self, basepath, relfile, force_params):
         """
-        Parses an XML file for test instances.  Attributes from existing
-        tests will be absorbed.
+        Initiates the parsing of a test file.  XML test descriptions may be
+        skipped if they don't appear to be a test file.  Attributes from
+        existing tests will be absorbed.
         """
         assert basepath
-        assert xmlfile
-        assert os.path.isabs(basepath)
-        assert not os.path.isabs(xmlfile)
+        assert relfile
+        assert os.path.isabs( basepath )
+        assert not os.path.isabs( relfile )
         
-        basepath = os.path.normpath(basepath)
-        xmlfile  = os.path.normpath(xmlfile)
+        basepath = os.path.normpath( basepath )
+        relfile  = os.path.normpath( relfile )
         
-        assert xmlfile
-        
-        fname = os.path.join( basepath, xmlfile )
+        assert relfile
         
         try:
-          doc = self.xmldocreader.readDoc(fname)
-          testL = TestSpecCreator.createTestObjects( doc, basepath, xmlfile,
-                                                     force_params,
-                                                     self.ufilter )
-        except xmlwrapper.XmlError, e:
-          print "*** skipping file: " + str(e)
-          testL = []
-        except TestSpecCreator.TestSpecError, e:
-          print "*** skipping file: " + fname + ": " + str(e)
+          testL = TestSpecCreator.createTestObjects(
+                        basepath, relfile, force_params, self.ufilter )
+        except TestSpecCreator.TestSpecError:
+          print "*** skipping file " + os.path.join( basepath, relfile ) + \
+                ": " + str( sys.exc_info()[1] )
           testL = []
         
         for t in testL:
@@ -358,7 +343,7 @@ class TestList:
             for n,v in tmp.getAttrs().items():
               t.setAttr(n,v)
           self.scand[xdir] = t
-    
+
     def addTest(self, t):
         """
         Add a test to the list.  Will overwrite an existing test.

@@ -62,8 +62,7 @@ fp.writelines( [
      '</rtest>\n' ] )
 fp.close()
 
-xdoc = xreader.readDoc('atest.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'atest.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'atest.xml', None, nofltr )
 for ti in tL:
   print ti
 assert len(tL) == 6
@@ -78,8 +77,7 @@ fp.writelines( [
      '  <keywords> junk1 junk2 </keywords>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad1.xml')
-try: TestSpecCreator.createTestObjects( xdoc, '.', 'bad1.xml', None, nofltr )
+try: TestSpecCreator.createTestObjects( '.', 'bad1.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -89,9 +87,8 @@ fp.writelines( [
      '  <keywords> junk1 junk2 </keywords>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad2.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad2.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad2.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -101,8 +98,7 @@ fp.writelines( [
      '  <keywords> junk1 ju/nk2 </keywords>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad3.xml')
-try: TestSpecCreator.createTestObjects( xdoc, '.', 'bad3.xml', None, nofltr )
+try: TestSpecCreator.createTestObjects( '.', 'bad3.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -112,8 +108,7 @@ fp.writelines( [
      '  <keywords> junk1 junk2 </keywords>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok1.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok1.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok1.xml', None, nofltr )
 assert len(tL) == 1
 kL = tL[0].getKeywords()
 kL.sort()
@@ -129,8 +124,7 @@ fp.writelines( [
      '  <keywords> junk2 </keywords>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok2.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok2.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok2.xml', None, nofltr )
 assert len(tL) == 1
 kL = tL[0].getKeywords()
 kL.sort()
@@ -151,8 +145,7 @@ fp.writelines( [
      '  <parameterize/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad4.xml')
-TestSpecCreator.createTestObjects( xdoc, '.', 'bad4.xml', None, nofltr )
+TestSpecCreator.createTestObjects( '.', 'bad4.xml', None, nofltr )
 
 fp = open('bad5.xml',"w")
 fp.writelines( [
@@ -161,8 +154,7 @@ fp.writelines( [
      '</rtest>\n' ] )
 fp.close()
 try:
-  xdoc = xreader.readDoc('bad5.xml')
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad5.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad5.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 except xmlwrapper.XmlError, e: print e
 else: raise Exception( "expected an exception" )
@@ -173,8 +165,7 @@ fp.writelines( [
      '  <parameterize p=" "/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad6.xml')
-try: TestSpecCreator.createTestObjects( xdoc, '.', 'bad6.xml', None, nofltr )
+try: TestSpecCreator.createTestObjects( '.', 'bad6.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -184,9 +175,8 @@ fp.writelines( [
      '  <parameterize p="val1 val/2"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad7.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad7.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad7.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -195,8 +185,7 @@ fp.writelines( [
      '<rtest name="atest">\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok3.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok3.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok3.xml', None, nofltr )
 assert len(tL) == 1
 
 fp = open('ok3a.xml',"w")
@@ -205,8 +194,7 @@ fp.writelines( [
      '  <parameterize pname="val1 val2"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok3a.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok3a.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok3a.xml', None, nofltr )
 assert len(tL) == 2
 kys = {}
 for t in tL: kys[t.getExecuteDirectory()] = None
@@ -227,8 +215,7 @@ fp.writelines( [
      '  <parameterize parm="valA"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok4.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok4.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok4.xml', None, nofltr )
 assert len(tL) == 1
 pL = paramGather(tL)
 print "param list", pL
@@ -241,8 +228,7 @@ fp.writelines( [
      '  <parameterize parm="valA valB valC"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok5.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok5.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok5.xml', None, nofltr )
 assert len(tL) == 6
 pL = paramGather(tL)
 print "param list", pL
@@ -257,8 +243,7 @@ fp.writelines( [
      '  <parameterize parm="valA"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok6.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok6.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok6.xml', None, nofltr )
 assert len(tL) == 2
 pL = paramGather(tL)
 print "param list", pL
@@ -270,8 +255,7 @@ fp.writelines( [
      '  <parameterize paramA="A1 A2" paramB="B1 B2"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok6b.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok6b.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok6b.xml', None, nofltr )
 assert len(tL) == 2
 pL = paramGather(tL)
 print "param list", pL
@@ -283,8 +267,7 @@ fp.writelines( [
      '  <parameterize paramA="A1" paramB="B1 "/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok6c.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok6c.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok6c.xml', None, nofltr )
 assert len(tL) == 1
 pL = paramGather(tL)
 print "param list", pL
@@ -297,8 +280,7 @@ fp.writelines( [
      '  <parameterize paramC="C1 C2"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok6d.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok6d.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok6d.xml', None, nofltr )
 assert len(tL) == 4
 pL = paramGather(tL)
 print "param list", pL
@@ -314,8 +296,7 @@ fp.writelines( [
      '  <parameterize paramC="C1 C2"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok6e.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok6e.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok6e.xml', None, nofltr )
 assert len(tL) == 2
 pL = paramGather(tL)
 print "param list", pL
@@ -328,8 +309,7 @@ fp.writelines( [
      '  <parameterize paramA="A1 A2" paramB="B1 "/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad7b.xml')
-try: TestSpecCreator.createTestObjects( xdoc, '.', 'bad7b.xml', None, nofltr )
+try: TestSpecCreator.createTestObjects( '.', 'bad7b.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -339,8 +319,7 @@ fp.writelines( [
      '  <parameterize paramA="" paramB=" "/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad7c.xml')
-try: TestSpecCreator.createTestObjects( xdoc, '.', 'bad7c.xml', None, nofltr )
+try: TestSpecCreator.createTestObjects( '.', 'bad7c.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -352,17 +331,16 @@ fp.writelines( [
      '  <parameterize not_keywords="fast" paramA="A1 A2" paramB="B1 B2"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok6f.xml')
 wx = FilterExpressions.WordExpression(['fast'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok6f.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok6f.xml', None, uf )
 assert len(tL) == 1
 pL = paramGather(tL)
 print "param list", pL
 assert pL[0] == 'paramA=A1.paramB=B1'
 wx = FilterExpressions.WordExpression(['medium'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok6f.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok6f.xml', None, uf )
 assert len(tL) == 2
 pL = paramGather(tL)
 print "param list", pL
@@ -379,17 +357,16 @@ fp.writelines( [
      '  <parameterize keyword="not fast" paramA="A1 A2" paramB="B1 B2"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok6g.xml')
 wx = FilterExpressions.WordExpression(['fast'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok6g.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok6g.xml', None, uf )
 assert len(tL) == 1
 pL = paramGather(tL)
 print "param list", pL
 assert pL[0] == 'paramA=A1.paramB=B1'
 wx = FilterExpressions.WordExpression(['medium'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok6g.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok6g.xml', None, uf )
 assert len(tL) == 2
 pL = paramGather(tL)
 print "param list", pL
@@ -404,8 +381,7 @@ fp.writelines( [
      '  <parameterize paramA="A1 A2" paramB="B1 B2"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok6h.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok6h.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok6h.xml', None, nofltr )
 assert len(tL) == 2
 pL = paramGather(tL)
 print "param list", pL
@@ -419,8 +395,7 @@ fp.writelines( [
      '  <parameterize paramA="A1" paramB="B1"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok6i.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok6i.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok6i.xml', None, nofltr )
 assert len(tL) == 1
 pL = paramGather(tL)
 print "param list", pL
@@ -436,9 +411,8 @@ fp.writelines( [
      '  <include platforms="some/value"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad10.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad10.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad10.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -448,9 +422,8 @@ fp.writelines( [
      '  <include platforms="" parameters="some value"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad11.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad11.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad11.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -461,9 +434,8 @@ fp.writelines( [
      '  <include platforms="" parameters="some=value =value"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad12.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad12.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad12.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -472,8 +444,7 @@ fp.writelines( [
      '<rtest name="atest">\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok7.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok7.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok7.xml', None, nofltr )
 assert len(tL) == 1
 
 fp = open('ok8.xml',"w")
@@ -482,11 +453,10 @@ fp.writelines( [
      '  <include platform=""/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok8.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok8.xml' )
+tL = TestSpecCreator.createTestObjects( '.', 'ok8.xml' )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='Dummy' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok8.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok8.xml', None, uf )
 assert len(tL) == 0
 
 fp = open('ok8a.xml',"w")
@@ -495,11 +465,10 @@ fp.writelines( [
      '  <include platforms=""/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok8a.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok8a.xml' )
+tL = TestSpecCreator.createTestObjects( '.', 'ok8a.xml' )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='Dummy' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok8a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok8a.xml', None, uf )
 assert len(tL) == 0
 
 fp = open('ok8b.xml',"w")
@@ -508,11 +477,10 @@ fp.writelines( [
      '  <include platform=""/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok8b.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok8b.xml' )
+tL = TestSpecCreator.createTestObjects( '.', 'ok8b.xml' )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='Dummy' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok8b.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok8b.xml', None, uf )
 assert len(tL) == 0
 
 fp = open('ok9.xml',"w")
@@ -521,12 +489,11 @@ fp.writelines( [
      '  <include platform="something"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok9.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok9.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok9.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok9.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok9.xml', None, uf )
 assert len(tL) == 0
 
 fp = open('ok9a.xml',"w")
@@ -535,16 +502,15 @@ fp.writelines( [
      '  <include platforms="something"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok9a.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok9a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok9a.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok9a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok9a.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( platform_name='something',
                                   platform_expr_list=['!something'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok9a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok9a.xml', None, uf )
 assert len(tL) == 0
 
 fp = open('ok10.xml',"w")
@@ -553,19 +519,18 @@ fp.writelines( [
      '  <include platform="something IRIX"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok10.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok10.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok10.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok10.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok10.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok10.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok10.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( platform_name='Linux',
                                   platform_expr_list=['IRIX','!SunOS'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok10.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok10.xml', None, uf )
 assert len(tL) == 1
 
 fp = open('ok10a.xml',"w")
@@ -574,15 +539,14 @@ fp.writelines( [
      '  <include platforms="something IRIX"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok10a.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok10a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok10a.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok10a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok10a.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok10a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok10a.xml', None, uf )
 assert len(tL) == 0
 
 fp = open('ok11.xml',"w")
@@ -591,19 +555,18 @@ fp.writelines( [
      '  <include platforms="not ( something or IRIX )"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok11.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok11.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok11.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok11.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok11.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok11.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok11.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='Linux',
                                   platform_expr_list=['Linux','!IRIX'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok11.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok11.xml', None, uf )
 assert len(tL) == 1
 
 fp = open('ok11a.xml',"w")
@@ -612,19 +575,18 @@ fp.writelines( [
      '  <include platforms="not something and not IRIX"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok11a.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok11a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok11a.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok11a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok11a.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok11a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok11a.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='Linux',
                                   platform_expr_list=['SunOS','!IRIX'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok11a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok11a.xml', None, uf )
 assert len(tL) == 1
 
 fp = open('ok12.xml',"w")
@@ -633,9 +595,8 @@ fp.writelines( [
      '  <include platforms="not dummy"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok12.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='anything' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok12.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok12.xml', None, uf )
 assert len(tL) == 1
 
 fp = open('ok13.xml',"w")
@@ -645,15 +606,14 @@ fp.writelines( [
      '  <include platforms="not theother"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok13.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok13.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok13.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok13.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok13.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='theother' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok13.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok13.xml', None, uf )
 assert len(tL) == 0
 
 fp = open('ok13a.xml',"w")
@@ -663,15 +623,14 @@ fp.writelines( [
      '  <include platforms="not theother"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok13a.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok13a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok13a.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok13a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok13a.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='theother' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok13a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok13a.xml', None, uf )
 assert len(tL) == 0
 
 fp = open('ok14.xml',"w")
@@ -681,15 +640,14 @@ fp.writelines( [
      '  <include platforms="not IRIX"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok14.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( platform_name='theother' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14.xml', None, uf )
 assert len(tL) == 0
 
 fp = open('ok14a.xml',"w")
@@ -699,15 +657,14 @@ fp.writelines( [
      '  <include platforms="not IRIX"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok14a.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14a.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14a.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( platform_name='theother' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14a.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14a.xml', None, uf )
 assert len(tL) == 0
 
 fp = open('ok14b.xml',"w")
@@ -716,12 +673,11 @@ fp.writelines( [
      '  <include options=""/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok14b.xml')
 uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14b.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14b.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14b.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14b.xml', None, uf )
 assert len(tL) == 1
 
 fp = open('ok14c.xml',"w")
@@ -730,12 +686,11 @@ fp.writelines( [
      '  <include options="opt"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok14c.xml')
 uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14c.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14c.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14c.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14c.xml', None, uf )
 assert len(tL) == 1
 
 fp = open('ok14d.xml',"w")
@@ -744,18 +699,17 @@ fp.writelines( [
      '  <include option="opt or pop"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok14d.xml')
 uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14d.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14d.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14d.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14d.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( option_list=['pop'], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14d.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14d.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( option_list=['opt','pop'], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14d.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14d.xml', None, uf )
 assert len(tL) == 1
 
 fp = open('ok14e.xml',"w")
@@ -764,15 +718,14 @@ fp.writelines( [
      '  <include platforms="PLAT" options=""/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok14e.xml')
 uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14e.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14e.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='PLAT' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14e.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14e.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='PLAT' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14e.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14e.xml', None, uf )
 assert len(tL) == 1
 
 fp = open('ok14f.xml',"w")
@@ -781,15 +734,14 @@ fp.writelines( [
      '  <include platforms="PLAT" options="opt"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok14f.xml')
 uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14f.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14f.xml', None, uf )
 assert len(tL) == 0  # the options is false
 uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14f.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14f.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='PLAT' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok14f.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok14f.xml', None, uf )
 assert len(tL) == 1
 
 fp = open('ok15.xml',"w")
@@ -799,13 +751,12 @@ fp.writelines( [
      '  <parameterize platforms="IRIX" np="1"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok15.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok15.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok15.xml', None, uf )
 assert len(tL) == 1
 assert tL[0].getParameterValue('np') == '1'
 uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok15.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok15.xml', None, uf )
 assert len(tL) == 2
 assert ( tL[0].getParameterValue('np') == '1' and \
          tL[1].getParameterValue('np') == '4' ) or \
@@ -820,12 +771,11 @@ fp.writelines( [
      '  <parameterize hsize="1.0 2.0"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok16.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok16.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok16.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok16.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok16.xml', None, uf )
 assert len(tL) == 4
 
 fp = open('ok17.xml',"w")
@@ -837,14 +787,13 @@ fp.writelines( [
      '  <parameterize platforms="IRIX"     hsize="1.0"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok17.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok17.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok17.xml', None, uf )
 assert len(tL) == 1
 assert tL[0].getParameterValue('np') == '1' and \
        tL[0].getParameterValue('hsize') == '1.0'
 uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok17.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok17.xml', None, uf )
 assert len(tL) == 4
 
 fp = open('ok18.xml',"w")
@@ -855,12 +804,11 @@ fp.writelines( [
      '  <parameterize platforms="IRIX"     hsize="1.0"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok18.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok18.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok18.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok18.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok18.xml', None, uf )
 assert len(tL) == 4
 
 print "55555555555555555555555555555555555555"
@@ -873,9 +821,8 @@ fp.writelines( [
      '  <timeout value=""/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad16.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad16.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad16.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -885,9 +832,8 @@ fp.writelines( [
      '  <timeout value="xyz"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad17.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad17.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad17.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -897,9 +843,8 @@ fp.writelines( [
      '  <timeout value="-1"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad18.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad18.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad18.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -909,8 +854,7 @@ fp.writelines( [
      '  <timeout value="240"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok20.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok20.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok20.xml', None, nofltr )
 assert len(tL) == 1
 assert tL[0].getTimeout() == 240
 
@@ -921,13 +865,12 @@ fp.writelines( [
      '  <timeout platforms="SunOS" value="300"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok23.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='anything' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok23.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok23.xml', None, uf )
 assert len(tL) == 1
 assert tL[0].getTimeout() == 240
 uf = FilterExpressions.ExpressionSet( platform_name='SunOS' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok23.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok23.xml', None, uf )
 assert len(tL) == 1
 assert tL[0].getTimeout() == 300
 
@@ -942,9 +885,8 @@ fp.writelines( [
      '  <execute name="ab/c"> # frag </execute>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad22.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad22.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad22.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -956,8 +898,7 @@ fp.writelines( [
      '  <execute expect="anyexit"> echo "dummy = $dummy" </execute>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok25.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok25.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok25.xml', None, nofltr )
 assert len(tL) == 1
 xL = tL[0].getExecutionList()
 assert len(xL) == 3
@@ -977,9 +918,8 @@ fp.writelines( [
      '  <execute ifdef="_NAME"> # frag </execute>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad22a.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad22a.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad22a.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -989,9 +929,8 @@ fp.writelines( [
      '  <execute ifdef="3NAME"> # frag </execute>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad22b.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad22b.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad22b.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -1001,9 +940,8 @@ fp.writelines( [
      '  <execute ifdef="NAME."> # frag </execute>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad22c.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad22c.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad22c.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -1013,15 +951,14 @@ fp.writelines( [
      '  <execute ifdef="VNAME"> # frag </execute>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok25a.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok25a.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok25a.xml', None, nofltr )
 assert len(tL) == 1
 t = tL[0]
 print t.getExecutionList()
 assert len( t.getExecutionList() ) == 0, \
        "VNAME should have to be in the environment"
 os.environ[ 'VNAME' ] = "somevalue"
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok25a.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok25a.xml', None, nofltr )
 assert len(tL) == 1
 t = tL[0]
 assert len( t.getExecutionList() ) == 1, \
@@ -1037,9 +974,8 @@ fp.writelines( [
      '  <copy_files>   </copy_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad23.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad23.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad23.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -1049,9 +985,8 @@ fp.writelines( [
      '  <link_files linkname="file1"> file1 file2 </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad24.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad24.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad24.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -1061,9 +996,8 @@ fp.writelines( [
      '  <link_files> /path/file1 </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad24b.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad24b.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad24b.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -1073,9 +1007,8 @@ fp.writelines( [
      '  <link_files linkname="/path/file1"> file1 </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad24c.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad24c.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad24c.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -1085,9 +1018,8 @@ fp.writelines( [
      '  <link_files linkname="/path/file1"> /apath/file1 </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad24d.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad24d.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad24d.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -1099,8 +1031,7 @@ fp.writelines( [
      '  <link_files test_name="file3.in"> file3 </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok26b.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok26b.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok26b.xml', None, nofltr )
 assert len(tL) == 1
 cpL = tL[0].getCopyFiles()
 cpL.sort()
@@ -1122,8 +1053,7 @@ fp.writelines( [
      '  <link_files linkname="file3.in"> file3 </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok26.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok26.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok26.xml', None, nofltr )
 assert len(tL) == 1
 cpL = tL[0].getCopyFiles()
 cpL.sort()
@@ -1146,8 +1076,7 @@ fp.writelines( [
      '  <link_files parameters="np=4" linkname="file"> file.4 </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok27.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok27.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok27.xml', None, nofltr )
 assert len(tL) == 2
 for t in tL:
   if t.getParameterValue('np') == '1':
@@ -1176,8 +1105,7 @@ fp.writelines( [
      '  <copy_files parameters="np=4" linkname="file"> file.4 </copy_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok28.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok28.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok28.xml', None, nofltr )
 assert len(tL) == 2
 for t in tL:
   if t.getParameterValue('np') == '1':
@@ -1204,9 +1132,8 @@ fp.writelines( [
      '  <baseline destination="file1" file="file1 file2"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad25.xml')
 try:
-  TestSpecCreator.createTestObjects( xdoc, '.', 'bad25.xml', None, nofltr )
+  TestSpecCreator.createTestObjects( '.', 'bad25.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
 
@@ -1216,8 +1143,7 @@ fp.writelines( [
      '  <baseline file="afile.exo"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok29.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok29.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok29.xml', None, nofltr )
 assert len(tL) == 1
 bL = tL[0].getBaselineFiles()
 assert len(bL) == 1
@@ -1229,8 +1155,7 @@ fp.writelines( [
      '  <baseline file="afile.exo" destination="bfile.exo"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok30.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok30.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok30.xml', None, nofltr )
 assert len(tL) == 1
 bL = tL[0].getBaselineFiles()
 assert len(bL) == 1
@@ -1243,8 +1168,7 @@ fp.writelines( [
      '  <baseline> set dummy = 10 </baseline>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok31.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok31.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok31.xml', None, nofltr )
 assert len(tL) == 1
 bL = tL[0].getBaselineFiles()
 assert len(bL) == 1
@@ -1260,8 +1184,7 @@ fp.writelines( [
      '  <baseline parameters="np=1" file="file.exo" destination="file.base_exo"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok32.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok32.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok32.xml', None, nofltr )
 assert len(tL) == 2
 for t in tL:
   bL = t.getBaselineFiles()
@@ -1280,16 +1203,15 @@ fp.writelines( [
      '  <baseline platforms="not SunOS" file="file.exo" destination="file.base_exo"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok33.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='SunOS' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok33.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok33.xml', None, uf )
 assert len(tL) == 1
 assert len( tL[0].getBaselineFragments() ) == 0
 bL = tL[0].getBaselineFiles()
 assert len(bL) == 1
 assert bL[0] == ('file.exo', 'file.SunOS_exo')
 uf = FilterExpressions.ExpressionSet( platform_name='Linux' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok33.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok33.xml', None, uf )
 assert len(tL) == 1
 assert len( tL[0].getBaselineFragments() ) == 0
 bL = tL[0].getBaselineFiles()
@@ -1305,8 +1227,7 @@ fp.writelines( [
      '<rtest name="atest">\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad26.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'bad26.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'bad26.xml', None, nofltr )
 assert len(tL) == 1
 fp = open('bad26.xml',"w")
 fp.writelines( [
@@ -1314,8 +1235,7 @@ fp.writelines( [
      '  <parameterize np="1"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad26.xml')
-TestSpecCreator.refreshTest( tL[0], xdoc, {'np':'1'} )
+TestSpecCreator.refreshTest( tL[0] )
 
 fp = open('bad27.xml',"w")
 fp.writelines( [
@@ -1323,8 +1243,7 @@ fp.writelines( [
      '  <parameterize np="1"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad27.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'bad27.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'bad27.xml', None, nofltr )
 assert len(tL) == 1
 fp = open('bad27.xml',"w")
 fp.writelines( [
@@ -1332,8 +1251,7 @@ fp.writelines( [
      '  <parameterize np="4"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad27.xml')
-TestSpecCreator.refreshTest( tL[0], xdoc, {'np':'1'} )
+TestSpecCreator.refreshTest( tL[0] )
 
 fp = open('bad28.xml',"w")
 fp.writelines( [
@@ -1341,8 +1259,7 @@ fp.writelines( [
      '  <parameterize np="1 4"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad28.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'bad28.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'bad28.xml', None, nofltr )
 assert len(tL) == 2
 fp = open('bad28.xml',"w")
 fp.writelines( [
@@ -1351,9 +1268,8 @@ fp.writelines( [
      '  <parameterize N="1 4"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad28.xml')
 for t in tL:
-  TestSpecCreator.refreshTest( t, xdoc, {'np':'1'} )
+  TestSpecCreator.refreshTest( t )
 
 fp = open('bad29.xml',"w")
 fp.writelines( [
@@ -1361,8 +1277,7 @@ fp.writelines( [
      '  <parameterize np="1 4"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad29.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'bad29.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'bad29.xml', None, nofltr )
 assert len(tL) == 2
 fp = open('bad29.xml',"w")
 fp.writelines( [
@@ -1370,9 +1285,8 @@ fp.writelines( [
      '  <parameterize np="1 4"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad29.xml')
 for t in tL:
-  TestSpecCreator.refreshTest( t, xdoc, {'np':'1'} )
+  TestSpecCreator.refreshTest( t )
 
 fp = open('bad30.xml',"w")
 fp.writelines( [
@@ -1380,8 +1294,7 @@ fp.writelines( [
      '  <parameterize np="1 4"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad30.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'bad30.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'bad30.xml', None, nofltr )
 assert len(tL) == 2
 fp = open('bad30.xml',"w")
 fp.writelines( [
@@ -1389,9 +1302,8 @@ fp.writelines( [
      '  <parameterize np="1 4"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad30.xml')
 for t in tL:
-  try: TestSpecCreator.refreshTest( t, xdoc, {'np':'1'} )
+  try: TestSpecCreator.refreshTest( t, {'np':'1'} )
   except TestSpecCreator.TestSpecError, e: print e
   else: raise Exception( "expected a TestSpecError exception" )
 
@@ -1407,9 +1319,8 @@ fp.writelines( [
      '  <link_files linkname="file"> lnfile </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok34.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='Linux' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok34.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok34.xml', None, uf )
 assert len(tL) == 2
 for t in tL:
   print t
@@ -1443,11 +1354,10 @@ fp.writelines( [
      '  <link_files> lnfile </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok34.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='Linux' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok34.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok34.xml', None, uf )
 for t in tL:
-  TestSpecCreator.refreshTest( t, xdoc, {'np':'1'}, uf )
+  TestSpecCreator.refreshTest( t, uf )
   print t
   kL = t.getKeywords()
   kL.sort()
@@ -1520,21 +1430,20 @@ fp.writelines( [
      '  <include options="2D and ( tridev or tri8 )"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok35.xml')
 uf = FilterExpressions.ExpressionSet( option_list=[] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok35.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( option_list=['2D','tridev'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok35.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( option_list=['2D','tri8'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok35.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
 assert len(tL) == 1
 uf = FilterExpressions.ExpressionSet( option_list=['3D','tri8'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok35.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( option_list=['tri8','2D','tridev'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok35.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
 assert len(tL) == 1
 
 print "12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12"
@@ -1545,8 +1454,7 @@ fp.writelines( [
      '  <analyze>echo "hello from analyze"</analyze>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok38.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok38.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok38.xml', None, nofltr )
 assert len(tL) == 1, "expected 1 test, not " + str(len(tL))
 print "print with analyze 3:", tL
 # if no params, the analyze gets lumped in with the execute fragments
@@ -1560,8 +1468,7 @@ fp.writelines( [
      '  <analyze>echo "hello from analyze"</analyze>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok39.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok39.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok39.xml', None, nofltr )
 assert len(tL) == 3
 print "print with parameterize/analyze 4:", tL
 if tL[0].getAnalyzeScript() != None:
@@ -1589,29 +1496,28 @@ fp.writelines( [
      '  <parameterize not_keywords="fast" np="1 4"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok41.xml')
 wx = FilterExpressions.WordExpression(['fast'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok41.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok41.xml', None, uf )
 assert len(tL) == 1
 wx = FilterExpressions.WordExpression(['medium'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok41.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok41.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet()
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok41.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok41.xml', None, uf )
 assert len(tL) == 2
 wx = FilterExpressions.WordExpression(['fast/medium'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok41.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok41.xml', None, uf )
 assert len(tL) == 1
 wx = FilterExpressions.WordExpression(['medium/long'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok41.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok41.xml', None, uf )
 assert len(tL) == 2
 wx = FilterExpressions.WordExpression(['medium/fast'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok41.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok41.xml', None, uf )
 assert len(tL) == 1
 
 # check the backward compatible keywords="not ..." mechanism
@@ -1623,29 +1529,28 @@ fp.writelines( [
      '  <parameterize keywords="not fast" np="1 4"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok41b.xml')
 wx = FilterExpressions.WordExpression(['fast'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok41b.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok41b.xml', None, uf )
 assert len(tL) == 1
 wx = FilterExpressions.WordExpression(['medium'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok41b.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok41b.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet()
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok41b.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok41b.xml', None, uf )
 assert len(tL) == 2
 wx = FilterExpressions.WordExpression(['fast/medium'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok41b.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok41b.xml', None, uf )
 assert len(tL) == 1
 wx = FilterExpressions.WordExpression(['medium/long'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok41b.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok41b.xml', None, uf )
 assert len(tL) == 2
 wx = FilterExpressions.WordExpression(['medium/fast'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok41b.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok41b.xml', None, uf )
 assert len(tL) == 1
 
 fp = open('ok42.xml',"w")
@@ -1656,18 +1561,17 @@ fp.writelines( [
      '  <parameterize keywords="medium" np="1 2 4"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok42.xml')
 wx = FilterExpressions.WordExpression(['fast'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok42.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok42.xml', None, uf )
 assert len(tL) == 2
 wx = FilterExpressions.WordExpression(['medium'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok42.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok42.xml', None, uf )
 assert len(tL) == 3
 wx = FilterExpressions.WordExpression(['long'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok42.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok42.xml', None, uf )
 assert len(tL) == 1
 assert len(tL[0].getParameters()) == 0
 
@@ -1678,15 +1582,14 @@ fp.writelines( [
      '  <parameterize platforms="Linux or tbird" np="1 2 4"/>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok43.xml')
 uf = FilterExpressions.ExpressionSet( platform_name='SunOS' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok43.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok43.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet( platform_name='Linux' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok43.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok43.xml', None, uf )
 assert len(tL) == 3
 uf = FilterExpressions.ExpressionSet( platform_name='tbird' )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok43.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok43.xml', None, uf )
 assert len(tL) == 3
 
 print "13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13"
@@ -1699,21 +1602,20 @@ fp.writelines( [
      '  <analyze keywords="fast">analyze fast</analyze>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok44.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok44.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok44.xml', None, nofltr )
 assert len(tL) == 1
 print tL[0]
 assert not tL[0].getAnalyzeScript()
 wx = FilterExpressions.WordExpression(['fast'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok44.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok44.xml', None, uf )
 assert len(tL) == 1
 print tL
 L = filter( lambda T: T[1].strip() == "analyze fast", tL[0].getExecutionList() )
 assert len(L) > 0
 wx = FilterExpressions.WordExpression(['long'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok44.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok44.xml', None, uf )
 assert len(tL) == 1
 print tL
 L = filter( lambda T: T[1].strip() == "analyze long", tL[0].getExecutionList() )
@@ -1728,28 +1630,27 @@ fp.writelines( [
      '  <analyze not_keywords="long">analyze not long</analyze>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok44b.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok44b.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, nofltr )
 assert len(tL) == 1
 print tL[0]
 L = filter( lambda T: T[1].strip() == "analyze not long", tL[0].getExecutionList() )
 assert len(L) > 0
 wx = FilterExpressions.WordExpression(['fast'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok44b.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, uf )
 assert len(tL) == 1
 print tL
 L = filter( lambda T: T[1].strip() == "analyze not long", tL[0].getExecutionList() )
 assert len(L) > 0
 wx = FilterExpressions.WordExpression(['long'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok44b.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, uf )
 assert len(tL) == 1
 print tL
 L = filter( lambda T: T[1].strip() == "analyze long", tL[0].getExecutionList() )
 assert len(L) > 0
 uf = FilterExpressions.ExpressionSet()
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok44b.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, uf )
 assert len(tL) == 1
 print tL
 L = filter( lambda T: T[1].strip() == "analyze not long", tL[0].getExecutionList() )
@@ -1770,51 +1671,50 @@ fp.writelines( [
      '  <link_files> regexfile.txt </link_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok46.xml')
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['One'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok46.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
 assert len(tL) == 2
 print tL[0]
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['three'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok46.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['line two'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok46.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['line one'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok46.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['LINE *THEN'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok46.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok46.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['line $'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok46.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['line$'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok46.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.nun','*.txt'],
                                   search_patterns=['LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok46.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.nun','*.two'],
                                   search_patterns=['LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok46.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['nomatch','LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok46.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
 assert len(tL) == 2
 
 fp = open('ok47.xml',"w")
@@ -1824,51 +1724,50 @@ fp.writelines( [
      '  <copy_files> regexfile.txt </copy_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok47.xml')
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['One'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok47.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
 assert len(tL) == 2
 print tL[0]
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['three'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok47.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['line two'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok47.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['line one'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok47.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['LINE *THEN'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok47.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok47.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['line $'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok47.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['line$'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok47.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.nun','*.txt'],
                                   search_patterns=['LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok47.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
 assert len(tL) == 2
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.nun','*.two'],
                                   search_patterns=['LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok47.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
 assert len(tL) == 0
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['nomatch','LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok47.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
 assert len(tL) == 2
 
 fp = open('ok48.xml',"w")
@@ -1878,10 +1777,9 @@ fp.writelines( [
      '  <copy_files> noexist.txt </copy_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok48.xml')
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['One'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok48.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok48.xml', None, uf )
 assert len(tL) == 0
 
 fp = open('ok49.xml',"w")
@@ -1891,10 +1789,9 @@ fp.writelines( [
      '  <copy_files> $NAME.txt </copy_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok49.xml')
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['One'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok49.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok49.xml', None, uf )
 assert len(tL) == 2
 print tL[0]
 
@@ -1905,10 +1802,9 @@ fp.writelines( [
      '  <copy_files> ${NAME}file.txt </copy_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok50.xml')
 uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
                                   search_patterns=['One'] )
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok50.xml', None, uf )
+tL = TestSpecCreator.createTestObjects( '.', 'ok50.xml', None, uf )
 assert len(tL) == 2
 print tL[0]
 
@@ -1950,8 +1846,7 @@ fp.writelines( [
      '  <glob_link parameters="np=4"> notme*_glob.txt </glob_link>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok51.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok51.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok51.xml', None, nofltr )
 assert len(tL) == 1
 L = tL[0].getCopyFiles() ; L.sort()
 assert L == [('glob*.txt',None)]
@@ -1975,8 +1870,7 @@ fp.writelines( [
      '  <source_files> notme*_glob.txt cond*_glob.txt </source_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('ok52.xml')
-tL = TestSpecCreator.createTestObjects( xdoc, '.', 'ok52.xml', None, nofltr )
+tL = TestSpecCreator.createTestObjects( '.', 'ok52.xml', None, nofltr )
 assert len(tL) == 1
 L = tL[0].getSourceFiles() ; L.sort()
 assert L == ['baseline_glob.base_txt', 'cond*_glob.txt',
@@ -1990,7 +1884,6 @@ fp.writelines( [
      '  <source_files parameters="np=1"> glob*.txt </source_files>\n',
      '</rtest>\n' ] )
 fp.close()
-xdoc = xreader.readDoc('bad31.xml')
-try: TestSpecCreator.createTestObjects( xdoc, '.', 'bad31.xml', None, nofltr )
+try: TestSpecCreator.createTestObjects( '.', 'bad31.xml', None, nofltr )
 except TestSpecCreator.TestSpecError, e: print e
 else: raise Exception( "expected a TestSpecError exception" )
