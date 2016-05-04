@@ -772,7 +772,7 @@ def writeCommandInfo( test_dir, plat, perms ):
       if expr and expr.strip():
         fp.write( 'KEYWORDS=' + expr + '\n' )
       if optdict.has_key('-p'):
-        fp.write( 'PARAMETERS=' + string.join( optdict['-p'] ) + '\n' )
+        fp.write( 'PARAMETERS=' + str( optdict['-p'] ) + '\n' )
       if config.get('exepath'):
         fp.write( \
             'PROJECT=' + os.path.abspath( config.get('exepath') ) + '\n' )
@@ -846,7 +846,7 @@ def readCommandInfo():
               keyword_expr.append( expr, 'and' )
           
         elif kvpair[0] == 'PARAMETERS':
-          L = string.split( kvpair[1] )
+          L = eval( kvpair[1] )
           if optdict.has_key('-p'): optdict['-p'].extend(L)
           else:                     optdict['-p'] = L
         elif kvpair[0] == 'PROJECT':

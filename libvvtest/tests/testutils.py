@@ -73,7 +73,12 @@ def writescript( fname, content ):
 def run_cmd( cmd, directory=None ):
     """
     """
-    print3( 'RUN:', cmd )
+    if type(cmd) == type(''):
+      print3( 'RUN:', cmd )
+      cmdL = cmd.split()
+    else:
+      print3( 'RUN:', ' '.join( cmd ) )
+      cmdL = cmd
     
     saved = None
     if directory:
@@ -86,7 +91,6 @@ def run_cmd( cmd, directory=None ):
       os.close(pread)  # child does not read from parent
       os.dup2(pwrite, sys.stdout.fileno())
       os.dup2(pwrite, sys.stderr.fileno())
-      cmdL = cmd.split()
       os.execvpe( cmdL[0], cmdL, os.environ )
     os.close(pwrite)   # parent does not write to child
     out = ''
@@ -105,20 +109,24 @@ def run_cmd( cmd, directory=None ):
       return True, out
     return False, out
 
-def run_vvtest( argstr='', ignore_errors=0, directory=None ):
+def run_vvtest( args='', ignore_errors=0, directory=None ):
     """
     Runs vvtest with the given argument string and returns
       ( command output, num pass, num diff, num fail, num notrun )
+    The 'args' can be either a string or a list.
     If the exit status is not zero, an assertion is raised.
     """
     if directory:
       curdir = os.getcwd()
       os.chdir( directory )
-    x,out = run_cmd( vvtest + ' ' + argstr )
+    if type(args) == type(''):
+      x,out = run_cmd( vvtest + ' ' + args )
+    else:
+      x,out = run_cmd( [vvtest]+args )
     if directory:
       os.chdir( curdir )
     if not x and not ignore_errors:
-      raise Exception( "vvtest command failed: " + vvtest + ' ' + argstr )
+      raise Exception( "vvtest command failed: " + vvtest + ' ' + args )
     return out,numpass(out),numdiff(out),numfail(out),numnotrun(out)
 
 def platform_name( test_out ):
