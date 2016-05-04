@@ -279,12 +279,12 @@ class TestList:
             # avoid descending into build and TestResults directories
             skipL.append(f)
           else:
-            ext = os.path.splitext(f)[1]
+            bn,ext = os.path.splitext(f)
             df = os.path.join(d,f)
             if os.path.isdir(df):
               if os.path.islink(df):
                 linkdirs.append(f)
-            elif ext in ['.xml','.vvt']:
+            elif bn and ext in ['.xml','.vvt']:
               self.readTestFile( basedir, os.path.join(reldir,f), force_params )
         
         # TODO: should check that the soft linked directories do not

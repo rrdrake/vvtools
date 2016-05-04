@@ -59,6 +59,11 @@ def writefile( fname, content, header=None ):
     fp.close()
 
 def writescript( fname, content ):
+    """
+    """
+    if content[0] == '\n':
+      # remove the first line if it is empty
+      content = content[1:]
     writefile( fname, content )
     perm = stat.S_IMODE( os.stat(fname)[stat.ST_MODE] )
     perm = perm | stat.S_IXUSR

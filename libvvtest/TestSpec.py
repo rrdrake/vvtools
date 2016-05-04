@@ -64,6 +64,12 @@ class TestSpec:
         if it has no parent.
         """
         return self.parent_xdir
+
+    def getScriptForm(self):
+        """
+        Returns the run script form, such as "xml", "bash", or "python".
+        """
+        return self.form
     
     def getKeywords(self, result_attrs=0):
         """
@@ -244,6 +250,7 @@ class TestSpec:
         """
         assert not os.path.isabs(filepath)
         
+        self.form = 'xml'
         self.name = name
         self.rootpath = rootpath
         self.filepath = filepath
@@ -296,6 +303,11 @@ class TestSpec:
     
     # construction methods
     
+    def setScriptForm(self, form):
+        """
+        """
+        self.form = form
+
     def setParent(self, parent_xdir):
         """
         """
@@ -432,7 +444,7 @@ class TestSpec:
         file to be copied, linked, and baselined.)
         """
         self.src_files = [] + files
-    
+
     def __copy_list(self, L):
         newL = None
         if L != None:
@@ -458,6 +470,7 @@ class TestSpec:
         values.  It is the origin of the parameters forming the children tests.
         """
         ts = TestSpec( self.name, self.rootpath, self.filepath )
+        ts.form = self.form
         ts.keywords = self.__copy_list(self.keywords)
         ts.setParameters({})  # skip ts.params
         ts.analyze = self.analyze

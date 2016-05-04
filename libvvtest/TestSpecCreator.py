@@ -57,9 +57,11 @@ def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
     """
     assert not os.path.isabs( relpath )
 
-    ext = os.path.splitext( relpath )[1]
+    if ufilter == None:
+      ufilter = FilterExpressions.ExpressionSet()
     
     fname = os.path.join( rootpath, relpath )
+    ext = os.path.splitext( relpath )[1]
     
     if ext == '.xml':
         
@@ -79,7 +81,11 @@ def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
             tL.extend( L )
     
     elif ext == '.vvt':
-        pass
+        
+        vspecs = ScriptReader( fname )
+        t = TestSpec.TestSpec( vspecs.basename(), rootpath, relpath )
+        t.setScriptForm( 'script' )
+        tL = [t]
 
     else:
         raise Exception( "invalid file extension: "+ext )
@@ -91,9 +97,6 @@ def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
 def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
     """
     """
-    if ufilter == None:
-      ufilter = FilterExpressions.ExpressionSet()
-    
     if not parseIncludeTest( filedoc, tname, ufilter ):
       return []
     
@@ -112,6 +115,7 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
     if len(combined) == 0:
       
       t = TestSpec.TestSpec( tname, rootpath, relpath )
+      t.setScriptForm( 'xml' )
       testL.append(t)
     
     else:
@@ -141,6 +145,7 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
         # create the test and add to test list
         t = TestSpec.TestSpec( tname, rootpath, relpath )
         t.setParameters( pdict )
+        t.setScriptForm( 'xml' )
         testL.append(t)
     
     # parse and set the rest of the XML file for each test
@@ -397,6 +402,126 @@ def escape_file(s):
       elif c == '\\': s2 = s2 + '\\\\'
       else:           s2 = s2 + c
     return s2
+
+
+###########################################################################
+
+class ScriptReader:
+    
+    def __init__(self, filename):
+        """
+        """
+        self.filename = None
+
+        if filename:
+            self.readfile( filename )
+
+    def basename(self):
+        """
+        Returns the base name of the file without the extension.
+        """
+        return os.path.splitext( os.path.basename( self.filename ) )[0]
+
+    vvtpat = re.compile( '[ \t]*#[ \t]*VVT[ \t]*:' )
+    cmtpat = re.compile( '[ \t]*#+$' )
+
+    def readfile(self, filename):
+        """
+        """
+        self.shebang = None
+
+        fp = open( filename )
+
+        self.specL = []
+        
+        try:
+            
+            line = fp.readline()
+            lineno = 1
+
+            if line[:2] == '#!':
+                self.shebang = line.rstrip()
+                line = fp.readline()
+                lineno += 1
+            
+            spec = None
+            while line:
+                done,spec = self.parse_line( line, spec, lineno )
+                if done:
+                    break
+                line = fp.readline()
+                lineno += 1
+
+            if spec != None:
+                self.specL.append( spec )
+        
+        except:
+            fp.close()
+            raise
+        
+        fp.close()
+
+        self.process_specs()
+
+        self.filename = filename
+    
+    def parse_line(self, line, spec, lineno):
+        """
+        Parse a line of the script file.
+        """
+        done = False
+        line = line.strip()
+        if line and not ScriptReader.cmtpat.match( line ):
+            if line[0] != '#':
+                done = True
+            m = ScriptReader.vvtpat.match( line )
+            if m != None:
+                spec = self.parse_spec( line[m.end():], spec, lineno )
+            else:
+                # not #VVT: and not an empty comment or empty line
+                done = True
+        
+        elif spec != None:
+            # an empty line or comment stops any continuation
+            self.specL.append( spec )
+            spec = None
+
+        return done,spec
+
+    def parse_spec(self, line, spec, lineno):
+        """
+        Parse the contents of the line after a #VVT: marker.
+        """
+        line = line.strip()
+        if line:
+            if line[0] == ':':
+                # continuation of previous spec
+                if spec == None:
+                    raise TestSpecError( "A #VVT:: continuation was found" + \
+                            " but there is nothing to continue, line " + \
+                            str( lineno ) )
+                else:
+                    spec[1] += ' ' + line
+            elif spec == None:
+                # no existing spec and new spec found
+                spec = [ lineno, line ]
+            else:
+                # spec exists and new spec found
+                self.specL.append( spec )
+                spec = [ lineno, line ]
+        elif spec != None:
+            # an empty line stops any continuation
+            self.specL.append( spec )
+            spec = None
+
+        return spec
+
+    def process_specs(self):
+        """
+        Turns the list of string specifications into keywords with attributes
+        and content.
+        """
+        pass
 
 
 ###########################################################################

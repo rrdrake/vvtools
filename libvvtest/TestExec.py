@@ -37,6 +37,8 @@ class TestExec:
         self.pid = 0
         self.xdir = None
         self.children = None  # parent tests will have a list of their children
+
+        self.cmdL = None  # the first part of the launch command
     
     def init(self, test_dir, platform, commondb, config ):
         """
@@ -56,25 +58,37 @@ class TestExec:
         if self.perms != None:
           self.perms.set( self.atest.getExecuteDirectory() )
         
-        script_file = os.path.join( self.xdir, 'runscript' )
+        form = self.atest.getScriptForm()
+
+        if form == 'xml':
+          
+          script_file = os.path.join( self.xdir, 'runscript' )
+          
+          if config.get('refresh') or not os.path.exists(script_file):
+            
+            assert os.path.isabs( self.atest.getRootpath() )
+            
+            srcdir = os.path.join( self.atest.getRootpath(),
+                                   os.path.dirname(self.atest.getFilepath()) )
+            srcdir = os.path.normpath( srcdir )
+            
+            cshScriptWriter.writeScript( self.atest, commondb, self.platform,
+                                         config.get('toolsdir'),
+                                         config.get('exepath'),
+                                         srcdir,
+                                         config.get('onopts'),
+                                         config.get('offopts'),
+                                         script_file )
+            if self.perms != None:
+              self.perms.set( os.path.abspath( script_file ) )
+
+          self.cmdL = ['/bin/csh', '-f', './runscript']
         
-        if config.get('refresh') or not os.path.exists(script_file):
+        else:
           
-          assert os.path.isabs( self.atest.getRootpath() )
-          
-          srcdir = os.path.join( self.atest.getRootpath(),
-                                 os.path.dirname(self.atest.getFilepath()) )
-          srcdir = os.path.normpath( srcdir )
-          
-          cshScriptWriter.writeScript( self.atest, commondb, self.platform,
-                                       config.get('toolsdir'),
-                                       config.get('exepath'),
-                                       srcdir,
-                                       config.get('onopts'),
-                                       config.get('offopts'),
-                                       script_file )
-          if self.perms != None:
-            self.perms.set( os.path.abspath( script_file ) )
+          # TODO: generalize this
+          bname = os.path.basename( self.atest.getFilepath() )
+          self.cmdL = [ './' + bname ]
     
     def start(self, baseline=0):
         """
@@ -82,7 +96,7 @@ class TestExec:
         """
         assert self.pid == 0
         
-        cmd_list = ['/bin/csh', '-f', './runscript']
+        cmd_list = [] + self.cmdL
         
         np = int( self.atest.getParameters().get('np', 0) )
         
@@ -99,7 +113,8 @@ class TestExec:
         if hasattr(self.plugin_obj, "mpi_opts") and self.plugin_obj.mpi_opts:
           cmd_list.extend(['--mpirun_opts', self.plugin_obj.mpi_opts])
         
-        if self.config.get('analyze'): cmd_list.append('--analyze')
+        if self.config.get('analyze'):
+          cmd_list.append('--analyze')
         
         self.tzero = time.time()
         

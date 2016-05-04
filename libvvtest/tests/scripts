@@ -1,0 +1,52 @@
+#!/usr/bin/env python
+
+import os, sys
+import time
+import glob
+
+# this will os.chdir() to a subdirectory
+from testutils import *
+
+
+def main():
+    """
+    """
+    argL = get_arg_list()
+
+    if len(argL) == 0:
+        argL = """test01
+               """.split()
+
+    cwd = os.getcwd()
+    for func in argL:
+        os.chdir( cwd )
+        rmallfiles()
+        time.sleep(1)
+        print3( '====> ', func )
+        eval( func+'()' )
+
+
+########################################################################
+
+def test01():
+    """
+    an executable script as a test file
+    """
+    writescript( 'hello.vvt', """
+        #!/bin/sh
+        echo "hello from the hello test script"
+        """ )
+    os.chmod
+
+    out,np,nd,nf,nn = run_vvtest()
+    tdir = results_dir()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert len( greptestlist(out,'pass.*hello') ) == 1
+
+    assert len( filegrep( tdir+'/hello/execute.log',
+                          "hello from the hello test script" ) ) == 1
+
+
+########################################################################
+
+main()
