@@ -476,8 +476,10 @@ class TestExec:
           if f != 'execute.log' and f != 'baseline.log' and \
              f != 'runscript' and f != 'machinefile':
             fp = os.path.join( self.xdir, f )
-            if os.path.isdir(fp):
-              shutil.rmtree( f )
+            if os.path.islink( fp ):
+              os.remove( fp )
+            elif os.path.isdir( fp ):
+              shutil.rmtree( fp )
             else:
               os.remove( fp )
 

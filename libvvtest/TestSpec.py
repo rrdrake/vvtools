@@ -464,10 +464,10 @@ class TestSpec:
             newD[n] = v
         return newD
     
-    def makeParent(self, paramD):
+    def makeParent(self):
         """
-        The 'paramD' is a dict mapping parameter name to a list of parameter
-        values.  It is the origin of the parameters forming the children tests.
+        Creates a TestSpec instance and copies all data members of this test
+        except the parameters.  The new test instance is returned.
         """
         ts = TestSpec( self.name, self.rootpath, self.filepath )
         ts.form = self.form
@@ -480,7 +480,6 @@ class TestSpec:
         ts.cpfiles = self.__copy_list(self.cpfiles)
         ts.baseline = self.__copy_list(self.baseline)
         ts.attrs = self.__copy_dictionary(self.attrs)
-        ts.paramD = {} ; ts.paramD.update( paramD )
         return ts
 
 for c in varname_chars_list:

@@ -100,63 +100,44 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
     if not parseIncludeTest( filedoc, tname, ufilter ):
       return []
     
-    combined = parseTestParameters( filedoc, tname, ufilter, force_params )
+    paramD = parseTestParameters( filedoc, tname, ufilter, force_params )
     
     keywords = parseKeywords( filedoc, tname, ufilter )
     
-    if not ufilter.getAttr('include_all',0):
-      if not ufilter.satisfies_nonresults_keywords( keywords ):
-        return []
+    do_all = ufilter.getAttr('include_all',0)
+
+    if not do_all and not ufilter.satisfies_nonresults_keywords( keywords ):
+      return []
     
     # create the test instances
     
     testL = []
     
-    if len(combined) == 0:
+    if len(paramD) == 0:
       
-      t = TestSpec.TestSpec( tname, rootpath, relpath )
-      t.setScriptForm( 'xml' )
-      testL.append(t)
+      if do_all or ufilter.evaluate_parameters( {} ):
+        t = TestSpec.TestSpec( tname, rootpath, relpath )
+        t.setScriptForm( 'xml' )
+        testL.append(t)
     
     else:
       
-      # take a cartesian product of all the parameter values
-      
-      # first, make a list containing each parameter value list
-      plist_keys = []
-      plist = []
-      for pname,pL in combined.items():
-        plist_keys.append(pname)
-        plist.append( pL )
-      
-      # then loop over each set in the cartesian product
-      dimset = range(len(plist))
-      for set in _cartesianProduct(plist):
-        # load the parameter values into a dictionary; note that the combined
-        # values are used which may have multiple parameter values embedded
-        pdict = {}
-        for i in dimset:
-          kL = string.split( plist_keys[i], ',' )
-          sL = string.split( set[i], ',' )
-          assert len(kL) == len(sL)
-          n = len(kL)
-          for j in range(n):
-            pdict[ kL.pop(0) ] = sL.pop(0)
+      # take a cartesian product of all the parameter values but apply
+      # parameter filtering (this may change the paramD)
+      instanceL = cartesian_product_and_filter( paramD, ufilter )
+
+      for pdict in instanceL:
         # create the test and add to test list
         t = TestSpec.TestSpec( tname, rootpath, relpath )
         t.setParameters( pdict )
         t.setScriptForm( 'xml' )
         testL.append(t)
-    
+      
     # parse and set the rest of the XML file for each test
     
     finalL = []
     parent = None
     for t in testL:
-      
-      if not ufilter.getAttr('include_all',0):
-        if not ufilter.evaluate_parameters(t.getParameters()):
-          continue
       
       t.setKeywords( keywords )
       
@@ -166,12 +147,13 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
       parseFiles        ( t, filedoc, ufilter )
       parseBaseline     ( t, filedoc, ufilter )
       
-      if ufilter.getAttr('include_all',0) or ufilter.file_search(t):
+      if do_all or ufilter.file_search(t):
         
         finalL.append(t)
         
         if parent == None and t.getAnalyzeScript() != None:
-          parent = t.makeParent( combined )
+          parent = t.makeParent()
+          parent.setParameterSet( paramD )
           if parent.getExecuteDirectory() == t.getExecuteDirectory():
             # a test with no parameters but with an analyze script
             parent = None
@@ -185,6 +167,7 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
       finalL.append( parent )
     
     return finalL
+
 
 def refreshTest( testobj, ufilter=None ):
     """
@@ -204,12 +187,13 @@ def refreshTest( testobj, ufilter=None ):
     
     tname = testobj.getName()
     
-    if not testobj.getParent():
-      combined = parseTestParameters( filedoc, tname, ufilter, None )
-      testobj.setParameterSet( combined )
-    
     if ufilter == None:
       ufilter = FilterExpressions.ExpressionSet()
+    
+    if not testobj.getParent():
+      paramD = parseTestParameters( filedoc, tname, ufilter, None )
+      cartesian_product_and_filter( paramD, ufilter )
+      testobj.setParameterSet( paramD )
     
     keep = True
     
@@ -629,10 +613,34 @@ def parseTestParameters( filedoc, tname, ufilter, force_params ):
     be created for the combination paramA=A1, paramB=B2, for example.
     
     Returns a dictionary mapping combined parameter names to lists of the
-    combined string values.  The separater in the combined case is a comma.
+    combined values.  For example,
+
+        <parameterize pA="value1 value2"/>
+
+    would return the dict
+
+        { (pA,) : [ (value1,), (value2,) ] }
+
+    And this
+        
+        <parameterize pA="value1 value2"/>
+        <parameterize pB="val1 val2"/>
+
+    would return
+
+        { (pA,) : [ (value1,), (value2,) ],
+          (pB,) : [ (val1,), (val2,) ] }
+
+    And this
+
+        <parameterize pA="value1 value2" pB="val1 val2"/>
+    
+    would return
+
+        { (pA,pB) : [ (value1,val1), (value2,val2) ] }
     """
     
-    combined = {}
+    paramD = {}
     if force_params == None:
       force_params = {}
     
@@ -686,22 +694,18 @@ def parseTestParameters( filedoc, tname, ufilter, force_params ):
         pL.append( L )
       
       if len(pL) > 0 and not skip:
+        # TODO: the parameter names should really be sorted here in order
+        #       to avoid duplicates if another parameterize comes along
+        #       with a different order of the same names
+        # the name(s) and each of the values are tuples
         if len(pL) == 1:
-          combined[ pL[0][0] ] = pL[0][1:]
+          L = pL[0]
+          paramD[ (L[0],) ] = [ (v,) for v in L[1:] ]
         else:
-          # combine the parameter values
-          oneL = []
-          for L in pL:
-            if len(oneL) == 0:
-              oneL.extend( L )
-            else:
-              newL = []
-              for i in range(len(L)):
-                newL.append( oneL.pop(0) + ',' + L.pop(0) )
-              oneL = newL
-          combined[ oneL[0] ] = oneL[1:]
+          L = zip( *pL )
+          paramD[ L[0] ] = L[1:]
     
-    return combined
+    return paramD
 
 
 def testname_ok( xmlnode, tname, ufilter ):
@@ -1310,6 +1314,58 @@ def parseBaseline( t, filedoc, ufilter ):
         script = string.strip( nd.getContent() )
         if script:
           t.addBaselineFragment( script )
+
+
+def cartesian_product_and_filter( paramD, ufilter ):
+    """
+    Takes a cartesian product of the parameters in 'paramD', applies parameter
+    filtering, then collects the cartesian product as a list of param=value
+    dictionaries (which is returned).  Note that the 'paramD' argument is
+    modified in-place to remove parameters that are filtered out.
+    """
+    do_all = ufilter.getAttr('include_all',0)
+
+    # first, make a list containing each parameter value list
+    plist_keys = []
+    plist_vals = []
+    for pname,pL in paramD.items():
+      plist_keys.append(pname)
+      plist_vals.append( pL )
+    
+    instanceL = []
+    paramD_filtered = {}
+    
+    # then loop over each set in the cartesian product
+    dimvals = range(len(plist_vals))
+    for vals in _cartesianProduct(plist_vals):
+      # load the parameter values into a dictionary; note that any combined
+      # values are used which may have multiple parameter values embedded
+      pdict = {}
+      for i in dimvals:
+        kL = plist_keys[i]
+        sL = vals[i]
+        assert len(kL) == len(sL)
+        n = len(kL)
+        for j in range(n):
+          pdict[ kL[j] ] = sL[j]
+      
+      if do_all or ufilter.evaluate_parameters( pdict ):
+        
+        instanceL.append( pdict )
+        
+        for i in dimvals:
+          kL = plist_keys[i]
+          sL = vals[i]
+          if kL in paramD_filtered:
+            paramD_filtered[kL].append( sL )
+          else:
+            paramD_filtered[kL] = [ sL ]
+
+    # replace paramD parameters with a filtered set
+    paramD.clear()
+    paramD.update( paramD_filtered )
+
+    return instanceL
 
 
 def _cartesianProduct(lists, current=[], idx=0):

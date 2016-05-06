@@ -120,13 +120,15 @@ def run_vvtest( args='', ignore_errors=0, directory=None ):
       curdir = os.getcwd()
       os.chdir( directory )
     if type(args) == type(''):
-      x,out = run_cmd( vvtest + ' ' + args )
+      cmd = vvtest + ' ' + args
+      x,out = run_cmd( cmd )
     else:
+      cmd = ' '.join( [vvtest]+args )
       x,out = run_cmd( [vvtest]+args )
     if directory:
       os.chdir( curdir )
     if not x and not ignore_errors:
-      raise Exception( "vvtest command failed: " + vvtest + ' ' + args )
+      raise Exception( "vvtest command failed: " + cmd )
     return out,numpass(out),numdiff(out),numfail(out),numnotrun(out)
 
 def platform_name( test_out ):

@@ -14,7 +14,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02 test03 test04 test05 test06
+        argL = """test01 test02 test03 test04 test05 test06 test07 test08
                """.split()
 
     savedir = os.getcwd()
@@ -32,13 +32,11 @@ def test01():
     """
     nominal parameterize usage
     """
-
     writefile( 'basic.xml', """
         <rtest name="basic">
           <parameterize np="1 4 8"/>
           <execute> echo "execute basic2 np = $np" </execute>
-        </rtest>
-    """)
+        </rtest>""" )
     
     out,np,nd,nf,nn = run_vvtest( '-p np<8 -P np=1' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
@@ -89,8 +87,7 @@ def test02():
           <parameterize np="1 4"/>
           <parameterize dt="0.1 0.01"/>
           <execute> echo "execute basic np = $np dt = $dt" </execute>
-        </rtest>
-    """)
+        </rtest>""" )
 
     out,np,nd,nf,nn = run_vvtest()
     assert np == 4 and nd == 0 and nf == 0 and nn == 0
@@ -144,7 +141,7 @@ def test03():
           <keywords> foobar </keywords>
           <parameterize/>
           <execute> echo "execute basic3 np = $np" </execute>
-        </rtest>""")
+        </rtest>""" )
 
     out,np,nd,nf,nn = run_vvtest()
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
@@ -217,16 +214,22 @@ def test05():
     
     out,np,nd,nf,nn = run_vvtest()
     assert np == 4 and nd == 0 and nf == 0 and nn == 0
+
+    tdir = results_dir()
     
     out,np,nd,nf,nn = run_vvtest( '-F -p AA=2' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+    os.chdir( tdir+'/params.AA=2.BB=bar' )
+    out,np,nd,nf,nn = run_vvtest( '-F' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
     
     
 #######################################################################
 
 def test06():
     """
-    an analyze section has the keywords available to it
+    an analyze section has the parameters available
     """
     writefile( 'basic.xml', """
         <rtest name="basic">
@@ -237,7 +240,7 @@ def test06():
             echo "access PARAM_np = $PARAM_np"
             echo "access PARAM_dt = $PARAM_dt"
           </analyze>
-        </rtest> """)
+        </rtest> """ )
     
     out,np,nd,nf,nn = run_vvtest()
     assert np == 5 and nd == 0 and nf == 0 and nn == 0
@@ -262,7 +265,7 @@ def test06():
           <analyze>
             echo "access PARAM_np_dt = $PARAM_np_dt"
           </analyze>
-        </rtest> """)
+        </rtest> """ )
     
     out,np,nd,nf,nn = run_vvtest()
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
@@ -300,6 +303,43 @@ def test07():
     os.chdir( tdir+'/basic' )
     out,np,nd,nf,nn = run_vvtest( '-F' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+
+def test08():
+    """
+    an analyze section sees restricted parameters
+    """
+    writefile( 'basic.xml', """
+        <rtest name="basic">
+          <parameterize isize="1 2 4"/>
+          <execute> echo "execute basic isize = $isize" </execute>
+          <analyze>
+            echo "access PARAM_isize = $PARAM_isize"
+          </analyze>
+        </rtest> """ )
+    
+    out,np,nd,nf,nn = run_vvtest( ['-p','isize<=2 or not isize'] )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+    tdir = results_dir()
+    assert os.path.exists( tdir+'/basic' )
+    L = filegrep( tdir+'/basic/execute.log', "access PARAM_isize" )
+    assert len(L) == 1
+    s = L[0]
+    ps = L[0].split('=',1)[1]
+    pL = ps.strip().split()
+    assert pL == ['1', '2']
+
+    os.chdir( tdir+'/basic' )
+    out,np,nd,nf,nn = run_vvtest( '-F' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    
+    L = filegrep( 'execute.log', "access PARAM_isize" )
+    assert len(L) == 1
+    s = L[0]
+    ps = L[0].split('=',1)[1]
+    pL = ps.strip().split()
+    assert pL == ['1', '2']
 
 
 #####################################################################

@@ -256,14 +256,11 @@ def writeScript( tspec, xdb, plat, \
       if len(D) > 0:
         # provide the parameter names and values that formed the children tests
         for n,L in D.items():
-          if ',' in n:
-            n2 = '_'.join( n.split(',') )
-            L2 = [ '/'.join( v.split(',') ) for v in L ]
-            line_list.append( 'set PARAM_'+n2+' = ( ' + ' '.join(L2) + ' )' )
-            line_list.append( 'echo "PARAM_'+n2+' = $PARAM_'+n2+'"' )
-          else:
-            line_list.append( 'set PARAM_'+n+' = ( ' + ' '.join(L) + ' )' )
-            line_list.append( 'echo "PARAM_'+n+' = $PARAM_'+n+'"' )
+          assert type(n) == type(())
+          n2 = '_'.join( n )
+          L2 = [ '/'.join( v ) for v in L ]
+          line_list.append( 'set PARAM_'+n2+' = ( ' + ' '.join(L2) + ' )' )
+          line_list.append( 'echo "PARAM_'+n2+' = $PARAM_'+n2+'"' )
         line_list.append('')
 
       line_list.extend( string.split( tspec.getAnalyzeScript(), os.linesep ) )
