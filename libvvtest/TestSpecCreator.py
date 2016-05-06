@@ -1357,7 +1357,8 @@ def cartesian_product_and_filter( paramD, ufilter ):
           kL = plist_keys[i]
           sL = vals[i]
           if kL in paramD_filtered:
-            paramD_filtered[kL].append( sL )
+            if sL not in paramD_filtered[kL]:  # avoid duplicates
+              paramD_filtered[kL].append( sL )
           else:
             paramD_filtered[kL] = [ sL ]
 

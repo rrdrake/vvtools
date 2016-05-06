@@ -244,17 +244,31 @@ def test06():
     
     out,np,nd,nf,nn = run_vvtest()
     assert np == 5 and nd == 0 and nf == 0 and nn == 0
+
     tdir = results_dir()
-    L = filegrep( tdir + '/basic/execute.log', 'PARAM_np' )
-    assert len(L) == 2 and L[0].find( '1' ) > 0 and L[0].find( '4' ) > 0
-    assert L[1].find( '1' ) > 0 and L[1].find( '4' ) > 0
+
     L = filegrep( tdir + '/basic/execute.log', 'access PARAM_np' )
-    assert len(L) == 1 and L[0].find( '1' ) > 0 and L[0].find( '4' ) > 0
-    L = filegrep( tdir + '/basic/execute.log', 'PARAM_dt' )
-    assert len(L) == 2 and L[0].find( '0.1' ) > 0 and L[0].find( '0.01' ) > 0
-    assert L[1].find( '0.1' ) > 0 and L[1].find( '0.01' ) > 0
+    assert len(L) == 1
+    pL = L[0].split( '=', 1 )[1].strip().split()
+    assert pL == ['1','4']
     L = filegrep( tdir + '/basic/execute.log', 'access PARAM_dt' )
-    assert len(L) == 1 and L[0].find( '0.1' ) > 0 and L[0].find( '0.01' ) > 0
+    assert len(L) == 1
+    pL = L[0].split( '=', 1 )[1].strip().split()
+    assert pL == ['0.1','0.01']
+
+    cwd = os.getcwd()
+    os.chdir( tdir+'/basic' )
+    out,np,nd,nf,nn = run_vvtest( '-F' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    L = filegrep( 'execute.log', 'access PARAM_np' )
+    assert len(L) == 1
+    pL = L[0].split( '=', 1 )[1].strip().split()
+    assert pL == ['1','4']
+    L = filegrep( 'execute.log', 'access PARAM_dt' )
+    assert len(L) == 1
+    pL = L[0].split( '=', 1 )[1].strip().split()
+    assert pL == ['0.1','0.01']
+    os.chdir( cwd )
     
     rmallfiles()
     
@@ -269,11 +283,18 @@ def test06():
     
     out,np,nd,nf,nn = run_vvtest()
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    L = filegrep( tdir+'/zip/execute.log', 'PARAM_np_dt' )
-    assert len(L) == 2 and L[0].find( '1/0.1' ) > 0 and L[0].find( '4/0.01' ) > 0
-    assert L[1].find( '1/0.1' ) > 0 and L[1].find( '4/0.01' ) > 0
     L = filegrep( tdir+'/zip/execute.log', 'access PARAM_np_dt' )
-    assert len(L) == 1 and L[0].find( '1/0.1' ) > 0 and L[0].find( '4/0.01' ) > 0
+    assert len(L) == 1
+    pL = L[0].split( '=', 1 )[1].strip().split()
+    assert pL == ['1/0.1','4/0.01']
+    
+    os.chdir( tdir+'/zip' )
+    out,np,nd,nf,nn = run_vvtest( '-F' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    L = filegrep( 'execute.log', 'access PARAM_np_dt' )
+    assert len(L) == 1
+    pL = L[0].split( '=', 1 )[1].strip().split()
+    assert pL == ['1/0.1','4/0.01']
 
 
 #######################################################################
