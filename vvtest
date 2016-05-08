@@ -1139,20 +1139,13 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
     while 1:
       
       new_run_list = []
-      doneL = []
       for t in run_list:
         if t.poll():
-          doneL.append( TestSpecCreator.toString(t.atest) + os.linesep )
-          print "%-12s" % "finished:", XstatusString(t, 0, test_dir, cwd)
+          print "%-12s" % "finished:", XstatusString( t, 0, test_dir, cwd )
+          tlist.AppendTestResult( t.atest )
           done_list.append(t)
         else:
           new_run_list.append(t)
-      if len(doneL) > 0:
-        # append the test lines to the done file
-        fp = open( tfile, "a" )
-        for s in doneL:
-          fp.write( s )
-        fp.close()
       run_list = new_run_list
       
       if len(run_list) == 0 and tlist.numTestExec() == 0:
@@ -1581,11 +1574,10 @@ class Pipelines:
           self.do_queue_pipe( -1, analyzeL, qsubids, commonopts )
         
         if analyzeL == None:
-          fn = os.path.join( self.test_dir, testlist_name )
           L = qsubids.keys() ; L.sort()
           for i in L:
             incl = self.filename( testlist_name, i, relative=True )
-            self.tlist.AddIncludeFile( fn, incl )
+            self.tlist.AddIncludeFile( incl )
         
         if self.perms != None:
             for f in os.listdir( self.test_dir ):
@@ -1693,32 +1685,16 @@ def saveResults( tlist, plat, test_dir, tag, inprogress=False ):
     if rdir == None or not os.path.isdir(rdir):
       raise Exception( "invalid testing directory: " + str(rdir) )
     
-    # uses the minimum date of all the tests to determine the date stamp
-    curdate = time.time()
-    mindate = curdate
-    tr = results.TestResults()
-    for t in tlist.getActiveTests():
-      tr.addTest(t)
-      d = t.getAttr('xdate',-1)
-      if d > 0:
-        mindate = min( mindate, d )
+    datestamp = tlist.getDateStamp( time.time() )
     
-    if mindate == curdate:
-      # no test was started, so no date is available from the test list;
-      # use the date stamp on the testlist file instead
-      if test_dir != None:
-        tl = os.path.join( test_dir, testlist_name )
-        if os.path.exists(tl):
-          mindate = os.path.getmtime(tl)
-      else:
-        raise Exception( \
-               "Could not determine date stamp for test results file name" )
-    
-    datestr = time.strftime( "%Y_%m_%d", time.localtime(mindate) )
+    datestr = time.strftime( "%Y_%m_%d", time.localtime( datestamp ) )
     L = ['results',datestr,pname,optstag]
     if tag != None: L.append(tag)
     fname = os.path.join( rdir, string.join( L, '.' ) )
     
+    tr = results.TestResults()
+    for t in tlist.getActiveTests():
+      tr.addTest(t)
     mach = os.uname()[1]
     tr.writeResults( fname, pname, cplr, mach, test_dir, inprogress )
 

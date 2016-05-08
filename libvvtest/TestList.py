@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import os, sys
-import string
+import time
 
 import TestSpec
 import TestExec
@@ -14,11 +14,13 @@ class TestList:
     file and to read from a test XML file.
     """
     
-    version = '28'
+    version = '29'
     
     def __init__(self, ufilter=None):
         
-        self.write_version = TestList.version
+        self.filename = None
+        self.datestamp = None
+
         self.filed = {}  # TestSpec xdir -> TestSpec object
         self.scand = {}  # TestSpec xdir -> TestSpec object
         self.active = {}  # TestSpec xdir -> TestSpec object
@@ -26,112 +28,67 @@ class TestList:
         
         self.ufilter = ufilter
     
-    def stringFileWrite(self, filename):
+    def stringFileWrite(self, filename, datestamp=None):
         """
         Writes the tests in this container to the given filename.  All tests
         are written, even those that were not executed (were filtered out).
         """
-        f = self.openFileForWrite(filename)
-        for t in self.filed.values():
-          f.write( TestSpecCreator.toString(t) + os.linesep )
-        for t in self.scand.values():
-          f.write( TestSpecCreator.toString(t) + os.linesep )
-        f.close()
-    
-    def AddIncludeFile(self, filename, include_file):
-        """
-        Appends the file 'filename' with a marker that causes the
-        readFileLines() method to also read the given file 'include_file'.
-        """
-        s = '\n# INCLUDE ' + include_file + '\n'
-        fp = open( filename, 'a' )
-        fp.write( s )
-        fp.close()
-    
-    def openFileForWrite(self, filename):
-        """
-        Opens and writes the file header.
-        """
-        filename = os.path.normpath( filename )
-        d,b = os.path.split( filename )
+        self.filename = os.path.normpath( filename )
+
+        d,b = os.path.split( self.filename )
         if d and d != '.':
           # allow that one directory level must be created
           if not os.path.exists(d):
             os.mkdir( d )
-        fp = open( filename, 'w' )
-        fp.write("\n# Version " + TestList.version + "\n\n")
-        return fp
-    
-    def readFileLines(self, filename):
-        """
-        Opens the file name and reads and returns its test lines.
-        """
-        fp = open(filename, 'r')
         
-        # read the header, if any
+        fp = open( self.filename, 'w' )
+        fp.write( "\n#VVT: Version = " + TestList.version + "\n" )
+
+        if datestamp == None:
+          datestamp = time.time()
+        self.datestamp = datestamp
+        fp.write( "#VVT: Date = " + time.ctime( datestamp ) + "\n\n" )
         
-        self.write_version = 0
-        while 1:
-          line = fp.readline()
-          if line:
-            line = string.strip(line)
-            if line[0:10] == "# Version ":
-              # use the version for backward compatibility logic
-              self.write_version = int( string.strip(line[10:] ) )
-              line = fp.readline()
-              break
-            elif line[0:13] == "### PipeLine ":
-              # TODO: this method for PipeLine include files is deprecated;
-              #       remove after a month or so [Apr 04, 2016]
-              fp.close()
-              lineL = []
-              wv = self.write_version
-              for qid in string.split(line[13:]):
-                f = filename + '.' + qid
-                if os.path.exists(f):
-                  lineL.extend( self.readFileLines(f) )
-                  wv = max( wv, self.write_version )
-              self.write_version = wv
-              return lineL
-            elif line and line[0] != '#':
-              break
+        for t in self.filed.values():
+          fp.write( TestSpecCreator.toString(t) + os.linesep )
         
-        # collect all the test lines in the file
-        
-        lineL = []
-        while line:
-          line = string.strip(line)
-          if line.startswith( "# INCLUDE " ):
-            # read the contents of the included file name
-            f = line[10:].strip()
-            if not os.path.isabs(f):
-              # a relative path is relative to the original file directory
-              d = os.path.dirname( filename )
-              f = os.path.join( d, f )
-            if os.path.exists(f):
-              inclL = self.readFileLines(f)
-              lineL.extend( inclL )
-          elif line and line[0] != "#":
-            lineL.append( line )
-          line = fp.readline()
+        for t in self.scand.values():
+          fp.write( TestSpecCreator.toString(t) + os.linesep )
         
         fp.close()
-        
-        return lineL
+    
+    def AddIncludeFile(self, include_file):
+        """
+        Appends the file 'filename' with a marker that causes the
+        _read_file_lines() method to also read the given file 'include_file'.
+        """
+        assert self.filename
+        fp = open( self.filename, 'a' )
+        fp.write( '\n# INCLUDE ' + include_file + '\n' )
+        fp.close()
+    
+    def AppendTestResult(self, tspec):
+        """
+        Appends the given file with the name and attributes of the given
+        TestSpec object.
+        """
+        assert self.filename
+        fp = open( self.filename, 'a' )
+        fp.write( TestSpecCreator.toString( tspec ) + '\n' )
+        fp.close()
     
     def readFile(self, filename):
         """
         Read test list from a file.  Existing TestSpec objects have their
         attributes overwritten, but new TestSpec objects are not created.
         """
-        lineL = self.readFileLines(filename)
+        self.filename = os.path.normpath( filename )
+
+        vers,lineL = self._read_file_lines(filename)
         
-        if len(lineL) > 0 and self.write_version < 12:
-          print "*** error: cannot read version " + \
-                       str(self.write_version) + \
-                " test results files with this version of the test harness"
-          print "    (or maybe the file is corrupt: " + filename + ")"
-          sys.exit(1)
+        if len(lineL) > 0 and vers < 12:
+          raise Exception( "invalid test list file format version, " + \
+                           str( vers ) + '; corrupt file? ' + filename )
         
         # record all the test lines in the file
         
@@ -148,6 +105,71 @@ class TestList:
                 t2.setAttr(k,v)
             else:
               self.filed[xdir] = t
+
+    def getDateStamp(self, default=None):
+        """
+        Return the date of the last stringFileWrite() or the date read in by
+        readFile().  If neither of those were issued, the 'default' argument
+        is returned.
+        """
+        if self.datestamp:
+          return self.datestamp
+        return default
+
+    def _read_file_lines(self, filename):
+        """
+        Opens the file name, reads the test lines, and returns the file
+        format version and the test line list.
+        """
+        fp = open( filename, 'r' )
+        
+        # read the header, if any
+        
+        self.datestamp = None
+        vers = 0
+        line = fp.readline()
+        while line:
+          line = line.strip()
+          if line[0:10] == "# Version ":
+            # TODO: an older format, remove after a few months [May 2016]
+            vers = int( line[10:].strip() )
+            line = fp.readline()
+            break
+          elif line.startswith( '#VVT: Version' ):
+            L = line.split( '=', 1 )
+            if len(L) == 2:
+              vers = int( L[1].strip() )
+          elif line.startswith( '#VVT: Date' ):
+            L = line.split( '=', 1 )
+            if len(L) == 2:
+              tup = time.strptime( L[1].strip() )
+              self.datestamp = time.mktime( tup )
+          elif line and line[0] != '#':
+            break
+          line = fp.readline()
+        
+        # collect all the test lines in the file
+        
+        lineL = []
+        while line:
+          line = line.strip()
+          if line.startswith( "# INCLUDE " ):
+            # read the contents of the included file name
+            f = line[10:].strip()
+            if not os.path.isabs(f):
+              # a relative path is relative to the original file directory
+              d = os.path.dirname( filename )
+              f = os.path.join( d, f )
+            if os.path.exists(f):
+              inclL = self._read_file_lines(f)
+              lineL.extend( inclL )
+          elif line and line[0] != "#":
+            lineL.append( line )
+          line = fp.readline()
+        
+        fp.close()
+        
+        return vers, lineL
     
     def loadTests(self, filter_dir=None, analyze_only=0 ):
         """
