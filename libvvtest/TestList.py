@@ -161,7 +161,7 @@ class TestList:
               d = os.path.dirname( filename )
               f = os.path.join( d, f )
             if os.path.exists(f):
-              inclL = self._read_file_lines(f)
+              v,inclL = self._read_file_lines(f)
               lineL.extend( inclL )
           elif line and line[0] != "#":
             lineL.append( line )
