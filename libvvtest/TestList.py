@@ -32,6 +32,9 @@ class TestList:
         """
         Writes the tests in this container to the given filename.  All tests
         are written, even those that were not executed (were filtered out).
+
+        A date stamp is written to the file.  If 'datestamp' is None, then
+        the current time is used.
         """
         self.filename = os.path.normpath( filename )
 
@@ -81,6 +84,9 @@ class TestList:
         """
         Read test list from a file.  Existing TestSpec objects have their
         attributes overwritten, but new TestSpec objects are not created.
+
+        If this object does not already have a date stamp, then the stamp
+        contained in 'filename' will be loaded and set.
         """
         self.filename = os.path.normpath( filename )
 
@@ -109,8 +115,8 @@ class TestList:
     def getDateStamp(self, default=None):
         """
         Return the date of the last stringFileWrite() or the date read in by
-        readFile().  If neither of those were issued, the 'default' argument
-        is returned.
+        the first readFile().  If neither of those were issued, the 'default'
+        argument is returned.
         """
         if self.datestamp:
           return self.datestamp
@@ -140,10 +146,12 @@ class TestList:
             if len(L) == 2:
               vers = int( L[1].strip() )
           elif line.startswith( '#VVT: Date' ):
-            L = line.split( '=', 1 )
-            if len(L) == 2:
-              tup = time.strptime( L[1].strip() )
-              self.datestamp = time.mktime( tup )
+            if self.datestamp == None:
+              # only load the date stamp once
+              L = line.split( '=', 1 )
+              if len(L) == 2:
+                tup = time.strptime( L[1].strip() )
+                self.datestamp = time.mktime( tup )
           elif line and line[0] != '#':
             break
           line = fp.readline()
