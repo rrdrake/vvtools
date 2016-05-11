@@ -20,9 +20,10 @@ class TestList:
         
         self.filename = None
         self.datestamp = None
+        self.finish = None
 
-        self.filed = {}  # TestSpec xdir -> TestSpec object
-        self.scand = {}  # TestSpec xdir -> TestSpec object
+        self.filetests = {}  # TestSpec xdir -> TestSpec object
+        self.scantests = {}  # TestSpec xdir -> TestSpec object
         self.active = {}  # TestSpec xdir -> TestSpec object
         self.xtlist = {}  # np -> list of TestExec objects
         
@@ -52,10 +53,10 @@ class TestList:
         self.datestamp = datestamp
         fp.write( "#VVT: Date = " + time.ctime( datestamp ) + "\n\n" )
         
-        for t in self.filed.values():
+        for t in self.filetests.values():
           fp.write( TestSpecCreator.toString(t) + os.linesep )
         
-        for t in self.scand.values():
+        for t in self.scantests.values():
           fp.write( TestSpecCreator.toString(t) + os.linesep )
         
         fp.close()
@@ -72,7 +73,7 @@ class TestList:
     
     def AppendTestResult(self, tspec):
         """
-        Appends the given file with the name and attributes of the given
+        Appends the current filename with the name and attributes of the given
         TestSpec object.
         """
         assert self.filename
@@ -80,6 +81,20 @@ class TestList:
         fp.write( TestSpecCreator.toString( tspec ) + '\n' )
         fp.close()
     
+    def writeFinished(self, datestamp=None):
+        """
+        Appends the current filename with a finish marker that contains the
+        given 'datestamp', or the current date if that is None.
+        """
+        assert self.filename
+
+        if datestamp == None:
+          datestamp = time.time()
+        
+        fp = open( self.filename, 'a' )
+        fp.write( '\n#VVT: Finish = ' + time.ctime( datestamp ) + '\n' )
+        fp.close()
+
     def readFile(self, filename):
         """
         Read test list from a file.  Existing TestSpec objects have their
@@ -105,12 +120,15 @@ class TestList:
             print "WARNING: reading file", filename, "string", line + ":", e
           else:
             xdir = t.getExecuteDirectory()
-            t2 = self.scand.get( xdir, None )
+            t2 = self.scantests.get( xdir, None )
             if t2 != None:
+              # test has been generated/refreshed from the test source;
+              # overwrite its attributes from the file read test
               for k,v in t.getAttrs().items():
                 t2.setAttr(k,v)
             else:
-              self.filed[xdir] = t
+              # this test created from a test list, not from the test source
+              self.filetests[xdir] = t
 
     def getDateStamp(self, default=None):
         """
@@ -122,6 +140,22 @@ class TestList:
           return self.datestamp
         return default
 
+    def getFinishDate(self, default=None):
+        """
+        Return the date on the finish mark as contained in the file and read
+        in by readFile().  If no finish mark was found, 'default' is returned.
+        """
+        if self.finish:
+          return self.finish
+        return default
+
+    def scanFile(self, filename):
+        """
+        Reads through the file and records the date stamp and finish date, but
+        does not construct any tests.
+        """
+        self._read_file_lines( filename )
+
     def _read_file_lines(self, filename):
         """
         Opens the file name, reads the test lines, and returns the file
@@ -131,7 +165,6 @@ class TestList:
         
         # read the header, if any
         
-        self.datestamp = None
         vers = 0
         line = fp.readline()
         while line:
@@ -152,6 +185,13 @@ class TestList:
               if len(L) == 2:
                 tup = time.strptime( L[1].strip() )
                 self.datestamp = time.mktime( tup )
+          elif line.startswith( '#VVT: Finish' ):
+            # if there are no tests in this file, the finish mark is
+            # seen during the header read
+            L = line.split( '=', 1 )
+            if len(L) == 2:
+              tup = time.strptime( L[1].strip() )
+              self.finish = time.mktime( tup )
           elif line and line[0] != '#':
             break
           line = fp.readline()
@@ -171,6 +211,11 @@ class TestList:
             if os.path.exists(f):
               v,inclL = self._read_file_lines(f)
               lineL.extend( inclL )
+          elif line.startswith( '#VVT: Finish' ):
+            L = line.split( '=', 1 )
+            if len(L) == 2:
+              tup = time.strptime( L[1].strip() )
+              self.finish = time.mktime( tup )
           elif line and line[0] != "#":
             lineL.append( line )
           line = fp.readline()
@@ -190,16 +235,18 @@ class TestList:
           if subdir == '' or subdir == '.':
             subdir = None
         
-        for xdir,t in self.scand.items():
+        # tests created from the test source do not need to be refreshed
+        for xdir,t in self.scantests.items():
           if self._apply_filters( xdir, t, subdir, analyze_only ):
             self.active[ xdir ] = t
         
-        for xdir,t in self.filed.items():
+        # tests read from a test list file may need to be refreshed
+        for xdir,t in self.filetests.items():
           if self._apply_filters( xdir, t, subdir, analyze_only ):
             keep = TestSpecCreator.refreshTest( t, self.ufilter )
             
-            del self.filed[xdir]
-            self.scand[xdir] = t
+            del self.filetests[xdir]
+            self.scantests[xdir] = t
             if keep:
               self.active[ xdir ] = t
     
@@ -361,27 +408,28 @@ class TestList:
           testL = []
         
         for t in testL:
-          # absorb attributes of an existing test (if any) and add test
+          # this new test is ignored if it was already read from source
+          # (or a different test source but the same relative path from root)
           xdir = t.getExecuteDirectory()
-          tmp = self.filed.get( xdir, None )
-          if tmp != None:
-            for n,v in tmp.getAttrs().items():
-              t.setAttr(n,v)
-            del self.filed[xdir]
-          tmp = self.scand.get( xdir, None )
-          if tmp != None:
-            for n,v in tmp.getAttrs().items():
-              t.setAttr(n,v)
-          self.scand[xdir] = t
+          t2 = self.scantests.get( xdir, None )
+          if t2 == None:
+            t3 = self.filetests.get( xdir, None )
+            if t3 != None:
+              # this test was read from a test list file; use the new test
+              # instance but take on the attributes from the test list
+              for n,v in tmp.getAttrs().items():
+                t.setAttr(n,v)
+              del self.filetests[xdir]
+            self.scantests[xdir] = t
 
     def addTest(self, t):
         """
         Add a test to the list.  Will overwrite an existing test.
         """
         xdir = t.getExecuteDirectory()
-        self.scand[xdir] = t
-        if self.filed.has_key(xdir):
-          del self.filed[xdir]
+        self.scantests[xdir] = t
+        if self.filetests.has_key(xdir):
+          del self.filetests[xdir]
     
     def createTestExecs(self, test_dir, platform, config, perms):
         """
@@ -403,7 +451,7 @@ class TestList:
         xtD = {}
         for t in self.active.values():
           
-          assert self.scand.has_key( t.getExecuteDirectory() )
+          assert self.scantests.has_key( t.getExecuteDirectory() )
           
           xt = TestExec.TestExec( t, perms )
           

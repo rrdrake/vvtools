@@ -814,7 +814,7 @@ def parseIncludeTest( filedoc, tname, ufilter ):
     if not ufilter.evaluate_platform_include( pev.satisfies_platform ):
       return 0
     
-    # second, evaluate based on the "options" attribute of "include"
+    # second, evaluate based on the "options" attribute of <include>
     for nd in filedoc.matchNodes(['include$']):
       
       if nd.hasAttr( 'parameters' ) or nd.hasAttr( 'parameter' ):

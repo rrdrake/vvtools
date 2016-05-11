@@ -61,7 +61,7 @@ DESCRIPTION
       
       Only those tests are run that show "notrun" or "notdone" and that
       satisfy the filtering options.  However, if the -k or -K options are
-      used, they take precedence.  Also, if the -F option is used, all the
+      used, they take precedence.  Also, if the -R option is used, all the
       tests are run after being filtered by -kK keyword options.
       
       3. Display information on a previous test run.  The same on/off
@@ -197,10 +197,6 @@ OPTIONS
             in any of the input files, then the test is included; otherwise it
             is filtered out.  This search is case insensitive.
       
-      -F    Force tests.  If a test has been already been run, then by default
-            it will not be run again.  This option forces all such tests to be
-            run again.
-
       -j directory
             Passed along to the test launch scripts for use in finding the
             executables to run.  This defines the PROJECT variable available
@@ -227,9 +223,21 @@ OPTIONS
             Only those tests that "pass" are cleaned out after they run.  The
             execute.log file is not removed.
       
-      -A    Force inactive tests.  If a test has been marked inactive by the
-            include/exclude XML tags, this option ignores the mark and the
-            test will appear active.
+      -A    Ignore platform restrictions.  Tests can be excluded by platform
+            name in the test specification file.  Using -A causes any such
+            exclusions to be ignored.
+
+      -R    Rerun tests.  If a test has been run and completes, then by default
+            it will not be run again.  This option causes all such tests to be
+            run again.  (This was the -F option, now deprecated.)
+
+      --force
+            Force vvtest to run.  When vvtest finishes running tests, a mark
+            is placed in the testlist file.  If another vvtest execution is
+            started while the first is still running, the second will refuse
+            to run because it cannot find the mark.  It is possible that vvtest
+            dies badly and the mark is never placed (and never will be).  So
+            vvtest can be forced to run in this case by using --force.
 
       -M directory
             Use the given directory to actually contain the test results.
@@ -497,6 +505,7 @@ def generateTestList( dirs, plat, ufilter ):
 
     tf = os.path.join( test_dir, testlist_name )
     tlist.stringFileWrite( tf )
+    tlist.writeFinished()
 
     if perms != None:
         perms.set( os.path.abspath( tf ) )
@@ -807,7 +816,7 @@ def readCommandInfo():
     test_dir = None
     
     d = os.getcwd()
-    
+
     while d != '/':
       test_cache = os.path.join(d,'test.cache')
       if os.path.exists( test_cache ):
@@ -887,6 +896,15 @@ def runTests( dirs, plat, ufilter ):
     # determine the directory that stores the test results then create it
     testdirname = testResultsDir( plat.getName() )
     test_dir = os.path.join( os.getcwd(), testdirname )
+    tfile = os.path.join( test_dir, testlist_name )
+    
+    if os.path.exists( tfile ):
+        tl = TestList.TestList()
+        tl.scanFile( tfile )
+        if tl.getFinishDate() == None and '--force' not in optdict:
+            print '*** error: tests are currently running in another process'
+            print '    (or a previous run crashed); use --force to run anyway'
+            sys.exit(1)
     
     perms = None
     if '--perms' in optdict:
@@ -906,10 +924,8 @@ def runTests( dirs, plat, ufilter ):
     
     writeCommandInfo( test_dir, plat, perms )
     
-    # create test list
-    
     tlist = TestList.TestList( ufilter )
-    
+
     # generate test list by scanning directories
     if len(dirs) == 0:
       dirs = ['.']
@@ -920,7 +936,6 @@ def runTests( dirs, plat, ufilter ):
         sys.exit(1);
       tlist.scanDirectory( d, optdict.get('-S',None) )
     
-    tfile = os.path.join( test_dir, testlist_name )
     if os.path.exists( tfile ):
         tlist.readFile( tfile )  # merge in existing test results
     
@@ -931,37 +946,44 @@ def runTests( dirs, plat, ufilter ):
     # save the test list in the TestResults directory
     tlist.stringFileWrite( tfile )
 
-    if perms != None:
-        perms.set( os.path.abspath( tfile ) )
-    
-    if len(tlist.active) > 0:
-      
-      if '--pipeline' not in optdict:
-        plat.initProcs( test_dir )
+    try:
+        
+        if perms != None:
+            perms.set( os.path.abspath( tfile ) )
+        
+        if len(tlist.active) > 0:
+          
+          if '--pipeline' not in optdict:
+            plat.initProcs( test_dir )
 
-      print "Running these tests:"
-      printResults( tlist, True, test_dir, False, perms, True )
+          print "Running these tests:"
+          printResults( tlist, True, test_dir, False, perms, True )
 
-      tlist.createTestExecs( test_dir, plat, config, perms )
-      
-      if optdict.has_key('--save-results'):
-        tag = optdict.get('--results-tag',None)
-        saveResults( tlist, plat, test_dir, tag, inprogress=True )
+          tlist.createTestExecs( test_dir, plat, config, perms )
+          
+          if optdict.has_key('--save-results'):
+            tag = optdict.get('--results-tag',None)
+            saveResults( tlist, plat, test_dir, tag, inprogress=True )
 
-      if not optdict.has_key('--pipeline'):
-        executeTestList( tlist, test_dir, plat, perms, tfile )
-      
-      else:
-        pipeLineTestList( tlist, test_dir, plat, perms )
+          if not optdict.has_key('--pipeline'):
+            executeTestList( tlist, test_dir, plat, perms, tfile )
+          
+          else:
+            pipeLineTestList( tlist, test_dir, plat, perms )
+        
+          print "Test directory:", testdirname
+          
+          if optdict.has_key('--save-results'):
+            tag = optdict.get('--results-tag',None)
+            saveResults( tlist, plat, test_dir, tag )
+        
+        else:
+          print "\n--------- no tests to run -----------\n"
     
-      print "Test directory:", testdirname
-      
-      if optdict.has_key('--save-results'):
-        tag = optdict.get('--results-tag',None)
-        saveResults( tlist, plat, test_dir, tag )
-    
-    else:
-      print "\n--------- no tests to run -----------\n"
+    except:
+        tlist.writeFinished()
+        raise
+    tlist.writeFinished()
 
 
 def printResults( atestlist, add_date, test_dir, do_html, perms, short=False ):
@@ -1136,7 +1158,7 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
     done_list = []
     only_analyze_left = 0
     
-    while 1:
+    while True:
       
       new_run_list = []
       for t in run_list:
@@ -1213,7 +1235,7 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
       else:
         # more tests but not enough free resources .. wait a few
         time.sleep(1)
-    
+
     if optdict.has_key('-L'):
       print "\n****************************************************"
       print "********************* END TESTS ********************"
@@ -1385,7 +1407,7 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
           NF.append(str(qid))
       else:
         NS.append(str(qid))
-    
+
     # print results
     
     elapsed = time.time() - starttime
@@ -1617,6 +1639,7 @@ class Pipelines:
         
         fn = self.filename( testlist_name, qidstr )
         tl.stringFileWrite( fn )
+        tl.writeFinished()
         
         fn = self.filename( 'pipe', qidstr )
         fp = open( fn, "w" )
@@ -1714,6 +1737,11 @@ def restartTests( test_dir, plat, ufilter ):
     
     tlist = TestList.TestList( ufilter )
     tlist.readFile( tfile )
+
+    if tlist.getFinishDate() == None and '--force' not in optdict:
+        print '*** error: tests are currently running in another process'
+        print '    (or a previous run crashed); use --force to run anyway'
+        sys.exit(1)
     
     reld = computeRelativePath( os.path.abspath(test_dir), os.getcwd() )
     
@@ -1728,33 +1756,40 @@ def restartTests( test_dir, plat, ufilter ):
 
     tlist.stringFileWrite( tfile )
 
-    if perms != None:
-        perms.set( os.path.abspath( tfile ) )
+    try:
+        
+        if perms != None:
+            perms.set( os.path.abspath( tfile ) )
+        
+        if len(tlist.active) > 0:
+          
+          print "Running these tests:"
+          printResults( tlist, True, test_dir, False, perms, True )
+          
+          if optdict.has_key('--save-results'):
+            tag = optdict.get('--results-tag',None)
+            saveResults( tlist, plat, test_dir, tag, inprogress=True )
+          
+          if not optdict.has_key('--pipeline'):
+            plat.initProcs( test_dir )
+            tlist.createTestExecs( test_dir, plat, config, perms )
+            executeTestList( tlist, test_dir, plat, perms, tfile )
+          
+          else:
+            tlist.createTestExecs( test_dir, plat, config, perms )
+            pipeLineTestList( tlist, test_dir, plat, perms )
+        
+          if optdict.has_key('--save-results'):
+            tag = optdict.get('--results-tag',None)
+            saveResults( tlist, plat, test_dir, tag )
+        
+        else:
+          print "\n--------- no tests to run -----------\n"
     
-    if len(tlist.active) > 0:
-      
-      print "Running these tests:"
-      printResults( tlist, True, test_dir, False, perms, True )
-      
-      if optdict.has_key('--save-results'):
-        tag = optdict.get('--results-tag',None)
-        saveResults( tlist, plat, test_dir, tag, inprogress=True )
-      
-      if not optdict.has_key('--pipeline'):
-        plat.initProcs( test_dir )
-        tlist.createTestExecs( test_dir, plat, config, perms )
-        executeTestList( tlist, test_dir, plat, perms, tfile )
-      
-      else:
-        tlist.createTestExecs( test_dir, plat, config, perms )
-        pipeLineTestList( tlist, test_dir, plat, perms )
-    
-      if optdict.has_key('--save-results'):
-        tag = optdict.get('--results-tag',None)
-        saveResults( tlist, plat, test_dir, tag )
-    
-    else:
-      print "\n--------- no tests to run -----------\n"
+    except:
+        tlist.writeFinished()
+        raise
+    tlist.writeFinished()
 
 
 def baselineTests( test_dir, plat, ufilter ):
@@ -1958,7 +1993,7 @@ def parseOptionsAndGenerateOptionDictionary():
     
     import getopt
     try: opts, dirs = getopt.getopt( argL,
-                        'hHvgGk:K:p:P:S:o:O:wr:R:Aj:FM:n:ibT:Lmeas:x:X:C',
+                        'hHvgGk:K:p:P:S:o:O:wAj:FRM:n:ibT:Lmeas:x:X:C',
                         longopts=['version','intr=','plat=','platopt=',
                                   'keys', 'files', 'pipeline',
                                   'qsub-id=', 'qsub-limit=', 'qsub-length=',
@@ -1966,7 +2001,7 @@ def parseOptionsAndGenerateOptionDictionary():
                                   'search=', 'extract=',
                                   'timeout-multiplier=', 'postclean',
                                   'vg', 'save-results', 'results-tag=',
-                                  'config=', 'perms=', 'sort=' ] )
+                                  'config=', 'perms=', 'sort=', 'force' ] )
     except getopt.error, e:
       sys.stderr.write('*** ' + exeName + ': error: ' + str(e) + '\n')
       sys.exit(1)
@@ -1976,6 +2011,7 @@ def parseOptionsAndGenerateOptionDictionary():
       if   n == '--analyze': n = '-a'
       elif n == '--search' : n = '-s'
       elif n == '--postclean': n = '-C'
+      elif n == '-F': n = '-R'  # -F is deprecated, use -R instead
       if n == '--results-tag':
         optdict[n] = optpair[1]
       elif not optdict.has_key(n):
@@ -2006,7 +2042,7 @@ def parseOptionsAndGenerateOptionDictionary():
     
     if optdict.has_key('-i') and ( optdict.has_key('-L') or \
                                    optdict.has_key('-g') or \
-                                   optdict.has_key('-F') or \
+                                   optdict.has_key('-R') or \
                                    optdict.has_key('-w') or \
                                    optdict.has_key('-S') or \
                                    optdict.has_key('-b') ):
@@ -2024,12 +2060,6 @@ def parseOptionsAndGenerateOptionDictionary():
       sys.exit(1)
     
     # parse -k & -K options into two convenient objects
-    
-    # first, include -r & -R for backward compatibility
-    if optdict.has_key('-k') or optdict.has_key('-r'):
-      optdict['-k'] = optdict.get('-k',[]) + optdict.get('-r',[])
-    if optdict.has_key('-K') or optdict.has_key('-R'):
-      optdict['-K'] = optdict.get('-K',[]) + optdict.get('-R',[])
     
     keywL = []
     if optdict.has_key('-k'):
@@ -2431,8 +2461,8 @@ if __name__ == '__main__':
  
   elif optdict.has_key('-b'):
     
-    if optdict.has_key('-F') or optdict.has_key('-w'):
-      print "*** error: cannot use -F or -w with -b (baseline)"
+    if '-R' in optdict or '-w' in optdict:
+      print "*** error: cannot use -R or -w with -b (baseline)"
       sys.exit(1)
     
     baselineTests( test_dir, plat, ufilter )
@@ -2444,7 +2474,7 @@ if __name__ == '__main__':
     
     # if no results keywords are specified, then add -k notrun/notdone
     if not keyword_expr.containsResultsKeywords() and \
-       not optdict.has_key('-w') and not optdict.has_key('-F'):
+       '-w' not in optdict and '-R' not in optdict:
       keyword_expr.append( ['notrun/notdone'], 'and' )
     
     if test_dir != None:

@@ -217,11 +217,11 @@ def test05():
 
     tdir = results_dir()
     
-    out,np,nd,nf,nn = run_vvtest( '-F -p AA=2' )
+    out,np,nd,nf,nn = run_vvtest( '-R -p AA=2' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
     os.chdir( tdir+'/params.AA=2.BB=bar' )
-    out,np,nd,nf,nn = run_vvtest( '-F' )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     
     
@@ -258,7 +258,7 @@ def test06():
 
     cwd = os.getcwd()
     os.chdir( tdir+'/basic' )
-    out,np,nd,nf,nn = run_vvtest( '-F' )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     L = filegrep( 'execute.log', 'access PARAM_np' )
     assert len(L) == 1
@@ -289,7 +289,7 @@ def test06():
     assert pL == ['1/0.1','4/0.01']
     
     os.chdir( tdir+'/zip' )
-    out,np,nd,nf,nn = run_vvtest( '-F' )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     L = filegrep( 'execute.log', 'access PARAM_np_dt' )
     assert len(L) == 1
@@ -322,7 +322,7 @@ def test07():
     assert     os.path.exists( tdir+'/basic' )
 
     os.chdir( tdir+'/basic' )
-    out,np,nd,nf,nn = run_vvtest( '-F' )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
 
@@ -352,7 +352,7 @@ def test08():
     assert pL == ['1', '2']
 
     os.chdir( tdir+'/basic' )
-    out,np,nd,nf,nn = run_vvtest( '-F' )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     
     L = filegrep( 'execute.log', "access PARAM_isize" )

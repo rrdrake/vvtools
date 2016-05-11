@@ -4,6 +4,7 @@ import os, sys
 import re
 import glob
 import time
+import subprocess
 
 # this will os.chdir() to a subdirectory
 from testutils import *
@@ -17,7 +18,8 @@ def main():
     if len(argL) == 0:
         argL = """null script links1 links2 links3
                   exitstat xmldir options params
-                  keywords autolink tname1 tname2 postclean
+                  keywords autolink tname1 tname2 duplicate
+                  postclean force1 force2 force3
                """.split()
 
     for func in argL:
@@ -161,7 +163,7 @@ def links2():
         this is file.txt
         """)
 
-    out,np,nd,nf,nn = run_vvtest( '-F' )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
     assert np == 4 and nd == 0 and nf == 0 and nn == 0
     fL = glob.glob( 'TestResults.*/*/execute.log' )
     assert len(fL) == 4
@@ -251,7 +253,7 @@ def exitstat():
     tdir = results_dir()
     os.chdir(tdir+"/PassTest")
 
-    out,np,nd,nf,nn = run_vvtest( "-F" )
+    out,np,nd,nf,nn = run_vvtest( "-R" )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
     os.chdir( cwd )
@@ -296,7 +298,7 @@ def xmldir():
     # cd into a test and run it
 
     os.chdir( tdir + '/xdir' )
-    out,np,nd,nf,nn = run_vvtest( "-F" )
+    out,np,nd,nf,nn = run_vvtest( "-R" )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     os.chdir(cwd)
 
@@ -526,6 +528,34 @@ def tname2():
 
 #####################################################################
 
+def duplicate():
+    """
+    two tests with duplicate path from root to test
+    """
+    writefile( "adir/subdir/dup.xml", """
+        <rtest name="dup">
+            <execute> echo "test adir" </execute>
+        </rtest>""" )
+
+    writefile( "bdir/subdir/dup.xml", """
+        <rtest name="dup">
+            <execute> echo "test bdir" </execute>
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest( 'bdir adir' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+    xf = os.path.join( tdir, 'subdir', 'dup', 'execute.log' )
+    assert len( filegrep( xf, 'test bdir' ) ) == 1
+    assert len( filegrep( xf, 'test adir' ) ) == 0
+
+    fl = os.readlink( os.path.join( tdir, 'subdir', 'dup', 'dup.xml' ) )
+    s = 'bdir/subdir/dup.xml'
+    assert fl[-len(s):] == s
+
+
+#####################################################################
+
 def postclean():
     """
     using -C to clean out after the test
@@ -543,10 +573,130 @@ def postclean():
     fL = glob.glob( tdir+'/pclean/afile.txt' )
     assert len(fL) == 1
 
-    out,np,nd,nf,nn = run_vvtest( '-F -C' )
+    out,np,nd,nf,nn = run_vvtest( '-R -C' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     fL = glob.glob( tdir+'/pclean/afile.txt' )
     assert len(fL) == 0
+
+
+############################################################################
+
+def force1():
+    """
+    a concurrent vvtest invocation should refuse to run
+    """
+    writefile( "sleeper.xml", """
+        <rtest name="sleeper">
+            <execute> sleep 10 </execute>
+        </rtest>""" )
+
+    bg = Background( vvtest, 'log' )
+    bg.wait()
+    fp = open( 'log', 'r' ) ; out = fp.read() ; fp.close()
+    print out
+    np,nd,nf,nn = numpass(out),numdiff(out),numfail(out),numnotrun(out)
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    remove_results()
+
+    bg = Background( vvtest, 'log' )
+    time.sleep(4)
+    xok,out = run_cmd( vvtest + ' -R' )
+
+    bg.wait( 10 )
+    assert not xok
+    assert len( grep( out, 'rror.*another process' ) ) == 1
+
+
+def force2():
+    """
+    same as force1 except cd into TestResults directory
+    """
+    writefile( "null.xml", """
+        <rtest name="null">
+        </rtest>""" )
+    out,np,nd,nf,nn = run_vvtest()
+    tdir = results_dir()
+    os.remove( 'null.xml' )
+    remove_results()
+
+    writefile( "sleeper.xml", """
+        <rtest name="sleeper">
+            <execute> sleep 10 </execute>
+        </rtest>""" )
+
+    bg = Background( vvtest, 'log' )
+    time.sleep(4)
+    xok,out = run_cmd( vvtest + ' -R', directory=tdir )
+
+    bg.wait( 10 )
+    assert not xok
+    assert len( grep( out, 'rror.*another process' ) ) == 1
+
+
+def force3():
+    """
+    can force concurrent by using --force
+    """
+    writefile( "sleeper.xml", """
+        <rtest name="sleeper">
+            <execute> sleep 10 </execute>
+        </rtest>""" )
+
+    bg = Background( vvtest, 'log' )
+    bg.wait()
+    fp = open( 'log', 'r' ) ; out = fp.read() ; fp.close()
+    print out
+    np,nd,nf,nn = numpass(out),numdiff(out),numfail(out),numnotrun(out)
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    remove_results()
+
+    bg = Background( vvtest, 'log' )
+    time.sleep(4)
+    xok,out = run_cmd( vvtest + ' -R --force' )
+
+    bg.wait( 10 )
+    assert len( grep( out, 'rror.*another process' ) ) == 0
+
+
+class Background:
+
+    def __init__(self, cmd, logfile=None):
+        """
+        """
+        self.cmd = cmd
+        if logfile != None:
+            fp = open( logfile, 'w' )
+            self.p = subprocess.Popen( cmd, shell=True,
+                                       stdout=fp.fileno(), 
+                                       stderr=fp.fileno() )
+            fp.close()
+        else:
+            self.p = subprocess.Popen( cmd, shell=True, close_fds=True )
+
+    def wait(self, timeout=30):
+        """
+        """
+        if timeout == None:
+            self.p.wait()
+            return self.p.returncode
+        for i in range(timeout):
+            self.p.poll()
+            if self.p.returncode != None:
+                return self.p.returncode
+            time.sleep(1)
+        self.stop()
+        return None
+    
+    def stop(self):
+        try:
+            os.kill( self.p.pid, signal.SIGINT )
+            self.p.wait()
+        except:
+            if hasattr( self.p, 'terminate' ):
+                try: self.p.terminate()
+                except: pass
 
 
 ############################################################################

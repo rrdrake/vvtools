@@ -67,20 +67,21 @@ def test01():
     out,np,nd,nf,nn = run_vvtest( '-n 2' )
     assert np == 2 and nd == 1 and nf == 1 and nn == 0
 
-    # restart on a keyword
+    # restart on a results keyword
     out,np,nd,nf,nn = run_vvtest( '-n 2 -w --intr 2', ignore_errors=1 )
     out,np,nd,nf,nn = run_vvtest( '-n 2 -k notrun' )
     assert np+nd+nf+nn == 2
 
-    # restart on not done and use -r instead of -k
-    out,np,nd,nf,nn = run_vvtest( '-n 2 -r notdone' )
+    # restart on not done
+    out,np,nd,nf,nn = run_vvtest( '-n 2 -k notdone' )
     assert np+nd+nf+nn == 2
 
     # none should restart now
     out,np,nd,nf,nn = run_vvtest( '-n 2' )
     assert np+nd+nf+nn == 0
 
-    # all of them should run again
+    # all of them should run again (the -F has been replaced by -R but use it
+    # here to test it still works, can be removed in the future [May 2016])
     out,np,nd,nf,nn = run_vvtest( '-n 2 -F' )
     assert np+nd+nf+nn == 4
 
@@ -107,12 +108,12 @@ def test02():
     assert os.path.exists( tdir+'/clean/generated_file.txt' )
 
     # run again should remove the generated file
-    out,np,nd,nf,nn = run_vvtest( '-F' )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 0
 
     # running again with -m option should fail
-    out,np,nd,nf,nn = run_vvtest( '-F -m' )
+    out,np,nd,nf,nn = run_vvtest( '-R -m' )
     assert np == 0 and nd == 0 and nf == 1 and nn == 0
     assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 1
 
