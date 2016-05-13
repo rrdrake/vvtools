@@ -14,7 +14,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01
+        argL = """test01 test02 test03 test04 test05
                """.split()
 
     cwd = os.getcwd()
@@ -36,7 +36,6 @@ def test01():
         #!/bin/sh
         echo "hello from the hello test script"
         """ )
-    os.chmod
 
     out,np,nd,nf,nn = run_vvtest()
     tdir = results_dir()
@@ -45,6 +44,123 @@ def test01():
 
     assert len( filegrep( tdir+'/hello/execute.log',
                           "hello from the hello test script" ) ) == 1
+
+
+########################################################################
+
+def test02():
+    """
+    script is not executable but contains a shebang
+    """
+    writefile( 'hello.vvt', """#!/bin/sh
+        echo "hello from the hello test script"
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    tdir = results_dir()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert len( greptestlist(out,'pass.*hello') ) == 1
+
+    assert len( filegrep( tdir+'/hello/execute.log',
+                          "hello from the hello test script" ) ) == 1
+
+
+########################################################################
+
+def test03():
+    """
+    script has an embedded extension
+    """
+    writefile( 'hello.py.vvt', """
+        import os, sys
+        print ( "hello from the python test script" )
+        """ )
+    writefile( 'hello.csh.vvt', """
+        setenv HELLO "world"
+        echo "hello $HELLO from the csh script"
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    tdir = results_dir()
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    assert len( greptestlist(out,'pass.*hello') ) == 2
+    assert len( greptestlist(out,'pass.*hello.py') ) == 1
+    assert len( greptestlist(out,'pass.*hello.csh') ) == 1
+
+    assert len( filegrep( tdir+'/hello.py/execute.log',
+                          "hello from the python test script" ) ) == 1
+    assert len( filegrep( tdir+'/hello.csh/execute.log',
+                          "hello world from the csh script" ) ) == 1
+
+
+########################################################################
+
+def test04():
+    """
+    script that imports the helper fragment
+    """
+    writefile( 'hello.py.vvt', """
+        import os, sys
+        print ( "hello from the python test script" )
+        import vvtest_util as vvt
+        print ( 'hello, dir=', dir(vvt) )
+
+        assert hasattr( vvt, 'NAME' )
+        assert hasattr( vvt, 'PLATFORM' )
+        assert hasattr( vvt, 'COMPILER' )
+        assert hasattr( vvt, 'VVTESTSRC' )
+        assert hasattr( vvt, 'PROJECT' )
+        assert hasattr( vvt, 'OPTIONS' )
+        assert hasattr( vvt, 'OPTIONS_OFF' )
+        assert hasattr( vvt, 'SRCDIR' )
+
+        assert vvt.NAME == 'hello.py'
+        print ( 'PROJECT = '+vvt.PROJECT )
+        assert vvt.OPTIONS == ['dbg']
+        """ )
+
+    os.mkdir( 'bin' )
+
+    out,np,nd,nf,nn = run_vvtest( '-j bin -o dbg' )
+    tdir = results_dir()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert len( greptestlist(out,'pass.*hello.py') ) == 1
+
+    assert len( filegrep( tdir+'/hello.py/execute.log',
+                          "hello from the python test script" ) ) == 1
+    L = filegrep( tdir+'/hello.py/execute.log', "PROJECT =" )
+    assert len(L) == 1
+    assert L[0].split('=',1)[1].strip() == os.path.abspath('bin')
+
+
+def test05():
+    """
+    python test that exits with a diff a pass and a fail
+    """
+    writescript( 'tpass.vvt', """
+        #!/usr/bin/env python
+        import os, sys
+        import vvtest_util as vvt
+        """ )
+    writescript( 'tdiff.vvt', """
+        #!/usr/bin/env python
+        import os, sys
+        import vvtest_util as vvt
+        vvt.have_diff = True
+        vvt.if_diff_then_exit()
+        """ )
+    writescript( 'tfail.vvt', """
+        #!/usr/bin/env python
+        import os, sys
+        import vvtest_util as vvt
+        def myfunc():
+            raise Exception( "test failed" )
+        myfunc()
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    tdir = results_dir()
+    assert np == 1 and nd == 1 and nf == 1 and nn == 0
 
 
 ########################################################################

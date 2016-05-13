@@ -84,7 +84,7 @@ def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
         
         vspecs = ScriptReader( fname )
         t = TestSpec.TestSpec( vspecs.basename(), rootpath, relpath )
-        t.setScriptForm( 'script' )
+        t.setScriptForm( vspecs.getForm() )
         tL = [t]
 
     else:
@@ -117,7 +117,6 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
       
       if do_all or ufilter.evaluate_parameters( {} ):
         t = TestSpec.TestSpec( tname, rootpath, relpath )
-        t.setScriptForm( 'xml' )
         testL.append(t)
     
     else:
@@ -130,7 +129,6 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
         # create the test and add to test list
         t = TestSpec.TestSpec( tname, rootpath, relpath )
         t.setParameters( pdict )
-        t.setScriptForm( 'xml' )
         testL.append(t)
       
     # parse and set the rest of the XML file for each test
@@ -400,6 +398,13 @@ class ScriptReader:
         if filename:
             self.readfile( filename )
 
+    def getForm(self):
+        """
+        """
+        if self.shebang:
+            return ('script', 'shebang='+self.shebang)
+        return ('script',)
+
     def basename(self):
         """
         Returns the base name of the file without the extension.
@@ -424,7 +429,7 @@ class ScriptReader:
             lineno = 1
 
             if line[:2] == '#!':
-                self.shebang = line.rstrip()
+                self.shebang = line[2:].strip()
                 line = fp.readline()
                 lineno += 1
             

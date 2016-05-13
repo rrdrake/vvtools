@@ -67,10 +67,10 @@ class TestSpec:
 
     def getScriptForm(self):
         """
-        Returns the run script form, such as "xml", "bash", or "python".
+        Returns the run script form, such as ('script','shebang=/bin/sh').
         """
         return self.form
-    
+
     def getKeywords(self, result_attrs=0):
         """
         Returns the list of keyword strings.  If 'result_attrs' is true, the
@@ -250,7 +250,8 @@ class TestSpec:
         """
         assert not os.path.isabs(filepath)
         
-        self.form = 'xml'
+        self.form = ()             # a tuple, such as ('script',)
+
         self.name = name
         self.rootpath = rootpath
         self.filepath = filepath
@@ -303,10 +304,10 @@ class TestSpec:
     
     # construction methods
     
-    def setScriptForm(self, form):
+    def setScriptForm(self, form_tuple):
         """
         """
-        self.form = form
+        self.form = form_tuple
 
     def setParent(self, parent_xdir):
         """

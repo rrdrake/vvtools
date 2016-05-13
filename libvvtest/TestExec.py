@@ -8,6 +8,7 @@ import glob
 import traceback
 
 import cshScriptWriter
+import ScriptWriter
 
 # this is the exit status that tests use to indicate a diff
 diffExitStatus = 64
@@ -59,18 +60,19 @@ class TestExec:
           self.perms.set( self.atest.getExecuteDirectory() )
         
         form = self.atest.getScriptForm()
-
-        if form == 'xml':
+            
+        if len(form) == 0:
           
+          # an empty 'form' defaults to the old XML test specification format
+
           script_file = os.path.join( self.xdir, 'runscript' )
           
-          if config.get('refresh') or not os.path.exists(script_file):
+          if config.get('refresh') or not os.path.exists( script_file ):
             
-            assert os.path.isabs( self.atest.getRootpath() )
-            
-            srcdir = os.path.join( self.atest.getRootpath(),
-                                   os.path.dirname(self.atest.getFilepath()) )
-            srcdir = os.path.normpath( srcdir )
+            troot = self.atest.getRootpath()
+            assert os.path.isabs( troot )
+            tdir = os.path.dirname( self.atest.getFilepath() )
+            srcdir = os.path.normpath( os.path.join( troot, tdir ) )
             
             cshScriptWriter.writeScript( self.atest, commondb, self.platform,
                                          config.get('toolsdir'),
@@ -83,13 +85,36 @@ class TestExec:
               self.perms.set( os.path.abspath( script_file ) )
 
           self.cmdL = ['/bin/csh', '-f', './runscript']
+
+          self.lang = 'xml'
         
         else:
           
-          # TODO: generalize this
-          bname = os.path.basename( self.atest.getFilepath() )
-          self.cmdL = [ './' + bname ]
-    
+          fn = self.atest.getFilename()
+          lang,cmdL = get_script_language( fn, form )
+
+          if cmdL:
+              self.cmdL = cmdL
+          else:
+              # this will probably fail, and the execute.log should show it
+              self.cmdL = [ './'+os.path.basename(fn) ]
+
+          if lang:
+              
+              #  write utility script fragment
+
+              script_file = os.path.join( self.xdir, 'vvtest_util.'+lang )
+              
+              if config.get('refresh') or not os.path.exists( script_file ):
+                
+                  ScriptWriter.writeScript( self.atest, script_file,
+                                            lang, config, self.platform )
+                  
+                  if self.perms != None:
+                      self.perms.set( os.path.abspath( script_file ) )
+
+          self.lang = lang
+
     def start(self, baseline=0):
         """
         Launches the child process.
@@ -203,13 +228,24 @@ class TestExec:
                 sshcmd.append('cd ' + os.getcwd() + ' &&' + safecmd)
                 cmd_list = sshcmd
               
+              if self.lang == 'py':
+                # since the script is a soft link, the execute directory must
+                # to be added to the python path (soft links are followed);
+                # doing so enables "import vvtest_util" in the script
+                val = os.environ.get( 'PYTHONPATH', '' )
+                if val: os.environ['PYTHONPATH'] = os.getcwd() + ':' + val
+                else:   os.environ['PYTHONPATH'] = os.getcwd()
+
               sys.stdout.write( '\n' )
               sys.stdout.flush()
 
               # replace this process with the command
-              os.execve( cmd_list[0], cmd_list, os.environ )
+              if os.path.isabs( cmd_list[0] ):
+                  os.execve( cmd_list[0], cmd_list, os.environ )
+              else:
+                  os.execvpe( cmd_list[0], cmd_list, os.environ )
               
-              raise "os.execv should not return"
+              raise Exception( "os.exec should not return" )
 
           except:
             sys.stdout.flush() ; sys.stderr.flush()
@@ -340,7 +376,8 @@ class TestExec:
         sys.stdout.flush()
 
         for f in os.listdir('.'):
-          if f != 'execute.log' and f != 'baseline.log' and f != 'runscript':
+          if f not in ['execute.log', 'baseline.log', 'runscript'] \
+             and not f.startswith( 'vvtest_util' ):
             if os.path.isdir(f):
               sys.stdout.write( "rm -r "+f+"\n" ) ; sys.stdout.flush()
               shutil.rmtree( f )
@@ -554,3 +591,92 @@ class TestExec:
         
         return None
 
+
+##########################################################################
+
+def get_script_language( filename, form ):
+    """
+    Given the full path to the script file and the #!/path/prog string from
+    the script (without the #! and if it exists), this function determines the
+    language that the script is written in and the command line that should be
+    used to launch the script.
+
+    Returns a pair lang,cmdL which is the language and command line (as a
+    list).  The known languages are
+
+        py, pl, sh, bash, csh, tcsh
+    """
+    lang = None
+    cmdL = None
+
+    shebang = None
+    for s in form:
+        if s.startswith('shebang='):
+            shebang = s.split('=',1)[1]
+
+    bname = os.path.basename( filename )
+
+    if shebang:
+        
+        import shlex
+        L = shlex.split( shebang )
+        xf = os.path.basename( L[0] )
+
+        if xf.startswith( 'python' ):
+            lang = 'py'
+        elif xf.startswith( 'perl' ):
+            lang = 'pl'
+        elif xf in ['sh','bash','csh','tcsh']:
+            lang = xf
+        elif xf == 'env':
+            # TODO: could use getopt here if options to the env program
+            #       are given and need to be handled
+            n = None
+            for arg in L[1:]:
+                # try to ignore VARNAME=value arguments
+                if '=' not in arg:
+                    n = arg
+                    break
+            if n:
+                n = os.path.basename( n )
+                if n.startswith( 'python' ):
+                    lang = 'py'
+                elif n.startswith( 'perl' ):
+                    lang = 'pl'
+                elif n in ['sh','bash','csh','tcsh']:
+                    lang = n
+
+        if os.access( filename, os.X_OK ):
+            cmdL = [ './'+bname ]
+        else:
+            cmdL = L
+            cmdL.append( bname )
+
+    if not lang:
+        
+        # look for an embedded extension, such as name.py.vvt
+        b,x1 = os.path.splitext( bname )
+        b,x2 = os.path.splitext( b )
+        if b and x2 in ['.py']:
+            lang = 'py'
+        elif b and x2 in ['.pl']:
+            lang = 'pl'
+        elif b and x2 in ['.sh','.bash','.csh','.tcsh']:
+            lang = x2[1:]
+
+    if not cmdL:
+        
+        if os.access( filename, os.X_OK ):
+            cmdL = [ './'+bname ]
+        
+        elif lang:
+            if lang == 'py':
+                cmdL = [ sys.executable, bname ]
+            elif lang == 'pl':
+                cmdL = [ 'perl', bname ]
+            elif lang in ['sh','bash','perl']:
+                cmdL = [ lang, bname ]
+            elif lang in ['csh','tcsh']:
+                cmdL = [ lang, '-f', bname ]
+
+    return lang,cmdL
