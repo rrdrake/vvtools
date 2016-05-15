@@ -34,6 +34,9 @@ class TestList:
         Writes the tests in this container to the given filename.  All tests
         are written, even those that were not executed (were filtered out).
 
+        The given filename is recorded in this object and is used for
+        subsequent write actions, such as AddIncludeFile() and writeFinished().
+
         A date stamp is written to the file.  If 'datestamp' is None, then
         the current time is used.
         """
@@ -100,10 +103,14 @@ class TestList:
         Read test list from a file.  Existing TestSpec objects have their
         attributes overwritten, but new TestSpec objects are not created.
 
+        If this object has not had its filename set, this function will
+        set it.
+
         If this object does not already have a date stamp, then the stamp
         contained in 'filename' will be loaded and set.
         """
-        self.filename = os.path.normpath( filename )
+        if not self.filename:
+          self.filename = os.path.normpath( filename )
 
         vers,lineL = self._read_file_lines(filename)
         
@@ -179,8 +186,8 @@ class TestList:
             if len(L) == 2:
               vers = int( L[1].strip() )
           elif line.startswith( '#VVT: Date' ):
+            # only load the date stamp once
             if self.datestamp == None:
-              # only load the date stamp once
               L = line.split( '=', 1 )
               if len(L) == 2:
                 tup = time.strptime( L[1].strip() )
@@ -209,8 +216,13 @@ class TestList:
               d = os.path.dirname( filename )
               f = os.path.join( d, f )
             if os.path.exists(f):
+              # avoid changing datestamp and finish marks from included files
+              dat = self.datestamp
+              fin = self.finish
               v,inclL = self._read_file_lines(f)
               lineL.extend( inclL )
+              self.finish = fin
+              self.datestamp = dat
           elif line.startswith( '#VVT: Finish' ):
             L = line.split( '=', 1 )
             if len(L) == 2:

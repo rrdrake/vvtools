@@ -1596,7 +1596,12 @@ class Pipelines:
           self.do_queue_pipe( -1, analyzeL, qsubids, commonopts )
         
         if analyzeL == None:
-          L = qsubids.keys() ; L.sort()
+          L = qsubids.keys()
+          L.sort()
+          if len(L) > 1 and L[0] < 0:
+            # put analyze queue id last
+            ti = L.pop(0)
+            L.append( ti )
           for i in L:
             incl = self.filename( testlist_name, i, relative=True )
             self.tlist.AddIncludeFile( incl )

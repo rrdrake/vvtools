@@ -16,6 +16,8 @@ sys.path.insert( 0, topdir )
 vvtest = os.path.join( topdir, 'vvtest' )
 resultspy = os.path.join( topdir, 'results.py' )
 
+batchplatforms = [ 'ceelan', 'Linux', 'iDarwin', 'Darwin' ]
+
 arglist = sys.argv[1:]
 
 def get_arg_list(): return arglist
