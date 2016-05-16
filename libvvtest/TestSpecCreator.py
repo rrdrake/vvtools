@@ -83,13 +83,15 @@ def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
     elif ext == '.vvt':
         
         vspecs = ScriptReader( fname )
-        t = TestSpec.TestSpec( vspecs.basename(), rootpath, relpath )
-        t.setScriptForm( vspecs.getForm() )
-        tL = [t]
+        nameL = testNameList_scr( vspecs )
+        tL = []
+        for tname in nameL:
+            L = createScriptTests( tname, vspecs, rootpath, relpath,
+                                   force_params, ufilter )
+            tL.extend( L )
 
     else:
         raise Exception( "invalid file extension: "+ext )
-
 
     return tL
 
@@ -167,6 +169,17 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
     return finalL
 
 
+def createScriptTests( tname, vspecs, rootpath, relpath,
+                       force_params, ufilter ):
+    """
+    """
+    tL = []
+    t = TestSpec.TestSpec( tname, rootpath, relpath )
+    t.setScriptForm( vspecs.getForm() )
+    tL.append( t )
+    return tL
+
+
 def refreshTest( testobj, ufilter=None ):
     """
     Parses the test source file and resets the settings for the given test.
@@ -178,46 +191,67 @@ def refreshTest( testobj, ufilter=None ):
     
     Returns false if any of the filtering would exclude this test.
     """
-    filedoc = readxml( testobj.getFilename() )
+    fname = testobj.getFilename()
+    ext = os.path.splitext( fname )[1]
 
-    # run through the test name logic to check XML validity
-    nameL = testNameList(filedoc)
-    
-    tname = testobj.getName()
-    
-    if ufilter == None:
-      ufilter = FilterExpressions.ExpressionSet()
-    
-    if not testobj.getParent():
-      paramD = parseTestParameters( filedoc, tname, ufilter, None )
-      cartesian_product_and_filter( paramD, ufilter )
-      testobj.setParameterSet( paramD )
-    
     keep = True
     
-    if not parseIncludeTest( filedoc, tname, ufilter ):
-      keep = False
-    
-    keywords = parseKeywords( filedoc, tname, ufilter )
-    testobj.setKeywords( keywords )
-    
-    if not ufilter.satisfies_keywords( testobj.getKeywords(1) ):
-      keep = False
-    
-    if not ufilter.evaluate_parameters( testobj.getParameters() ):
-      keep = False
-    
-    parseFiles       ( testobj, filedoc, ufilter )
-    parseAnalyze     ( testobj, filedoc, ufilter )
-    parseTimeouts    ( testobj, filedoc, ufilter )
-    parseExecuteList ( testobj, filedoc, ufilter )
-    parseBaseline    ( testobj, filedoc, ufilter )
-    
-    if ufilter.getAttr('include_all',0):
-      return True
-    
-    if not ufilter.file_search(testobj):
-      keep = False
+    if ext == '.xml':
+        
+        filedoc = readxml( fname )
+
+        # run through the test name logic to check XML validity
+        nameL = testNameList(filedoc)
+        
+        tname = testobj.getName()
+        
+        if ufilter == None:
+          ufilter = FilterExpressions.ExpressionSet()
+        
+        if not testobj.getParent():
+          paramD = parseTestParameters( filedoc, tname, ufilter, None )
+          cartesian_product_and_filter( paramD, ufilter )
+          testobj.setParameterSet( paramD )
+        
+        if not parseIncludeTest( filedoc, tname, ufilter ):
+          keep = False
+        
+        keywords = parseKeywords( filedoc, tname, ufilter )
+        testobj.setKeywords( keywords )
+        
+        if not ufilter.satisfies_keywords( testobj.getKeywords(1) ):
+          keep = False
+        
+        if not ufilter.evaluate_parameters( testobj.getParameters() ):
+          keep = False
+        
+        parseFiles       ( testobj, filedoc, ufilter )
+        parseAnalyze     ( testobj, filedoc, ufilter )
+        parseTimeouts    ( testobj, filedoc, ufilter )
+        parseExecuteList ( testobj, filedoc, ufilter )
+        parseBaseline    ( testobj, filedoc, ufilter )
+        
+        if ufilter.getAttr('include_all',0):
+          return True
+        
+        if not ufilter.file_search(testobj):
+          keep = False
+
+    elif ext == '.vvt':
+        
+        vspecs = ScriptReader( fname )
+        
+        testobj.setScriptForm( vspecs.getForm() )
+
+        # run through the test name logic to check validity
+        nameL = testNameList_scr( vspecs )
+
+        tname = testobj.getName()
+
+        # TODO: refresh the test
+
+    else:
+        raise Exception( "invalid file extension: "+ext )
     
     return keep
 
@@ -393,11 +427,20 @@ class ScriptReader:
     def __init__(self, filename):
         """
         """
-        self.filename = None
+        self.filename = filename
+        
+        self.shebang = None
+        self.speclineL = []  # list of [line number, raw spec string]
+        self.specL = []  # list of ScriptSpec objects
 
-        if filename:
-            self.readfile( filename )
+        self.readfile( filename )
 
+    def basename(self):
+        """
+        Returns the base name of the source file without the extension.
+        """
+        return os.path.splitext( os.path.basename( self.filename ) )[0]
+    
     def getForm(self):
         """
         """
@@ -405,11 +448,16 @@ class ScriptReader:
             return ('script', 'shebang='+self.shebang)
         return ('script',)
 
-    def basename(self):
+    def getSpecList(self, specname):
         """
-        Returns the base name of the file without the extension.
+        Returns a list of ScriptSpec objects whose keyword equals 'specname'.
+        The order is the same as in the source test script.
         """
-        return os.path.splitext( os.path.basename( self.filename ) )[0]
+        L = []
+        for sspec in self.specL:
+            if sspec.keyword == specname:
+                L.append( sspec )
+        return L
 
     vvtpat = re.compile( '[ \t]*#[ \t]*VVT[ \t]*:' )
     cmtpat = re.compile( '[ \t]*#+$' )
@@ -417,11 +465,7 @@ class ScriptReader:
     def readfile(self, filename):
         """
         """
-        self.shebang = None
-
         fp = open( filename )
-
-        self.specL = []
         
         try:
             
@@ -442,7 +486,7 @@ class ScriptReader:
                 lineno += 1
 
             if spec != None:
-                self.specL.append( spec )
+                self.speclineL.append( spec )
         
         except:
             fp.close()
@@ -472,7 +516,7 @@ class ScriptReader:
         
         elif spec != None:
             # an empty line or comment stops any continuation
-            self.specL.append( spec )
+            self.speclineL.append( spec )
             spec = None
 
         return done,spec
@@ -496,11 +540,11 @@ class ScriptReader:
                 spec = [ lineno, line ]
             else:
                 # spec exists and new spec found
-                self.specL.append( spec )
+                self.speclineL.append( spec )
                 spec = [ lineno, line ]
         elif spec != None:
             # an empty line stops any continuation
-            self.specL.append( spec )
+            self.speclineL.append( spec )
             spec = None
 
         return spec
@@ -510,7 +554,68 @@ class ScriptReader:
         Turns the list of string specifications into keywords with attributes
         and content.
         """
-        pass
+        kvpat = re.compile( '[:=]' )
+        parenpat = re.compile( '[(].*[)]' )
+        for lineno,line in self.speclineL:
+            L = kvpat.split( line, 1 )
+            if len(L) == 2:
+                ks = L[0]
+                attrs = ''
+                val = L[1].strip()
+                m = parenpat.search( ks )
+                if m != None:
+                    key = ks[:m.start()].strip()
+                    attrs = ks[m.start():m.end()]
+                    attrs = attrs.lstrip('(').rstrip(')').strip()
+                    if ks[m.end():].strip():
+                        raise TestSpecError( \
+                                  'invalid specification syntax, ' + \
+                                  'line ' + str(lineno) )
+                else:
+                    key = ks.strip()
+
+                if not key:
+                    raise TestSpecError( 'invalid specification syntax, ' + \
+                                         'line ' + str(lineno) )
+                # TODO: parse attrs
+
+                specobj = ScriptSpec( lineno, key, attrs, val )
+                self.specL.append( specobj )
+
+            else:
+                raise TestSpecError( 'invalid specification syntax, line ' + \
+                                     str(lineno) )
+            key = L[0]
+
+
+class ScriptSpec:
+
+    def __init__(self, lineno, keyword, attrs, value):
+        self.keyword = keyword
+        self.attrs = attrs
+        self.value = value
+        self.lineno = lineno
+
+
+def testNameList_scr( vspecs ):
+    """
+    Determine the test name and check for validity.
+    Returns a list of test names.
+    """
+    L = []
+
+    for spec in vspecs.getSpecList( "name" ):
+        name = spec.value
+        if not name or not allowableString(name):
+            raise TestSpecError( 'missing or invalid test name, ' + \
+                                 'line ' + str(spec.lineno) )
+        L.append( name )
+
+    if len(L) == 0:
+        # the name defaults to the basename of the script file
+        L.append( vspecs.basename() )
+
+    return L
 
 
 ###########################################################################

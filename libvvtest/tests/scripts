@@ -14,7 +14,8 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02 test03 test04 test05
+        argL = """test01 test01b test02 test03 test04 test05 test06
+                  test07
                """.split()
 
     cwd = os.getcwd()
@@ -44,6 +45,26 @@ def test01():
 
     assert len( filegrep( tdir+'/hello/execute.log',
                           "hello from the hello test script" ) ) == 1
+
+
+def test01b():
+    """
+    the test can be named different than the script name
+    """
+    writescript( 'hello.vvt', """
+        #!/bin/sh
+        #VVT: name=world
+        echo "hello from the hello/world test script"
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    tdir = results_dir()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert len( greptestlist(out,'pass.*hello') ) == 0
+    assert len( greptestlist(out,'pass.*world') ) == 1
+
+    assert len( filegrep( tdir+'/world/execute.log',
+                          "hello from the hello/world test script" ) ) == 1
 
 
 ########################################################################
@@ -123,6 +144,7 @@ def test04():
 
     out,np,nd,nf,nn = run_vvtest( '-j bin -o dbg' )
     tdir = results_dir()
+    platname = platform_name( out )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     assert len( greptestlist(out,'pass.*hello.py') ) == 1
 
@@ -131,6 +153,23 @@ def test04():
     L = filegrep( tdir+'/hello.py/execute.log', "PROJECT =" )
     assert len(L) == 1
     assert L[0].split('=',1)[1].strip() == os.path.abspath('bin')
+    
+    if platname in batchplatforms:
+
+        # same thing in pipeline mode
+
+        remove_results()
+        
+        out,np,nd,nf,nn = run_vvtest( '--pipeline -j bin -o dbg' )
+        tdir = results_dir()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( greptestlist(out,'pass.*hello.py') ) == 1
+
+        assert len( filegrep( tdir+'/hello.py/execute.log',
+                              "hello from the python test script" ) ) == 1
+        L = filegrep( tdir+'/hello.py/execute.log', "PROJECT =" )
+        assert len(L) == 1
+        assert L[0].split('=',1)[1].strip() == os.path.abspath('bin')
 
 
 def test05():
@@ -159,8 +198,116 @@ def test05():
         """ )
 
     out,np,nd,nf,nn = run_vvtest()
-    tdir = results_dir()
     assert np == 1 and nd == 1 and nf == 1 and nn == 0
+    platname = platform_name( out )
+
+    if platname in batchplatforms:
+
+        # same thing in pipeline mode
+
+        remove_results()
+        
+        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        assert np == 1 and nd == 1 and nf == 1 and nn == 0
+
+
+def test06():
+    """
+    multiple tests in one script file
+    """
+    writescript( 'multi.vvt', """
+        #!/usr/bin/env python
+        #VVT: name=multi
+        #VVT: name=multi2
+        import vvtest_util as vvt
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    tdir = results_dir()
+    platname = platform_name( out )
+
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    assert len( greptestlist(out,'pass.*multi') ) == 2
+    assert len( greptestlist(out,'pass.*multi2') ) == 1
+
+    assert len( filegrep( tdir+'/multi/execute.log',
+                          "hello from the multi test" ) ) == 1
+    assert len( filegrep( tdir+'/multi2/execute.log',
+                          "hello from the multi2 test" ) ) == 1
+    
+    if platname in batchplatforms:
+
+        remove_results()
+        
+        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+        assert len( greptestlist(out,'pass.*multi') ) == 2
+        assert len( greptestlist(out,'pass.*multi2') ) == 1
+
+        assert len( filegrep( tdir+'/multi/execute.log',
+                              "hello from the multi test" ) ) == 1
+        assert len( filegrep( tdir+'/multi2/execute.log',
+                              "hello from the multi2 test" ) ) == 1
+
+
+def test07():
+    """
+    check header specification comment variations
+    """
+    writescript( 'tst1.vvt', """
+        #!/usr/bin/env python
+
+        #VVT: name=test1
+        import vvtest_util as vvt
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
+    writescript( 'tst2.vvt', """
+        #!/usr/bin/env python
+        # 
+        #VVT: name=test2
+        import vvtest_util as vvt
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
+    writescript( 'tst3.vvt', """
+        #!/usr/bin/env python
+        import vvtest_util as vvt
+        #VVT: name=test3
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
+    writescript( 'tst4.vvt', """
+        #!/usr/bin/env python
+        #VVT: name=test4a
+
+        #VVT: name=test4b
+
+        import vvtest_util as vvt
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    tdir = results_dir()
+    assert np == 5 and nd == 0 and nf == 0 and nn == 0
+    assert len( greptestlist(out,'pass.*tst1') ) == 0
+    assert len( greptestlist(out,'pass.*test1') ) == 1
+    assert len( greptestlist(out,'pass.*tst2') ) == 0
+    assert len( greptestlist(out,'pass.*test2') ) == 1
+    assert len( greptestlist(out,'pass.*tst3') ) == 1
+    assert len( greptestlist(out,'pass.*test3') ) == 0
+    assert len( greptestlist(out,'pass.*test4a') ) == 1
+    assert len( greptestlist(out,'pass.*test4b') ) == 1
+
+    assert len( filegrep( tdir+'/test1/execute.log',
+                          "hello from the test1 test" ) ) == 1
+    assert len( filegrep( tdir+'/test2/execute.log',
+                          "hello from the test2 test" ) ) == 1
+    assert len( filegrep( tdir+'/tst3/execute.log',
+                          "hello from the tst3 test" ) ) == 1
+    assert len( filegrep( tdir+'/test4a/execute.log',
+                          "hello from the test4a test" ) ) == 1
+    assert len( filegrep( tdir+'/test4b/execute.log',
+                          "hello from the test4b test" ) ) == 1
 
 
 ########################################################################
