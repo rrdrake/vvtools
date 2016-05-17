@@ -15,7 +15,7 @@ def main():
 
     if len(argL) == 0:
         argL = """test01 test01b test02 test03 test04 test05 test06
-                  test07
+                  test07 test08
                """.split()
 
     cwd = os.getcwd()
@@ -308,6 +308,80 @@ def test07():
                           "hello from the test4a test" ) ) == 1
     assert len( filegrep( tdir+'/test4b/execute.log',
                           "hello from the test4b test" ) ) == 1
+
+
+def test08():
+    """
+    incorrect specification syntax
+    """
+    writescript( 'tst1.vvt', """
+        #!/usr/bin/env python
+        #VVT: =junk
+        import vvtest_util as vvt
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
+    writescript( 'tst2.vvt', """
+        #!/usr/bin/env python
+        #VVT: keywords (testname=tst2) foo : bar
+        import vvtest_util as vvt
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
+    writescript( 'tst2b.vvt', """
+        #!/usr/bin/env python
+        #VVT: keywords (testname=tst2b) foo
+        import vvtest_util as vvt
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
+    writescript( 'tst2c.vvt', """
+        #!/usr/bin/env python
+        #VVT: keywords (testname=tst2c) (testname=tst2b)
+        import vvtest_util as vvt
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
+    writescript( 'tst3.vvt', """
+        #!/usr/bin/env python
+        #VVT: keywords (testname=tst3) : junk
+        import vvtest_util as vvt
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
+    writescript( 'tst4.vvt', """
+        #!/usr/bin/env python
+        #VVT::
+        import vvtest_util as vvt
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
+    writescript( 'tst5.vvt', """
+        #!/usr/bin/env python
+        #VVT: keywords (=tst5) : foo bar
+        import vvtest_util as vvt
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
+    writescript( 'tst6.vvt', """
+        #!/usr/bin/env python
+        #VVT: keywords (foo=bar,=) : foo bar
+        import vvtest_util as vvt
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
+    writescript( 'tst7.vvt', """
+        #!/usr/bin/env python
+        #VVT: keywords (foo=bar : foo bar
+        import vvtest_util as vvt
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    tdir = results_dir()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    assert len( grep( out, 'skipping .*tst1.vvt'  ) ) == 1
+    assert len( grep( out, 'skipping .*tst2.vvt'  ) ) == 1
+    assert len( grep( out, 'skipping .*tst2b.vvt' ) ) == 1
+    assert len( grep( out, 'skipping .*tst2c.vvt' ) ) == 1
+    assert os.path.exists( os.path.join( tdir, 'tst3', 'execute.log' ) )
+    assert len( grep( out, 'skipping .*tst4.vvt' ) ) == 1
+    assert len( grep( out, 'skipping .*tst5.vvt' ) ) == 1
+    assert len( grep( out, 'skipping .*tst6.vvt' ) ) == 1
+    assert len( grep( out, 'skipping .*tst7.vvt' ) ) == 1
 
 
 ########################################################################

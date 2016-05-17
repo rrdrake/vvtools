@@ -86,8 +86,8 @@ def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
         nameL = testNameList_scr( vspecs )
         tL = []
         for tname in nameL:
-            L = createScriptTests( tname, vspecs, rootpath, relpath,
-                                   force_params, ufilter )
+            L = createScriptTest( tname, vspecs, rootpath, relpath,
+                                  force_params, ufilter )
             tL.extend( L )
 
     else:
@@ -169,14 +169,30 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
     return finalL
 
 
-def createScriptTests( tname, vspecs, rootpath, relpath,
-                       force_params, ufilter ):
+def createScriptTest( tname, vspecs, rootpath, relpath,
+                      force_params, ufilter ):
     """
     """
+    #if not parseIncludeTest( filedoc, tname, ufilter ):
+    #  return []
+    #
+    #paramD = parseTestParameters( filedoc, tname, ufilter, force_params )
+    
+    keywords = parseKeywords_scr( vspecs, tname, ufilter )
+    
+    do_all = ufilter.getAttr('include_all',0)
+
+    if not do_all and not ufilter.satisfies_nonresults_keywords( keywords ):
+      return []
+    
     tL = []
+    
     t = TestSpec.TestSpec( tname, rootpath, relpath )
     t.setScriptForm( vspecs.getForm() )
+    t.setKeywords( keywords )
+    
     tL.append( t )
+    
     return tL
 
 
@@ -554,38 +570,62 @@ class ScriptReader:
         Turns the list of string specifications into keywords with attributes
         and content.
         """
-        kvpat = re.compile( '[:=]' )
-        parenpat = re.compile( '[(].*[)]' )
+        kpat = re.compile( '.*?[:=(]' )
+        ppat = re.compile( '[(].*?[)]' )
         for lineno,line in self.speclineL:
-            L = kvpat.split( line, 1 )
-            if len(L) == 2:
-                ks = L[0]
-                attrs = ''
-                val = L[1].strip()
-                m = parenpat.search( ks )
-                if m != None:
-                    key = ks[:m.start()].strip()
-                    attrs = ks[m.start():m.end()]
-                    attrs = attrs.lstrip('(').rstrip(')').strip()
-                    if ks[m.end():].strip():
+            key = None
+            val = None
+            attrs = None
+            m = kpat.match( line )
+            if m:
+                key = line[:m.end()-1].strip()
+                rest = line[m.end()-1:]
+                if rest and rest[0] == '(':
+                    # extract attribute(s)
+                    m = ppat.match( rest )
+                    if m:
+                        attrs = rest[:m.end()]
+                        attrs = attrs.lstrip('(').rstrip(')').strip()
+                        rest = rest[m.end():].strip()
+                        if rest and rest[0] in ':=':
+                            val = rest[1:]
+                        elif rest:
+                            raise TestSpecError( \
+                              'extra text following attributes, ' + \
+                              'line ' + str(lineno) )
+                    else:
                         raise TestSpecError( \
-                                  'invalid specification syntax, ' + \
-                                  'line ' + str(lineno) )
+                              'malformed attribute specification, ' + \
+                              'line ' + str(lineno) )
                 else:
-                    key = ks.strip()
-
-                if not key:
-                    raise TestSpecError( 'invalid specification syntax, ' + \
-                                         'line ' + str(lineno) )
-                # TODO: parse attrs
-
-                specobj = ScriptSpec( lineno, key, attrs, val )
-                self.specL.append( specobj )
-
+                    val = rest[1:].strip()
             else:
-                raise TestSpecError( 'invalid specification syntax, line ' + \
-                                     str(lineno) )
-            key = L[0]
+                key = line.strip()
+            
+            if not key:
+                raise TestSpecError( \
+                              'missing or invalid specification keyword, ' + \
+                              'line ' + str(lineno) )
+
+            if attrs:
+                D = {}
+                for s in attrs.split(','):
+                    s = s.strip()
+                    i = s.find( '=' )
+                    if i == 0:
+                        raise TestSpecError( \
+                                'invalid attribute specification, ' + \
+                                'line ' + str(lineno) )
+                    elif i > 0:
+                        n = s[:i]
+                        v = s[i+1:].strip().strip('"')
+                        D[n] = v
+                    else:
+                        D[s] = None
+                attrs = D
+            
+            specobj = ScriptSpec( lineno, key, attrs, val )
+            self.specL.append( specobj )
 
 
 class ScriptSpec:
@@ -617,6 +657,52 @@ def testNameList_scr( vspecs ):
 
     return L
 
+def parseKeywords_scr( vspecs, tname, ufilter ):
+    """
+    Parse the test keywords for the test script file.
+    
+      keywords : key1 key2
+      keywords (testname=mytest) : key3
+    
+    Also includes the test name and the parameterize names.
+    TODO: what other implicit keywords ??
+    """
+    keyD = {}
+    
+    keyD[tname] = None
+    
+    for spec in vspecs.getSpecList( 'keywords' ):
+        if not testname_ok_scr( spec.attrs, tname, ufilter ):
+            # skip this keyword set (filtered out based on test name)
+            continue
+        for key in spec.value.strip().split():
+            if allowableString(key):
+                keyD[key] = None
+            else:
+                raise TestSpecError( 'invalid keyword: "'+key+'", line ' + \
+                                     str(spec.lineno) )
+    
+    # the parameter names are included in the test keywords
+    for spec in vspecs.getSpecList( 'parameterize' ):
+        if not testname_ok_scr( spec.attrs, tname, ufilter ):
+            continue
+        # TODO: extract the parameter names
+        #if allowableVariable(n):
+        #    keyD[ str(n) ] = None
+    
+    L = keyD.keys()
+    L.sort()
+    return L
+
+
+def testname_ok_scr( attrs, tname, ufilter ):
+    """
+    """
+    if attrs != None:
+        tval = attrs.get( 'testname', None )
+        if tval != None and not ufilter.evauate_testname_expr( tname, tval ):
+            return False
+    return True
 
 ###########################################################################
 
