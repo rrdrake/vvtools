@@ -2,6 +2,7 @@ import os, sys
 import re
 import shutil
 import stat
+import time
 
 # this file is expected to be imported from a script that was run
 # within the tests directory (which is how all the tests are run)
@@ -344,6 +345,27 @@ def testlines(out):
         mark = 1
         L = []  # reset list so only last cluster is considered
     return L
+
+def testtimes(out):
+    """
+    Parses the test output and obtains the start time (seconds since epoch)
+    and finish time of each test.  Returns a list of
+          [ test execute dir, start time, end time ]
+    """
+    timesL = []
+
+    fmt = '%Y %m/%d %H:%M:%S'
+    for line in testlines(out):
+        L = line.strip().split()
+        try:
+            s = time.strftime('%Y ')+L[4]+' '+L[5]
+            t = time.mktime( time.strptime( s, fmt ) )
+            e = t + int( L[3][:-1] )
+            timesL.append( [ L[-1], t, e ] )
+        except:
+            pass
+
+    return timesL
 
 if not os.environ.has_key('TOOLSET_RUNDIR'):
     # directly executing a test script can be done but rm -rf * is performed;

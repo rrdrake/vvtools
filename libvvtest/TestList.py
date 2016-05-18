@@ -532,10 +532,11 @@ class TestList:
           L.extend( self.xtlist.get(numprocs,[]) )
         return L
     
-    def popNonFastNonParentTestExec(self, platform):
+    def popNonFastTestExec(self, platform):
         """
         next test of largest np available to the platform, does not have
-        'fast' keyword, and is not a parent test
+        'fast' keyword, and is not a parent test with a child that did not
+        run or had a bad result
         """
         npL = self.xtlist.keys()
         npL.sort()
@@ -545,17 +546,29 @@ class TestList:
             L = self.xtlist[np]
             for i in xrange(len(L)):
               tx = L[i]
-              if not tx.atest.hasKeyword('fast') and not tx.isParent():
+              ok = False
+              if not tx.atest.hasKeyword('fast'):
+                if tx.isParent():
+                  # if all children tests were run and passed or diffed,
+                  # then this parent can execute
+                  if tx.badChild() == None:
+                    ok = True
+                else:
+                  ok = True
+              if ok:
                 del L[i]
                 if len(L) == 0:
                   del self.xtlist[np]
                 return tx
         return None
     
-    def popNonParentTestExec(self, platform=None):
+    def popTestExec(self, platform=None):
         """
-        if 'platform' is None, return the next non-parent test
-        else, next non-parent test of largest np available to the platform
+        If 'platform' is None, return the next test on the list.
+        If 'platform' is not None, return the next test of largest np
+        available to the platform.
+        In both cases, parent tests are not returned if they have a child
+        that did not run or had a bad result.
         """
         npL = self.xtlist.keys()
         npL.sort()
@@ -565,16 +578,24 @@ class TestList:
             L = self.xtlist[np]
             for i in xrange(len(L)):
               tx = L[i]
-              if not tx.isParent():
+              ok = False
+              if tx.isParent():
+                # if all children tests were run and passed or diffed,
+                # then this parent can execute
+                if tx.badChild() == None:
+                  ok = True
+              else:
+                ok = True
+              if ok:
                 del L[i]
                 if len(L) == 0:
                   del self.xtlist[np]
                 return tx
         return None
     
-    def popTestExec(self):
+    def forcePopTestExec(self):
         """
-        return next test of largest np in the list
+        Return next test of largest np in the list.
         """
         npL = self.xtlist.keys()
         npL.sort()

@@ -1174,7 +1174,7 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
         # no tests running and no more tests to run, so we are done
         break
       
-      # the --intr option is used for testing and interrupt
+      # the --intr option is used for testing
       if optdict.has_key('--intr') and \
             len(run_list)+len(done_list) == optdict['--intr']:
         time.sleep(1.0)
@@ -1186,49 +1186,47 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
       
       # find next test to run
       
-      next = tlist.popNonFastNonParentTestExec( plat )
+      tnext = tlist.popNonFastTestExec( plat )
       
-      if next == None:
-        next = tlist.popNonParentTestExec( plat )
+      if tnext == None:
+        tnext = tlist.popTestExec( plat )
       
-      if next == None and len(run_list) == 0:
+      if tnext == None and len(run_list) == 0:
         # no test is selected but no tests are running, so must be analyze
         # tests left or tests that require more processors than
-        # the platform has .. try for the later
-        next = tlist.popNonParentTestExec()
+        # the platform has .. try for the latter
+        tnext = tlist.popTestExec()
       
-      if next == None and plat.queryProcs(1) and \
+      if tnext == None and plat.queryProcs(1) and \
          (only_analyze_left or len(run_list) == 0):
         only_analyze_left = 1  # true
         while 1:
-          next = tlist.popTestExec()
-          if next == None:
+          tnext = tlist.forcePopTestExec()
+          if tnext == None:
             break
-          k = next.badChild()
+          k = tnext.badChild()
           if k != None:
             print 'Note: skipping analyze for "' + \
-                  next.atest.getExecuteDirectory() + \
+                  tnext.atest.getExecuteDirectory() + \
                   '" due to child "' + k.atest.getExecuteDirectory() + '"'
           else:
             break
       
-      if next != None:
+      if tnext != None:
         
         if optdict.has_key('-L'):
           print "\n****************************************************"
           print "******************** BEGIN TEST ********************"
           print "****************************************************\n"
         
-        next.start()
-        fp = open( tfile, "a" )
-        fp.write( TestSpecCreator.toString(next.atest) + '\n' )
-        fp.close()
+        tnext.start()
+        tlist.AppendTestResult( tnext.atest )
         
         numrun = numrun + 1
         s = "%-12s" % ("(" + str(numrun) + " of " + str(totnum) + ")")
-        print s, XstatusString(next, 0, test_dir, cwd)
+        print s, XstatusString(tnext, 0, test_dir, cwd)
         
-        run_list.append(next)
+        run_list.append(tnext)
         
 #        time.sleep(1)  # give the system some breathing room
       

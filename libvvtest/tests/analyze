@@ -14,6 +14,7 @@ def main():
 
     if len(argL) == 0:
         argL = """test01 test02 test03 test04 test05 test06 test07
+                  test08
                """.split()
 
     savedir = os.getcwd()
@@ -156,7 +157,7 @@ def test02():
 
     out,np,nd,nf,nn = run_vvtest( '-R -k notdone/notrun/fail -k bad parentchild' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    
+
 
 def test03():
     """
@@ -385,6 +386,46 @@ def test07():
     fL = glob.glob( 'TestResults.*/multi2/execute.log' )
     assert len(fL) == 1
     assert len( filegrep( fL[0], 'analyze test multi2 ' ) ) >= 1
+
+
+########################################################################
+
+def test08():
+    """
+    analyze tests should not wait until the end to run
+    """
+    writefile( 'test1.xml', """
+        <rtest name="test1">
+          <parameterize timestep="1 2"/>
+          <execute>
+            sleep 1
+            touch afile.$timestep
+          </execute>
+          <analyze>
+             ls ../test1.timestep=1/afile.1 || exit 1
+             ls ../test1.timestep=2/afile.2 || exit 1
+          </analyze>
+        </rtest>""" )
+    writefile( 'test2.xml', """
+        <rtest name="test2">
+          <execute>
+            sleep 10
+            echo "that was a nice nap"
+          </execute>
+        </rtest>""" )
+    
+    out,np,nd,nf,nn = run_vvtest( '-n 4 --sort x' )
+    assert np == 4 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+
+    tL = testtimes( out )
+    assert len(tL) == 4
+    assert tL[0][0] == tdir+'/test1'
+    assert tL[1][0] == tdir+'/test1.timestep=1'
+    assert tL[2][0] == tdir+'/test1.timestep=2'
+    assert tL[3][0] == tdir+'/test2'
+    assert tL[0][1] >= tL[1][2] and tL[0][1] >= tL[2][2]
+    assert tL[0][1] < tL[3][2]
 
 
 ########################################################################
