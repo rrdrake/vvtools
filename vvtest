@@ -950,8 +950,17 @@ def runTests( dirs, plat, ufilter ):
     if os.path.exists( tfile ):
         tlist.readFile( tfile )  # merge in existing test results
     
-    tlist.loadTests( analyze_only=optdict.has_key('-a') )
+    pruneL = tlist.loadTests( analyze_only=optdict.has_key('-a'),
+                              prune=True )
     
+    if len(pruneL) > 0:
+        print3()
+        for pt,ct in pruneL:
+            print3( '*** Warning: analyze test',
+                    relative_execute_directory( pt, test_dir, os.getcwd() ),
+                    'will not be run due to child',
+                    relative_execute_directory( ct, test_dir, os.getcwd() ) )
+
     loadExecutionTimes( tlist, plat )
     
     # save the test list in the TestResults directory
@@ -1238,7 +1247,8 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
     # write testlist files for each qsub
     numjobs = pipes.writeQsubScripts()
 
-    print3( 'Total number of batch jobs:', numjobs )
+    print3( 'Total number of batch jobs: ' + str(numjobs) + \
+            ', maximum concurrent jobs: ' + str(qsublimit) )
 
     if optdict.has_key('-g'):
       return
@@ -1931,7 +1941,17 @@ def restartTests( test_dir, plat, ufilter ):
     
     reld = computeRelativePath( os.path.abspath(test_dir), os.getcwd() )
     
-    tlist.loadTests( filter_dir=reld, analyze_only=optdict.has_key('-a') )
+    pruneL = tlist.loadTests( filter_dir=reld,
+                              analyze_only=optdict.has_key('-a'),
+                              prune=True )
+    
+    if len(pruneL) > 0:
+        print3()
+        for pt,ct in pruneL:
+            print3( '*** Warning: analyze test',
+                    relative_execute_directory( pt, test_dir, os.getcwd() ),
+                    'will not be run due to child',
+                    relative_execute_directory( ct, test_dir, os.getcwd() ) )
     
     if qid == None:
       loadExecutionTimes( tlist, plat )

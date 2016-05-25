@@ -247,11 +247,17 @@ class TestList:
         
         return vers, lineL
     
-    def loadTests(self, filter_dir=None, analyze_only=0 ):
+    def loadTests(self, filter_dir=None, analyze_only=0, prune=False ):
         """
         Creates the active test list using the scanned tests and the tests
         read in from a test list file.  A subdirectory filter is applied and
         the filter given in the constructor.
+
+        If 'prune' is true, then analyze tests are filtered out if they have
+        inactive children that did not pass/diff in a previous run.
+
+        Returns a list of (analyze test, child test) for analyze tests that
+        were pruned.  The second item is the child that did not pass/diff.
         """
         self.active = {}
 
@@ -276,18 +282,23 @@ class TestList:
             if keep:
               self.active[ xdir ] = t
 
-        # remove analyze tests from the active set if they have inactive
-        # children that have a bad result
-        for xdir,t in self.scantests.items()+self.filetests.items():
-            pxdir = t.getParent()
-            # does this test have a parent and is this test inactive
-            if pxdir != None and xdir not in self.active:
-                # is the parent active and does the child have a bad result
-                if pxdir in self.active and \
-                      ( t.getAttr('state') != 'done' or \
-                        t.getAttr('result') not in ['pass','diff'] ):
-                    # remove the parent from the active set
-                    self.active.pop( pxdir )
+        pruneL = []
+        if prune:
+            # remove analyze tests from the active set if they have inactive
+            # children that have a bad result
+            for xdir,t in self.scantests.items()+self.filetests.items():
+                pxdir = t.getParent()
+                # does this test have a parent and is this test inactive
+                if pxdir != None and xdir not in self.active:
+                    # is the parent active and does the child have a bad result
+                    if pxdir in self.active and \
+                          ( t.getAttr('state') != 'done' or \
+                            t.getAttr('result') not in ['pass','diff'] ):
+                        # remove the parent from the active set
+                        pt = self.active.pop( pxdir )
+                        pruneL.append( (pt,t) )
+
+        return pruneL
     
     def _apply_filters(self, xdir, tspec, subdir, analyze_only):
         """

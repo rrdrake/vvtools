@@ -21,11 +21,16 @@ def main():
         argL = """test01 test02
                """.split()
 
+    # set these for the pipeline tests
+    os.environ['VVTEST_BATCH_READ_DELAY'] = '5'
+    os.environ['VVTEST_BATCH_READ_DELAY_MAX'] = '15'
+    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+
+    savedir = os.getcwd()
     for func in argL:
-        
+        os.chdir( savedir )
         rmallfiles()
         time.sleep(1)
-        
         print3( '====> ', func )
         eval( func+'()' )
 
@@ -58,6 +63,7 @@ def test01():
     out,np,nd,nf,nn = run_vvtest( '--perms g=,o=' )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
     tdir = os.path.abspath( results_dir() )
+    platname = platform_name( out )
 
     m = stat.S_IMODE( os.stat(tdir)[stat.ST_MODE] )
     assert int( m & stat.S_IRWXG ) == 0
@@ -80,6 +86,36 @@ def test01():
         m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
         assert int( m & stat.S_IRWXG ) == 0
         assert int( m & stat.S_IRWXO ) == 0
+    
+    if platname in batchplatforms:
+        
+        remove_results()
+
+        out,np,nd,nf,nn = run_vvtest( '--pipeline --perms g=,o=' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+        m = stat.S_IMODE( os.stat(tdir)[stat.ST_MODE] )
+        assert int( m & stat.S_IRWXG ) == 0
+        assert int( m & stat.S_IRWXO ) == 0
+
+        for f in 'test.cache testlist one two'.split():
+            p = os.path.join( tdir, f )
+            m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+            assert int( m & stat.S_IRWXG ) == 0
+            assert int( m & stat.S_IRWXO ) == 0
+
+        for f in 'cat dog'.split():
+            p = os.path.join( tdir, 'one', f )
+            m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+            assert int( m & stat.S_IRWXG ) == 0
+            assert int( m & stat.S_IRWXO ) == 0
+
+        for f in 'execute.log runscript'.split():
+            p = os.path.join( tdir, 'one', 'dog', f )
+            m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+            assert int( m & stat.S_IRWXG ) == 0
+            assert int( m & stat.S_IRWXO ) == 0
+
 
 def test02():
     """
@@ -107,6 +143,7 @@ def test02():
     out,np,nd,nf,nn = run_vvtest( '--perms g=rws,o=rwx' )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
     tdir = os.path.abspath( results_dir() )
+    platname = platform_name( out )
 
     m = stat.S_IMODE( os.stat(tdir)[stat.ST_MODE] )
     assert int( m & (stat.S_IRWXG|stat.S_ISGID) ) == int( stat.S_IRWXG|stat.S_ISGID )
@@ -141,6 +178,55 @@ def test02():
         m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
         assert int( m & stat.S_IRWXG ) == int( stat.S_IRGRP|stat.S_IWGRP|stat.S_IXGRP )
         assert int( m & stat.S_IRWXO ) == int( stat.S_IROTH|stat.S_IWOTH|stat.S_IXOTH )
+    
+    if platname in batchplatforms:
+        
+        remove_results()
+        
+        out,np,nd,nf,nn = run_vvtest( '--pipeline --perms g=rws,o=rwx' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( results_dir() )
+        platname = platform_name( out )
+
+        m = stat.S_IMODE( os.stat(tdir)[stat.ST_MODE] )
+        assert int( m & (stat.S_IRWXG|stat.S_ISGID) ) == int( stat.S_IRWXG|stat.S_ISGID )
+        assert int( m & stat.S_IRWXO ) == stat.S_IRWXO
+
+        for f in 'test.cache testlist'.split():
+            p = os.path.join( tdir, f )
+            m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+            assert int( m & stat.S_IRWXG ) == int( stat.S_IRGRP|stat.S_IWGRP )
+            assert int( m & stat.S_IRWXO ) == int( stat.S_IROTH|stat.S_IWOTH )
+
+        for f in 'one two batchset0'.split():
+            p = os.path.join( tdir, f )
+            m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+            assert int( m & (stat.S_IRWXG|stat.S_ISGID) ) == int( stat.S_IRWXG|stat.S_ISGID )
+            assert int( m & stat.S_IRWXO ) == stat.S_IRWXO
+
+        for f in os.listdir( os.path.join( tdir, 'batchset0' ) ):
+            p = os.path.join( tdir, 'batchset0', f )
+            m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+            assert int( m & stat.S_IRWXG ) == int( stat.S_IRGRP|stat.S_IWGRP )
+            assert int( m & stat.S_IRWXO ) == int( stat.S_IROTH|stat.S_IWOTH )
+        
+        for f in 'cat dog'.split():
+            p = os.path.join( tdir, 'one', f )
+            m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+            assert int( m & (stat.S_IRWXG|stat.S_ISGID) ) == int( stat.S_IRWXG|stat.S_ISGID )
+            assert int( m & stat.S_IRWXO ) == stat.S_IRWXO
+
+        for f in 'execute.log'.split():
+            p = os.path.join( tdir, 'one', 'dog', f )
+            m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+            assert int( m & stat.S_IRWXG ) == int( stat.S_IRGRP|stat.S_IWGRP )
+            assert int( m & stat.S_IRWXO ) == int( stat.S_IROTH|stat.S_IWOTH )
+
+        for f in 'runscript'.split():
+            p = os.path.join( tdir, 'one', 'dog', f )
+            m = stat.S_IMODE( os.stat(p)[stat.ST_MODE] )
+            assert int( m & stat.S_IRWXG ) == int( stat.S_IRGRP|stat.S_IWGRP|stat.S_IXGRP )
+            assert int( m & stat.S_IRWXO ) == int( stat.S_IROTH|stat.S_IWOTH|stat.S_IXOTH )
 
 
 ############################################################################

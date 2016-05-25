@@ -14,7 +14,7 @@ def main():
 
     if len(argL) == 0:
         argL = """test01 test02 test03 test04 test05 test06 test07
-                  test08 test09 test10
+                  test08 test09 test10 test11 test12
                """.split()
 
     # set these for the pipeline tests
@@ -652,6 +652,61 @@ def test10():
         # (if the analyze job does, then the analyze test will show a fail)
         out,np,nd,nf,nn = run_vvtest( '-R --pipeline --qsub-length 1 --qsub-limit 5' )
         assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+
+def test11():
+    """
+    make sure if a child test takes more processors than available, then
+    the analyze will still wait for all the children to finish
+    """
+    writefile( 'atest.xml', """
+        <rtest name="atest">
+          <parameterize np="1 1 2 2" foo="bar baz bar baz"/>
+          <execute>
+            sleep 4
+            touch afile.$foo.$np
+          </execute>
+          <analyze>
+             ls ../atest.foo=bar.np=1/afile.bar.1 || exit 1
+             ls ../atest.foo=baz.np=1/afile.baz.1 || exit 1
+             ls ../atest.foo=bar.np=2/afile.bar.2 || exit 1
+             ls ../atest.foo=baz.np=2/afile.baz.2 || exit 1
+          </analyze>
+        </rtest>""" )
+    
+    out,np,nd,nf,nn = run_vvtest( '-n 1' )
+    assert np == 5 and nd == 0 and nf == 0 and nn == 0
+
+
+def test12():
+    """
+    analyze tests that have bad children are not pruned when using -i
+    """
+    writefile( 'bad.xml', """
+    <rtest name="bad">
+      <keywords> fast medium </keywords>
+      <parameterize timestep="1 2"/>
+      <execute>
+        if ( "$timestep" == 2 ) then
+          echo "fake failure"
+          exit 1
+        else
+          touch bfile.$timestep
+        endif
+      </execute>
+      <analyze>
+         ls ../bad.timestep=1/bfile.1 || exit 1
+         ls ../bad.timestep=2/bfile.2 || exit 1
+      </analyze>
+    </rtest>""" )
+
+    # the analyze should be run here
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 1 and nn == 1
+
+    # the analyze should show up in the listing here
+    out,np,nd,nf,nn = run_vvtest( '-i -k notrun/pass' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 1
 
 
 ########################################################################
