@@ -353,6 +353,11 @@ class TestExec:
         """
         return self.children != None
     
+    def getChildren(self):
+        """
+        """
+        return self.children
+
     def badChild(self):
         """
         If this is a parent test and one of its children didn't run, didn't

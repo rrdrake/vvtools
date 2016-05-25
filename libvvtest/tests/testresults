@@ -1434,7 +1434,9 @@ def inprogress():
           </execute>
         </rtest>""" )
 
-    out,np,nd,nf,nn = run_vvtest( '--intr 2 --save-results', ignore_errors=1 )
+    os.environ['VVTEST_INTERRUPT_COUNT'] = '2'
+    out,np,nd,nf,nn = run_vvtest( '--save-results', ignore_errors=1 )
+    del os.environ['VVTEST_INTERRUPT_COUNT']
     tdir = os.path.abspath( results_dir() )
 
     resultsfname = glob.glob('results.*')[0]

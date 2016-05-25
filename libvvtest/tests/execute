@@ -20,13 +20,19 @@ def main():
                   exitstat xmldir options params
                   keywords autolink tname1 tname2 duplicate
                   postclean force1 force2 force3
+                  batch1
                """.split()
 
+    # set these for the pipeline tests
+    os.environ['VVTEST_BATCH_READ_DELAY'] = '5'
+    os.environ['VVTEST_BATCH_READ_DELAY_MAX'] = '15'
+    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+    
+    cwd = os.getcwd()
     for func in argL:
-        
+        os.chdir( cwd )
         rmallfiles()
         time.sleep(1)
-        
         print3( '====> ', func )
         eval( func+'()' )
 
@@ -634,31 +640,6 @@ def force2():
     assert len( grep( out, 'rror.*another process' ) ) == 1
 
 
-def force3():
-    """
-    can force concurrent by using --force
-    """
-    writefile( "sleeper.xml", """
-        <rtest name="sleeper">
-            <execute> sleep 10 </execute>
-        </rtest>""" )
-
-    bg = Background( vvtest, 'log' )
-    bg.wait()
-    fp = open( 'log', 'r' ) ; out = fp.read() ; fp.close()
-    print out
-    np,nd,nf,nn = numpass(out),numdiff(out),numfail(out),numnotrun(out)
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-    remove_results()
-
-    bg = Background( vvtest, 'log' )
-    time.sleep(4)
-    xok,out = run_cmd( vvtest + ' -R --force' )
-
-    bg.wait( 10 )
-    assert len( grep( out, 'rror.*another process' ) ) == 0
-
 
 class Background:
 
@@ -697,6 +678,121 @@ class Background:
             if hasattr( self.p, 'terminate' ):
                 try: self.p.terminate()
                 except: pass
+
+
+def force3():
+    """
+    can force concurrent by using --force
+    """
+    writefile( "sleeper1.xml", """
+        <rtest name="sleeper1">
+            <timeout value="20"/>
+            <execute> sleep 5 </execute>
+        </rtest>""" )
+    writefile( "sleeper2.xml", """
+        <rtest name="sleeper2">
+            <timeout value="20"/>
+            <execute> sleep 5 </execute>
+        </rtest>""" )
+
+    # using SIGKILL prevents the "finished" mark from getting placed
+    os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
+    os.environ['VVTEST_SIGNAL'] = 'SIGKILL'
+    xok,out = run_cmd( vvtest + ' -n 1' )
+    del os.environ['VVTEST_INTERRUPT_COUNT']
+    del os.environ['VVTEST_SIGNAL']
+    
+    # this one should fail
+    xok,out = run_cmd( vvtest + ' -R' )
+    assert not xok
+    assert len( grep( out, 'rror.*another process' ) ) == 1
+    
+    # this one should be forced to run
+    xok,out = run_cmd( vvtest + ' -R --force' )
+    assert xok
+    assert len( grep( out, 'rror.*another process' ) ) == 0
+
+    platname = platform_name( out )
+    if platname in batchplatforms:
+        
+        remove_results()
+        
+        # using SIGKILL prevents the "finished" mark from getting placed
+        os.environ['VVTEST_INTERRUPT_BATCH'] = '1'
+        os.environ['VVTEST_SIGNAL_BATCH'] = 'SIGKILL'
+        xok,out = run_cmd( vvtest + ' --pipeline --qsub-limit 1 --qsub-length 1' )
+        del os.environ['VVTEST_INTERRUPT_BATCH']
+        del os.environ['VVTEST_SIGNAL_BATCH']
+        
+        # this one should fail
+        xok,out = run_cmd( vvtest + ' --pipeline -R' )
+        assert not xok
+        assert len( grep( out, 'rror.*another process' ) ) == 1
+        
+        # this one should be forced to run
+        xok,out = run_cmd( vvtest + ' --pipeline -R --force' )
+        assert xok
+        assert len( grep( out, 'rror.*another process' ) ) == 0
+
+
+############################################################################
+
+def batch1():
+    """
+    behavior of a batch job failing
+    """
+    writefile( "null.xml", """
+        <rtest name="null">
+        </rtest>""" )
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+    platname = platform_name( out )
+    remove_results()
+    os.remove( 'null.xml' )
+
+    if platname in batchplatforms:
+
+        writefile( "sleeper1.xml", """
+            <rtest name="sleeper1">
+                <timeout value="15"/>
+                <execute> sleep 5 </execute>
+            </rtest>""" )
+        writefile( "sleeper2.xml", """
+            <rtest name="sleeper2">
+                <timeout value="15"/>
+                <execute> sleep 5 </execute>
+            </rtest>""" )
+        writefile( "sleeper3.xml", """
+            <rtest name="sleeper3">
+                <timeout value="15"/>
+                <execute> sleep 5 </execute>
+            </rtest>""" )
+        writefile( "sleeper4.xml", """
+            <rtest name="sleeper4">
+                <timeout value="15"/>
+                <execute> sleep 5 </execute>
+            </rtest>""" )
+        
+        # these four tests are run in two pipelines
+        # pipeline zero will be ok, while pipeline one will crash
+        # this should cause pipeline one to show "did not seem to finish"
+
+        os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
+        os.environ['VVTEST_INTERRUPT_QID'] = '1'
+        xok,out = run_cmd( vvtest + ' --pipeline --qsub-limit 1 --qsub-length 40' )
+        del os.environ['VVTEST_INTERRUPT_COUNT']
+        del os.environ['VVTEST_INTERRUPT_QID']
+
+        L = grep( out, 'did not seem to finish:' )
+        assert len(L) == 1
+        L2 = L[0].split(':')[-1].split()
+        L2 = [ int(s) for s in L2 ]
+        assert L2 == [1]
+
+        assert len( greptestlist( out, 'sleeper[1-4]' ) ) == 4
+        assert len( greptestlist( out, 'sleeper[1-4] .*pass' ) ) == 3
+
 
 
 ############################################################################

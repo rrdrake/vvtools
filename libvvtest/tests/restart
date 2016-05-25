@@ -12,9 +12,14 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02
+        argL = """test01 test02 test03
                """.split()
 
+    # set these for the pipeline tests
+    os.environ['VVTEST_BATCH_READ_DELAY'] = '5'
+    os.environ['VVTEST_BATCH_READ_DELAY_MAX'] = '15'
+    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+    
     cwd = os.getcwd()
     for func in argL:
         os.chdir( cwd )
@@ -61,20 +66,28 @@ def test01():
         </rtest>""")
 
     # run the test set but provide a false interruption
-    out,np,nd,nf,nn = run_vvtest( "-n 2 --intr 2", ignore_errors=1 )
+    os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
+    out,np,nd,nf,nn = run_vvtest( "-n 2", ignore_errors=1 )
+    del os.environ['VVTEST_INTERRUPT_COUNT']
+    out,np,nd,nf,nn = run_vvtest( '-i' )
+    assert np+nd+nf+nn == 4
+    assert np < 2 or nd < 1 or nf < 1
 
     # restart with no keywords
     out,np,nd,nf,nn = run_vvtest( '-n 2' )
+    out,np,nd,nf,nn = run_vvtest( '-i' )
     assert np == 2 and nd == 1 and nf == 1 and nn == 0
 
-    # restart on a results keyword
-    out,np,nd,nf,nn = run_vvtest( '-n 2 -w --intr 2', ignore_errors=1 )
-    out,np,nd,nf,nn = run_vvtest( '-n 2 -k notrun' )
-    assert np+nd+nf+nn == 2
-
-    # restart on not done
-    out,np,nd,nf,nn = run_vvtest( '-n 2 -k notdone' )
-    assert np+nd+nf+nn == 2
+    # restart using results keyword
+    os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
+    out,np,nd,nf,nn = run_vvtest( '-n 2 -w', ignore_errors=1 )
+    del os.environ['VVTEST_INTERRUPT_COUNT']
+    out,np,nd,nf,nn = run_vvtest( '-i' )
+    assert np+nd+nf+nn == 4
+    assert np < 2 or nd < 1 or nf < 1
+    out,np,nd,nf,nn = run_vvtest( '-n 2 -k notrun/notdone' )
+    out,np,nd,nf,nn = run_vvtest( '-i' )
+    assert np+nd+nf+nn == 4
 
     # none should restart now
     out,np,nd,nf,nn = run_vvtest( '-n 2' )

@@ -35,8 +35,9 @@ class Platform:
     def getOptions(self): return self.optdict
     
     def display(self):
-        s = "Platform " + self.platname + \
-            " with " + str(self.nprocs) + " processors"
+        s = "Platform " + self.platname
+        if self.nprocs > 0:
+            s += " with " + str(self.nprocs) + " processors"
         print s
     
     def getEnvironment(self):

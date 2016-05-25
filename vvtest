@@ -10,7 +10,7 @@ import shutil
 import types
 import glob
 
-version = '27'  # version number; used to check format and for information
+version = '28'  # version number; used to check format and for information
 
 usagepage = \
 '''
@@ -400,7 +400,7 @@ config = Configuration()
 
 ############################################################################
 
-def XstatusString(t, add_date, test_dir, cwd):
+def XstatusString( t, add_date, test_dir, cwd ):
     """
     Returns a formatted string containing the job and its status.  If the
     add_date argument is true, it adds the date the job finished to the
@@ -444,15 +444,7 @@ def XstatusString(t, add_date, test_dir, cwd):
       else:
         s = s + "               "
     
-    if test_dir == None:
-      s = s + " " + ref.getExecuteDirectory()
-    else:
-      d = os.path.join( test_dir, ref.getExecuteDirectory() )
-      sdir = issubdir( cwd, d )
-      if sdir == None or sdir == "":
-        s = s + " " + os.path.basename( ref.getExecuteDirectory() )
-      else:
-        s = s + " " + sdir
+    s += ' ' + relative_execute_directory( ref, test_dir, cwd )
     
     return s
 
@@ -467,6 +459,24 @@ def XstatusResult(t):
       return state
     
     return ref.getAttr('result')
+
+
+def relative_execute_directory( tst, testdir, cwd ):
+    """
+    Returns the test execute directory relative to the given current working
+    directory.
+    """
+    xdir = tst.getExecuteDirectory()
+
+    if testdir == None:
+      return xdir
+    
+    d = os.path.join( testdir, xdir )
+    sdir = issubdir( cwd, d )
+    if sdir == None or sdir == "":
+        return os.path.basename( xdir )
+    
+    return sdir
 
 
 ##############################################################################
@@ -905,6 +915,7 @@ def runTests( dirs, plat, ufilter ):
             print '*** error: tests are currently running in another process'
             print '    (or a previous run crashed); use --force to run anyway'
             sys.exit(1)
+        tl = None
     
     perms = None
     if '--perms' in optdict:
@@ -956,8 +967,9 @@ def runTests( dirs, plat, ufilter ):
           if '--pipeline' not in optdict:
             plat.initProcs( test_dir )
 
-          print "Running these tests:"
+          print3( "Running these tests:" )
           printResults( tlist, True, test_dir, False, perms, True )
+          print3()
 
           tlist.createTestExecs( test_dir, plat, config, perms )
           
@@ -971,7 +983,7 @@ def runTests( dirs, plat, ufilter ):
           else:
             pipeLineTestList( tlist, test_dir, plat, perms )
         
-          print "Test directory:", testdirname
+          print3( "Test directory:", testdirname )
           
           if optdict.has_key('--save-results'):
             tag = optdict.get('--results-tag',None)
@@ -1023,7 +1035,6 @@ def printResults( atestlist, add_date, test_dir, do_html, perms, short=False ):
             print3( XstatusString( atest, add_date, test_dir, cwd ) )
     print3( "==================================================" )
     print3( "Summary:", sumstr )
-    print3()
     
     if do_html:
         printHTMLResults( sumstr, test_dir, perms,
@@ -1142,290 +1153,210 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
     """
     plat.display()
     starttime = time.time()
-    print "Start time:", time.ctime( starttime )
+    print3( "Start time:", time.ctime() )
     
-    totnum = tlist.numTestExec()  # total number of tests to be run
-    numrun = 0
-
     # execute tests
 
     if perms != None:
         perms.set( os.path.abspath( tfile ) )
 
     cwd = os.getcwd()
-    
-    run_list = []
-    done_list = []
-    only_analyze_left = 0
-    
-    while True:
-      
-      new_run_list = []
-      for t in run_list:
-        if t.poll():
-          print "%-12s" % "finished:", XstatusString( t, 0, test_dir, cwd )
-          tlist.AppendTestResult( t.atest )
-          done_list.append(t)
-        else:
-          new_run_list.append(t)
-      run_list = new_run_list
-      
-      if len(run_list) == 0 and tlist.numTestExec() == 0:
-        # no tests running and no more tests to run, so we are done
-        break
-      
-      # the --intr option is used for testing
-      if optdict.has_key('--intr') and \
-            len(run_list)+len(done_list) == optdict['--intr']:
-        time.sleep(1.0)
-        print exeName + ": interrupting after", optdict['--intr'], \
-              "tests due to the --intr option"
-        os.kill( os.getpid(), signal.SIGINT )
-        time.sleep(60)
-        sys.exit(1)
-      
-      # find next test to run
-      
-      tnext = tlist.popNonFastTestExec( plat )
-      
-      if tnext == None:
-        tnext = tlist.popTestExec( plat )
-      
-      if tnext == None and len(run_list) == 0:
-        # no test is selected but no tests are running, so must be analyze
-        # tests left or tests that require more processors than
-        # the platform has .. try for the latter
-        tnext = tlist.popTestExec()
-      
-      if tnext == None and plat.queryProcs(1) and \
-         (only_analyze_left or len(run_list) == 0):
-        only_analyze_left = 1  # true
-        while 1:
-          tnext = tlist.forcePopTestExec()
-          if tnext == None:
-            break
-          k = tnext.badChild()
-          if k != None:
-            print 'Note: skipping analyze for "' + \
-                  tnext.atest.getExecuteDirectory() + \
-                  '" due to child "' + k.atest.getExecuteDirectory() + '"'
-          else:
-            break
-      
-      if tnext != None:
-        
-        if optdict.has_key('-L'):
-          print "\n****************************************************"
-          print "******************** BEGIN TEST ********************"
-          print "****************************************************\n"
-        
-        tnext.start()
-        tlist.AppendTestResult( tnext.atest )
-        
-        numrun = numrun + 1
-        s = "%-12s" % ("(" + str(numrun) + " of " + str(totnum) + ")")
-        print s, XstatusString(tnext, 0, test_dir, cwd)
-        
-        run_list.append(tnext)
-        
-#        time.sleep(1)  # give the system some breathing room
-      
-      else:
-        # more tests but not enough free resources .. wait a few
-        time.sleep(1)
 
-    if optdict.has_key('-L'):
-      print "\n****************************************************"
-      print "********************* END TESTS ********************"
-      print "****************************************************\n"
+    while True:
+
+        tnext = tlist.popNext( plat )
+
+        if tnext != None:
+            print3( 'Starting:',
+                    relative_execute_directory( tnext.atest, test_dir, cwd ) )
+            tnext.start()
+            tlist.AppendTestResult( tnext.atest )
+        
+        elif tlist.numRunning() == 0:
+            break
+
+        else:
+            time.sleep(1)
+
+        showprogress = False
+        for tx in tlist.getRunning():
+            if tx.poll():
+                xs = XstatusString( tx, False, test_dir, cwd )
+                print3( "Finished:", xs )
+                tlist.testDone( tx )
+                showprogress = True
+      
+        unit_test_hook( 'tests', tlist.numRunning(), tlist.numDone() )
+
+        if showprogress:
+            ndone = tlist.numDone()
+            ntot = tlist.numActive()
+            pct = 100 * float(ndone) / float(ntot)
+            div = str(ndone)+'/'+str(ntot)
+            dt = pretty_time( time.time() - starttime )
+            print3( "Progress: " + div+" = %%%.1f"%pct + ', time = '+dt )
     
-    elapsed = time.time() - starttime
-    h = int( elapsed / 3600 )
-    m = int( (elapsed - h * 3600) / 60 )
-    if h == 0 and m == 0: m = 1
-    print "Finish time:", time.ctime( time.time() ) + \
-          " (elapsed %dh %dm)" % (h,m)
+    # any remaining tests cannot run, so print warnings
+    tL = tlist.popRemaining()
+    if len(tL) > 0:
+        print3()
+    for tx in tL:
+        deptx = tx.badChild()
+        assert tx.isParent() and deptx != None
+        print3( '*** Warning: analyze test skipped for "' + \
+                tx.atest.getExecuteDirectory() + \
+                '" due to child "' + deptx.atest.getExecuteDirectory() + '"' )
     
+    print3()
     do_html = ( '--qsub-id' not in optdict )
     printResults( tlist, True, test_dir, do_html, perms )
     
-    print "Finish time:", time.ctime( time.time() ) + \
-          " (elapsed %dh %dm)" % (h,m)
+    elapsed = pretty_time( time.time() - starttime )
+    print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
 
 
 def pipeLineTestList( tlist, test_dir, plat, perms ):
     """
     The 'tlist' is a TestList class instance.
     """
-    pipes = Pipelines( plat, test_dir, tlist, perms )
+    assert '--qsub-id' not in optdict
+
+    qsublimit = optdict.get( '--qsub-limit', plat.getDefaultQsubLimit() )
+    
+    pipes = Pipelines( plat, test_dir, tlist, perms, qsublimit )
     
     plat.display()
     starttime = time.time()
-    print "Start time:", time.ctime( starttime )
+    print3( "Start time:", time.ctime() )
     
     # clean up old pipeline files
-    print "rm -rf batchset*"
+    print3( "rm -rf batchset*" )
     for f in os.listdir( test_dir ):
-      if f.startswith( 'batchset' ):
-        shutil.rmtree( os.path.join( test_dir, f ) )
+        if f.startswith( 'batchset' ):
+            shutil.rmtree( os.path.join( test_dir, f ) )
     
     # write testlist files for each qsub
-    
-    qsubids = pipes.writeQsubScripts()
-    
-    qsubs_started = {}  # maps qid to (queue job id, submit time)
-    qsubs_stopped = {}  # maps qid to None
-    
-    # determine a limit on the number of processors to use
-    
-    if optdict.has_key('-n'):
-      proc_limit = int(optdict['-n'])
-      # make sure limit is able to handle all tests
-      for qid,np in qsubids.items():
-        if np > proc_limit:
-          print "*** "+exeName+": error: -n option specified", proc_limit, \
-                "processors but at least one test requires", np
-          sys.exit(1)
-    else:
-      # no limit given, just add up all numbers of processors
-      proc_limit = 0
-      for qid,np in qsubids.items():
-        assert np > 0
-        proc_limit += np
-    
+    numjobs = pipes.writeQsubScripts()
+
+    print3( 'Total number of batch jobs:', numjobs )
+
     if optdict.has_key('-g'):
       return
     
-    # manage the qsubs by looking for special files
+    cwd = os.getcwd()
+    qsleep = int( os.environ.get( 'VVTEST_BATCH_SLEEP_LENGTH', 15 ) )
     
-    procs_used = 0
-    
-    qsublimit = optdict.get( '--qsub-limit', plat.getDefaultQsubLimit() )
-    
-    qidL = qsubids.keys()
-    
-    while len(qsubs_stopped) < len(qsubids):
-      
-      sleep = 1  # flag to sleep (below) for a few seconds when no activity
-      
-      # check for finished qsubs
-      
-      D = {}
-      for qid in qidL:
-        if qsubs_started.has_key(qid) and not qsubs_stopped.has_key(qid):
-          D[qid] = qsubs_started[qid][0]
-      if len(D) > 0:
-        statusD = plat.Qquery( D.values() )
-        for qid,jobid in D.items():
-          if not statusD[jobid]:
-            # empty status means its not in the queue, but double check
-            # that either the out file exists or enough time has elapsed
-            # since the submit occurred
-            pout = pipes.filename( 'pipe-out', qid )
-            elapse = time.time() - qsubs_started[qid][1]
-            if elapse > 30 or os.path.exists(pout):
-              sleep = 0
-              qsubs_stopped[qid] = None
-              print 'finished: pipeline "' + str(qid) + \
-                    '", number remaining:', len(qsubids) - len(qsubs_stopped)
-              procs_used = procs_used - qsubids[qid]
-              if procs_used < 0: procs_used = 0
-            if perms != None and os.path.exists( pout ):
-                perms.set( pout )
-      
-      # see if another qsub can be submitted
-      
-      if len(qsubs_stopped) < len(qsubids) and \
-         len(qsubs_started) - len(qsubs_stopped) < qsublimit:
-        
-        # start another qsub
-        for newqid in qidL:
-          if not qsubs_started.has_key(newqid) and \
-             ( newqid != -1 or len(qsubs_stopped) == len(qsubids)-1 ):
-            if procs_used + qsubids[newqid] <= proc_limit:
-              sleep = 0
-              
-              if newqid == -1:
-                # before running all the analyze tests, check if children
-                # failed, did not finish, or did not run
-                
-                # first, update the test list with current results
-                time.sleep(5)
-                for qid in qidL:
-                  fname = pipes.filename( testlist_name, qid )
-                  if os.path.exists( fname ):
-                    tlist.readFile( fname )
-                # thin down analyze list by whether children have a bad state
-                Lanalyze2 = []
-                for xt in pipes.Lanalyze:
-                  k = xt.badChild()
-                  if k != None:
-                    print 'Note: skipping analyze in final pipeline for "' + \
-                          xt.atest.getExecuteDirectory() + '" due to child "' + \
-                          k.atest.getExecuteDirectory() + '"'
-                  else:
-                    Lanalyze2.append(xt)
-                if len(Lanalyze2) == 0:
-                  qsubs_stopped[-1] = None
-                  break
-                # write a new analyze pipeline out
-                pipes.writeQsubScripts( Lanalyze2 )
-              
-              print 'launching: pipeline "' + str(newqid) + '"'
-              
-              pout = pipes.filename( 'pipe-out', newqid )
-              pin = pipes.filename( 'pipe', newqid )
-              jobid = plat.Qsubmit( test_dir, pout, pin )
-              qsubs_started[newqid] = (jobid,time.time())
-              procs_used = procs_used + qsubids[newqid]
-              
-              break
-      
-      if sleep and len(qsubs_stopped) < len(qsubids):
-        time.sleep(2)
-    
-    # when all are finished, combine results into "finished" file
-    
-    NF = []
-    NS = []
-    time.sleep(5)  # give file system a chance to sync
-    for qid in qidL:
-      fname = pipes.filename( testlist_name, qid )
-      if os.path.exists( fname ):
-        tlist.readFile( fname )
-      pout = pipes.filename( 'pipe-out', qid )
-      if os.path.exists(pout):
-        sz = os.path.getsize(pout)
-        off = max(sz-512, 0)
-        fp = open( pout, 'rb' )
-        fp.seek(off)
-        buf = fp.read(512)
-        fp.close()
-        if buf.find("queue job finished cleanly") < 0:
-          NF.append(str(qid))
-      else:
-        NS.append(str(qid))
+    while True:
 
-    # print results
-    
-    elapsed = time.time() - starttime
-    h = int( elapsed / 3600 )
-    m = int( (elapsed - h * 3600) / 60 )
-    if h == 0 and m == 0: m = 1
-    print "Finish time:", time.ctime( time.time() ) + \
-          " (elapsed %dh %dm)" % (h,m)
-    
-    printResults( tlist, True, test_dir, 1, perms )
-    
+        qid = pipes.checkstart()
+        if qid != None:
+            # nothing to print here because the qsubmit prints
+            pass
+        elif pipes.numRunning() == 0:
+            break
+        else:
+            time.sleep( qsleep )
+
+        qidL,doneL = pipes.checkdone()
+        
+        if len(qidL) > 0:
+            ids = ' '.join( [ str(jid) for jid in qidL ] )
+            print3( 'Batch jobs done:', ids )
+        for t in doneL:
+            ts = XstatusString( t, False, test_dir, cwd )
+            print3( "Finished:", ts )
+        
+        unit_test_hook( 'batch', pipes.numRunning(), pipes.numDone() )
+
+        if len(doneL) > 0:
+            jpct = 100 * float(pipes.numDone()) / float(numjobs)
+            jdiv = 'jobs '+str(pipes.numDone())+'/'+str(numjobs)
+            jflt = '(in flight '+str(pipes.numStarted())+')'
+            ndone = pipes.tlist.numDone()
+            ntot = pipes.tlist.numActive()
+            tpct = 100 * float(ndone) / float(ntot)
+            tdiv = 'tests '+str(ndone)+'/'+str(ntot)
+            dt = pretty_time( time.time() - starttime )
+            print3( "Progress: " + \
+                    jdiv+" = %%%.1f"%jpct + ' '+jflt+', ' + \
+                    tdiv+" = %%%.1f"%tpct + ', ' + \
+                    'time = '+dt )
+
+    # any remaining tests cannot be run; flush then print warnings
+    NS, NF, nrL = pipes.flush()
+    if len(NS)+len(NF)+len(nrL) > 0:
+        print3()
     if len(NS) > 0:
-      print "*** Warning: these pipe numbers did not seem to start:", \
-            string.join(NS)
+      print3( "*** Warning: these pipe numbers did not seem to start:",
+              ' '.join(NS) )
     if len(NF) > 0:
-      print "*** Warning: these pipe numbers may have timed out:", \
-            string.join(NF)
+      print3( "*** Warning: these pipe numbers did not seem to finish:",
+              ' '.join(NF) )
+    for tx,deptx in nrL:
+        assert tx.isParent() and deptx != None
+        print3( '*** Warning: analyze test skipped for "' + \
+                tx.atest.getExecuteDirectory() + \
+                '" due to child "' + deptx.atest.getExecuteDirectory() + '"' )
     
-    print "Finish time:", time.ctime( time.time() ) + \
-          " (elapsed %dh %dm)" % (h,m)
+    print3()
+    printResults( tlist, True, test_dir, True, perms )
+    
+    elapsed = pretty_time( time.time() - starttime )
+    print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
+
+
+def pretty_time( nseconds ):
+    """
+    Returns a string with the given number of seconds written in an easily
+    readable form.
+    """
+    h = int( nseconds / 3600 )
+    sh = str(h)+'h'
+
+    m = int( ( nseconds - 3600*h ) / 60 )
+    sm = str(m)+'m'
+
+    s = int( ( nseconds - 3600*h - 60*m ) )
+    if h == 0 and m == 0 and s == 0: s = 1
+    ss = str(s) + 's'
+
+    if h > 0: return sh+' '+sm+' '+ss
+    if m > 0: return sm+' '+ss
+    return ss
+
+
+def unit_test_hook( loop, numrun, numdone ):
+    """
+    The VVTEST_INTERRUPT_COUNT and VVTEST_INTERRUPT_BATCH environment variables
+    can be used to interrupt the execution sequence for unit testing.
+    """
+    if loop == 'tests':
+        snum = os.environ.get( 'VVTEST_INTERRUPT_COUNT', '' )
+        if snum:
+            sqid = os.environ.get( 'VVTEST_INTERRUPT_QID', '' )
+            qok = True
+            if sqid and '--qsub-id' in optdict:
+                assert type( optdict['--qsub-id'] ) == type('')
+                # if the QID is defined and equal to this batch job's queue id
+                # then the interrupt will take place; if it is defined but
+                # not equal to this job's queue id then no interrupt will occur
+                if sqid != optdict['--qsub-id']:
+                    qok = False
+            if qok and numdone >= int(snum):
+                sig = os.environ.get( 'VVTEST_SIGNAL', 'SIGINT' )
+                sig = eval( 'signal.'+sig )
+                os.kill( os.getpid(), sig )
+                time.sleep(60)
+                sys.exit(1)
+    elif loop == 'batch':
+        snum = os.environ.get( 'VVTEST_INTERRUPT_BATCH', '' )
+        if snum:
+            if numdone >= int(snum):
+                sig = os.environ.get( 'VVTEST_SIGNAL_BATCH', 'SIGINT' )
+                sig = eval( 'signal.'+sig )
+                os.kill( os.getpid(), sig )
+                time.sleep(60)
+                sys.exit(1)
 
 
 def loadExecutionTimes( tlist, plat ):
@@ -1497,7 +1428,7 @@ def loadExecutionTimes( tlist, plat ):
 
 class Pipelines:
     
-    def __init__(self, plat, test_dir, tlist, perms):
+    def __init__(self, plat, test_dir, tlist, perms, maxjobs):
         """
         The 'tlist' is a TestList class instance.
         """
@@ -1509,36 +1440,51 @@ class Pipelines:
         self.Tzero = 21*60*60  # no timeout in pipeline mode is 21 hours
         
         self.createTestGroups()
+
+        self.maxjobs = maxjobs
+
+        # queue jobs to be submitted, qid -> BatchJob
+        self.qtodo = {}
+        # queue jobs submitted, qid -> BatchJob
+        self.qstart = {}
+        # queue jobs submitted then have left the queue, qid -> BatchJob
+        self.qstop  = {}
+        # queue jobs whose final results have been read, qid -> BatchJob
+        self.qread  = {}
+
+        # allow these values to be set by environment variable, mainly for
+        # unit testing; if setting these is needed more regularly then a
+        # command line option should be added
+        val = int( os.environ.get( 'VVTEST_BATCH_READ_DELAY', 30 ) )
+        self.read_delay = val
+        val = int( os.environ.get( 'VVTEST_BATCH_READ_DELAY_MAX', 5*60 ) )
+        self.read_max_delay = val
     
     def createTestGroups(self):
         """
         """
         qlen = optdict.get( '--qsub-length', 30*60 )
         qL = []
-        self.Lanalyze = []
         for np in self.tlist.getTestExecProcList():
           xL = []
           for tx in self.tlist.getTestExecList(np):
-            if tx.isParent():
-              self.Lanalyze.append(tx)
-            else:
-              xL.append( (tx.atest.getAttr('timeout'),tx) )
+            xL.append( (tx.atest.getAttr('timeout'),tx) )
           xL.sort()
-          L = []
+          grpL = []
           tsum = 0
           for rt,tx in xL:
-            if tx.atest.getAttr('timeout') < 1:
-              # tests with no timeout get their own group
+            if tx.isParent() or tx.atest.getAttr('timeout') < 1:
+              # analyze tests and those with no timeout get their own group
               qL.append( [ self.Tzero, len(qL), [tx] ] )
             else:
-              if len(L) > 0 and tsum + rt > qlen:
-                qL.append( [ tsum, len(qL), L ] )
-                L = []
+              if len(grpL) > 0 and tsum + rt > qlen:
+                qL.append( [ tsum, len(qL), grpL ] )
+                grpL = []
                 tsum = 0
-              L.append( tx )
+              grpL.append( tx )
               tsum += rt
-          if len(L) > 0:
-            qL.append( [ tsum, len(qL), L ] )
+          if len(grpL) > 0:
+            qL.append( [ tsum, len(qL), grpL ] )
         
         qL.sort()
         qL.reverse()
@@ -1558,16 +1504,15 @@ class Pipelines:
             fn = os.path.join( self.test_dir, subd, basename+'.'+str(pipeid) )
         return fn
 
-    def writeQsubScripts(self, analyzeL=None):
+    def writeQsubScripts(self):
         """
         """
-        if analyzeL == None:
-          for i in range(len(self.qsublists)):
-            f = self.filename( testlist_name, i )
-            try:
-                os.unlink( f )
-            except:
-                pass
+        for i in range(len(self.qsublists)):
+          f = self.filename( testlist_name, i )
+          try:
+              os.unlink( f )
+          except:
+              pass
         
         commonopts = ''
         if optdict.has_key('-e'): commonopts += ' -e'
@@ -1582,27 +1527,16 @@ class Pipelines:
         
         qsubids = {}  # maps qpipe id to max number of processors for that pipe
         
-        if analyzeL == None:
-          qid = 0
-          for qL in self.qsublists:
-            self.do_queue_pipe( qid, qL, qsubids, commonopts )
-            qid = qid + 1
-          if len(self.Lanalyze) > 0:
-            self.do_queue_pipe( -1, self.Lanalyze, qsubids, commonopts )
+        qid = 0
+        for qL in self.qsublists:
+          self.do_queue_pipe( qid, qL, qsubids, commonopts )
+          qid += 1
         
-        elif len(analyzeL) > 0:
-          self.do_queue_pipe( -1, analyzeL, qsubids, commonopts )
-        
-        if analyzeL == None:
-          L = qsubids.keys()
-          L.sort()
-          if len(L) > 1 and L[0] < 0:
-            # put analyze queue id last
-            ti = L.pop(0)
-            L.append( ti )
-          for i in L:
-            incl = self.filename( testlist_name, i, relative=True )
-            self.tlist.AddIncludeFile( incl )
+        L = qsubids.keys()
+        L.sort()
+        for i in L:
+          incl = self.filename( testlist_name, i, relative=True )
+          self.tlist.AddIncludeFile( incl )
         
         if self.perms != None:
             for f in os.listdir( self.test_dir ):
@@ -1610,7 +1544,7 @@ class Pipelines:
                     p = os.path.join( self.test_dir, f )
                     self.perms.recurse( p )
 
-        return qsubids
+        return len( qsubids )
     
     def do_queue_pipe(self, qnumber, qlist, npD, comopts):
         """
@@ -1618,6 +1552,7 @@ class Pipelines:
         qidstr = str(qnumber)
         
         tl = TestList.TestList()
+        tL = []
         maxnp = 0
         qtime = 0
         for tx in qlist:
@@ -1625,6 +1560,7 @@ class Pipelines:
           if np <= 0: np = 1
           maxnp = max( maxnp, np )
           tl.addTest(tx.atest)
+          tL.append( tx )
           qtime += int( tx.atest.getAttr('timeout') )
         
         if qtime == 0:
@@ -1639,6 +1575,9 @@ class Pipelines:
             qtime = int( float(qtime) * 1.3 )
         
         npD[qnumber] = maxnp
+        pout = self.filename( 'pipe-out', qnumber )
+        tout = self.filename( 'testlist', qnumber )
+        self.qtodo[ qnumber ] = BatchJob( qnumber, maxnp, pout, tout, tL )
         
         fn = self.filename( testlist_name, qidstr )
         tl.stringFileWrite( fn )
@@ -1647,7 +1586,6 @@ class Pipelines:
         fn = self.filename( 'pipe', qidstr )
         fp = open( fn, "w" )
         
-        pout = self.filename( 'pipe-out', qidstr )
         hdr = self.plat.getQsubScriptHeader( maxnp, qtime, self.test_dir, pout )
         fp.writelines( [ hdr + '\n\n',
                          'cd ' + self.test_dir + ' || exit 1\n',
@@ -1673,6 +1611,249 @@ class Pipelines:
         fp.writelines( [ 'echo "queue job finished cleanly"\n' ] )
         
         fp.close()
+
+    def checkstart(self):
+        """
+        Launches a new batch job if possible.  If it does, the batch id is
+        returned.
+        """
+        if len( self.qstart ) < self.maxjobs:
+            for qid,bjob in self.qtodo.items():
+                if self._check_deps( bjob ) == None:
+                    pin = self.filename( 'pipe', qid )
+                    jobid = self.plat.Qsubmit( self.test_dir, bjob.outfile, pin )
+                    self._start( qid, jobid )
+                    return qid
+        return None
+
+    def numRunning(self):
+        """
+        Returns the number of batch jobs are still running or stopped but
+        whose results have not been read yet.
+        """
+        return len( self.qstart ) + len( self.qstop )
+
+    def numStarted(self):
+        """
+        Number of batch jobs currently running (those that have been started
+        and still appear to be in the batch queue).
+        """
+        return len( self.qstart )
+
+    def numDone(self):
+        """
+        Number of batch jobs that ran and completed.
+        """
+        return len( self.qread )
+
+    def checkdone(self):
+        """
+        Uses the platform to find batch jobs that ran but are now no longer
+        in the batch queue.  These jobs are moved from the started list to
+        the stopped list.
+
+        Then the jobs in the "stopped" list are visited and their test
+        results are read.  When a job is successfully read, the job is moved
+        from the "stopped" list to the "read" list.
+
+        Returns a list of job ids that were removed from the batch queue,
+        and a list of tests that were successfully read in.
+        """
+        qdoneL = []
+        jobidL = [ bjob.jobid for bjob in self.qstart.values() ]
+        if len(jobidL) > 0:
+            statusD = self.plat.Qquery( jobidL )
+            tnow = time.time()
+            for qid,bjob in self.qstart.items():
+                if not statusD[ bjob.jobid ]:
+                    # empty status means its not in the queue, but double
+                    # check that either the out file exists or enough time
+                    # has elapsed since the submit occurred
+                    elapsed = tnow - bjob.tstart
+                    if elapsed > 30 or os.path.exists( bjob.outfile ):
+                        self._stop( qid )
+                        qdoneL.append( qid )
+                    if self.perms != None and os.path.exists( bjob.outfile ):
+                        self.perms.set( bjob.outfile )
+
+        tnow = time.time()
+        tdoneL = []
+        for qid,bjob in self.qstop.items():
+            if bjob.tcheck < tnow:
+                # try to read the results
+                clean = False
+                fin = False
+                # first check the batch output file
+                try:
+                    sz = os.path.getsize( bjob.outfile )
+                    off = max(sz-512, 0)
+                    fp = open( bjob.outfile, 'r' )
+                except:
+                    pass
+                else:
+                    try:
+                        fp.seek(off)
+                        buf = fp.read(512)
+                    except:
+                        pass
+                    else:
+                        if buf.find("queue job finished cleanly") >= 0:
+                            clean = True
+                    fp.close()
+                if clean:
+                    # then check the testlist file for the "finished" mark
+                    tl = TestList.TestList()
+                    try:
+                        tl.scanFile( bjob.testfile )
+                        if tl.getFinishDate() != None:
+                            fin = True
+                    except:
+                        pass
+                    tl = None
+                if fin:
+                    # read worked, so load the results into the TestList
+                    tdoneL.extend( self._finish( qid, bjob, 'clean' ) )
+                else:
+                    # read failed
+                    if tnow < bjob.tstop+self.read_max_delay:
+                        # set the time for the next read
+                        bjob.tcheck = tnow + self.read_delay
+                    else:
+                        # too many attempts to read; assume the queue job
+                        # failed somehow, but force a read anyway
+                        tdoneL.extend( self._finish( qid, bjob ) )
+
+        return qdoneL, tdoneL
+
+    def flush(self):
+        """
+        Remove any remaining jobs from the "todo" list, add them to the "read"
+        list, but mark them as not run.
+
+        Returns a triple
+            - a list of batch ids that were not run
+            - a list of batch ids that did not finish
+            - a list of the tests that did not run, each of which is a
+              pair (a test, failed dependency test)
+        """
+        # should not be here if there are jobs currently running
+        assert len( self.qstart ) == 0 and len( self.qstop ) == 0
+
+        # force remove the rest of the jobs that were not run and gather
+        # the list of tests that were not run
+        notrunL = []
+        for qid,bjob in self.qtodo.items():
+            tx1 = self._check_deps( bjob )
+            assert tx1 != None  # otherwise checkstart() should have ran it
+            for tx0 in bjob.testL:
+                notrunL.append( (tx0,tx1) )
+            self.qtodo.pop( qid )
+            self.qread[ qid ] = bjob
+            bjob.finished( 'notrun' )
+        
+        # TODO: rather than only reporting the jobs left on qtodo as not run,
+        #       loop on all jobs in qread and look for 'notrun' mark
+
+        notrun = []
+        notdone = []
+        for qid,bjob in self.qread.items():
+            if bjob.result == 'notrun': notrun.append( str(qid) )
+            elif bjob.result == 'notdone': notdone.append( str(qid) )
+
+        return notrun, notdone, notrunL
+    
+    def _start(self, qid, jobid):
+        """
+        """
+        bjob = self.qtodo.pop( qid )
+        bjob.start( jobid )
+        self.qstart[ qid ] = bjob
+
+    def _stop(self, qid):
+        """
+        """
+        bjob = self.qstart.pop( qid )
+        bjob.stop( self.read_delay )
+        self.qstop[ qid ] = bjob
+
+    def _check_deps(self, bjob):
+        """
+        """
+        for tx in bjob.testL:
+            if tx.isParent():
+                for childtx in tx.getChildren():
+                    chxdir = childtx.atest.getExecuteDirectory()
+                    if chxdir not in self.tlist.stopped:
+                        return childtx
+                childtx = tx.badChild()
+                if childtx != None:
+                    return childtx
+        return None
+    
+    def _finish(self, qid, bjob, mark=None):
+        """
+        """
+        tL = []
+
+        if not os.path.exists( bjob.outfile ):
+            bjob.finished( 'notrun' )
+        
+        elif os.path.exists( bjob.testfile ):
+            if mark == None:
+                bjob.finished( 'notdone' )
+            else:
+                bjob.finished( mark )
+            counts = {}
+            self.tlist.readFile( bjob.testfile, counts )
+            # only add tests to the stopped list that have a count
+            # of three (initial, launched, & finished)
+            for tx in bjob.testL:
+                xdir = tx.atest.getExecuteDirectory()
+                # TODO: could mark the tests that were not run somehow
+                if counts.get( xdir, 0 ) == 3:
+                    tL.append( tx.atest )
+                    self.tlist.stopped[ xdir ] = tx
+        
+        else:
+            bjob.finished( 'fail' )
+        
+        self.qstop.pop( qid )
+        self.qread[ qid ] = bjob
+
+        return tL
+
+
+class BatchJob:
+    
+    def __init__(self, qid, maxnp, fout, flist, testL):
+        self.qid = qid
+        self.maxnp = maxnp
+        self.outfile = fout
+        self.testfile = flist
+        self.testL = testL  # list of TestExec objects
+        self.jobid = None
+        self.tstart = None
+        self.tstop = None
+        self.tcheck = None
+        self.result = None
+
+    def start(self, jobid):
+        """
+        """
+        self.jobid = jobid
+        self.tstart = time.time()
+
+    def stop(self, delay):
+        """
+        """
+        self.tstop = time.time()
+        self.tcheck = self.tstop + delay
+
+    def finished(self, result):
+        """
+        """
+        assert result in ['clean','notrun','notdone','fail']
+        self.result = result
 
 
 def batchset( qid ):
@@ -1731,12 +1912,14 @@ def restartTests( test_dir, plat, ufilter ):
     
     path_filter = os.getcwd()
     
-    if '--qsub-id' in optdict:
+    qid = optdict.get( '--qsub-id', None )
+    if qid == None:
+        tfile = os.path.join( test_dir, testlist_name )
+    else:
+        # batch jobs have --qsub-id set and land here
         qid = optdict['--qsub-id']
         subd = batchset( qid )
         tfile = os.path.join( test_dir, subd, testlist_name+'.'+qid )
-    else:
-        tfile = os.path.join( test_dir, testlist_name )
     
     tlist = TestList.TestList( ufilter )
     tlist.readFile( tfile )
@@ -1750,7 +1933,7 @@ def restartTests( test_dir, plat, ufilter ):
     
     tlist.loadTests( filter_dir=reld, analyze_only=optdict.has_key('-a') )
     
-    if '--qsub-id' not in optdict:
+    if qid == None:
       loadExecutionTimes( tlist, plat )
     
     perms = None
@@ -1766,8 +1949,9 @@ def restartTests( test_dir, plat, ufilter ):
         
         if len(tlist.active) > 0:
           
-          print "Running these tests:"
+          print3( "Running these tests:" )
           printResults( tlist, True, test_dir, False, perms, True )
+          print3()
           
           if optdict.has_key('--save-results'):
             tag = optdict.get('--results-tag',None)
@@ -1787,7 +1971,7 @@ def restartTests( test_dir, plat, ufilter ):
             saveResults( tlist, plat, test_dir, tag )
         
         else:
-          print "\n--------- no tests to run -----------\n"
+          print3( "\n--------- no tests to run -----------\n" )
     
     except:
         tlist.writeFinished()
@@ -1997,7 +2181,7 @@ def parseOptionsAndGenerateOptionDictionary():
     import getopt
     try: opts, dirs = getopt.getopt( argL,
                         'hHvgGk:K:p:P:S:o:O:wAj:FRM:n:ibT:Lmeas:x:X:C',
-                        longopts=['version','intr=','plat=','platopt=',
+                        longopts=['version','plat=','platopt=',
                                   'keys', 'files', 'pipeline',
                                   'qsub-id=', 'qsub-limit=', 'qsub-length=',
                                   'html', 'check=', 'analyze', 'cdir=',
@@ -2168,10 +2352,7 @@ def parseOptionsAndGenerateOptionDictionary():
       optdict['--platopt'] = popts
     
     if optdict.has_key('--qsub-id'):
-      if len(optdict['--qsub-id']) > 1:
-        sys.stderr.write('*** ' + exeName + \
-              ': error: only one --qsub-id option allowed\n')
-        sys.exit(1)
+      assert len( optdict['--qsub-id'] ) == 1
       optdict['--qsub-id'] = optdict['--qsub-id'][0]
     
     if optdict.has_key('--qsub-limit'):
@@ -2286,22 +2467,6 @@ def parseOptionsAndGenerateOptionDictionary():
         sys.exit(1);
       optdict['--timeout-multiplier'] = val
      
-    if optdict.has_key('--intr'):
-      if len(optdict['--intr']) > 1:
-          sys.stderr.write('*** ' + exeName + \
-                ': error: only one --intr option is allowed\n')
-          sys.exit(1);
-      try: val = int(optdict['--intr'][0])
-      except:
-          sys.stderr.write('*** ' + exeName + \
-             ': error: the --intr option must be followd by an integer\n')
-          sys.exit(1)
-      if val <= 0:
-        sys.stderr.write('*** ' + exeName + \
-             ': error: the --intr option must specify a positive integer\n')
-        sys.exit(1);
-      optdict['--intr'] = val
-    
     # collapse the list of length one for single argument options
     
     if optdict.has_key('-j'):

@@ -14,9 +14,14 @@ def main():
 
     if len(argL) == 0:
         argL = """test01 test02 test03 test04 test05 test06 test07
-                  test08
+                  test08 test09 test10
                """.split()
 
+    # set these for the pipeline tests
+    os.environ['VVTEST_BATCH_READ_DELAY'] = '5'
+    os.environ['VVTEST_BATCH_READ_DELAY_MAX'] = '15'
+    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+    
     savedir = os.getcwd()
     for func in argL:
         os.chdir( savedir )
@@ -417,6 +422,7 @@ def test08():
     out,np,nd,nf,nn = run_vvtest( '-n 4 --sort x' )
     assert np == 4 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
+    platname = platform_name( out )
 
     tL = testtimes( out )
     assert len(tL) == 4
@@ -426,6 +432,226 @@ def test08():
     assert tL[3][0] == tdir+'/test2'
     assert tL[0][1] >= tL[1][2] and tL[0][1] >= tL[2][2]
     assert tL[0][1] < tL[3][2]
+    
+    if platname in batchplatforms:
+        
+        remove_results()
+        
+        out,np,nd,nf,nn = run_vvtest( '-n 4 --sort x --pipeline --qsub-limit 5' )
+        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+
+        tL = testtimes( out )
+        assert len(tL) == 4
+        assert tL[0][0] == tdir+'/test1'
+        assert tL[1][0] == tdir+'/test1.timestep=1'
+        assert tL[2][0] == tdir+'/test1.timestep=2'
+        assert tL[3][0] == tdir+'/test2'
+        assert tL[0][1] >= tL[1][2] and tL[0][1] >= tL[2][2]
+        assert tL[0][1] < tL[3][2]
+
+
+def test09():
+    """
+    analyze should not run if a child failed previously
+    """
+    writefile( 'atest.xml', """
+        <rtest name="atest">
+          <parameterize timestep="1 2"/>
+          <execute>
+            if ( "$timestep" == 2 ) then
+              echo "fake failure"
+              exit 1
+            else
+              touch afile.$timestep
+            endif
+          </execute>
+          <analyze>
+             ls ../atest.timestep=1/afile.1 || exit 1
+             ls ../atest.timestep=2/afile.2 || exit 1
+          </analyze>
+        </rtest>""" )
+    
+    # the analyze should not run because a child fails
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 1 and nn == 1
+    tdir = results_dir()
+    platname = platform_name( out )
+
+    # the analyze should not run here
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+    
+    # double check the state
+    out,np,nd,nf,nn = run_vvtest( "-i" )
+    assert np == 1 and nd == 0 and nf == 1 and nn == 1
+    
+    # "fix" the failure
+    writefile( 'atest.xml', """
+        <rtest name="atest">
+          <parameterize timestep="1 2"/>
+          <execute>
+            touch afile.$timestep
+          </execute>
+          <analyze>
+             ls ../atest.timestep=1/afile.1 || exit 1
+             ls ../atest.timestep=2/afile.2 || exit 1
+          </analyze>
+        </rtest>""" )
+    
+    # rerun the failure
+    out,np,nd,nf,nn = run_vvtest( '-k fail' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    
+    # now the analyze should run
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    
+    out,np,nd,nf,nn = run_vvtest( "-i" )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+    
+    if platname in batchplatforms:
+        
+        remove_results()
+        
+        writefile( 'atest.xml', """
+            <rtest name="atest">
+              <parameterize timestep="1 2"/>
+              <execute>
+                if ( "$timestep" == 2 ) then
+                  echo "fake failure"
+                  exit 1
+                else
+                  touch afile.$timestep
+                endif
+              </execute>
+              <analyze>
+                 ls ../atest.timestep=1/afile.1 || exit 1
+                 ls ../atest.timestep=2/afile.2 || exit 1
+              </analyze>
+            </rtest>""" )
+        
+        # the analyze should not run because a child fails
+        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        assert np == 1 and nd == 0 and nf == 1 and nn == 1
+        tdir = results_dir()
+        platname = platform_name( out )
+
+        # the analyze should not run here
+        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        
+        # double check the state
+        out,np,nd,nf,nn = run_vvtest( '-i' )
+        assert np == 1 and nd == 0 and nf == 1 and nn == 1
+        
+        # "fix" the failure
+        writefile( 'atest.xml', """
+            <rtest name="atest">
+              <parameterize timestep="1 2"/>
+              <execute>
+                touch afile.$timestep
+              </execute>
+              <analyze>
+                 ls ../atest.timestep=1/afile.1 || exit 1
+                 ls ../atest.timestep=2/afile.2 || exit 1
+              </analyze>
+            </rtest>""" )
+        
+        # rerun the failure
+        out,np,nd,nf,nn = run_vvtest( '-k fail --pipeline' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        
+        # now the analyze should run
+        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        
+        out,np,nd,nf,nn = run_vvtest( '-i' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+
+def test10():
+    """
+    behavior with previous children test results
+    """
+    writefile( 'atest.xml', """
+        <rtest name="atest">
+          <parameterize timestep="1 2"/>
+          <execute>
+            sleep 5
+            touch afile.$timestep
+          </execute>
+          <analyze>
+             ls ../atest.timestep=1/bfile.1 || exit 1
+             ls ../atest.timestep=2/bfile.2 || exit 1
+          </analyze>
+        </rtest>""" )
+    
+    # the analyze should fail
+    out,np,nd,nf,nn = run_vvtest( '-n 3' )
+    assert np == 2 and nd == 0 and nf == 1 and nn == 0
+    tdir = results_dir()
+    platname = platform_name( out )
+
+    # "fix" the execute
+    writefile( 'atest.xml', """
+        <rtest name="atest">
+          <parameterize timestep="1 2"/>
+          <execute>
+            sleep 5
+            touch bfile.$timestep
+          </execute>
+          <analyze>
+             ls ../atest.timestep=1/bfile.1 || exit 1
+             ls ../atest.timestep=2/bfile.2 || exit 1
+          </analyze>
+        </rtest>""" )
+    
+    # the analyze test should NOT run at the same time as the children
+    # (if it does in this case, then the analyze test will show a fail)
+    out,np,nd,nf,nn = run_vvtest( '-R -n 3' )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+    
+    if platname in batchplatforms:
+        
+        remove_results()
+
+        writefile( 'atest.xml', """
+            <rtest name="atest">
+              <timeout value="15"/>
+              <parameterize timestep="1 2"/>
+              <execute>
+                sleep 5
+                touch afile.$timestep
+              </execute>
+              <analyze>
+                 ls ../atest.timestep=1/bfile.1 || exit 1
+                 ls ../atest.timestep=2/bfile.2 || exit 1
+              </analyze>
+            </rtest>""" )
+        
+        # the analyze should fail
+        out,np,nd,nf,nn = run_vvtest( '--pipeline --qsub-length 1 --qsub-limit 5' )
+        assert np == 2 and nd == 0 and nf == 1 and nn == 0
+
+        # "fix" the execute
+        writefile( 'atest.xml', """
+            <rtest name="atest">
+              <timeout value="15"/>
+              <parameterize timestep="1 2"/>
+              <execute>
+                sleep 5
+                touch bfile.$timestep
+              </execute>
+              <analyze>
+                 ls ../atest.timestep=1/bfile.1 || exit 1
+                 ls ../atest.timestep=2/bfile.2 || exit 1
+              </analyze>
+            </rtest>""" )
+        
+        # the analyze test should not run at the same time as the children
+        # (if the analyze job does, then the analyze test will show a fail)
+        out,np,nd,nf,nn = run_vvtest( '-R --pipeline --qsub-length 1 --qsub-limit 5' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
 
 ########################################################################

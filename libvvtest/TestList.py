@@ -24,8 +24,12 @@ class TestList:
 
         self.filetests = {}  # TestSpec xdir -> TestSpec object
         self.scantests = {}  # TestSpec xdir -> TestSpec object
+        
         self.active = {}  # TestSpec xdir -> TestSpec object
+        
         self.xtlist = {}  # np -> list of TestExec objects
+        self.started = {}  # TestSpec xdir -> TestExec object
+        self.stopped = {}  # TestSpec xdir -> TestExec object
         
         self.ufilter = ufilter
     
@@ -98,10 +102,14 @@ class TestList:
         fp.write( '\n#VVT: Finish = ' + time.ctime( datestamp ) + '\n' )
         fp.close()
 
-    def readFile(self, filename):
+    def readFile(self, filename, count_entries=None):
         """
         Read test list from a file.  Existing TestSpec objects have their
         attributes overwritten, but new TestSpec objects are not created.
+
+        If 'count_entries' is not None, it should be a dictionary.  This
+        dictionary maps test execute directory to the number of times that
+        test appears in 'filename'.
 
         If this object has not had its filename set, this function will
         set it.
@@ -127,6 +135,9 @@ class TestList:
             print "WARNING: reading file", filename, "string", line + ":", e
           else:
             xdir = t.getExecuteDirectory()
+            if count_entries != None:
+              if xdir in count_entries: count_entries[xdir] += 1
+              else:                     count_entries[xdir] = 1
             t2 = self.scantests.get( xdir, None )
             if t2 != None:
               # test has been generated/refreshed from the test source;
@@ -238,9 +249,12 @@ class TestList:
     
     def loadTests(self, filter_dir=None, analyze_only=0 ):
         """
+        Creates the active test list using the scanned tests and the tests
+        read in from a test list file.  A subdirectory filter is applied and
+        the filter given in the constructor.
         """
         self.active = {}
-        
+
         subdir = None
         if filter_dir != None:
           subdir = os.path.normpath( filter_dir )
@@ -261,6 +275,19 @@ class TestList:
             self.scantests[xdir] = t
             if keep:
               self.active[ xdir ] = t
+
+        # remove analyze tests from the active set if they have inactive
+        # children that have a bad result
+        for xdir,t in self.scantests.items()+self.filetests.items():
+            pxdir = t.getParent()
+            # does this test have a parent and is this test inactive
+            if pxdir != None and xdir not in self.active:
+                # is the parent active and does the child have a bad result
+                if pxdir in self.active and \
+                      ( t.getAttr('state') != 'done' or \
+                        t.getAttr('result') not in ['pass','diff'] ):
+                    # remove the parent from the active set
+                    self.active.pop( pxdir )
     
     def _apply_filters(self, xdir, tspec, subdir, analyze_only):
         """
@@ -445,17 +472,18 @@ class TestList:
     
     def createTestExecs(self, test_dir, platform, config, perms):
         """
+        Creates the set of TestExec objects from the active test list.
         """
         d = os.path.join( config.get('toolsdir'), 'libvvtest' )
         c = config.get('configdir')
         xdb = CommonSpec.loadCommonSpec( d, c )
         
-        self._createTextExecList( perms )
+        self._createTestExecList( perms )
         
         for xt in self.getTestExecList():
           xt.init( test_dir, platform, xdb, config )
     
-    def _createTextExecList(self, perms):
+    def _createTestExecList(self, perms):
         """
         """
         self.xtlist = {}
@@ -476,8 +504,8 @@ class TestList:
           xtD[ t.getExecuteDirectory() ] = xt
         
         # put tests with the "fast" keyword first in each list; this is to try
-        # to avoid launching long running tests at the end of the sequence which
-        # can add significantly to the total run time
+        # to avoid launching long running tests at the end of the sequence
+        # which can add significantly to the total run time
         self.sortTestExecList()
         
         # add children tests to parent tests
@@ -502,15 +530,6 @@ class TestList:
           newL.extend(longL)
           self.xtlist[np] = newL
     
-    def numTestExec(self):
-        """
-        Total number of TestExec objects.
-        """
-        n = 0
-        for np,L in self.xtlist.items():
-          n += len(L)
-        return n
-    
     def getTestExecProcList(self):
         """
         Returns a list of integers; each integer is the number of processors
@@ -532,83 +551,116 @@ class TestList:
           L.extend( self.xtlist.get(numprocs,[]) )
         return L
     
-    def popNonFastTestExec(self, platform):
+    def popNext(self, platform):
         """
-        next test of largest np available to the platform, does not have
-        'fast' keyword, and is not a parent test with a child that did not
-        run or had a bad result
+        Finds a test to execute.  Returns a TestExec object, or None if no
+        test can run.  In this case, one of the following is true
+        
+            1. there are not enough free processors to run another test
+            2. the only tests left are parent tests that cannot be run
+               because one or more of their children did not pass or diff
+
+        In the latter case, numRunning() will be zero.
         """
         npL = self.xtlist.keys()
         npL.sort()
         npL.reverse()
+
+        # look for non-fast tests of highest num procs first
+        tx = self._pop_next_test( npL, platform, 'fast' )
+        if tx == None:
+            # same search but fast is ok
+            tx = self._pop_next_test( npL, platform )
+            if tx == None and len(self.started) == 0:
+                # search for tests that need more processors than platform has
+                tx = self._pop_next_test( npL )
+
+        if tx != None:
+            self.started[ tx.atest.getExecuteDirectory() ] = tx
+
+        return tx
+
+    def popRemaining(self):
+        """
+        All remaining tests are removed from the run list and returned.
+        """
+        tL = []
+        for np,L in self.xtlist.items():
+            tL.extend( L )
+            del L[:]
+            self.xtlist.pop( np )
+        return tL
+
+    def getRunning(self):
+        """
+        Return the list of tests that are still running.
+        """
+        return self.started.values()
+
+    def testDone(self, tx):
+        """
+        """
+        xdir = tx.atest.getExecuteDirectory()
+        self.AppendTestResult( tx.atest )
+        self.started.pop( xdir )
+        self.stopped[ xdir ] = tx
+
+    def numActive(self):
+        """
+        Return the total number of active tests (the tests that are to be run).
+        """
+        return len(self.active)
+
+    def numDone(self):
+        """
+        Return the number of tests that have been run.
+        """
+        return len(self.stopped)
+
+    def numRunning(self):
+        """
+        Return the number of tests are currently running.
+        """
+        return len(self.started)
+
+    def _pop_next_test(self, npL, platform=None, notkey=None):
+        """
+        """
         for np in npL:
-          if platform.queryProcs(np):
-            L = self.xtlist[np]
-            for i in xrange(len(L)):
-              tx = L[i]
-              ok = False
-              if not tx.atest.hasKeyword('fast'):
-                if tx.isParent():
-                  # if all children tests were run and passed or diffed,
-                  # then this parent can execute
-                  if tx.badChild() == None:
-                    ok = True
-                else:
-                  ok = True
-              if ok:
-                del L[i]
-                if len(L) == 0:
-                  del self.xtlist[np]
-                return tx
+            if platform == None or platform.queryProcs(np):
+                tL = self.xtlist[np]
+                N = len(tL)
+                i = 0
+                while i < N:
+                    tx = tL[i]
+                    if notkey == None or not tx.atest.hasKeyword(notkey):
+                        if self._children_ok( tx ):
+                            self._pop_test_exec( np, i )
+                            return tx
+                    i += 1
         return None
+
+    def _children_ok(self, tx):
+        """
+        Returns True unless this test is a parent and one or more children
+        tests did not pass or diff.
+        """
+        if tx.isParent():
+            if tx.badChild() != None:
+                return False
+            for childtx in tx.getChildren():
+                cxdir = childtx.atest.getExecuteDirectory()
+                if cxdir not in self.stopped:
+                    return False
+        return True
     
-    def popTestExec(self, platform=None):
+    def _pop_test_exec(self, np, i):
         """
-        If 'platform' is None, return the next test on the list.
-        If 'platform' is not None, return the next test of largest np
-        available to the platform.
-        In both cases, parent tests are not returned if they have a child
-        that did not run or had a bad result.
         """
-        npL = self.xtlist.keys()
-        npL.sort()
-        npL.reverse()
-        for np in npL:
-          if platform == None or platform.queryProcs(np):
-            L = self.xtlist[np]
-            for i in xrange(len(L)):
-              tx = L[i]
-              ok = False
-              if tx.isParent():
-                # if all children tests were run and passed or diffed,
-                # then this parent can execute
-                if tx.badChild() == None:
-                  ok = True
-              else:
-                ok = True
-              if ok:
-                del L[i]
-                if len(L) == 0:
-                  del self.xtlist[np]
-                return tx
-        return None
-    
-    def forcePopTestExec(self):
-        """
-        Return next test of largest np in the list.
-        """
-        npL = self.xtlist.keys()
-        npL.sort()
-        npL.reverse()
-        for np in npL:
-          L = self.xtlist[np]
-          for i in xrange(len(L)):
-            tx = L[i]
-            del L[i]
-            if len(L) == 0:
-              del self.xtlist[np]
-            return tx
-        return None
+        L = self.xtlist[np]
+        del L[i]
+        if len(L) == 0:
+            self.xtlist.pop( np )
 
 
 def is_subdir(parent_dir, subdir):
