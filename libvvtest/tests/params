@@ -15,6 +15,7 @@ def main():
 
     if len(argL) == 0:
         argL = """test01 test02 test03 test04 test05 test06 test07 test08
+                  test09
                """.split()
 
     # set these for the pipeline tests
@@ -366,6 +367,99 @@ def test08():
     ps = L[0].split('=',1)[1]
     pL = ps.strip().split()
     assert pL == ['1', '2']
+
+
+#####################################################################
+
+def test09():
+    """
+    using parameterize with script test
+    """
+    writescript( 'params1.vvt', """
+        #!/usr/bin/env python
+        #VVT: parameterize : animal = dog cat
+        import os
+        print ( "hello from "+os.path.basename(os.getcwd()) )
+        """ )
+    writescript( 'params2.vvt', """
+        #!/usr/bin/env python
+        #VVT: parameterize : A = dog cat
+        #VVT: parameterize : V = carrot celery
+        import os
+        print ( "hello from "+os.path.basename(os.getcwd()) )
+        """ )
+    writescript( 'params3.vvt', """
+        #!/usr/bin/env python
+        #VVT: parameterize : B,X = dog,carrot cat,celery
+        import os
+        print ( "hello from "+os.path.basename(os.getcwd()) )
+        """ )
+    writescript( 'params4.vvt', """
+        #!/usr/bin/env python
+        #VVT: parameterize : C, Y, Z = 1 ,2,3  4,5,6
+        #VVT::                         7 , 8 , 9   10, 11,12
+        import os
+        print ( "hello from "+os.path.basename(os.getcwd()) )
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    tdir = results_dir()
+    platname = platform_name( out )
+
+    assert np == 12 and nd == 0 and nf == 0 and nn == 0
+    assert len( greptestlist(out,'pass.*.animal=dog') ) == 1
+    assert len( greptestlist(out,'pass.*.animal=cat') ) == 1
+    assert len( greptestlist(out,'pass.*.A=dog.V=carrot') ) == 1
+    assert len( greptestlist(out,'pass.*.A=cat.V=carrot') ) == 1
+    assert len( greptestlist(out,'pass.*.A=dog.V=celery') ) == 1
+    assert len( greptestlist(out,'pass.*.A=cat.V=celery') ) == 1
+    assert len( greptestlist(out,'pass.*.B=dog.X=carrot') ) == 1
+    assert len( greptestlist(out,'pass.*.B=cat.X=celery') ) == 1
+    assert len( greptestlist(out,'pass.*.B=cat.X=carrot') ) == 0
+    assert len( greptestlist(out,'pass.*.B=dog.X=celery') ) == 0
+    assert len( greptestlist(out,'pass.*.C=1.Y=2.Z=3') ) == 1
+    assert len( greptestlist(out,'pass.*.C=4.Y=5.Z=6') ) == 1
+    assert len( greptestlist(out,'pass.*.C=7.Y=8.Z=9') ) == 1
+    assert len( greptestlist(out,'pass.*.C=10.Y=11.Z=12') ) == 1
+
+    assert len( filegrep( tdir+'/params1.animal=dog/execute.log',
+                          "hello from params1.animal=dog" ) ) == 1
+    assert len( filegrep( tdir+'/params1.animal=cat/execute.log',
+                          "hello from params1.animal=cat" ) ) == 1
+    
+    out,np,nd,nf,nn = run_vvtest( '-ik animal' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    out,np,nd,nf,nn = run_vvtest( '-ik dog' )
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+    out,np,nd,nf,nn = run_vvtest( '-ik Z' )
+    assert np == 4 and nd == 0 and nf == 0 and nn == 0
+    
+    if platname in batchplatforms:
+
+        remove_results()
+        
+        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        assert np == 12 and nd == 0 and nf == 0 and nn == 0
+
+        assert len( greptestlist(out,'pass.*animal=dog') ) == 1
+        assert len( greptestlist(out,'pass.*animal=cat') ) == 1
+        assert len( greptestlist(out,'pass.*A=dog.V=carrot') ) == 1
+        assert len( greptestlist(out,'pass.*A=cat.V=carrot') ) == 1
+        assert len( greptestlist(out,'pass.*A=dog.V=celery') ) == 1
+        assert len( greptestlist(out,'pass.*A=cat.V=celery') ) == 1
+        assert len( greptestlist(out,'pass.*B=dog.X=carrot') ) == 1
+        assert len( greptestlist(out,'pass.*B=cat.X=celery') ) == 1
+        assert len( greptestlist(out,'pass.*B=cat.X=carrot') ) == 0
+        assert len( greptestlist(out,'pass.*B=dog.X=celery') ) == 0
+        assert len( greptestlist(out,'pass.*.C=1.Y=2.Z=3') ) == 1
+        assert len( greptestlist(out,'pass.*.C=4.Y=5.Z=6') ) == 1
+        assert len( greptestlist(out,'pass.*.C=7.Y=8.Z=9') ) == 1
+        assert len( greptestlist(out,'pass.*.C=10.Y=11.Z=12') ) == 1
+
+        assert len( filegrep( tdir+'/params1.animal=dog/execute.log',
+                              "hello from params1.animal=dog" ) ) == 1
+        assert len( filegrep( tdir+'/params1.animal=cat/execute.log',
+                              "hello from params1.animal=cat" ) ) == 1
 
 
 #####################################################################

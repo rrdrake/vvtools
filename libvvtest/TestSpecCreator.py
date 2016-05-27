@@ -173,27 +173,71 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
                       force_params, ufilter ):
     """
     """
-    #if not parseIncludeTest( filedoc, tname, ufilter ):
-    #  return []
-    #
-    #paramD = parseTestParameters( filedoc, tname, ufilter, force_params )
+    if not parseEnableTest( vspecs, tname, ufilter ):
+        return []
+    
+    paramD = parseTestParameters_scr( vspecs, tname, ufilter, force_params )
     
     keywords = parseKeywords_scr( vspecs, tname, ufilter )
     
     do_all = ufilter.getAttr('include_all',0)
 
     if not do_all and not ufilter.satisfies_nonresults_keywords( keywords ):
-      return []
+        return []
     
-    tL = []
+    testL = []
+
+    if len(paramD) == 0:
+
+        if do_all or ufilter.evaluate_parameters( {} ):
+            t = TestSpec.TestSpec( tname, rootpath, relpath )
+            testL.append(t)
+
+    else:
+        
+        # take a cartesian product of all the parameter values but apply
+        # parameter filtering (this may change the paramD)
+        instanceL = cartesian_product_and_filter( paramD, ufilter )
+        
+        for pdict in instanceL:
+            # create the test and add to test list
+            t = TestSpec.TestSpec( tname, rootpath, relpath )
+            t.setParameters( pdict )
+            testL.append(t)
     
-    t = TestSpec.TestSpec( tname, rootpath, relpath )
-    t.setScriptForm( vspecs.getForm() )
-    t.setKeywords( keywords )
+    finalL = []
+    parent = None
+    for t in testL:
+      
+      t.setScriptForm( vspecs.getForm() )
+      t.setKeywords( keywords )
+      
+      if do_all or ufilter.file_search(t):
+        
+        finalL.append(t)
+        
+        #parseAnalyze      ( t, filedoc, ufilter )
+        #parseTimeouts     ( t, filedoc, ufilter )
+        #parseExecuteList  ( t, filedoc, ufilter )
+        #parseFiles        ( t, filedoc, ufilter )
+        #parseBaseline     ( t, filedoc, ufilter )
+        #
+        #if parent == None and t.getAnalyzeScript() != None:
+        #  parent = t.makeParent()
+        #  parent.setParameterSet( paramD )
+        #  if parent.getExecuteDirectory() == t.getExecuteDirectory():
+        #    # a test with no parameters but with an analyze script
+        #    parent = None
+        #    t.appendExecutionFragment( t.getAnalyzeScript(), None, "yes" )
+        #    t.setAnalyze( None )
     
-    tL.append( t )
-    
-    return tL
+    if parent != None:
+      for t in finalL:
+        t.setAnalyze( None )
+        t.setParent( parent.getExecuteDirectory() )
+      finalL.append( parent )
+
+    return finalL
 
 
 def refreshTest( testobj, ufilter=None ):
@@ -264,7 +308,37 @@ def refreshTest( testobj, ufilter=None ):
 
         tname = testobj.getName()
 
-        # TODO: refresh the test
+        if ufilter == None:
+          ufilter = FilterExpressions.ExpressionSet()
+        
+        if not testobj.getParent():
+          paramD = parseTestParameters_scr( vspecs, tname, ufilter, None )
+          cartesian_product_and_filter( paramD, ufilter )
+          testobj.setParameterSet( paramD )
+        
+        if not parseEnableTest( vspecs, tname, ufilter ):
+          keep = False
+        
+        keywords = parseKeywords_scr( vspecs, tname, ufilter )
+        testobj.setKeywords( keywords )
+        
+        if not ufilter.satisfies_keywords( testobj.getKeywords(1) ):
+          keep = False
+        
+        if not ufilter.evaluate_parameters( testobj.getParameters() ):
+          keep = False
+        
+        #parseFiles       ( testobj, filedoc, ufilter )
+        #parseAnalyze     ( testobj, filedoc, ufilter )
+        #parseTimeouts    ( testobj, filedoc, ufilter )
+        #parseExecuteList ( testobj, filedoc, ufilter )
+        #parseBaseline    ( testobj, filedoc, ufilter )
+        
+        if ufilter.getAttr('include_all',0):
+          return True
+        
+        #if not ufilter.file_search(testobj):
+        #  keep = False
 
     else:
         raise Exception( "invalid file extension: "+ext )
@@ -549,8 +623,8 @@ class ScriptReader:
                     raise TestSpecError( "A #VVT:: continuation was found" + \
                             " but there is nothing to continue, line " + \
                             str( lineno ) )
-                else:
-                    spec[1] += ' ' + line
+                elif len(line) > 1:
+                    spec[1] += ' ' + line[1:]
             elif spec == None:
                 # no existing spec and new spec found
                 spec = [ lineno, line ]
@@ -565,13 +639,35 @@ class ScriptReader:
 
         return spec
 
+    # the following pattern should match the first paren enclosed stuff,
+    # but parens within double quotes are ignored
+    #   1. this would match as few chars within parens
+    #       [(].*?[)]
+    #   2. this would match as few chars within parens unless there is a
+    #      double quote in the parens
+    #       [(][^"]*?[)]
+    #   3. this would match as few chars within double quotes
+    #       ["].*?["]
+    #   4. this would match as few chars within double quotes possible
+    #      chars on either side (but as few of them as well)
+    #       .*?["].*?["].*?
+    #   5. this will match either number 2 or number 4 above as a regex group
+    #       ([^"]*?|.*?["].*?["].*?)
+    #   6. this adds back the parens on the outside
+    #       [(]([^"]*?|.*?["].*?["].*?)[)]
+    ATTRPAT = re.compile( '[(]([^"]*?|.*?["].*?["].*?)[)]' )
+
+    # this pattern matches everything up to the first ':' or '=' or paren
+    DEFPAT = re.compile( '.*?[:=(]' )
+
     def process_specs(self):
         """
         Turns the list of string specifications into keywords with attributes
         and content.
         """
-        kpat = re.compile( '.*?[:=(]' )
-        ppat = re.compile( '[(].*?[)]' )
+        ppat = ScriptReader.ATTRPAT
+        kpat = ScriptReader.DEFPAT
+        
         for lineno,line in self.speclineL:
             key = None
             val = None
@@ -608,9 +704,10 @@ class ScriptReader:
                               'line ' + str(lineno) )
 
             if attrs:
+                # process the attributes into a dictionary
                 D = {}
                 for s in attrs.split(','):
-                    s = s.strip()
+                    s = s.strip().strip('"').strip()
                     i = s.find( '=' )
                     if i == 0:
                         raise TestSpecError( \
@@ -620,10 +717,10 @@ class ScriptReader:
                         n = s[:i]
                         v = s[i+1:].strip().strip('"')
                         D[n] = v
-                    else:
-                        D[s] = None
+                    elif s:
+                        D[s] = ''
                 attrs = D
-            
+
             specobj = ScriptSpec( lineno, key, attrs, val )
             self.specL.append( specobj )
 
@@ -645,6 +742,11 @@ def testNameList_scr( vspecs ):
     L = []
 
     for spec in vspecs.getSpecList( "name" ):
+
+        if spec.attrs:
+            raise TestSpecError( 'no attributes allowed here, ' + \
+                                 'line ' + str(spec.lineno) )
+
         name = spec.value
         if not name or not allowableString(name):
             raise TestSpecError( 'missing or invalid test name, ' + \
@@ -656,6 +758,53 @@ def testNameList_scr( vspecs ):
         L.append( vspecs.basename() )
 
     return L
+
+
+def parseEnableTest( vspecs, tname, ufilter ):
+    """
+    Parse syntax that will filter out this test by platform or build option.
+    Returns false if the test is to be disabled/excluded.
+    
+    Platform expressions and build options use word expressions.
+    
+        #VVT: enable (platforms="not SunOS and not Linux")
+        #VVT: enable (options="not dbg and ( tridev or tri8 )")
+        #VVT: enable (platforms="...", options="...")
+    
+    If both platform and option expressions are given, their results are
+    ANDed together.  If more than one "enable" block is given, each must
+    result in True for the test to be included.
+    """
+    if ufilter.getAttr('include_all',0):
+        return True
+    
+    # first, evaluate based purely on the platform restrictions
+    pev = PlatformEvaluator_scr( vspecs, tname, ufilter )
+    if not ufilter.evaluate_platform_include( pev.satisfies_platform ):
+        return False
+    
+    # second, evaluate based on the "options" attribute of "enable"
+    for spec in vspecs.getSpecList( 'enable' ):
+      
+        if spec.attrs:
+        
+            if 'parameters' in spec.attrs or 'parameter' in spec.attrs:
+                raise TestSpecError( "parameters attribute not " + \
+                                     "allowed here, line " + str(spec.lineno) )
+
+            if not testname_ok_scr( spec.attrs, tname, ufilter ):
+              # the "enable" does not apply to this test name
+              continue
+            
+            opexpr = spec.attrs.get( 'options',
+                                     spec.attrs.get( 'option', None ) )
+            if opexpr != None:
+                opexpr = opexpr.strip()
+                if opexpr and not ufilter.evaluate_option_expr( opexpr ):
+                    return False
+    
+    return True
+
 
 def parseKeywords_scr( vspecs, tname, ufilter ):
     """
@@ -672,9 +821,15 @@ def parseKeywords_scr( vspecs, tname, ufilter ):
     keyD[tname] = None
     
     for spec in vspecs.getSpecList( 'keywords' ):
-        if not testname_ok_scr( spec.attrs, tname, ufilter ):
-            # skip this keyword set (filtered out based on test name)
+        
+        if spec.attrs and \
+           ( 'parameters' in spec.attrs or 'parameter' in spec.attrs ):
+            raise TestSpecError( "parameters attribute not allowed here, " + \
+                                 "line " + str(spec.lineno) )
+        
+        if not filterAttr_scr( spec.attrs, tname, {}, ufilter, spec.lineno ):
             continue
+        
         for key in spec.value.strip().split():
             if allowableString(key):
                 keyD[key] = None
@@ -686,13 +841,126 @@ def parseKeywords_scr( vspecs, tname, ufilter ):
     for spec in vspecs.getSpecList( 'parameterize' ):
         if not testname_ok_scr( spec.attrs, tname, ufilter ):
             continue
-        # TODO: extract the parameter names
-        #if allowableVariable(n):
-        #    keyD[ str(n) ] = None
+        L = spec.value.split( '=', 1 )
+        if len(L) == 2 and L[0].strip():
+            for k in [ n.strip() for n in L[0].strip().split(',') ]:
+                keyD[k] = None
     
     L = keyD.keys()
     L.sort()
     return L
+
+
+def parseTestParameters_scr( vspecs, tname, ufilter, force_params ):
+    """
+    Parses the parameter settings for a script test file.
+        
+        #VVT: parameterize : np=1 4
+        #VVT: parameterize (testname=mytest_fast) : np=1 4
+        #VVT: parameterize (platforms=Cray or redsky) : np=128
+        #VVT: parameterize (options=not dbg) : np=32
+        
+        #VVT: parameterize : dt,dh = 0.1,0.2  0.01,0.02  0.001,0.002
+        #VVT: parameterize : np,dt,dh = 1, 0.1  , 0.2
+        #VVT::                          4, 0.01 , 0.02
+        #VVT::                          8, 0.001, 0.002
+    
+    Returns a dictionary mapping combined parameter names to lists of the
+    combined values.  For example,
+
+        #VVT: parameterize : pA=value1 value2
+
+    would return the dict
+
+        { (pA,) : [ (value1,), (value2,) ] }
+
+    And this
+        
+        #VVT: parameterize : pA=value1 value2
+        #VVT: parameterize : pB=val1 val2
+
+    would return
+
+        { (pA,) : [ (value1,), (value2,) ],
+          (pB,) : [ (val1,), (val2,) ] }
+
+    And this
+
+        #VVT: parameterize : pA,pB = value1,val1 value2,val2
+    
+    would return
+
+        { (pA,pB) : [ (value1,val1), (value2,val2) ] }
+    """
+    cpat = re.compile( '[\t ]*,[\t ]*' )
+
+    paramD = {}
+
+    for spec in vspecs.getSpecList( 'parameterize' ):
+        
+        lnum = spec.lineno
+
+        if spec.attrs and \
+           ( 'parameters' in spec.attrs or 'parameter' in spec.attrs ):
+            raise TestSpecError( "parameters attribute not allowed here, " + \
+                                 "line " + str(lnum) )
+        
+        if not filterAttr_scr( spec.attrs, tname, {}, ufilter, lnum ):
+            continue
+
+        L = spec.value.split( '=', 1 )
+        if len(L) < 2:
+            raise TestSpecError( "invalid parameterize specification, " + \
+                                 "line " + str(lnum) )
+        if not L[0].strip():
+            raise TestSpecError( "no parameter name given, " + \
+                                 "line " + str(lnum) )
+        
+        nL = tuple( [ n.strip() for n in L[0].strip().split(',') ] )
+        
+        for n in nL:
+            if not allowableVariable(n):
+                raise TestSpecError( 'invalid parameter name: "'+n+'", ' + \
+                                     'line ' + str(lnum) )
+
+        if len(nL) == 1:
+            
+            if force_params != None and nL[0] in force_params:
+                vL = force_params[ nL[0] ]
+            else:
+                vL = L[1].strip().split()
+            
+            for v in vL:
+                if not allowableString(v):
+                    raise TestSpecError( 'invalid parameter value: "' + \
+                                         v+'", line ' + str(lnum) )
+            
+            paramD[ nL ] = [ (v,) for v in vL ]
+        
+        else:
+            
+            if force_params != None:
+                for n in nL:
+                    if n in force_params:
+                        raise TestSpecError( 'cannot force a grouped ' + \
+                                    'parameter name: "' + \
+                                    n+'", line ' + str(lnum) )
+            
+            vL = []
+            for s in cpat.sub( ',', L[1].strip() ).split():
+                gL = s.split(',')
+                if len(gL) != len(nL):
+                    raise TestSpecError( 'malformed parameter list: "' + \
+                                          v+'", line ' + str(lnum) )
+                for v in gL:
+                    if not allowableString(v):
+                        raise TestSpecError( 'invalid parameter value: "' + \
+                                             v+'", line ' + str(lnum) )
+                vL.append( tuple(gL) )
+            
+            paramD[ nL ] = vL
+
+    return paramD
 
 
 def testname_ok_scr( attrs, tname, ufilter ):
@@ -703,6 +971,39 @@ def testname_ok_scr( attrs, tname, ufilter ):
         if tval != None and not ufilter.evauate_testname_expr( tname, tval ):
             return False
     return True
+
+
+def filterAttr_scr( attrs, testname, paramD, ufilter, lineno ):
+    """
+    Checks for known attribute names in the given 'attrs' dictionary.
+    Returns False only if at least one attribute evaluates to false.
+    """
+    if attrs:
+
+        for attrname,attrvalue in attrs.items():
+            
+            try:
+                
+                if attrname == "testname":
+                    return ufilter.evauate_testname_expr( testname, attrvalue )
+                
+                elif attrname in ["platform","platforms"]:
+                    return ufilter.evaluate_platform_expr( attrvalue )
+                
+                elif attrname in ["option","options"]:
+                    return ufilter.evaluate_option_expr( attrvalue )
+                
+                elif attrname in ["parameter","parameters"]:
+                    pf = FilterExpressions.ParamFilter(attrvalue)
+                    return pf.evaluate( paramD )
+            
+            except ValueError:
+                raise TestSpecError( 'invalid '+attrname+' expression, ' + \
+                                     'line ' + lineno + ": " + \
+                                     str(sys.exc_info()[1]) )
+    
+    return True
+
 
 ###########################################################################
 
@@ -789,7 +1090,7 @@ def filterAttr( attrname, attrvalue, testname, paramD, ufilter, lineno ):
       raise TestSpecError( "bad " + attrname + " expression, line " + \
                            lineno + ": " + str(e) )
     
-    return False, False  # false, false
+    return False, False
 
 
 def parseTestParameters( filedoc, tname, ufilter, force_params ):
@@ -1081,6 +1382,49 @@ class PlatformEvaluator:
               return 0
         
         return 1
+
+
+class PlatformEvaluator_scr:
+    """
+    This class is a helper to provide UserFilter an evaluator function.
+    """
+    
+    def __init__(self, vspecs, tname, ufilter):
+        self.vspecs = vspecs
+        self.tname = tname
+        self.ufilter = ufilter
+    
+    def satisfies_platform(self, plat_name):
+        """
+        This function parses the test header for platform restrictions and
+        returns true if the test would run under the given 'plat_name'.
+        Otherwise, it returns false.
+        """
+        for spec in self.vspecs.getSpecList( 'enable' ):
+            
+            if spec.attrs:
+
+                if 'parameters' in spec.attrs or 'parameter' in spec.attrs:
+                    raise TestSpecError( "parameters attribute not allowed here, " + \
+                                         "line " + str(spec.lineno) )
+                
+                if not testname_ok_scr( spec.attrs, self.tname, self.ufilter ):
+                  # the "enable" does not apply to this test name
+                  continue
+                
+                s = spec.attrs.get( 'platforms',
+                                    spec.attrs.get( 'platform', None ) )
+                if s != None:
+                    s = s.strip()
+                    if '/' in s:
+                        raise TestSpecError( \
+                            'invalid "platforms" attribute value '
+                            ', line ' + str(spec.lineno) )
+                    wx = FilterExpressions.WordExpression(s)
+                    if not wx.evaluate( lambda tok: tok == plat_name ):
+                        return False
+        
+        return True
 
 
 def parseAnalyze( t, filedoc, ufilter ):

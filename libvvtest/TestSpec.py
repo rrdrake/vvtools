@@ -351,7 +351,7 @@ class TestSpec:
         """
         Set the analyze script.  Should be the contents of a script, or None.
         """
-        assert analyze_text == None or type(analyze_text) == types.StringType
+        assert analyze_text == None or type(analyze_text) == type('')
         self.analyze = analyze_text
     
     def setTimeout(self, timeout):

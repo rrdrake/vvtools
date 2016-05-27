@@ -14,7 +14,13 @@ def main():
 
     if len(argL) == 0:
         argL = """test01 test02 test03 test04 test05
+                  test06 test07
                """.split()
+
+    # set these for the pipeline tests
+    os.environ['VVTEST_BATCH_READ_DELAY'] = '5'
+    os.environ['VVTEST_BATCH_READ_DELAY_MAX'] = '15'
+    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
 
     cwd = os.getcwd()
     for func in argL:
@@ -23,6 +29,7 @@ def main():
         time.sleep(1)
         print3( '====> ', func )
         eval( func+'()' )
+
 
 ########################################################################
 
@@ -293,6 +300,160 @@ def test05():
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     assert len( glob.glob( 'TestResults.*/multi/execute.log' ) ) == 1
     assert len( glob.glob( 'TestResults.*/dual/execute.log' ) ) == 1
+
+
+########################################################################
+
+def test06():
+    """
+    using "enable" with script test
+    """
+    writescript( "null.vvt", """
+        #!/usr/bin/env python
+        pass""" )
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    platname = platform_name( out )
+    tdir = results_dir()
+    remove_results()
+    os.remove( 'null.vvt' )
+    
+    # disable current platform
+    writescript( 'exclude.vvt', """
+        #!/bin/sh
+        #VVT: enable (platforms=not """+platname+""")
+        echo "hello world"
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+    
+    # enable current platform
+    os.remove( 'exclude.vvt' )
+    writescript( 'include.vvt', """
+        #!/bin/sh
+        #VVT: enable (platforms="""+platname+""")
+        echo "hello world"
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest( '-w' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    
+    # add both an enable and disable
+    os.remove( 'include.vvt' )
+    writescript( 'both.vvt', """
+        #!/bin/sh
+        #VVT: enable (platforms=not """+platname+""")
+        #VVT: enable (platforms="""+platname+""")
+        echo "hello world"
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest( '-w' )
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+    
+    # use -A to ignore enable/disable
+    out,np,nd,nf,nn = run_vvtest( '-w -A' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    
+    # an empty platform enable
+    os.remove( 'both.vvt' )
+    writescript( 'empty.vvt', """
+        #!/bin/sh
+        #VVT: name=empty1
+        #VVT: name=empty2
+        #VVT: enable (testname=empty1, platforms=)
+        echo "hello world"
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest( '-w' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert os.path.exists( os.path.join( tdir, 'empty2', 'execute.log' ) )
+
+    writescript( 'empty.vvt', """
+        #!/bin/sh
+        #VVT: name=empty1
+        #VVT: name=empty2
+        #VVT: enable (testname=empty2, platforms)
+        echo "hello world"
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest( '-w' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert os.path.exists( os.path.join( tdir, 'empty1', 'execute.log' ) )
+
+
+def test07():
+    """
+    option attributes with enable in script test
+    """
+    writescript( "null.vvt", """
+        #!/usr/bin/env python
+        pass""" )
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    platname = platform_name( out )
+    tdir = results_dir()
+    remove_results()
+    os.remove( 'null.vvt' )
+    
+    # some complex option expression
+    writescript( 'opts.vvt', """
+        #!/bin/sh
+        #VVT: enable ( options="2D and ( tridev or tri8 )" )
+        echo "hello world"
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tridev' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tri8' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-w -o 2D -o tri8' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-w -o 3D -o tri8' )
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+    
+    # combine platform with option expression
+    writescript( 'opts.vvt', """
+        #!/bin/sh
+        #VVT: enable (options="2D and ( tridev or tri8 )",""" + \
+                """platforms="""+platname+""")
+        echo "hello world"
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tridev' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tridev -X '+platname )
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tridev -x '+platname )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    
+    # reverse the order (and add an extra comma in the attributes)
+    writescript( 'opts.vvt', """
+        #!/bin/sh
+        #VVT: enable ( platforms="""+platname+", " + \
+                   """options="2D and ( tridev or tri8 )", )
+        echo "hello world"
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tridev' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tridev -X '+platname )
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
 
 ########################################################################
