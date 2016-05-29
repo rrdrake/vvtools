@@ -103,6 +103,7 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
       return []
     
     paramD = parseTestParameters( filedoc, tname, ufilter, force_params )
+    pcount = len( paramD )
     
     keywords = parseKeywords( filedoc, tname, ufilter )
     
@@ -114,57 +115,54 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
     # create the test instances
     
     testL = []
-    
+
     if len(paramD) == 0:
-      
       if do_all or ufilter.evaluate_parameters( {} ):
         t = TestSpec.TestSpec( tname, rootpath, relpath )
+        t.setKeywords( keywords )
         testL.append(t)
     
     else:
-      
       # take a cartesian product of all the parameter values but apply
       # parameter filtering (this may change the paramD)
       instanceL = cartesian_product_and_filter( paramD, ufilter )
-
       for pdict in instanceL:
         # create the test and add to test list
         t = TestSpec.TestSpec( tname, rootpath, relpath )
         t.setParameters( pdict )
+        t.setKeywords( keywords )
         testL.append(t)
-      
+    
+    if len(testL) > 0:
+      # check for execute/analyze
+      t = testL[0]
+      parseAnalyze( t, filedoc, ufilter )
+      if t.hasAnalyze():
+        if pcount == 0:
+          # a test with no parameters but with an analyze script
+          raise TestSpecError( 'an analyze requires at least one ' + \
+                               'parameter to be defined' )
+        # create an analyze test, and make it the parent of each test
+        parent = t.makeParent()
+        parent.setParameterSet( paramD )
+        for t2 in testL:
+          t2.setParent( parent.getExecuteDirectory() )
+        testL.append( parent )
+        # reset to no analyze, so that only analyze tests have an analyze
+        t.setAnalyze( None, None )
+
     # parse and set the rest of the XML file for each test
     
     finalL = []
-    parent = None
     for t in testL:
       
-      t.setKeywords( keywords )
-      
-      parseAnalyze      ( t, filedoc, ufilter )
       parseTimeouts     ( t, filedoc, ufilter )
       parseExecuteList  ( t, filedoc, ufilter )
       parseFiles        ( t, filedoc, ufilter )
       parseBaseline     ( t, filedoc, ufilter )
       
       if do_all or ufilter.file_search(t):
-        
         finalL.append(t)
-        
-        if parent == None and t.getAnalyzeScript() != None:
-          parent = t.makeParent()
-          parent.setParameterSet( paramD )
-          if parent.getExecuteDirectory() == t.getExecuteDirectory():
-            # a test with no parameters but with an analyze script
-            parent = None
-            t.appendExecutionFragment( t.getAnalyzeScript(), None, "yes" )
-            t.setAnalyze( None )
-    
-    if parent != None:
-      for t in finalL:
-        t.setAnalyze( None )
-        t.setParent( parent.getExecuteDirectory() )
-      finalL.append( parent )
     
     return finalL
 
@@ -177,6 +175,7 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
         return []
     
     paramD = parseTestParameters_scr( vspecs, tname, ufilter, force_params )
+    pcount = len( paramD )
     
     keywords = parseKeywords_scr( vspecs, tname, ufilter )
     
@@ -188,54 +187,52 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
     testL = []
 
     if len(paramD) == 0:
-
         if do_all or ufilter.evaluate_parameters( {} ):
             t = TestSpec.TestSpec( tname, rootpath, relpath )
+            t.setKeywords( keywords )
             testL.append(t)
 
     else:
-        
         # take a cartesian product of all the parameter values but apply
         # parameter filtering (this may change the paramD)
         instanceL = cartesian_product_and_filter( paramD, ufilter )
-        
         for pdict in instanceL:
             # create the test and add to test list
             t = TestSpec.TestSpec( tname, rootpath, relpath )
             t.setParameters( pdict )
+            t.setKeywords( keywords )
             testL.append(t)
     
+    if len(testL) > 0:
+      # check for execute/analyze
+      t = testL[0]
+      parseAnalyze_scr( t, vspecs, ufilter )
+      if t.hasAnalyze():
+        if pcount == 0:
+          # a test with no parameters but with an analyze script
+          raise TestSpecError( 'an analyze requires at least one ' + \
+                               'parameter to be defined' )
+        # create an analyze test, and make it the parent of each test
+        parent = t.makeParent()
+        parent.setParameterSet( paramD )
+        for t2 in testL:
+          t2.setParent( parent.getExecuteDirectory() )
+        testL.append( parent )
+        # reset to no analyze, so that only analyze tests have an analyze
+        t.setAnalyze( None, None )
+
     finalL = []
-    parent = None
     for t in testL:
       
-      t.setScriptForm( vspecs.getForm() )
-      t.setKeywords( keywords )
-      
-      if do_all or ufilter.file_search(t):
-        
-        finalL.append(t)
-        
-        #parseAnalyze      ( t, filedoc, ufilter )
+        t.setScriptForm( vspecs.getForm() )
+
+        #parseFiles        ( t, filedoc, ufilter )
         #parseTimeouts     ( t, filedoc, ufilter )
         #parseExecuteList  ( t, filedoc, ufilter )
-        #parseFiles        ( t, filedoc, ufilter )
         #parseBaseline     ( t, filedoc, ufilter )
-        #
-        #if parent == None and t.getAnalyzeScript() != None:
-        #  parent = t.makeParent()
-        #  parent.setParameterSet( paramD )
-        #  if parent.getExecuteDirectory() == t.getExecuteDirectory():
-        #    # a test with no parameters but with an analyze script
-        #    parent = None
-        #    t.appendExecutionFragment( t.getAnalyzeScript(), None, "yes" )
-        #    t.setAnalyze( None )
-    
-    if parent != None:
-      for t in finalL:
-        t.setAnalyze( None )
-        t.setParent( parent.getExecuteDirectory() )
-      finalL.append( parent )
+        
+        if do_all or ufilter.file_search(t):
+            finalL.append(t)
 
     return finalL
 
@@ -285,8 +282,11 @@ def refreshTest( testobj, ufilter=None ):
         if not ufilter.evaluate_parameters( testobj.getParameters() ):
           keep = False
         
+        # don't want children tests to get an analyze defined
+        if not testobj.getParent():
+          parseAnalyze( testobj, filedoc, ufilter )
+        
         parseFiles       ( testobj, filedoc, ufilter )
-        parseAnalyze     ( testobj, filedoc, ufilter )
         parseTimeouts    ( testobj, filedoc, ufilter )
         parseExecuteList ( testobj, filedoc, ufilter )
         parseBaseline    ( testobj, filedoc, ufilter )
@@ -328,8 +328,11 @@ def refreshTest( testobj, ufilter=None ):
         if not ufilter.evaluate_parameters( testobj.getParameters() ):
           keep = False
         
+        # don't want children tests to get an analyze defined
+        if not testobj.getParent():
+            parseAnalyze_scr( testobj, vspecs, ufilter )
+        
         #parseFiles       ( testobj, filedoc, ufilter )
-        #parseAnalyze     ( testobj, filedoc, ufilter )
         #parseTimeouts    ( testobj, filedoc, ufilter )
         #parseExecuteList ( testobj, filedoc, ufilter )
         #parseBaseline    ( testobj, filedoc, ufilter )
@@ -519,9 +522,9 @@ class ScriptReader:
         """
         self.filename = filename
         
-        self.shebang = None
         self.speclineL = []  # list of [line number, raw spec string]
         self.specL = []  # list of ScriptSpec objects
+        self.form = None  # a dict set by readfile()
 
         self.readfile( filename )
 
@@ -534,9 +537,7 @@ class ScriptReader:
     def getForm(self):
         """
         """
-        if self.shebang:
-            return ('script', 'shebang='+self.shebang)
-        return ('script',)
+        return self.form
 
     def getSpecList(self, specname):
         """
@@ -557,13 +558,14 @@ class ScriptReader:
         """
         fp = open( filename )
         
+        shebang = None
         try:
             
             line = fp.readline()
             lineno = 1
 
             if line[:2] == '#!':
-                self.shebang = line[2:].strip()
+                shebang = line[2:].strip()
                 line = fp.readline()
                 lineno += 1
             
@@ -586,6 +588,13 @@ class ScriptReader:
 
         self.process_specs()
 
+        lang,cmdL = get_script_language( filename, True, shebang )
+
+        if not cmdL:
+            raise TestSpecError( "Could not determine the script " + \
+                                 "command line for test script: "+filename )
+
+        self.form = { 'lang':lang, 'cmd':cmdL }
         self.filename = filename
     
     def parse_line(self, line, spec, lineno):
@@ -734,6 +743,109 @@ class ScriptSpec:
         self.lineno = lineno
 
 
+def get_script_language( filename, usebase, shebang ):
+    """
+    Given the full path to the script file and the #!/path/prog string from
+    the script (without the #! and if it exists), this function determines the
+    language that the script is written in and the command line that should be
+    used to launch the script.
+
+    Returns a pair lang,cmdL which is the language and command line (as a
+    list).  The known languages are
+
+        py, pl, sh, bash, csh, tcsh
+    """
+    lang = None
+    cmdL = None
+
+    bname = os.path.basename( filename )
+
+    if shebang:
+        
+        import shlex
+        L = shlex.split( shebang )
+        xf = os.path.basename( L[0] )
+
+        if xf.startswith( 'python' ):
+            lang = 'py'
+        elif xf.startswith( 'perl' ):
+            lang = 'pl'
+        elif xf in ['sh','bash','csh','tcsh']:
+            lang = xf
+        elif xf == 'env':
+            # TODO: could use getopt here if options to the env program
+            #       are given and need to be handled
+            n = None
+            for arg in L[1:]:
+                # try to ignore VARNAME=value arguments
+                if '=' not in arg:
+                    n = arg
+                    break
+            if n:
+                n = os.path.basename( n )
+                if n.startswith( 'python' ):
+                    lang = 'py'
+                elif n.startswith( 'perl' ):
+                    lang = 'pl'
+                elif n in ['sh','bash','csh','tcsh']:
+                    lang = n
+
+        if os.access( filename, os.X_OK ):
+            if usebase:
+                cmdL = [ './'+bname ]
+            else:
+                cmdL = [ filename ]
+        else:
+            cmdL = L
+            if usebase:
+                cmdL.append( bname )
+            else:
+                cmdL.append( filename )
+
+    if not lang:
+        
+        # look at the extension
+        b1,x1 = os.path.splitext( bname )
+        if b1 and x1 in ['.py']:
+            lang = 'py'
+        elif b1 and x1 in ['.pl']:
+            lang = 'pl'
+        elif b1 and x1 in ['.sh','.bash','.csh','.tcsh']:
+            lang = x1[1:]
+        
+        if lang == None:
+            # look for an embedded extension, such as name.py.vvt
+            b2,x2 = os.path.splitext( b1 )
+            if b2 and x2 in ['.py']:
+                lang = 'py'
+            elif b2 and x2 in ['.pl']:
+                lang = 'pl'
+            elif b2 and x2 in ['.sh','.bash','.csh','.tcsh']:
+                lang = x2[1:]
+
+    if not cmdL:
+        
+        if os.access( filename, os.X_OK ):
+            if usebase:
+                cmdL = [ './'+bname ]
+            else:
+                cmdL = [ filename ]
+        
+        elif lang:
+            if usebase: fn = bname
+            else:    fn = filename
+            if lang == 'py':
+                cmdL = [ sys.executable, fn ]
+            elif lang == 'pl':
+                cmdL = [ 'perl', fn ]
+            elif lang in ['sh','bash','perl']:
+                cmdL = [ lang, fn ]
+            elif lang in ['csh','tcsh']:
+                cmdL = [ lang, '-f', fn ]
+
+    return lang,cmdL
+
+
 def testNameList_scr( vspecs ):
     """
     Determine the test name and check for validity.
@@ -787,11 +899,11 @@ def parseEnableTest( vspecs, tname, ufilter ):
     for spec in vspecs.getSpecList( 'enable' ):
       
         if spec.attrs:
-        
+            
             if 'parameters' in spec.attrs or 'parameter' in spec.attrs:
                 raise TestSpecError( "parameters attribute not " + \
                                      "allowed here, line " + str(spec.lineno) )
-
+            
             if not testname_ok_scr( spec.attrs, tname, ufilter ):
               # the "enable" does not apply to this test name
               continue
@@ -963,6 +1075,86 @@ def parseTestParameters_scr( vspecs, tname, ufilter, force_params ):
     return paramD
 
 
+def parseAnalyze_scr( t, vspecs, ufilter ):
+    """
+    Parse any analyze specifications.
+    
+        #VVT: analyze : analyze.py
+        #VVT: analyze (file) : analyze.py
+        #VVT: analyze : --analyze
+        #VVT: analyze (argument) : --analyze
+        #VVT: analyze (argument, testname=not mytest_fast) : --analyze
+
+    If neither (file) nor (argument) is given as an attribute, then
+        - if the value starts with a dash, then (argument) is assumed
+        - otherwise, (file) is assumed
+    """
+    for spec in vspecs.getSpecList( 'analyze' ):
+        
+        if spec.attrs and \
+           ( 'parameters' in spec.attrs or 'parameter' in spec.attrs ):
+            raise TestSpecError( "parameters attribute not allowed here, " + \
+                                 "line " + str(spec.lineno) )
+        
+        if not filterAttr_scr( spec.attrs, t.getName(), {},
+                               ufilter, spec.lineno ):
+            continue
+
+        val = spec.value
+        if not val or not val.strip():
+            raise TestSpecError( 'missing or invalid analyze value, ' + \
+                                 'line ' + str(spec.lineno) )
+        
+        val = val.strip()
+        if spec.attrs and 'file' in spec.attrs:
+            t.setAnalyze( 'file', val )
+        elif spec.attrs and 'argument' in spec.attrs:
+            t.setAnalyze( 'arg', val )
+        elif val.startswith('-'):
+            t.setAnalyze( 'arg', val )
+        else:
+            t.setAnalyze( 'file', val )
+
+    if t.hasAnalyze():
+        fn = t.getAnalyze( 'file', None )
+        if fn != None:
+            # for analyze specifications that use a separate file, need to
+            # determine the script language and command line for executing it
+
+            fn = os.path.normpath( fn )
+            
+            if os.path.isabs( fn ):
+                # absolute path names are NOT soft linked into the test
+                # execution directory
+                usebase = False
+            else:
+                usebase = True
+                # soft link the analyze script into the test execution dir
+                t.addLinkFile( fn )
+                # relative paths are relative to the test file directory
+                d = os.path.dirname( vspecs.filename )
+                fn = os.path.normpath( os.path.join( d, fn ) )
+            
+            if os.path.exists( fn ):
+                # to determine the execution command, look for shebang and
+                # then leverage the logic used to invoke the test script itself
+                fp = open( fn, 'r' )
+                line = fp.readline()
+                fp.close()
+                shebang = None
+                if line[:2] == '#!':
+                    shebang = line[2:]
+                lang,cmdL = get_script_language( fn, usebase, shebang )
+                if not cmdL:
+                    raise TestSpecError( "Could not determine the script " + \
+                                 "command line for analyze script: "+fn )
+                # cache this information into the test object
+                t.setAnalyze( 'lang', lang )
+                t.setAnalyze( 'cmd', cmdL )
+            else:
+                raise TestSpecError( 'analyze file does not exist: ' + fn )
+
+
 def testname_ok_scr( attrs, tname, ufilter ):
     """
     """
@@ -992,7 +1184,7 @@ def filterAttr_scr( attrs, testname, paramD, ufilter, lineno ):
                 
                 elif attrname in ["option","options"]:
                     return ufilter.evaluate_option_expr( attrvalue )
-                
+
                 elif attrname in ["parameter","parameters"]:
                     pf = FilterExpressions.ParamFilter(attrvalue)
                     return pf.evaluate( paramD )
@@ -1404,10 +1596,6 @@ class PlatformEvaluator_scr:
             
             if spec.attrs:
 
-                if 'parameters' in spec.attrs or 'parameter' in spec.attrs:
-                    raise TestSpecError( "parameters attribute not allowed here, " + \
-                                         "line " + str(spec.lineno) )
-                
                 if not testname_ok_scr( spec.attrs, self.tname, self.ufilter ):
                   # the "enable" does not apply to this test name
                   continue
@@ -1466,7 +1654,7 @@ def parseAnalyze( t, filedoc, ufilter ):
         else:
           a += os.linesep + content.strip()
     
-    t.setAnalyze( a )
+    t.setAnalyze( 'script', a )
 
 
 def parseTimeouts( t, filedoc, ufilter ):

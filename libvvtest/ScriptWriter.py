@@ -27,9 +27,9 @@ def writeScript( testobj, filename, lang, config, plat ):
     platname = plat.getName()
     cplrname = plat.getCompiler()
 
-    if lang == 'py':
+    w = LineWriter()
 
-        w = LineWriter()
+    if lang == 'py':
 
         w.add( 'import sys',
                'sys.path.insert( 0, "'+vvtlib+'" )' )
@@ -56,23 +56,70 @@ def writeScript( testobj, filename, lang, config, plat ):
         for k,v in testobj.getParameters().items():
             w.add( k+' = "'+v+'"' )
         
+        if testobj.getParent() == None and testobj.hasAnalyze():
+            w.add( '', '# parameters comprising the children' )
+            D = testobj.getParameterSet()
+            if len(D) > 0:
+              # the parameter names and values of the children tests
+              for n,L in D.items():
+                assert type(n) == type(())
+                if len(n) == 1:
+                    L2 = [ T[0] for T in L ]
+                    w.add( 'PARAM_'+n[0]+' = ' + repr(L2) )
+                else:
+                    n2 = '_'.join( n )
+                    w.add( 'PARAM_'+n2+' = ' + repr(L) )
+        
         w.add(  """
                 # the test can set "have_diff" to True in the test script,
-                # then at the end call if_diff_then_exit()
+                # then at the end call if_diff_exit_diff()
                 diffExitStatus = 64
-                have_diff = False
-                def if_diff_then_exit():
-                    if have_diff:
-                        sys.exit( diffExitStatus )
+                def exit_diff():
+                    sys.exit( diffExitStatus )
                 """ )
-
-        w.write( filename )
     
     elif lang == 'pl':
         pass
     
     elif lang == 'sh':
-        pass
+        
+        w.add( '',
+               'NAME="'+tname+'"',
+               'PLATFORM="'+platname+'"',
+               'COMPILER="'+cplrname+'"',
+               'VVTESTSRC="'+tdir+'"',
+               'PROJECT="'+projdir+'"',
+               'OPTIONS="'+'+'.join( onopts )+'"',
+               'OPTIONS_OFF="'+'+'.join( offopts )+'"',
+               'SRCDIR="'+srcdir+'"' )
+
+        w.add( '', '# platform settings' )
+        for k,v in plat.getEnvironment().items():
+            w.add( 'export '+k+'="'+v+'"' )
+
+        w.add( '', '# parameters defined by the test' )
+        for k,v in testobj.getParameters().items():
+            w.add( k+'="'+v+'"' )
+        
+        if testobj.getParent() == None and testobj.hasAnalyze():
+            w.add( '', '# parameters comprising the children' )
+            D = testobj.getParameterSet()
+            if len(D) > 0:
+              # the parameter names and values of the children tests
+              for n,L in D.items():
+                assert type(n) == type(())
+                n2 = '_'.join( n )
+                L2 = [ '/'.join( v ) for v in L ]
+                w.add( 'PARAM_'+n2+'="' + ' '.join(L2) + '"' )
+        
+        w.add(  """
+                # the test can set "have_diff" to 1 in the test script,
+                # then at the end check its value and exit 'diffExitStatus'
+                diffExitStatus=64
+                have_diff=0
+                """ )
+    
+    w.write( filename )
 
 
 #########################################################################

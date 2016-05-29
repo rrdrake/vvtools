@@ -13,6 +13,7 @@ def main():
 
     if len(argL) == 0:
         argL = """test01 test02 test03
+                  test04 test05
                """.split()
 
     # set these for the pipeline tests
@@ -219,6 +220,111 @@ def test03():
         out,np,nd,nf,nn = run_vvtest( '--pipeline -k fail/notrun' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
+
+########################################################################
+
+def test04():
+    """
+    restart with script tests
+    """
+    writefile( "param.vvt", """
+        #!/usr/bin/env python
+        #VVT: parameterize : hello = world mars
+        import time
+        time.sleep(1)
+        """[1:] )
+    writescript( "FailTest.vvt", """
+        #!/usr/bin/env python
+        import time
+        time.sleep(1)
+        raise Exception( "fake failure" )
+        """ )
+    writefile( "DiffTest.vvt", """
+        #!/usr/bin/env python
+        import vvtest_util as vvt
+        import time
+        time.sleep(1)
+        vvt.exit_diff()
+        """[1:] )
+
+    # run the test set but provide a false interruption
+    os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
+    out,np,nd,nf,nn = run_vvtest( "-n 2", ignore_errors=1 )
+    del os.environ['VVTEST_INTERRUPT_COUNT']
+    out,np,nd,nf,nn = run_vvtest( '-i' )
+    assert np < 2 or nd < 1 or nf < 1
+
+    # restart with no keywords
+    out,np,nd,nf,nn = run_vvtest( '-n 2' )
+    out,np,nd,nf,nn = run_vvtest( '-i' )
+    assert np == 2 and nd == 1 and nf == 1 and nn == 0
+
+    # restart using results keyword
+    os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
+    out,np,nd,nf,nn = run_vvtest( '-n 2 -w', ignore_errors=1 )
+    del os.environ['VVTEST_INTERRUPT_COUNT']
+    out,np,nd,nf,nn = run_vvtest( '-i' )
+    assert np < 2 or nd < 1 or nf < 1
+    out,np,nd,nf,nn = run_vvtest( '-n 2 -k notrun/notdone' )
+    out,np,nd,nf,nn = run_vvtest( '-i' )
+    assert np+nd+nf+nn == 4
+
+    # none should restart now
+    out,np,nd,nf,nn = run_vvtest( '-n 2' )
+    assert np+nd+nf+nn == 0
+
+    # all of them should run again
+    out,np,nd,nf,nn = run_vvtest( '-n 2 -R' )
+    assert np+nd+nf+nn == 4
+
+
+def test05():
+    """
+    prerun file cleanout with script test
+    """
+    writescript( "clean.vvt", """
+        #!/usr/bin/env python
+        import os
+        for f in os.listdir('.'):
+            print ( 'existing file = '+f )
+        assert not os.path.exists( 'generated_file.txt' )
+        fp = open( 'generated_file.txt', 'w' )
+        fp.write( 'gen file contents' )
+        fp.close()
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tdir = os.path.abspath( results_dir() )
+    platname = platform_name( out )
+    assert os.path.exists( tdir+'/clean/generated_file.txt' )
+
+    # run again should remove the generated file
+    out,np,nd,nf,nn = run_vvtest( '-R' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 0
+
+    # running again with -m option should fail
+    out,np,nd,nf,nn = run_vvtest( '-R -m' )
+    assert np == 0 and nd == 0 and nf == 1 and nn == 0
+    assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 1
+    
+    if platname in batchplatforms:
+        remove_results()
+        
+        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert os.path.exists( tdir+'/clean/generated_file.txt' )
+
+        # run again should remove the generated file
+        out,np,nd,nf,nn = run_vvtest( '-R --pipeline' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 0
+
+        # running again with -m option should fail
+        out,np,nd,nf,nn = run_vvtest( '-R -m --pipeline' )
+        assert np == 0 and nd == 0 and nf == 1 and nn == 0
+        assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 1
 
 ########################################################################
 

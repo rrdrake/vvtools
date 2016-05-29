@@ -67,7 +67,7 @@ class TestSpec:
 
     def getScriptForm(self):
         """
-        Returns the run script form, such as ('script','shebang=/bin/sh').
+        Returns the run script form (None or a dictionary).
         """
         return self.form
 
@@ -129,12 +129,25 @@ class TestSpec:
         """
         return self.paramD
 
-    def getAnalyzeScript(self):
+    def hasAnalyze(self):
         """
-        A script (as a string) to be run after all parameterized tests run.
-        If no script is defined, then None is returned.
+        Returns true if this test has an analyze specification.
         """
-        return self.analyze
+        return len( self.analyze ) > 0
+
+    def getAnalyze(self, key, *default):
+        """
+        An analyze script can be specified by the contents of the script,
+        by a file name, or by a command line option to the test file.  Which
+        one of these and the information for each are contained in a dict.
+        This function allows access to that dict.
+
+        Returns the value for the given key.  If 'default' is given and the
+        key is not in the dict, then 'default' is reterned.
+        """
+        if len(default) > 0:
+            return self.analyze.get( key, default[0] )
+        return self.analyze[key]
     
     def getTimeout(self):
         """
@@ -250,7 +263,7 @@ class TestSpec:
         """
         assert not os.path.isabs(filepath)
         
-        self.form = ()             # a tuple, such as ('script',)
+        self.form = None           # a dictionary
 
         self.name = name
         self.rootpath = rootpath
@@ -260,7 +273,7 @@ class TestSpec:
         
         self.keywords = []         # list of strings
         self.params = {}           # name string to value string
-        self.analyze = None        # contents of an analyze script
+        self.analyze = {}          # analyze script specifications
         self.timeout = None        # timeout value in seconds (an integer)
         self.execL = []            # list of
                                    #   (name, fragment, exit status, analyze)
@@ -304,10 +317,10 @@ class TestSpec:
     
     # construction methods
     
-    def setScriptForm(self, form_tuple):
+    def setScriptForm(self, form):
         """
         """
-        self.form = form_tuple
+        self.form = form
 
     def setParent(self, parent_xdir):
         """
@@ -347,12 +360,22 @@ class TestSpec:
         self.paramD = {}
         self.paramD.update( paramD )
     
-    def setAnalyze(self, analyze_text):
+    def setAnalyze(self, key, value):
         """
-        Set the analyze script.  Should be the contents of a script, or None.
+        Add the given 'key'='value' pair to the analyze information.
+        If both 'key' and 'value' are None, then all analyze information is
+        removed (the default state).  If just 'value' is None, then 'key' is
+        removed.
         """
-        assert analyze_text == None or type(analyze_text) == type('')
-        self.analyze = analyze_text
+        if key == None:
+            if value == None:
+                self.analyze.clear()
+        else:
+            if value == None:
+                if key in self.analyze:
+                    self.analyze.pop( key )
+            else:
+                self.analyze[ key ] = value
     
     def setTimeout(self, timeout):
         """
@@ -405,6 +428,17 @@ class TestSpec:
         src = os.path.basename( self.filepath )
         if src not in D:
             self.lnfiles.append( (src,None) )
+
+    def addLinkFile(self, link_file_name):
+        """
+        Add the given file name to the set of files to link from the test
+        source area to the test execution directory.  Note that this must
+        be called AFTER setLinkFiles() because that function resets the
+        link file list.
+        """
+        assert link_file_name and not os.path.isabs( link_file_name )
+        if link_file_name not in [ T[0] for T in self.lnfiles ]:
+            self.lnfiles.append( (link_file_name,None) )
     
     def setCopyFiles(self, copy_files_list):
         """
@@ -471,10 +505,10 @@ class TestSpec:
         except the parameters.  The new test instance is returned.
         """
         ts = TestSpec( self.name, self.rootpath, self.filepath )
-        ts.form = self.form
+        ts.form = self.__copy_dictionary( self.form )
         ts.keywords = self.__copy_list(self.keywords)
         ts.setParameters({})  # skip ts.params
-        ts.analyze = self.analyze
+        ts.analyze = self.__copy_dictionary( self.analyze )
         ts.timeout = self.timeout
         ts.execL = self.__copy_list(self.execL)
         ts.lnfiles = self.__copy_list(self.lnfiles)

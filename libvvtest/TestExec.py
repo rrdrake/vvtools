@@ -61,9 +61,9 @@ class TestExec:
         
         form = self.atest.getScriptForm()
             
-        if len(form) == 0:
+        if form == None:
           
-          # an empty 'form' defaults to the old XML test specification format
+          # no 'form' defaults to the XML test specification format
 
           script_file = os.path.join( self.xdir, 'runscript' )
           
@@ -90,14 +90,25 @@ class TestExec:
         
         else:
           
-          fn = self.atest.getFilename()
-          lang,cmdL = get_script_language( fn, form )
-
-          if cmdL:
-              self.cmdL = cmdL
+          if self.atest.hasAnalyze():
+            zfile = self.atest.getAnalyze( 'file', None )
+            if zfile != None:
+              # execute the analyze script rather than the test file
+              lang = self.atest.getAnalyze( 'lang' )
+              cmdL = self.atest.getAnalyze( 'cmd' )
+            else:
+              # execute the test file but add the analyze command line option
+              lang = form['lang']
+              cmdL = form['cmd']
+              arg = self.atest.getAnalyze( 'arg', None )
+              if arg != None:
+                cmdL = cmdL + [ arg ]
+          
           else:
-              # this will probably fail, and the execute.log should show it
-              self.cmdL = [ './'+os.path.basename(fn) ]
+            lang = form['lang']
+            cmdL = form['cmd']
+
+          self.cmdL = cmdL
 
           if lang:
               
@@ -348,7 +359,7 @@ class TestExec:
           self.children = []
         self.children.append( testexec )
     
-    def isParent(self):
+    def hasChildren(self):
         """
         """
         return self.children != None
@@ -595,93 +606,3 @@ class TestExec:
             self._get_processes(p, psdict, pidlist)
         
         return None
-
-
-##########################################################################
-
-def get_script_language( filename, form ):
-    """
-    Given the full path to the script file and the #!/path/prog string from
-    the script (without the #! and if it exists), this function determines the
-    language that the script is written in and the command line that should be
-    used to launch the script.
-
-    Returns a pair lang,cmdL which is the language and command line (as a
-    list).  The known languages are
-
-        py, pl, sh, bash, csh, tcsh
-    """
-    lang = None
-    cmdL = None
-
-    shebang = None
-    for s in form:
-        if s.startswith('shebang='):
-            shebang = s.split('=',1)[1]
-
-    bname = os.path.basename( filename )
-
-    if shebang:
-        
-        import shlex
-        L = shlex.split( shebang )
-        xf = os.path.basename( L[0] )
-
-        if xf.startswith( 'python' ):
-            lang = 'py'
-        elif xf.startswith( 'perl' ):
-            lang = 'pl'
-        elif xf in ['sh','bash','csh','tcsh']:
-            lang = xf
-        elif xf == 'env':
-            # TODO: could use getopt here if options to the env program
-            #       are given and need to be handled
-            n = None
-            for arg in L[1:]:
-                # try to ignore VARNAME=value arguments
-                if '=' not in arg:
-                    n = arg
-                    break
-            if n:
-                n = os.path.basename( n )
-                if n.startswith( 'python' ):
-                    lang = 'py'
-                elif n.startswith( 'perl' ):
-                    lang = 'pl'
-                elif n in ['sh','bash','csh','tcsh']:
-                    lang = n
-
-        if os.access( filename, os.X_OK ):
-            cmdL = [ './'+bname ]
-        else:
-            cmdL = L
-            cmdL.append( bname )
-
-    if not lang:
-        
-        # look for an embedded extension, such as name.py.vvt
-        b,x1 = os.path.splitext( bname )
-        b,x2 = os.path.splitext( b )
-        if b and x2 in ['.py']:
-            lang = 'py'
-        elif b and x2 in ['.pl']:
-            lang = 'pl'
-        elif b and x2 in ['.sh','.bash','.csh','.tcsh']:
-            lang = x2[1:]
-
-    if not cmdL:
-        
-        if os.access( filename, os.X_OK ):
-            cmdL = [ './'+bname ]
-        
-        elif lang:
-            if lang == 'py':
-                cmdL = [ sys.executable, bname ]
-            elif lang == 'pl':
-                cmdL = [ 'perl', bname ]
-            elif lang in ['sh','bash','perl']:
-                cmdL = [ lang, bname ]
-            elif lang in ['csh','tcsh']:
-                cmdL = [ lang, '-f', bname ]
-
-    return lang,cmdL

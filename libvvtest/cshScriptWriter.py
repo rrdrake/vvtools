@@ -191,7 +191,7 @@ def writeScript( tspec, xdb, plat, \
     # finally, add the main execution fragments
     
     just_analyze = 0
-    if tspec.getAnalyzeScript() != None and tspec.getParent() == None:
+    if tspec.getParent() == None and tspec.hasAnalyze():
       just_analyze = 1
     
     if not just_analyze:
@@ -263,7 +263,7 @@ def writeScript( tspec, xdb, plat, \
           line_list.append( 'echo "PARAM_'+n2+' = $PARAM_'+n2+'"' )
         line_list.append('')
 
-      line_list.extend( string.split( tspec.getAnalyzeScript(), os.linesep ) )
+      line_list.extend( string.split( tspec.getAnalyze('script'), os.linesep ) )
       line_list.append('')
       line_list.append('################ end analyze script')
       line_list.append('')

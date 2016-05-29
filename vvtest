@@ -1211,7 +1211,7 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
         print3()
     for tx in tL:
         deptx = tx.badChild()
-        assert tx.isParent() and deptx != None
+        assert tx.hasChildren() and deptx != None
         print3( '*** Warning: analyze test skipped for "' + \
                 tx.atest.getExecuteDirectory() + \
                 '" due to child "' + deptx.atest.getExecuteDirectory() + '"' )
@@ -1303,7 +1303,7 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
       print3( "*** Warning: these pipe numbers did not seem to finish:",
               ' '.join(NF) )
     for tx,deptx in nrL:
-        assert tx.isParent() and deptx != None
+        assert tx.hasChildren() and deptx != None
         print3( '*** Warning: analyze test skipped for "' + \
                 tx.atest.getExecuteDirectory() + \
                 '" due to child "' + deptx.atest.getExecuteDirectory() + '"' )
@@ -1483,7 +1483,7 @@ class Pipelines:
           grpL = []
           tsum = 0
           for rt,tx in xL:
-            if tx.isParent() or tx.atest.getAttr('timeout') < 1:
+            if tx.hasChildren() or tx.atest.getAttr('timeout') < 1:
               # analyze tests and those with no timeout get their own group
               qL.append( [ self.Tzero, len(qL), [tx] ] )
             else:
@@ -1526,6 +1526,7 @@ class Pipelines:
         
         commonopts = ''
         if optdict.has_key('-e'): commonopts += ' -e'
+        if optdict.has_key('-m'): commonopts += ' -m'
         if optdict.has_key('-C'): commonopts += ' -C'
         if '--perms' in optdict:
             val = ','.join( optdict['--perms'] )
@@ -1790,7 +1791,7 @@ class Pipelines:
         """
         """
         for tx in bjob.testL:
-            if tx.isParent():
+            if tx.hasChildren():
                 for childtx in tx.getChildren():
                     chxdir = childtx.atest.getExecuteDirectory()
                     if chxdir not in self.tlist.stopped:

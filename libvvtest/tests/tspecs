@@ -1454,12 +1454,9 @@ fp.writelines( [
      '  <analyze>echo "hello from analyze"</analyze>\n',
      '</rtest>\n' ] )
 fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok38.xml', None, nofltr )
-assert len(tL) == 1, "expected 1 test, not " + str(len(tL))
-print "print with analyze 3:", tL
-# if no params, the analyze gets lumped in with the execute fragments
-assert tL[0].getAnalyzeScript() == None
-assert tL[0].getParent() == None
+try: tL = TestSpecCreator.createTestObjects( '.', 'ok38.xml', None, nofltr )
+except: pass
+else: raise Exception( 'expected an exception' )
 
 fp = open('ok39.xml',"w")
 fp.writelines( [
@@ -1471,22 +1468,19 @@ fp.close()
 tL = TestSpecCreator.createTestObjects( '.', 'ok39.xml', None, nofltr )
 assert len(tL) == 3
 print "print with parameterize/analyze 4:", tL
-if tL[0].getAnalyzeScript() != None:
-  assert tL[1].getAnalyzeScript() == None and tL[2].getAnalyzeScript() == None
-  assert tL[0].getParent() == None
+if tL[0].getParent() == None:
+  assert tL[0].hasAnalyze()
   assert tL[1].getParent() != None
   assert tL[2].getParent() != None
-elif tL[1].getAnalyzeScript() != None:
-  assert tL[0].getAnalyzeScript() == None and tL[2].getAnalyzeScript() == None
+elif tL[1].getParent() == None:
   assert tL[0].getParent() != None
-  assert tL[1].getParent() == None
+  assert tL[1].hasAnalyze()
   assert tL[2].getParent() != None
 else:
-  assert tL[2].getAnalyzeScript() != None
-  assert tL[0].getAnalyzeScript() == None and tL[1].getAnalyzeScript() == None
   assert tL[0].getParent() != None
   assert tL[1].getParent() != None
   assert tL[2].getParent() == None
+  assert tL[2].hasAnalyze()
 
 fp = open('ok41.xml',"w")
 fp.writelines( [
@@ -1598,6 +1592,7 @@ fp = open('ok44.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
      '  <keywords> fast medium long </keywords>\n',
+     '  <parameterize junk="a"/>\n',
      '  <analyze keywords="long">analyze long</analyze>\n',
      '  <analyze keywords="fast">analyze fast</analyze>\n',
      '</rtest>\n' ] )
@@ -1605,56 +1600,55 @@ fp.close()
 tL = TestSpecCreator.createTestObjects( '.', 'ok44.xml', None, nofltr )
 assert len(tL) == 1
 print tL[0]
-assert not tL[0].getAnalyzeScript()
+assert not tL[0].hasAnalyze()
 wx = FilterExpressions.WordExpression(['fast'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
 tL = TestSpecCreator.createTestObjects( '.', 'ok44.xml', None, uf )
-assert len(tL) == 1
+assert len(tL) == 2
 print tL
-L = filter( lambda T: T[1].strip() == "analyze fast", tL[0].getExecutionList() )
-assert len(L) > 0
+t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
+assert t.getAnalyze('script').find( "analyze fast" ) >= 0
 wx = FilterExpressions.WordExpression(['long'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
 tL = TestSpecCreator.createTestObjects( '.', 'ok44.xml', None, uf )
-assert len(tL) == 1
+assert len(tL) == 2
 print tL
-L = filter( lambda T: T[1].strip() == "analyze long", tL[0].getExecutionList() )
-assert len(L) > 0
+t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
+assert t.getAnalyze('script').find( "analyze long" ) >= 0
 
 
 fp = open('ok44b.xml',"w")
 fp.writelines( [
      '<rtest name="atest">\n',
      '  <keywords> fast medium long </keywords>\n',
+     '  <parameterize junk="a"/>\n',
      '  <analyze keywords="long">analyze long</analyze>\n',
      '  <analyze not_keywords="long">analyze not long</analyze>\n',
      '</rtest>\n' ] )
 fp.close()
 tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, nofltr )
-assert len(tL) == 1
-print tL[0]
-L = filter( lambda T: T[1].strip() == "analyze not long", tL[0].getExecutionList() )
-assert len(L) > 0
+assert len(tL) == 2
+t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
+assert t.getAnalyze('script').find( "analyze not long" ) >= 0
 wx = FilterExpressions.WordExpression(['fast'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
 tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, uf )
-assert len(tL) == 1
-print tL
-L = filter( lambda T: T[1].strip() == "analyze not long", tL[0].getExecutionList() )
-assert len(L) > 0
+assert len(tL) == 2
+t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
+assert t.getAnalyze('script').find( "analyze not long" ) >= 0
 wx = FilterExpressions.WordExpression(['long'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
 tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, uf )
-assert len(tL) == 1
+assert len(tL) == 2
 print tL
-L = filter( lambda T: T[1].strip() == "analyze long", tL[0].getExecutionList() )
-assert len(L) > 0
+t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
+assert t.getAnalyze('script').find( "analyze long" ) >= 0
 uf = FilterExpressions.ExpressionSet()
 tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, uf )
-assert len(tL) == 1
+assert len(tL) == 2
 print tL
-L = filter( lambda T: T[1].strip() == "analyze not long", tL[0].getExecutionList() )
-assert len(L) > 0
+t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
+assert t.getAnalyze('script').find( "analyze not long" ) >= 0
 
 
 print "14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14"

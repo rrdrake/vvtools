@@ -656,7 +656,7 @@ class TestList:
         Returns True unless this test is a parent and one or more children
         tests did not pass or diff.
         """
-        if tx.isParent():
+        if tx.hasChildren():
             if tx.badChild() != None:
                 return False
             for childtx in tx.getChildren():
