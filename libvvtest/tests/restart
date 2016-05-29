@@ -13,7 +13,7 @@ def main():
 
     if len(argL) == 0:
         argL = """test01 test02 test03
-                  test04 test05
+                  test04 test05 test06
                """.split()
 
     # set these for the pipeline tests
@@ -325,6 +325,56 @@ def test05():
         out,np,nd,nf,nn = run_vvtest( '-R -m --pipeline' )
         assert np == 0 and nd == 0 and nf == 1 and nn == 0
         assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 1
+
+
+def test06():
+    """
+    prerun file cleanout containing a soft linked directory
+    """
+    writefile( 'softdir.xml', """
+        <rtest name="softdir">
+          <link_files> subdir </link_files>
+          <execute>
+            ls subdir/afile.txt || exit 1
+          </execute>
+        </rtest>""" )
+    writefile( 'subdir/afile.txt', """
+        contents of file
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tdir = os.path.abspath( results_dir() )
+    platname = platform_name( out )
+    assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
+
+    # run again exercises the pre-clean logic
+    out,np,nd,nf,nn = run_vvtest( '-R' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
+
+    # now with post-clean
+    out,np,nd,nf,nn = run_vvtest( '-R -C' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert not os.path.exists( tdir+'/softdir/subdir/afile.txt' )
+    
+    if platname in batchplatforms:
+        remove_results()
+        
+        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
+
+        # run again exercises the pre-clean logic
+        out,np,nd,nf,nn = run_vvtest( '-R --pipeline' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
+
+        # now with post-clean
+        out,np,nd,nf,nn = run_vvtest( '-R -C --pipeline' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert not os.path.exists( tdir+'/softdir/subdir/afile.txt' )
+
 
 ########################################################################
 

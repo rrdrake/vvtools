@@ -394,7 +394,9 @@ class TestExec:
         for f in os.listdir('.'):
           if f not in ['execute.log', 'baseline.log', 'runscript'] \
              and not f.startswith( 'vvtest_util' ):
-            if os.path.isdir(f):
+            if os.path.islink( f ):
+              os.remove( f )
+            elif os.path.isdir(f):
               sys.stdout.write( "rm -r "+f+"\n" ) ; sys.stdout.flush()
               shutil.rmtree( f )
             else:
