@@ -1960,7 +1960,7 @@ def report_generation( optD, fileL ):
                 else:               rL.append( (fdate,'run') )
             hist = dmap.history(rL)
 
-            fdate,tr,started = rmat.latestResults( pc, loc )
+            fdate,tr,tr2,started = rmat.latestResults( pc, loc )
             
             print3( '  ', dmap.legend() )
             print3( '  ', hist, '  ', tr.getSummary() )
@@ -1975,18 +1975,32 @@ def report_generation( optD, fileL ):
                 
                 resD,nmatch = tr.collectResults( 'fail', 'diff', 'timeout' )
                 
+                rD2 = None
+                if tr2 != None:
+                    # get tests that timed out in the 2-nd most recent results
+                    rD2,nm2 = tr2.collectResults( 'timeout' )
+                
                 # do not report individual test results for a test
                 # execution that has massive failures
                 if nmatch <= maxreport:
                     for k,T in resD.items():
                         xd,res = T
                         if xd > 0 and ( k not in testD or testD[k][0] < xd ):
-                            testD[k] = T
+                            if rD2 != None:
+                                testD[k] = xd,res,rD2.get( k, None )
+                            else:
+                                testD[k] = xd,res,None
 
         for k,T in testD.items():
-            xd,res = T
+            xd,res,v2 = T
             if res:
-                redD[k] = res
+                if res == 'result=timeout':
+                    # only report timeouts if the 2-nd most recent test result
+                    # was also a timeout
+                    if v2 != None and v2[1] == 'result=timeout':
+                        redD[k] = res
+                else:
+                    redD[k] = res
     
     print3()
     print3( 'Tests that have diffed, failed, or timed out are next.' )
@@ -2137,22 +2151,34 @@ class ResultsMatrix:
         """
         For the given platform/compiler and location, finds the test results
         with the most recent date stamp, but that is not in progress.  Returns
-        a triple
+        a tuple
 
-            ( file date, TestResults, started )
+            ( file date, TestResults, TestResults, started )
 
-        where 'started' is True if the most recent test results are in
-        progress.
+        where the first TestResults is the latest and the second TestResults
+        is the second latest, and 'started' is True if the most recent test
+        results are in progress.
         """
         L = [] + self.matrixD[platcplr][location]
         L.reverse()
         started = L[0][1].inProgress()
-        # pick the most recent which is not in-progress
+        # pick the most recent and second most recent which is not in-progress
+        frst = None
+        scnd = None
         for fd,tr in L:
             if not tr.inProgress():
-                return fd,tr,started
+                if frst == None:
+                    frst = ( fd, tr )
+                elif scnd == None:
+                    scnd = tr
+                else:
+                    break
+        
+        if frst != None:
+            return frst[0], frst[1], scnd, started
+        
         fd,tr = L[0]  # all are in progress? just choose most recent
-        return fd,tr,started
+        return fd,tr,None,started
 
     def resultsForTest(self, platcplr, testdir, testname, result=None):
         """

@@ -117,7 +117,7 @@ class TestExec:
               script_file = os.path.join( self.xdir, 'vvtest_util.'+lang )
               
               if config.get('refresh') or not os.path.exists( script_file ):
-                
+                  
                   ScriptWriter.writeScript( self.atest, script_file,
                                             lang, config, self.platform )
                   

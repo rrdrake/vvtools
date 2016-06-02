@@ -409,49 +409,29 @@ class TestSpec:
         s = string.join( string.split(content) )  # remove embedded newlines
         self.execL.append( (name, s, exit_status, "no") )
    
-    def setLinkFiles(self, link_file_list):
-        """
-        Set the list of files to link from the test source directory to
-        the testing directory.  Each item in the list is a pair:
-           ( source name, test name )
-        where the test name may be None.
-        """
-        self.lnfiles = []
-        D = {}
-        for src,tst in link_file_list:
-          assert src and not os.path.isabs(src)
-          assert tst == None or not os.path.isabs(tst)
-          self.lnfiles.append( (src, tst) )
-          D[ src ] = None
-        
-        # always include the test specification file
-        src = os.path.basename( self.filepath )
-        if src not in D:
-            self.lnfiles.append( (src,None) )
-
-    def addLinkFile(self, link_file_name):
+    def addLinkFile(self, srcname, destname=None):
         """
         Add the given file name to the set of files to link from the test
-        source area to the test execution directory.  Note that this must
-        be called AFTER setLinkFiles() because that function resets the
-        link file list.
+        source area into the test execution directory.  The 'srcname' is an
+        existing file, and 'destname' is the name of the sym link file in
+        the test execution directory.  If 'destname' is None, the base name
+        of 'srcname' is used.
         """
-        assert link_file_name and not os.path.isabs( link_file_name )
-        if link_file_name not in [ T[0] for T in self.lnfiles ]:
-            self.lnfiles.append( (link_file_name,None) )
+        assert srcname and not os.path.isabs( srcname )
+        if (srcname,destname) not in self.lnfiles:
+            self.lnfiles.append( (srcname,destname) )
     
-    def setCopyFiles(self, copy_files_list):
+    def addCopyFile(self, srcname, destname=None):
         """
-        Set the list of files to copy from the test source directory to
-        the testing directory.  Each item in the list is a pair:
-           ( source name, test name )
-        where the test name may be None.
+        Add the given file name to the set of files to copy from the test
+        source area into the test execution directory.  The 'srcname' is an
+        existing file, and 'destname' is the name of the file in the test
+        execution directory.  If 'destname' is None, the base name of
+        'srcname' is used.
         """
-        self.cpfiles = []
-        for src,tst in copy_files_list:
-          assert src and not os.path.isabs(src)
-          assert tst == None or not os.path.isabs(tst)
-          self.cpfiles.append( (src, tst) )
+        assert srcname and not os.path.isabs( srcname )
+        if (srcname,destname) not in self.cpfiles:
+            self.cpfiles.append( (srcname,destname) )
     
     def resetBaseline(self):
         """

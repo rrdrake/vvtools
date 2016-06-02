@@ -31,6 +31,7 @@ def main():
                   list01
                   files01 report01 report02
                   inprogress
+                  timeouts
                """.split()
 
     for func in argL:
@@ -1452,6 +1453,95 @@ def inprogress():
             s = line.split('pass')[0].strip()
             assert s[-1] == 's'
             break
+
+############################################################################
+
+def timeouts():
+    """
+    timeout only reported if two or more times in a row
+    """
+    writefile( "subdir/test1.xml", """
+        <rtest name="test1">
+          <timeout value="5"/>
+          <execute> sleep 2 </execute>
+        </rtest>""" )
+    writefile( "subdir/test2.xml", """
+        <rtest name="test2">
+          <timeout value="10"/>
+          <execute> sleep 1 </execute>
+        </rtest>""" )
+    
+    out,np,nd,nf,nn = run_vvtest( 'subdir' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    tdir = os.path.abspath( results_dir() )
+
+    # bootstrap with runtimes files then save the test results
+    ok,out = run_cmd( resultspy + ' save', directory='subdir' )
+    assert ok
+    run_vvtest( '-i --save-results' )
+    
+    # compute a new result date to be yesterday's date
+    rf1 = glob.glob('results.*')[0]
+    s1,d,s2 = rf1.split('.',2)
+    y,m,d = d.split('_')
+    if d == '01':
+        if m == '01':
+            return  # I'm lazy
+        m = int(m)-1
+        if m < 10: m = '0'+str(m)
+        else:      m = str(m)
+        d = '28'
+    else:
+        d = int(d)-1
+        if d < 10: d = '0'+str(d)
+        else:      d = str(d)
+    rf2 = s1+'.'+y+'_'+m+'_'+d+'.'+s2
+
+    # rewrite the results file to a file with yesterday's date
+    tr = results.TestResults( rf1 )
+    platname,cplrname = tr.platform(), tr.compiler()
+    mach,testdir = tr.machine(), tr.testdir()
+    tr.writeResults( rf2, platname, cplrname, mach, testdir )
+
+    # rerun the tests
+    time.sleep(1)
+    out,np,nd,nf,nn = run_vvtest( '-w --save-results subdir' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+    ok,out = run_cmd( resultspy + ' report ' + rf1 + ' ' + rf2 )
+    assert ok
+    assert len( grep( out, 'test1' ) ) == 0
+    assert len( grep( out, 'test2' ) ) == 0
+
+    # now make a test timeout
+    writefile( "subdir/test1.xml", """
+        <rtest name="test1">
+          <timeout value="5"/>
+          <execute> sleep 10 </execute>
+        </rtest>""" )
+    
+    out,np,nd,nf,nn = run_vvtest( '-w --save-results subdir' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    # the timed out test should not be reported
+    ok,out = run_cmd( resultspy + ' report ' + rf1 + ' ' + rf2 )
+    assert ok
+    assert len( grep( out, 'test1' ) ) == 0
+    assert len( grep( out, 'test2' ) ) == 0
+
+    # rename the results with the timed out test to yesterday's date
+    os.remove( rf2 )
+    os.rename( rf1, rf2 )
+
+    # rerun one more time, in which the test will timeout again
+    out,np,nd,nf,nn = run_vvtest( '-w --save-results subdir' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    # the timed out test should now be reported
+    ok,out = run_cmd( resultspy + ' report ' + rf1 + ' ' + rf2 )
+    assert ok
+    assert len( grep( out, 'test1' ) ) == 1
+    assert len( grep( out, 'test2' ) ) == 0
 
 
 ############################################################################

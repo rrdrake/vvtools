@@ -320,16 +320,36 @@ def test07():
     
     out,np,nd,nf,nn = run_vvtest( ['-p','isize<=2 or not isize'] )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
-
     tdir = results_dir()
+    platname = platform_name( out )
+    
     assert     os.path.exists( tdir+'/basic.isize=1' )
     assert     os.path.exists( tdir+'/basic.isize=2' )
     assert not os.path.exists( tdir+'/basic.isize=4' )
     assert     os.path.exists( tdir+'/basic' )
 
+    cwd = os.getcwd()
     os.chdir( tdir+'/basic' )
     out,np,nd,nf,nn = run_vvtest( '-R' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    os.chdir( cwd )
+
+    if platname in batchplatforms:
+        remove_results()
+
+        out,np,nd,nf,nn = run_vvtest( ['-p','isize<=2 or not isize',
+                                       '--pipeline'] )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        
+        assert     os.path.exists( tdir+'/basic.isize=1' )
+        assert     os.path.exists( tdir+'/basic.isize=2' )
+        assert not os.path.exists( tdir+'/basic.isize=4' )
+        assert     os.path.exists( tdir+'/basic' )
+
+        os.chdir( tdir+'/basic' )
+        out,np,nd,nf,nn = run_vvtest( '-R --pipeline' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        os.chdir( cwd )
 
 
 def test08():
@@ -347,8 +367,9 @@ def test08():
     
     out,np,nd,nf,nn = run_vvtest( ['-p','isize<=2 or not isize'] )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
-
     tdir = results_dir()
+    platname = platform_name( out )
+
     assert os.path.exists( tdir+'/basic' )
     L = filegrep( tdir+'/basic/execute.log', "access PARAM_isize" )
     assert len(L) == 1
@@ -357,6 +378,7 @@ def test08():
     pL = ps.strip().split()
     assert pL == ['1', '2']
 
+    cwd = os.getcwd()
     os.chdir( tdir+'/basic' )
     out,np,nd,nf,nn = run_vvtest( '-R' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
@@ -367,6 +389,34 @@ def test08():
     ps = L[0].split('=',1)[1]
     pL = ps.strip().split()
     assert pL == ['1', '2']
+    os.chdir( cwd )
+    
+    if platname in batchplatforms:
+        remove_results()
+
+        out,np,nd,nf,nn = run_vvtest( ['-p','isize<=2 or not isize',
+                                       '--pipeline'] )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+        assert os.path.exists( tdir+'/basic' )
+        L = filegrep( tdir+'/basic/execute.log', "access PARAM_isize" )
+        assert len(L) == 1
+        s = L[0]
+        ps = L[0].split('=',1)[1]
+        pL = ps.strip().split()
+        assert pL == ['1', '2']
+
+        os.chdir( tdir+'/basic' )
+        out,np,nd,nf,nn = run_vvtest( '-R --pipeline' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        
+        L = filegrep( 'execute.log', "access PARAM_isize" )
+        assert len(L) == 1
+        s = L[0]
+        ps = L[0].split('=',1)[1]
+        pL = ps.strip().split()
+        assert pL == ['1', '2']
+        os.chdir( cwd )
 
 
 #####################################################################

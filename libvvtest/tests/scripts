@@ -15,7 +15,8 @@ def main():
 
     if len(argL) == 0:
         argL = """test01 test01b test02 test03 test04 test05 test06
-                  test07 test08
+                  test07 test08 test09 test10 test11 test12 test13
+                  test14
                """.split()
 
     # set these for the pipeline tests
@@ -386,6 +387,398 @@ def test08():
     assert len( grep( out, 'skipping .*tst5.vvt' ) ) == 1
     assert len( grep( out, 'skipping .*tst6.vvt' ) ) == 1
     assert len( grep( out, 'skipping .*tst7.vvt' ) ) == 1
+
+
+def test09():
+    """
+    using the "have diff" utils
+    """
+    writescript( 'pypass.vvt', """
+        #!/usr/bin/env python
+        import os, sys
+        import vvtest_util as vvt
+        vvt.if_diff_exit_diff()
+        """ )
+    writescript( 'pydiff.vvt', """
+        #!/usr/bin/env python
+        import os, sys
+        import vvtest_util as vvt
+        vvt.set_have_diff()
+        vvt.if_diff_exit_diff()
+        """ )
+    writescript( 'pydiff2.vvt', """
+        #!/usr/bin/env python
+        import os, sys
+        import vvtest_util as vvt
+        vvt.exit_diff()
+        """ )
+    writescript( 'shpass.vvt', """
+        #!/bin/sh
+        source vvtest_util.sh
+        if_diff_exit_diff
+        """ )
+    writescript( 'shdiff.vvt', """
+        #!/bin/sh
+        source vvtest_util.sh
+        set_have_diff
+        if_diff_exit_diff
+        """ )
+    writescript( 'shdiff2.vvt', """
+        #!/bin/sh
+        source vvtest_util.sh
+        exit_diff
+        """ )
+    writescript( 'cshpass.vvt', """
+        #!/bin/csh
+        source vvtest_util.csh
+        if_diff_exit_diff
+        """ )
+    writescript( 'cshdiff.vvt', """
+        #!/bin/csh
+        source vvtest_util.csh
+        set_have_diff
+        if_diff_exit_diff
+        """ )
+    writescript( 'cshdiff2.vvt', """
+        #!/bin/csh
+        source vvtest_util.csh
+        exit_diff
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 3 and nd == 6 and nf == 0 and nn == 0
+    platname = platform_name( out )
+    tdir = results_dir()
+    assert len( filegrep( tdir+'/pydiff/execute.log', 'exitting diff' ) ) == 1
+    assert len( filegrep( tdir+'/shdiff/execute.log', 'exitting diff' ) ) == 1
+    assert len( filegrep( tdir+'/cshdiff/execute.log', 'exitting diff' ) ) == 1
+    assert len( filegrep( tdir+'/pypass/execute.log', 'exitting diff' ) ) == 0
+    assert len( filegrep( tdir+'/shpass/execute.log', 'exitting diff' ) ) == 0
+    assert len( filegrep( tdir+'/cshpass/execute.log', 'exitting diff' ) ) == 0
+
+    if platname in batchplatforms:
+        remove_results()
+        
+        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        assert np == 3 and nd == 6 and nf == 0 and nn == 0
+        assert len( filegrep( tdir+'/pydiff/execute.log', 'exitting diff' ) ) == 1
+        assert len( filegrep( tdir+'/shdiff/execute.log', 'exitting diff' ) ) == 1
+        assert len( filegrep( tdir+'/cshdiff/execute.log', 'exitting diff' ) ) == 1
+        assert len( filegrep( tdir+'/pypass/execute.log', 'exitting diff' ) ) == 0
+        assert len( filegrep( tdir+'/shpass/execute.log', 'exitting diff' ) ) == 0
+        assert len( filegrep( tdir+'/cshpass/execute.log', 'exitting diff' ) ) == 0
+
+    os.chdir( tdir )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
+    assert np == 3 and nd == 6 and nf == 0 and nn == 0
+    assert len( filegrep( 'pydiff/execute.log', 'exitting diff' ) ) == 1
+    assert len( filegrep( 'shdiff/execute.log', 'exitting diff' ) ) == 1
+    assert len( filegrep( 'cshdiff/execute.log', 'exitting diff' ) ) == 1
+    assert len( filegrep( 'pypass/execute.log', 'exitting diff' ) ) == 0
+    assert len( filegrep( 'shpass/execute.log', 'exitting diff' ) ) == 0
+    assert len( filegrep( 'cshpass/execute.log', 'exitting diff' ) ) == 0
+
+
+def test10():
+    """
+    the sedfile utility
+    """
+    writefile( 'changeme.txt', """
+        the quick brown fox jumps
+        over the lazy dog
+        """ )
+    writescript( 'pytest.vvt', """
+        #!/usr/bin/env python
+        #VVT: link = changeme.txt
+        import os
+        import vvtest_util as vvt
+        assert os.path.islink( 'changeme.txt' )
+        vvt.sedfile( 'changeme.txt', 'quick', 'lazy', 'jumps', 'steps' )
+        assert not os.path.islink( 'changeme.txt' )
+        """ )
+    writescript( 'shtest.vvt', """
+        #!/bin/sh
+        #VVT: link = changeme.txt
+        source vvtest_util.sh
+        sedfile changeme.txt "s/quick/speedy/"
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    platname = platform_name( out )
+    tdir = results_dir()
+
+    assert len( filegrep( 'changeme.txt', 'quick brown' ) ) == 1
+    assert len( filegrep( 'changeme.txt', 'lazy brown' ) ) == 0
+    assert len( filegrep( 'changeme.txt', 'fox jumps' ) ) == 1
+    assert len( filegrep( 'changeme.txt', 'fox steps' ) ) == 0
+    assert len( filegrep( 'changeme.txt', 'speedy brown' ) ) == 0
+    
+    assert not os.path.islink( tdir+'/pytest/changeme.txt' )
+    assert len( filegrep( tdir+'/pytest/changeme.txt', 'lazy brown' ) ) == 1
+    assert len( filegrep( tdir+'/pytest/changeme.txt', 'fox steps' ) ) == 1
+    assert not os.path.islink( tdir+'/shtest/changeme.txt' )
+    assert len( filegrep( tdir+'/shtest/changeme.txt', 'speedy brown' ) ) == 1
+
+
+def test11():
+    """
+    the unixdiff utility
+    """
+    writefile( 'baseline.txt',
+               'the quick brown fox jumps\n' + \
+               'over the lazy dog' )
+    writescript( 'pypass.vvt', """
+        #!/usr/bin/env python
+        #VVT: link = baseline.txt
+        import os
+        import vvtest_util as vvt
+        fp = open( 'genfile.txt', 'w' )
+        fp.write( 'the quick brown fox jumps\\n' + \
+                  'over the lazy dog\\n' )
+        fp.close()
+        vvt.unixdiff( 'baseline.txt', 'genfile.txt' )
+        vvt.if_diff_exit_diff()
+        """ )
+    writescript( 'pydiff.vvt', """
+        #!/usr/bin/env python
+        #VVT: link = baseline.txt
+        import os
+        import vvtest_util as vvt
+        fp = open( 'genfile.txt', 'w' )
+        fp.write( 'the quick brown fox jumps\\n' + \
+                  'over the super lazy dog\\n' )
+        fp.close()
+        vvt.unixdiff( 'baseline.txt', 'genfile.txt' )
+        vvt.if_diff_exit_diff()
+        """ )
+    writescript( 'shpass.vvt', """
+        #!/bin/sh
+        #VVT: link = baseline.txt
+        source vvtest_util.sh
+        echo "the quick brown fox jumps" > genfile.txt
+        echo "over the lazy dog" >> genfile.txt
+        echo "" >> genfile.xt
+        unixdiff baseline.txt genfile.txt
+        if_diff_exit_diff
+        """ )
+    writescript( 'shdiff.vvt', """
+        #!/bin/sh
+        #VVT: link = baseline.txt
+        source vvtest_util.sh
+        echo "the quick brown fox jumps" > genfile.txt
+        echo "over the utterly lazy dog" >> genfile.txt
+        echo "" >> genfile.xt
+        unixdiff baseline.txt genfile.txt
+        if_diff_exit_diff
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 2 and nd == 2 and nf == 0 and nn == 0
+    platname = platform_name( out )
+    tdir = results_dir()
+
+    assert len( filegrep( tdir+'/pypass/execute.log', 'files are diff' ) ) == 0
+    assert len( filegrep( tdir+'/pydiff/execute.log', 'files are diff' ) ) == 1
+    assert len( filegrep( tdir+'/shpass/execute.log', 'files are diff' ) ) == 0
+    assert len( filegrep( tdir+'/shdiff/execute.log', 'files are diff' ) ) == 1
+
+
+def test12():
+    """
+    the nlinesdiff utility
+    """
+    writescript( 'pypass.vvt', """
+        #!/usr/bin/env python
+        import os
+        import vvtest_util as vvt
+        fp = open( 'genfile.txt', 'w' )
+        fp.write( 'the speedy brown fox jumps\\n' + \
+                  'over the lazy dog\\n' )
+        fp.close()
+        vvt.nlinesdiff( 'genfile.txt', 2 )
+        vvt.if_diff_exit_diff()
+        """ )
+    writescript( 'pydiff.vvt', """
+        #!/usr/bin/env python
+        import os
+        import vvtest_util as vvt
+        fp = open( 'genfile.txt', 'w' )
+        fp.write( 'the speedy brown fox jumps\\n' + \
+                  'over the super lazy dog\\n' + \
+                  'and laughed\\n' )
+        fp.close()
+        vvt.nlinesdiff( 'genfile.txt', 2 )
+        vvt.if_diff_exit_diff()
+        """ )
+    writescript( 'shpass.vvt', """
+        #!/bin/sh
+        source vvtest_util.sh
+        echo "the speedy brown fox jumps" > genfile.txt
+        echo "over the lazy dog" >> genfile.txt
+        nlinesdiff genfile.txt 2
+        if_diff_exit_diff
+        """ )
+    writescript( 'shdiff.vvt', """
+        #!/bin/sh
+        source vvtest_util.sh
+        echo "the speedy brown fox jumps" > genfile.txt
+        echo "over the lazy dog" >> genfile.txt
+        echo "and laughed" >> genfile.txt
+        nlinesdiff genfile.txt 2
+        if_diff_exit_diff
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 2 and nd == 2 and nf == 0 and nn == 0
+    platname = platform_name( out )
+    tdir = results_dir()
+
+    assert len( filegrep( tdir+'/pypass/execute.log',
+                          'number of lines exceeded' ) ) == 0
+    assert len( filegrep( tdir+'/pydiff/execute.log',
+                          'number of lines exceeded' ) ) == 1
+    assert len( filegrep( tdir+'/shpass/execute.log',
+                          'number of lines exceeded' ) ) == 0
+    assert len( filegrep( tdir+'/shdiff/execute.log',
+                          'number of lines exceeded' ) ) == 1
+
+
+########################################################################
+
+def test13():
+    """
+    copy & link files
+    """
+    writefile( 'file1.txt', """
+        this is file one
+        """ )
+    writefile( 'file2.txt', """
+        this is file two
+        """ )
+    writefile( 'file3.txt', """
+        this is file three
+        """ )
+    writescript( 'files.vvt', """
+        #!/usr/bin/env python
+        #VVT: link : file1.txt file2.txt
+        #VVT: copy : file3.txt
+        #VVT: link (rename) : file1.txt, lfile1 file2.txt,lfile2
+        #VVT: copy (rename) : file3.txt ,cfile3
+        import os
+        assert os.path.exists( 'file1.txt' )
+        assert os.path.islink( 'file1.txt' )
+        assert os.path.exists( 'file2.txt' )
+        assert os.path.islink( 'file2.txt' )
+        assert os.path.exists( 'file3.txt' )
+        assert not os.path.islink( 'file3.txt' )
+        assert os.path.exists( 'lfile1' )
+        assert os.path.islink( 'lfile1' )
+        assert os.path.exists( 'lfile2' )
+        assert os.path.islink( 'lfile2' )
+        assert os.path.exists( 'cfile3' )
+        assert not os.path.islink( 'cfile3' )
+
+        import filecmp
+        assert filecmp.cmp( 'file1.txt', 'lfile1', shallow=False )
+        assert filecmp.cmp( 'file2.txt', 'lfile2', shallow=False )
+        assert filecmp.cmp( 'file3.txt', 'cfile3', shallow=False )
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+    platname = platform_name( out )
+    
+    if platname in batchplatforms:
+        remove_results()
+        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+
+def test14():
+    """
+    copy & link files with attribute specifications
+    """
+    writescript( "null.vvt", """
+        #!/bin/sh
+        echo null
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    platname = platform_name( out )
+    tdir = results_dir()
+    remove_results()
+    os.remove( 'null.vvt' )
+
+    writefile( 'file1.txt', """
+        this is file one
+        """ )
+    writefile( 'file2.txt', """
+        this is file two
+        """ )
+    writefile( 'file3.txt', """
+        this is file three
+        """ )
+    writefile( 'file4.txt', """
+        this is file four
+        """ )
+    writefile( 'file5.txt', """
+        this is file five
+        """ )
+    writescript( 'files.vvt', """
+        #!/usr/bin/env python
+        
+        #VVT: name = files
+        #VVT: name = another
+        #VVT: link (testname=files): file1.txt
+        #VVT: link (testname=not files): file2.txt
+        #VVT: copy (options=dbg, testname=another) : file3.txt
+        #VVT: link (rename, platforms="Junk") : file4.txt, lfile4
+        #VVT: copy (rename, platforms="""+platname+""") : file5.txt,cfile5
+        
+        import os
+        import vvtest_util as vvt
+        if vvt.NAME == 'files':
+            assert os.path.exists( 'file1.txt' )
+            assert os.path.islink( 'file1.txt' )
+            assert not os.path.exists( 'file2.txt' )
+        else:
+            assert os.path.exists( 'file2.txt' )
+            assert os.path.islink( 'file2.txt' )
+        if 'dbg' in vvt.OPTIONS and vvt.NAME == 'another':
+            assert os.path.exists( 'file3.txt' )
+            assert not os.path.islink( 'file3.txt' )
+        else:
+            assert not os.path.exists( 'file3.txt' )
+        assert not os.path.exists( 'file4.txt' )
+        assert not os.path.exists( 'lfile4' )
+        assert os.path.exists( 'cfile5' )
+        assert not os.path.islink( 'cfile5' )
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( '-o dbg' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    dbgdir = results_dir()
+    assert os.path.exists( dbgdir+'/another/file3.txt' )
+    assert not os.path.islink( dbgdir+'/another/file3.txt' )
+
+    if platname in batchplatforms:
+        remove_results()
+        
+        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        remove_results()
+        
+        out,np,nd,nf,nn = run_vvtest( '-o dbg --pipeline' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        assert os.path.exists( dbgdir+'/another/file3.txt' )
+        assert not os.path.islink( dbgdir+'/another/file3.txt' )
 
 
 ########################################################################

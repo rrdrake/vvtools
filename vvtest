@@ -1270,8 +1270,8 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
         qidL,doneL = pipes.checkdone()
         
         if len(qidL) > 0:
-            ids = ' '.join( [ str(jid) for jid in qidL ] )
-            print3( 'Batch jobs done:', ids )
+            ids = ' '.join( [ str(qid) for qid in qidL ] )
+            print3( 'Finished batch IDS:', ids )
         for t in doneL:
             ts = XstatusString( t, False, test_dir, cwd )
             print3( "Finished:", ts )
@@ -1525,9 +1525,12 @@ class Pipelines:
               pass
         
         commonopts = ''
-        if optdict.has_key('-e'): commonopts += ' -e'
-        if optdict.has_key('-m'): commonopts += ' -m'
-        if optdict.has_key('-C'): commonopts += ' -C'
+        if '-e' in optdict: commonopts += ' -e'
+        if '-m' in optdict: commonopts += ' -m'
+        if '-C' in optdict: commonopts += ' -C'
+        for s in optdict.get('-p',[]):
+            s = s.replace( '!', '\\!' )  # have to escape exclamation points
+            commonopts += ' -p "'+s+'"'
         if '--perms' in optdict:
             val = ','.join( optdict['--perms'] )
             commonopts += ' --perms '+val
@@ -1931,7 +1934,7 @@ def restartTests( test_dir, plat, ufilter ):
         qid = optdict['--qsub-id']
         subd = batchset( qid )
         tfile = os.path.join( test_dir, subd, testlist_name+'.'+qid )
-    
+
     tlist = TestList.TestList( ufilter )
     tlist.readFile( tfile )
 

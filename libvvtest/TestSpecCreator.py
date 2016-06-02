@@ -107,9 +107,7 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
     
     keywords = parseKeywords( filedoc, tname, ufilter )
     
-    do_all = ufilter.getAttr('include_all',0)
-
-    if not do_all and not ufilter.satisfies_nonresults_keywords( keywords ):
+    if not ufilter.satisfies_nonresults_keywords( keywords ):
       return []
     
     # create the test instances
@@ -117,7 +115,7 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
     testL = []
 
     if len(paramD) == 0:
-      if do_all or ufilter.evaluate_parameters( {} ):
+      if ufilter.evaluate_parameters( {} ):
         t = TestSpec.TestSpec( tname, rootpath, relpath )
         t.setKeywords( keywords )
         testL.append(t)
@@ -161,7 +159,7 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
       parseFiles        ( t, filedoc, ufilter )
       parseBaseline     ( t, filedoc, ufilter )
       
-      if do_all or ufilter.file_search(t):
+      if ufilter.file_search(t):
         finalL.append(t)
     
     return finalL
@@ -179,15 +177,13 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
     
     keywords = parseKeywords_scr( vspecs, tname, ufilter )
     
-    do_all = ufilter.getAttr('include_all',0)
-
-    if not do_all and not ufilter.satisfies_nonresults_keywords( keywords ):
+    if not ufilter.satisfies_nonresults_keywords( keywords ):
         return []
     
     testL = []
 
     if len(paramD) == 0:
-        if do_all or ufilter.evaluate_parameters( {} ):
+        if ufilter.evaluate_parameters( {} ):
             t = TestSpec.TestSpec( tname, rootpath, relpath )
             t.setKeywords( keywords )
             testL.append(t)
@@ -226,12 +222,12 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
       
         t.setScriptForm( vspecs.getForm() )
 
-        #parseFiles        ( t, filedoc, ufilter )
+        parseFiles_scr    ( t, vspecs, ufilter )
         #parseTimeouts     ( t, filedoc, ufilter )
         #parseExecuteList  ( t, filedoc, ufilter )
         #parseBaseline     ( t, filedoc, ufilter )
         
-        if do_all or ufilter.file_search(t):
+        if ufilter.file_search(t):
             finalL.append(t)
 
     return finalL
@@ -265,11 +261,6 @@ def refreshTest( testobj, ufilter=None ):
         if ufilter == None:
           ufilter = FilterExpressions.ExpressionSet()
         
-        if not testobj.getParent():
-          paramD = parseTestParameters( filedoc, tname, ufilter, None )
-          cartesian_product_and_filter( paramD, ufilter )
-          testobj.setParameterSet( paramD )
-        
         if not parseIncludeTest( filedoc, tname, ufilter ):
           keep = False
         
@@ -282,9 +273,17 @@ def refreshTest( testobj, ufilter=None ):
         if not ufilter.evaluate_parameters( testobj.getParameters() ):
           keep = False
         
-        # don't want children tests to get an analyze defined
         if not testobj.getParent():
+          # to avoid children tests getting an analyze defined, only parse
+          # analyze if the test does not have a parent; this is safe for 
+          # a refresh because the parents are saved in the test list file
           parseAnalyze( testobj, filedoc, ufilter )
+          
+          if testobj.hasAnalyze():
+            # this regenerates the parameter set for analyze tests
+            paramD = parseTestParameters( filedoc, tname, ufilter, None )
+            cartesian_product_and_filter( paramD, ufilter )
+            testobj.setParameterSet( paramD )
         
         parseFiles       ( testobj, filedoc, ufilter )
         parseTimeouts    ( testobj, filedoc, ufilter )
@@ -311,11 +310,6 @@ def refreshTest( testobj, ufilter=None ):
         if ufilter == None:
           ufilter = FilterExpressions.ExpressionSet()
         
-        if not testobj.getParent():
-          paramD = parseTestParameters_scr( vspecs, tname, ufilter, None )
-          cartesian_product_and_filter( paramD, ufilter )
-          testobj.setParameterSet( paramD )
-        
         if not parseEnableTest( vspecs, tname, ufilter ):
           keep = False
         
@@ -328,11 +322,19 @@ def refreshTest( testobj, ufilter=None ):
         if not ufilter.evaluate_parameters( testobj.getParameters() ):
           keep = False
         
-        # don't want children tests to get an analyze defined
         if not testobj.getParent():
+            # to avoid children tests getting an analyze defined, only parse
+            # analyze if the test does not have a parent; this is safe for 
+            # a refresh because the parents are saved in the test list file
             parseAnalyze_scr( testobj, vspecs, ufilter )
+            
+            if testobj.hasAnalyze():
+                # this regenerates the parameter set for analyze tests
+                paramD = parseTestParameters_scr( vspecs, tname, ufilter, None )
+                cartesian_product_and_filter( paramD, ufilter )
+                testobj.setParameterSet( paramD )
         
-        #parseFiles       ( testobj, filedoc, ufilter )
+        parseFiles_scr    ( testobj, vspecs, ufilter )
         #parseTimeouts    ( testobj, filedoc, ufilter )
         #parseExecuteList ( testobj, filedoc, ufilter )
         #parseBaseline    ( testobj, filedoc, ufilter )
@@ -939,7 +941,7 @@ def parseKeywords_scr( vspecs, tname, ufilter ):
             raise TestSpecError( "parameters attribute not allowed here, " + \
                                  "line " + str(spec.lineno) )
         
-        if not filterAttr_scr( spec.attrs, tname, {}, ufilter, spec.lineno ):
+        if not filterAttr_scr( spec.attrs, tname, None, ufilter, spec.lineno ):
             continue
         
         for key in spec.value.strip().split():
@@ -1017,7 +1019,7 @@ def parseTestParameters_scr( vspecs, tname, ufilter, force_params ):
             raise TestSpecError( "parameters attribute not allowed here, " + \
                                  "line " + str(lnum) )
         
-        if not filterAttr_scr( spec.attrs, tname, {}, ufilter, lnum ):
+        if not filterAttr_scr( spec.attrs, tname, None, ufilter, lnum ):
             continue
 
         L = spec.value.split( '=', 1 )
@@ -1063,7 +1065,7 @@ def parseTestParameters_scr( vspecs, tname, ufilter, force_params ):
                 gL = s.split(',')
                 if len(gL) != len(nL):
                     raise TestSpecError( 'malformed parameter list: "' + \
-                                          v+'", line ' + str(lnum) )
+                                          s+'", line ' + str(lnum) )
                 for v in gL:
                     if not allowableString(v):
                         raise TestSpecError( 'invalid parameter value: "' + \
@@ -1096,7 +1098,7 @@ def parseAnalyze_scr( t, vspecs, ufilter ):
             raise TestSpecError( "parameters attribute not allowed here, " + \
                                  "line " + str(spec.lineno) )
         
-        if not filterAttr_scr( spec.attrs, t.getName(), {},
+        if not filterAttr_scr( spec.attrs, t.getName(), None,
                                ufilter, spec.lineno ):
             continue
 
@@ -1155,6 +1157,70 @@ def parseAnalyze_scr( t, vspecs, ufilter ):
                 raise TestSpecError( 'analyze file does not exist: ' + fn )
 
 
+def parseFiles_scr( t, vspecs, ufilter ):
+    """
+        #VVT: copy : file1 file2
+        #VVT: link : file3 file4
+        #VVT: copy (rename) : srcname1,copyname1 srcname2,copyname2
+        #VVT: link (rename) : srcname1,linkname1 srcname2,linkname2
+    """
+    cpfiles = []
+    lnfiles = []
+    tname = t.getName()
+    params = t.getParameters()
+
+    for spec in vspecs.getSpecList( 'copy' ):
+        if filterAttr_scr( spec.attrs, tname, params, ufilter, spec.lineno ):
+            collectFileNames_scr( spec, cpfiles, tname, params, ufilter )
+
+    for spec in vspecs.getSpecList( 'link' ):
+        if filterAttr_scr( spec.attrs, tname, params, ufilter, spec.lineno ):
+            collectFileNames_scr( spec, lnfiles, tname, params, ufilter )
+    
+    for src,dst in lnfiles:
+        t.addLinkFile( src, dst )
+    for src,dst in cpfiles:
+        t.addCopyFile( src, dst )
+
+
+def collectFileNames_scr( spec, flist, tname, paramD, ufilter ):
+    """
+        #VVT: copy : file1 file2
+        #VVT: copy (rename) : srcname1,copyname1 srcname2,copyname2
+    """
+    val = spec.value.strip()
+
+    if spec.attrs and 'rename' in spec.attrs:
+        cpat = re.compile( '[\t ]*,[\t ]*' )
+        fL = []
+        for s in cpat.sub( ',', val ).split():
+            L = s.split(',')
+            if len(L) != 2:
+                raise TestSpecError( 'malformed (rename) file list: "' + \
+                                      s+'", line ' + str(spec.lineno) )
+            fsrc,fdst = L
+            if os.path.isabs(fsrc) or os.path.isabs(fdst):
+                raise TestSpecError( 'file names cannot be absolute ' + \
+                                     'paths, line ' + str(spec.lineno) )
+            fL.append( [fsrc,fdst] )
+        
+        variableExpansion( tname, ufilter.platformName(), paramD, fL )
+
+        flist.extend( fL )
+
+    else:
+        fL = val.split()
+        
+        for f in fL:
+            if os.path.isabs(f):
+                raise TestSpecError( 'file names cannot be absolute ' + \
+                                     'paths, line ' + str(spec.lineno) )
+        
+        variableExpansion( tname, ufilter.platformName(), paramD, fL )
+
+        flist.extend( [ [f,None] for f in fL ] )
+
+
 def testname_ok_scr( attrs, tname, ufilter ):
     """
     """
@@ -1172,25 +1238,29 @@ def filterAttr_scr( attrs, testname, paramD, ufilter, lineno ):
     """
     if attrs:
 
-        for attrname,attrvalue in attrs.items():
+        for name,value in attrs.items():
             
             try:
                 
-                if attrname == "testname":
-                    return ufilter.evauate_testname_expr( testname, attrvalue )
+                if name == "testname":
+                    if not ufilter.evauate_testname_expr( testname, value ):
+                        return False
                 
-                elif attrname in ["platform","platforms"]:
-                    return ufilter.evaluate_platform_expr( attrvalue )
+                elif name in ["platform","platforms"]:
+                    if not ufilter.evaluate_platform_expr( value ):
+                        return False
                 
-                elif attrname in ["option","options"]:
-                    return ufilter.evaluate_option_expr( attrvalue )
+                elif name in ["option","options"]:
+                    if not ufilter.evaluate_option_expr( value ):
+                        return False
 
-                elif attrname in ["parameter","parameters"]:
-                    pf = FilterExpressions.ParamFilter(attrvalue)
-                    return pf.evaluate( paramD )
+                elif name in ["parameter","parameters"]:
+                    pf = FilterExpressions.ParamFilter(value)
+                    if not pf.evaluate( paramD ):
+                        return False
             
             except ValueError:
-                raise TestSpecError( 'invalid '+attrname+' expression, ' + \
+                raise TestSpecError( 'invalid '+name+' expression, ' + \
                                      'line ' + lineno + ": " + \
                                      str(sys.exc_info()[1]) )
     
@@ -1637,7 +1707,7 @@ def parseAnalyze( t, filedoc, ufilter ):
                                '"parameters=..." attribute: ' + \
                                ', line ' + str(nd.line_no) )
         
-        isfa, istrue = filterAttr( n, v, t.getName(), t.getParameters(),
+        isfa, istrue = filterAttr( n, v, t.getName(), None,
                                    ufilter, str(nd.line_no) )
         if isfa and not istrue:
           skip = 1
@@ -1972,8 +2042,10 @@ def parseFiles( t, filedoc, ufilter ):
       # This construct is deprecated [April 2016].
       globFileNames( nd, cpfiles, t, ufilter )
     
-    t.setLinkFiles( lnfiles )
-    t.setCopyFiles( cpfiles )
+    for src,dst in lnfiles:
+      t.addLinkFile( src, dst )
+    for src,dst in cpfiles:
+      t.addCopyFile( src, dst )
     
     fL = []
     for nd in filedoc.matchNodes(["source_files$"]):
@@ -2050,9 +2122,11 @@ def cartesian_product_and_filter( paramD, ufilter ):
     filtering, then collects the cartesian product as a list of param=value
     dictionaries (which is returned).  Note that the 'paramD' argument is
     modified in-place to remove parameters that are filtered out.
-    """
-    do_all = ufilter.getAttr('include_all',0)
 
+    Important: this function always applies filtering, even if the
+    "include_all" flag is present in 'ufilter'.  This implies that any
+    command line parameter expressions be passed along in pipeline/batch mode.
+    """
     # first, make a list containing each parameter value list
     plist_keys = []
     plist_vals = []
@@ -2077,7 +2151,7 @@ def cartesian_product_and_filter( paramD, ufilter ):
         for j in range(n):
           pdict[ kL[j] ] = sL[j]
       
-      if do_all or ufilter.evaluate_parameters( pdict ):
+      if ufilter.evaluate_parameters( pdict ):
         
         instanceL.append( pdict )
         
