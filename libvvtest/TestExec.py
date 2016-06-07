@@ -38,8 +38,6 @@ class TestExec:
         self.pid = 0
         self.xdir = None
         self.children = None  # parent tests will have a list of their children
-
-        self.cmdL = None  # the first part of the launch command
     
     def init(self, test_dir, platform, commondb, config ):
         """
@@ -59,13 +57,13 @@ class TestExec:
         if self.perms != None:
           self.perms.set( self.atest.getExecuteDirectory() )
         
-        form = self.atest.getScriptForm()
-            
-        if form == None:
+        lang = self.atest.getForm( 'lang' )
+        
+        if lang == 'xml':
           
           # no 'form' defaults to the XML test specification format
 
-          script_file = os.path.join( self.xdir, 'runscript' )
+          script_file = os.path.join( self.xdir, self.atest.getForm('file') )
           
           if config.get('refresh') or not os.path.exists( script_file ):
             
@@ -74,6 +72,8 @@ class TestExec:
             tdir = os.path.dirname( self.atest.getFilepath() )
             srcdir = os.path.normpath( os.path.join( troot, tdir ) )
             
+            # note that this writes a different sequence if the test is an
+            # analyze test
             cshScriptWriter.writeScript( self.atest, commondb, self.platform,
                                          config.get('toolsdir'),
                                          config.get('exepath'),
@@ -83,48 +83,29 @@ class TestExec:
                                          script_file )
             if self.perms != None:
               self.perms.set( os.path.abspath( script_file ) )
-
-          self.cmdL = ['/bin/csh', '-f', './runscript']
-
-          self.lang = 'xml'
         
         else:
           
-          if self.atest.hasAnalyze():
-            zfile = self.atest.getAnalyze( 'file', None )
-            if zfile != None:
-              # execute the analyze script rather than the test file
-              lang = self.atest.getAnalyze( 'lang' )
-              cmdL = self.atest.getAnalyze( 'cmd' )
-            else:
-              # execute the test file but add the analyze command line option
-              lang = form['lang']
-              cmdL = form['cmd']
-              arg = self.atest.getAnalyze( 'arg', None )
-              if arg != None:
-                cmdL = cmdL + [ arg ]
-          
-          else:
-            lang = form['lang']
-            cmdL = form['cmd']
-
-          self.cmdL = cmdL
+          lang = self.atest.getForm( 'lang', None )
 
           if lang:
-              
               #  write utility script fragment
-
               script_file = os.path.join( self.xdir, 'vvtest_util.'+lang )
-              
               if config.get('refresh') or not os.path.exists( script_file ):
-                  
                   ScriptWriter.writeScript( self.atest, script_file,
                                             lang, config, self.platform )
-                  
                   if self.perms != None:
                       self.perms.set( os.path.abspath( script_file ) )
 
-          self.lang = lang
+          # may also need to write a util fragment for a baseline script
+          blinelang = self.atest.getBaseline( 'lang', lang )
+          if blinelang != lang:
+              script_file = os.path.join( self.xdir, 'vvtest_util.'+blinelang )
+              if config.get('refresh') or not os.path.exists( script_file ):
+                  ScriptWriter.writeScript( self.atest, script_file,
+                                            blinelang, config, self.platform )
+                  if self.perms != None:
+                      self.perms.set( os.path.abspath( script_file ) )
 
     def start(self, baseline=0):
         """
@@ -132,25 +113,33 @@ class TestExec:
         """
         assert self.pid == 0
         
-        cmd_list = [] + self.cmdL
-        
         np = int( self.atest.getParameters().get('np', 0) )
         
         self.plugin_obj = self.platform.obtainProcs( np )
         
         logfname = 'execute.log'
         
+        cmd_list = [] + self.atest.getForm( 'cmd' )
+        lang = self.atest.getForm( 'lang', None )
+
         if baseline:
-          cmd_list.append('--baseline')
+          cmd = self.atest.getBaseline( 'cmd', None )
+          if cmd == None:
+            cmd_list = None
+          else:
+            cmd_list = [] + cmd
+          lang = self.atest.getBaseline( 'lang', lang )
           logfname = 'baseline.log'
+        
         elif not self.config.get('logfile'):
           logfname = None
         
-        if hasattr(self.plugin_obj, "mpi_opts") and self.plugin_obj.mpi_opts:
-          cmd_list.extend(['--mpirun_opts', self.plugin_obj.mpi_opts])
-        
-        if self.config.get('analyze'):
-          cmd_list.append('--analyze')
+        if cmd_list != None:
+          if hasattr(self.plugin_obj, "mpi_opts") and self.plugin_obj.mpi_opts:
+            cmd_list.extend(['--mpirun_opts', self.plugin_obj.mpi_opts])
+          
+          if self.config.get('analyze'):
+            cmd_list.append('--analyze')
         
         self.tzero = time.time()
         
@@ -201,7 +190,8 @@ class TestExec:
               
               sys.stdout.write( "Starting test: "+self.atest.getName()+'\n' )
               sys.stdout.write( "Directory    : "+os.getcwd()+'\n' )
-              sys.stdout.write( "Command      : "+' '.join( cmd_list )+'\n' )
+              if cmd_list != None:
+                sys.stdout.write( "Command      : "+' '.join( cmd_list )+'\n' )
               sys.stdout.write( "Timeout      : "+str(self.timeout)+'\n' )
               sys.stdout.write( '\n' )
               sys.stdout.flush()
@@ -218,9 +208,11 @@ class TestExec:
                 if self.perms != None:
                   self.perms.set( os.path.abspath( "machinefile" ) )
               
-              if not self.setWorkingFiles():
-                sys.stdout.flush() ; sys.stderr.flush()
-                os._exit(1)
+              if not baseline:
+                # establish soft links and make copies of working files
+                if not self.setWorkingFiles():
+                  sys.stdout.flush() ; sys.stderr.flush()
+                  os._exit(1)
 
               if hasattr(self.plugin_obj, 'sshcmd'):
                 
@@ -239,10 +231,13 @@ class TestExec:
                 sshcmd.append('cd ' + os.getcwd() + ' &&' + safecmd)
                 cmd_list = sshcmd
               
-              if self.lang == 'py':
-                # since the script is a soft link, the execute directory must
-                # to be added to the python path (soft links are followed);
-                # doing so enables "import vvtest_util" in the script
+              if lang == 'py':
+                # Python seems to follow soft links for script execution, which
+                # means the script directory that is prepended to the sys.path
+                # is the test source directory.  But we want to be able to just
+                #      import vvtest_util
+                # within the test script.  A simple solution is to set the
+                # test execution directory in the PYTHONPATH before launching.
                 val = os.environ.get( 'PYTHONPATH', '' )
                 if val: os.environ['PYTHONPATH'] = os.getcwd() + ':' + val
                 else:   os.environ['PYTHONPATH'] = os.getcwd()
@@ -250,12 +245,19 @@ class TestExec:
               sys.stdout.write( '\n' )
               sys.stdout.flush()
 
+              if baseline:
+                  self.copyBaselineFiles()
+
+              if cmd_list == None:
+                # this can only happen in baseline mode
+                sys.stdout.flush() ; sys.stderr.flush()
+                os._exit(0)
+
               # replace this process with the command
               if os.path.isabs( cmd_list[0] ):
                   os.execve( cmd_list[0], cmd_list, os.environ )
               else:
                   os.execvpe( cmd_list[0], cmd_list, os.environ )
-              
               raise Exception( "os.exec should not return" )
 
           except:
@@ -391,9 +393,15 @@ class TestExec:
         sys.stdout.write( "Cleaning execute directory...\n" )
         sys.stdout.flush()
 
+        xL = [ 'execute.log', 'baseline.log' ]
+        # exclude the test 'file' because it may have been generated earlier,
+        # which happens for the xml form
+        f = self.atest.getForm( 'file', None )
+        if f != None:
+          xL.append( f )
+
         for f in os.listdir('.'):
-          if f not in ['execute.log', 'baseline.log', 'runscript'] \
-             and not f.startswith( 'vvtest_util' ):
+          if f not in xL and not f.startswith( 'vvtest_util' ):
             if os.path.islink( f ):
               os.remove( f )
             elif os.path.isdir(f):
@@ -521,15 +529,35 @@ class TestExec:
 
         return ok
 
+    def copyBaselineFiles(self):
+        """
+        """
+        troot = self.atest.getRootpath()
+        tdir = os.path.dirname( self.atest.getFilepath() )
+        srcdir = os.path.normpath( os.path.join( troot, tdir ) )
+        
+        # TODO: add file globbing for baseline files
+        for fromfile,tofile in self.atest.getBaselineFiles():
+            dst = os.path.join( srcdir, tofile )
+            sys.stdout.write( "baseline: cp -p "+fromfile+" "+dst+'\n' )
+            sys.stdout.flush()
+            shutil.copy2( fromfile, dst )
+
     def postclean(self):
         """
-        Should only be run right after the test script finishes.  It
-        removes all files in the execute directory except for a few vvtest
-        files.
+        Should only be run right after the test script finishes.  It removes
+        all files in the execute directory except for a few vvtest files.
         """
+        xL = [ 'execute.log', 'baseline.log', 'machinefile' ]
+        f = self.atest.getForm( 'file', None )
+        if f != None: xL.append( os.path.basename(f) )
+        f = self.atest.getBaseline( 'file', None )
+        if f != None: xL.append( os.path.basename(f) )
+        f = self.atest.getAnalyze( 'file', None )
+        if f != None: xL.append( os.path.basename(f) )
+        
         for f in os.listdir( self.xdir ):
-          if f != 'execute.log' and f != 'baseline.log' and \
-             f != 'runscript' and f != 'machinefile':
+          if f not in xL and not f.startswith( 'vvtest_util' ):
             fp = os.path.join( self.xdir, f )
             if os.path.islink( fp ):
               os.remove( fp )

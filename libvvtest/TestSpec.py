@@ -65,11 +65,13 @@ class TestSpec:
         """
         return self.parent_xdir
 
-    def getScriptForm(self):
+    def getForm(self, key, *default):
         """
-        Returns the run script form (None or a dictionary).
+        Gets test form information for a given 'key'.
         """
-        return self.form
+        if len(default) > 0:
+            return self.form.get( key, default[0] )
+        return self.form[ key ]
 
     def getKeywords(self, result_attrs=0):
         """
@@ -180,25 +182,23 @@ class TestSpec:
         of files to be copied from the testing directory to the source
         directory.
         """
-        L = []
-        for tst,src,script in self.baseline:
-          if tst != None:
-            assert src != None
-            L.append( (tst,src) )
-        return L
-    
+        return self.baseline.get( 'files', [] )
+
     def getBaselineFragments(self):
         """
-        Returns a list of script fragments to be executed during baseling.
-        Standard filters are used to decide whether each baseline fragment
-        will be included in the list.
+        Returns a list of script fragments to be executed during baselining.
         """
-        L = []
-        for tst,src,script in self.baseline:
-          if script != None:
-            L.append( script )
-        return L
+        return self.baseline.get( 'scriptfrag', [] )
     
+    def getBaseline(self, key, *default):
+        """
+        Returns the baseline value for the given key.  If 'default' is given
+        and the key is not in the dict, then 'default' is reterned.
+        """
+        if len(default) > 0:
+            return self.baseline.get( key, default[0] )
+        return self.baseline[key]
+
     def getExecutionList(self):
         """
         Returns, in order, raw fragments and named execution fragments for
@@ -263,7 +263,7 @@ class TestSpec:
         """
         assert not os.path.isabs(filepath)
         
-        self.form = None           # a dictionary
+        self.form = {}
 
         self.name = name
         self.rootpath = rootpath
@@ -282,8 +282,7 @@ class TestSpec:
                                    # is any string, and analyze is yes or no
         self.lnfiles = []          # list of (src name, test name)
         self.cpfiles = []          # list of (src name, test name)
-        self.baseline = []         # list of (test name, src name, script)
-                                   # where both names OR script may be None
+        self.baseline = {}         # baseline specifications
         self.src_files = []        # extra source files listed by the test
         self.attrs = {}            # maps name string to value string; the
                                    # allowed characters are restricted
@@ -317,10 +316,21 @@ class TestSpec:
     
     # construction methods
     
-    def setScriptForm(self, form):
+    def setForm(self, key, value):
         """
+        Add the given 'key'='value' pair to the test form information.
+        If both 'key' and 'value' are None, then all information is removed
+        (the default state).  If just 'value' is None, then 'key' is removed.
         """
-        self.form = form
+        if key == None:
+            if value == None:
+                self.form.clear()
+        else:
+            if value == None:
+                if key in self.form:
+                    self.form.pop( key )
+            else:
+                self.form[ key ] = value
 
     def setParent(self, parent_xdir):
         """
@@ -433,26 +443,45 @@ class TestSpec:
         if (srcname,destname) not in self.cpfiles:
             self.cpfiles.append( (srcname,destname) )
     
-    def resetBaseline(self):
-        """
-        Clears the files to be baselined and script fragments for baselining.
-        """
-        self.baseline = []
-    
     def addBaselineFile(self, test_dir_name, source_dir_name):
         """
         Add a file to be copied from the test directory to the source
         directory during baselining.
         """
         assert test_dir_name and source_dir_name
-        self.baseline.append( (test_dir_name, source_dir_name, None) )
-    
+        L = self.baseline.get( 'files', None )
+        if L == None:
+            L = []
+            self.baseline[ 'files' ] = L
+        L.append( (test_dir_name, source_dir_name) )
+
     def addBaselineFragment(self, script_fragment):
         """
         Add a script fragment to be executed during baselining.
         """
-        self.baseline.append( (None, None, script_fragment) )
+        L = self.baseline.get( 'scriptfrag', None )
+        if L == None:
+            L = []
+            self.baseline[ 'scriptfrag' ] = L
+        L.append( script_fragment )
     
+    def setBaseline(self, key, value):
+        """
+        Add the given 'key'='value' pair to the baseline information.
+        If both 'key' and 'value' are None, then all baseline information is
+        removed (the default state).  If just 'value' is None, then 'key' is
+        removed.
+        """
+        if key == None:
+            if value == None:
+                self.baseline.clear()
+        else:
+            if value == None:
+                if key in self.baseline:
+                    self.baseline.pop( key )
+            else:
+                self.baseline[ key ] = value
+
     def setSourceFiles(self, files):
         """
         A list of file names needed by this test (this is in addition to the
@@ -493,7 +522,7 @@ class TestSpec:
         ts.execL = self.__copy_list(self.execL)
         ts.lnfiles = self.__copy_list(self.lnfiles)
         ts.cpfiles = self.__copy_list(self.cpfiles)
-        ts.baseline = self.__copy_list(self.baseline)
+        ts.baseline = self.__copy_dictionary(self.baseline)
         ts.attrs = self.__copy_dictionary(self.attrs)
         return ts
 

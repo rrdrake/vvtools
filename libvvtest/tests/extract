@@ -14,7 +14,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02 test03 test04 test05
+        argL = """test01 test02 test03 test04 test05 test06 test07
                """.split()
 
     cwd = os.getcwd()
@@ -201,6 +201,102 @@ def test05():
     fL.sort()
     assert fL == ['copy/atest.xml', 'copy/cp1.txt', 'copy/cp_7.txt',
                   'copy/ln1.txt', 'copy/ln_7.txt']
+
+
+########################################################################
+
+def test06():
+    """
+    extract with script test
+    """
+    writescript( 'orig/atest.vvt', """
+        #!/usr/bin/env python
+        #VVT: copy : file1.txt
+        #VVT: link : file2.txt
+        #VVT: baseline : file3.txt, file3.txt
+        #VVT: sources : file4.txt ${NAME}_*.py
+        import os
+        import vvtest_util as vvt
+        print3 = vvt.print3
+        fp = open( 'file1.txt' ) ; print3( fp.read() ) ; fp.close()
+        fp = open( 'file2.txt' ) ; print3( fp.read() ) ; fp.close()
+        fp = open( vvt.SRCDIR+'/file3.txt' ) ; print3( fp.read() ) ; fp.close()
+        fp = open( vvt.SRCDIR+'/file4.txt' ) ; print3( fp.read() ) ; fp.close()
+        fp = open( vvt.SRCDIR+'/atest_1.py' ) ; print3( fp.read() ) ; fp.close()
+        if os.path.exists( vvt.SRCDIR+'/2_atest.py' ):
+            print3( 'py file 2 exists' )
+        """ )
+
+    writefile( 'orig/file1.txt', "file one" )
+    writefile( 'orig/file2.txt', "file two" )
+    writefile( 'orig/file3.txt', "file three" )
+    writefile( 'orig/file4.txt', "file four" )
+    writefile( 'orig/atest_1.py', "py file one" )
+    writefile( 'orig/2_atest.py', "py file two" )
+
+    os.chdir('orig')
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+    assert len( greptestlist(out,'pass.*atest') ) == 1
+    assert len( filegrep( tdir+'/atest/execute.log', 'py file 2 exists' ) ) == 1
+
+    os.chdir('..')
+
+    # extract the orig directory then run in the extracted area
+
+    out,np,nd,nf,nn = run_vvtest( '--extract copy orig' )
+
+    os.chdir('copy')
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    assert len( greptestlist(out,'pass.*atest') ) == 1
+    assert len( filegrep( tdir+'/atest/execute.log', 'py file 2 exists' ) ) == 0
+
+
+def test07():
+    """
+    extract with analyze file in a script test
+    """
+    writescript( 'orig/atest.vvt', """
+        #!/usr/bin/env python
+        #VVT: parameterize : P = 1 2
+        #VVT: analyze : atest_analyze.py
+        import os
+        import vvtest_util as vvt
+        print3 = vvt.print3
+        fp = open( 'genfile.txt', 'w' )
+        fp.write( 'param P='+vvt.P+'\\n' )
+        fp.close()
+        """ )
+
+    writescript( "orig/atest_analyze.py", """
+        #!/usr/bin/env python
+        import os
+        import vvtest_util as vvt
+        for P in vvt.PARAM_P:
+            fn = '../'+vvt.NAME+'.P='+P+'/genfile.txt'
+            assert os.path.exists( fn )
+        """ )
+
+    os.chdir('orig')
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+
+    os.chdir('..')
+
+    # extract the orig directory then run in the extracted area
+
+    out,np,nd,nf,nn = run_vvtest( '--extract copy orig' )
+
+    os.chdir('copy')
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
 
 ########################################################################

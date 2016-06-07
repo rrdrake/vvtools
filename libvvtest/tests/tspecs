@@ -1303,7 +1303,7 @@ fp.writelines( [
      '</rtest>\n' ] )
 fp.close()
 for t in tL:
-  try: TestSpecCreator.refreshTest( t, {'np':'1'} )
+  try: TestSpecCreator.refreshTest( t )
   except TestSpecCreator.TestSpecError, e: print e
   else: raise Exception( "expected a TestSpecError exception" )
 
@@ -1607,14 +1607,14 @@ tL = TestSpecCreator.createTestObjects( '.', 'ok44.xml', None, uf )
 assert len(tL) == 2
 print tL
 t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
-assert t.getAnalyze('script').find( "analyze fast" ) >= 0
+assert t.getAnalyze('scriptfrag').find( "analyze fast" ) >= 0
 wx = FilterExpressions.WordExpression(['long'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
 tL = TestSpecCreator.createTestObjects( '.', 'ok44.xml', None, uf )
 assert len(tL) == 2
 print tL
 t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
-assert t.getAnalyze('script').find( "analyze long" ) >= 0
+assert t.getAnalyze('scriptfrag').find( "analyze long" ) >= 0
 
 
 fp = open('ok44b.xml',"w")
@@ -1629,26 +1629,26 @@ fp.close()
 tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, nofltr )
 assert len(tL) == 2
 t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
-assert t.getAnalyze('script').find( "analyze not long" ) >= 0
+assert t.getAnalyze('scriptfrag').find( "analyze not long" ) >= 0
 wx = FilterExpressions.WordExpression(['fast'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
 tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, uf )
 assert len(tL) == 2
 t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
-assert t.getAnalyze('script').find( "analyze not long" ) >= 0
+assert t.getAnalyze('scriptfrag').find( "analyze not long" ) >= 0
 wx = FilterExpressions.WordExpression(['long'])
 uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
 tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, uf )
 assert len(tL) == 2
 print tL
 t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
-assert t.getAnalyze('script').find( "analyze long" ) >= 0
+assert t.getAnalyze('scriptfrag').find( "analyze long" ) >= 0
 uf = FilterExpressions.ExpressionSet()
 tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, uf )
 assert len(tL) == 2
 print tL
 t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
-assert t.getAnalyze('script').find( "analyze not long" ) >= 0
+assert t.getAnalyze('scriptfrag').find( "analyze not long" ) >= 0
 
 
 print "14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14"

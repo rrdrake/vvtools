@@ -108,6 +108,7 @@ def writeScript( tspec, xdb, plat, \
       'set OFF = "' + string.join(offopts,'+') + '"',
       'echo OFF = "$OFF"',
       'set np = ' + str(tspec.getParameters().get('np',0)),
+      'set SRCDIR = "' + srcdir + '"',
       'set XMLDIR = "' + srcdir + '"',
       'echo "XMLDIR = $XMLDIR"' ] )
     
@@ -178,9 +179,6 @@ def writeScript( tspec, xdb, plat, \
       '  set echo', '' ] )
     
     # TODO: add file globbing for baseline files
-    for testname, srcname in tspec.getBaselineFiles():
-      line_list.append( \
-        'cp -f ' + testname + ' $XMLDIR/' + srcname + ' || exit 1' )
     for frag in tspec.getBaselineFragments():
       line_list.append( frag )
     
@@ -263,7 +261,7 @@ def writeScript( tspec, xdb, plat, \
           line_list.append( 'echo "PARAM_'+n2+' = $PARAM_'+n2+'"' )
         line_list.append('')
 
-      line_list.extend( string.split( tspec.getAnalyze('script'), os.linesep ) )
+      line_list.extend( string.split( tspec.getAnalyze('scriptfrag'), os.linesep ) )
       line_list.append('')
       line_list.append('################ end analyze script')
       line_list.append('')

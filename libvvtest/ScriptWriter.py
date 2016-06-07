@@ -152,16 +152,17 @@ def writeScript( testobj, filename, lang, config, plat ):
                         print3( '*** unixdiff: files are different,',
                                 'setting have_diff' )
                         set_have_diff()
-                        import difflib
                         fp1 = open( file1, 'r' )
                         flines1 = fp1.readlines()
                         fp2 = open( file2, 'r' )
                         flines2 = fp2.readlines()
+                        import difflib
                         diffs = difflib.unified_diff( flines1, flines2,
                                                       file1, file2 )
                         fp1.close()
                         fp2.close()
                         sys.stdout.writelines( diffs )
+                        sys.stdout.flush()
                         return True
                     return False
                 """ )
@@ -281,6 +282,10 @@ def writeScript( testobj, filename, lang, config, plat ):
 
         w.add(  """
                 unixdiff() {
+                    # two arguments are accepted, 'file1' and 'file2'
+                    # If the filenames are different, then the differences are
+                    # printed and set_have_diff() is called.
+                    
                     if [ $# -ne 2 ]
                     then
                         echo "*** error: unixdiff requires exactly 2 arguments"
@@ -312,6 +317,9 @@ def writeScript( testobj, filename, lang, config, plat ):
         
         w.add(  """
                 nlinesdiff() {
+                    # Counts the number of lines in 'filename' and if more
+                    # than 'maxlines' then print this fact and set have_diff
+                    
                     if [ $# -ne 2 ]
                     then
                         echo "*** error: nlinesdiff requires exactly 2 arguments"

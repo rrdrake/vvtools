@@ -14,7 +14,8 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02
+        argL = """test01 test02 test03 test04 test05 test06 test07 test08
+                  test09
                """.split()
 
     savedir = os.getcwd()
@@ -110,6 +111,280 @@ def test02():
     
     assert len( greptestlist( out, 'pass.*/multi$' ) ) == 1
     assert len( greptestlist( out, 'diff.*/multi2$' ) ) == 1
+
+
+#####################################################################
+
+def test03():
+    """
+    script test rebaseline with just copy files
+    """
+    writescript( "param.vvt", """
+        #!/bin/sh
+        #VVT: parameterize : hello = world mars
+        source vvtest_util.sh
+        sleep 1
+        echo "parm=$hello"
+        """ )
+
+    writescript( "bline.vvt", """
+        #!/bin/sh
+        #VVT: baseline : bline.txt,bline.txt bline2.txt, blinetwo.txt
+        source vvtest_util.sh
+        # create a single baseline file to use for the first differencing
+        echo "baseline test data file" > bline.txt
+        echo "line two" >> bline.txt
+        unixdiff bline.txt ${SRCDIR}/bline.txt
+        # copy the previous file to a separate name
+        cp bline.txt bline2.txt
+        unixdiff bline2.txt ${SRCDIR}/blinetwo.txt
+        if_diff_exit_diff
+        """ )
+
+    writefile( "bline.txt", "a" )
+    writefile( "bline2.txt", "b" )
+    writefile( "blinetwo.txt", "c" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 2 and nd == 1 and nf == 0 and nn == 0
+
+    # run baseline and rerun tests
+    out,np,nd,nf,nn = run_vvtest( '-b' )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+
+def test04():
+    """
+    script test rebaseline with external script (of different language)
+    """
+    writescript( "bline.vvt", """
+        #!/bin/sh
+        #VVT: baseline : bline.py
+        source vvtest_util.sh
+        # create a single baseline file to use for the first differencing
+        echo "baseline test data file" > bline.txt
+        echo "line two" >> bline.txt
+        unixdiff bline.txt ${SRCDIR}/bline.txt
+        # copy the previous file to a separate name
+        cp bline.txt bline2.txt
+        unixdiff bline2.txt ${SRCDIR}/blinetwo.txt
+        if_diff_exit_diff
+        """ )
+    writefile( "bline.py", """
+        import os, shutil
+        import vvtest_util as vvt
+        srcd = vvt.SRCDIR
+        shutil.copy2( 'bline.txt', os.path.join( srcd, 'bline.txt' ) )
+        shutil.copy2( 'bline2.txt', os.path.join( srcd, 'blinetwo.txt' ) )
+        """ )
+
+    writefile( "bline.txt", "a" )
+    writefile( "bline2.txt", "b" )
+    writefile( "blinetwo.txt", "c" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 1 and nf == 0 and nn == 0
+
+    # run baseline and rerun tests
+    out,np,nd,nf,nn = run_vvtest( '-b' )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+
+def test05():
+    """
+    script test rebaseline using argument
+    """
+    writescript( "bline.vvt", """
+        #!/usr/bin/env python
+        #VVT: baseline : --bline
+        import os, sys
+        import shutil
+        import vvtest_util as vvt
+        if '--bline' in sys.argv:
+            srcd = vvt.SRCDIR
+            shutil.copy2( 'bline.txt', os.path.join( srcd, 'bline.txt' ) )
+            shutil.copy2( 'bline2.txt', os.path.join( srcd, 'blinetwo.txt' ) )
+        else:
+            # create a single baseline file to use for the first differencing
+            fp = open( 'bline.txt', 'w' )
+            fp.write( "baseline test data file\\n" + \\
+                      "line two\\n" )
+            fp.close()
+            vvt.unixdiff( 'bline.txt', vvt.SRCDIR+'/bline.txt' )
+            # copy the previous file to a separate name
+            shutil.copyfile( 'bline.txt', 'bline2.txt' )
+            vvt.unixdiff( 'bline2.txt', vvt.SRCDIR+'/blinetwo.txt' )
+            vvt.if_diff_exit_diff()
+        """ )
+
+    writefile( "bline.txt", "a" )
+    writefile( "bline2.txt", "b" )
+    writefile( "blinetwo.txt", "c" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 1 and nf == 0 and nn == 0
+
+    # run baseline and rerun tests
+    out,np,nd,nf,nn = run_vvtest( '-b' )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+
+def test06():
+    """
+    script test rebaseline using an explicit argument
+    """
+    writescript( "bline.vvt", """
+        #!/usr/bin/env python
+        #VVT: baseline (argument) : bline
+        import os, sys
+        import shutil
+        import vvtest_util as vvt
+        if 'bline' in sys.argv:
+            srcd = vvt.SRCDIR
+            shutil.copy2( 'bline.txt', os.path.join( srcd, 'bline.txt' ) )
+            shutil.copy2( 'bline2.txt', os.path.join( srcd, 'blinetwo.txt' ) )
+        else:
+            # create a single baseline file to use for the first differencing
+            fp = open( 'bline.txt', 'w' )
+            fp.write( "baseline test data file\\n" + \\
+                      "line two\\n" )
+            fp.close()
+            vvt.unixdiff( 'bline.txt', vvt.SRCDIR+'/bline.txt' )
+            # copy the previous file to a separate name
+            shutil.copyfile( 'bline.txt', 'bline2.txt' )
+            vvt.unixdiff( 'bline2.txt', vvt.SRCDIR+'/blinetwo.txt' )
+            vvt.if_diff_exit_diff()
+        """ )
+
+    writefile( "bline.txt", "a" )
+    writefile( "bline2.txt", "b" )
+    writefile( "blinetwo.txt", "c" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 1 and nf == 0 and nn == 0
+
+    # run baseline and rerun tests
+    out,np,nd,nf,nn = run_vvtest( '-b' )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+
+def test07():
+    """
+    script test rebaseline with an explit script
+    """
+    writescript( "bline.vvt", """
+        #!/bin/sh
+        #VVT: baseline (file) : --bline
+        source vvtest_util.sh
+        # create a single baseline file to use for the first differencing
+        echo "baseline test data file" > bline.txt
+        echo "line two" >> bline.txt
+        unixdiff bline.txt ${SRCDIR}/bline.txt
+        # copy the previous file to a separate name
+        cp bline.txt bline2.txt
+        unixdiff bline2.txt ${SRCDIR}/blinetwo.txt
+        if_diff_exit_diff
+        """ )
+    writescript( "--bline", """
+        #!/bin/sh
+        source vvtest_util.sh
+        cp -f bline.txt $SRCDIR/bline.txt || exit 1
+        cp -f bline2.txt $SRCDIR/blinetwo.txt || exit 1
+        """ )
+
+    writefile( "bline.txt", "a" )
+    writefile( "bline2.txt", "b" )
+    writefile( "blinetwo.txt", "c" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 1 and nf == 0 and nn == 0
+
+    # run baseline and rerun tests
+    out,np,nd,nf,nn = run_vvtest( '-b' )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+
+def test08():
+    """
+    xml baseline with script frag and file list
+    """
+    writefile( "bline.xml", """
+        <rtest name="bline">
+          <execute> <![CDATA[
+            # create a single baseline file to use for the first differencing
+            echo "baseline test data file" >! bline.txt
+            echo "line two" >> bline.txt
+            ]]>
+          </execute>
+          <execute name="unixdiff"> bline.txt ${XMLDIR}/bline.txt </execute>
+          <execute> <![CDATA[
+            # copy the previous file to a separate name
+            cp bline.txt bline2.txt
+            ]]>
+          </execute>
+          <execute name="unixdiff"> bline2.txt ${XMLDIR}/blinetwo.txt </execute>
+          <baseline>
+            cp -f bline.txt $SRCDIR/bline.txt
+          </baseline>
+          <baseline file="bline2.txt" destination="blinetwo.txt"/>
+        </rtest>""" )
+
+    writefile( "bline.txt", "" )
+    writefile( "bline2.txt", "" )
+    writefile( "blinetwo.txt", "" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 1 and nf == 0 and nn == 0
+
+    # run baseline and rerun tests
+    out,np,nd,nf,nn = run_vvtest( '-b' )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+
+def test09():
+    """
+    variable expansion in baseline file list
+    """
+    writefile( "bline.xml", """
+        <rtest name="bline">
+          <execute> <![CDATA[
+            # create a single baseline file to use for the first differencing
+            echo "baseline test data file" >! bline.txt
+            echo "line two" >> bline.txt
+            ]]>
+          </execute>
+          <execute name="unixdiff"> bline.txt ${XMLDIR}/bline_base.txt </execute>
+          <baseline file="$NAME.txt" destination="${NAME}_base.txt"/>
+        </rtest>""" )
+    writescript( "pybase.vvt", """
+        #!/usr/bin/env python
+        #VVT: baseline : $NAME.txt, ${NAME}_base.txt
+        import vvtest_util as vvt
+        # create a single baseline file to use for the first differencing
+        fp = open( 'pybase.txt', 'w' )
+        fp.write( "baseline test data file\\n" + \\
+                  "line two\\n" )
+        fp.close()
+        vvt.unixdiff( 'pybase.txt', vvt.SRCDIR+'/pybase_base.txt' )
+        vvt.if_diff_exit_diff()
+        """ )
+
+    writefile( "bline_base.txt", "" )
+    writefile( "pybase_base.txt", "" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 2 and nf == 0 and nn == 0
+
+    # run baseline and rerun tests
+    out,np,nd,nf,nn = run_vvtest( '-b' )
+    out,np,nd,nf,nn = run_vvtest( '-R' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
 
 #####################################################################

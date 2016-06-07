@@ -12,7 +12,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02
+        argL = """test01 test02 test03 test04
                """.split()
 
     # set these for the pipeline tests
@@ -33,6 +33,7 @@ def main():
 
 def test01():
     """
+    excercise timeout mechanism
     """
     writefile( "null.xml", """
         <rtest name="null">
@@ -152,6 +153,119 @@ def test02():
         
         out,np,nd,nf,nn = run_vvtest( '--pipeline -wT 20' )
         assert np == 4 and nd == 0 and nf == 0 and nn == 0
+        assert numtimeout(out) == 0
+
+
+########################################################################
+
+def test03():
+    """
+    timeout mechanism with scripts
+    """
+    writefile( "null.xml", """
+        <rtest name="null">
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    platname = platform_name( out )
+    os.remove( 'null.xml' )
+    remove_results()
+
+
+    # sleep1 should timeout
+    writescript( 'sleep1.vvt', """
+        #!/bin/sh
+        #VVT: timeout : 3
+        echo "sleep1 is sleeping 10 seconds"
+        sleep 10
+        """ )
+
+    # sleep2 should not timeout
+    writescript( 'sleep2.vvt', """
+        #!/bin/sh
+        #VVT: timeout : 3
+        #VVT: timeout (platforms="""+platname+"""): 0
+        echo "sleep2 is sleeping 10 seconds"
+        sleep 10
+        """ )
+
+    # sleep3 should not timeout
+    writescript( 'sleep3.vvt', """
+        #!/bin/sh
+        #VVT: timeout : 3
+        #VVT: timeout ( platforms = """+platname+""" ): 15
+        echo "sleep3 is sleeping 10 seconds"
+        sleep 10
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    assert numtimeout(out) == 1
+
+    out,np,nd,nf,nn = run_vvtest( '-wT 1.5' )
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+    assert numtimeout(out) == 3
+
+    out,np,nd,nf,nn = run_vvtest( '-wT 20' )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+    assert numtimeout(out) == 0
+
+
+def test04():
+    """
+    same as test03 but in batch mode
+    """
+    writefile( "null.xml", """
+        <rtest name="null">
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    platname = platform_name( out )
+    os.remove( 'null.xml' )
+    remove_results()
+
+
+    # sleep1 should timeout
+    writescript( 'sleep1.vvt', """
+        #!/bin/sh
+        #VVT: timeout : 3
+        echo "sleep1 is sleeping 10 seconds"
+        sleep 10
+        """ )
+
+    # sleep2 should not timeout
+    writescript( 'sleep2.vvt', """
+        #!/bin/sh
+        #VVT: timeout : 3
+        #VVT: timeout (platforms="""+platname+"""): 0
+        echo "sleep2 is sleeping 10 seconds"
+        sleep 10
+        """ )
+
+    # sleep3 should not timeout
+    writescript( 'sleep3.vvt', """
+        #!/bin/sh
+        #VVT: timeout : 3
+        #VVT: timeout ( platforms = """+platname+""" ): 15
+        echo "sleep3 is sleeping 10 seconds"
+        sleep 10
+        """ )
+    
+    if platname in batchplatforms:
+        remove_results()
+        
+        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        assert numtimeout(out) == 1
+        
+        out,np,nd,nf,nn = run_vvtest( '--pipeline -wT 1.5' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        assert numtimeout(out) == 3
+        
+        out,np,nd,nf,nn = run_vvtest( '--pipeline -wT 20' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
         assert numtimeout(out) == 0
 
 
