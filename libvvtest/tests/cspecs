@@ -315,8 +315,10 @@ def test05():
         third line
         """.strip() )
     
-    out,np,nd,nf,nn = run_vvtest( '-w' )
+    remove_results()
+    out,np,nd,nf,nn = run_vvtest()
     assert np == 1 and nd == 1 and nf == 0 and nn == 0
+    tdir = os.path.abspath( results_dir() )
     assert len( filegrep( os.path.join(tdir,'cat','execute.log'),
                           'kitten output no' ) ) == 1
     assert len( filegrep( os.path.join(tdir,'dog','execute.log'),
@@ -355,8 +357,10 @@ def test05():
         </exeDB>
         """ )
 
-    out,np,nd,nf,nn = run_vvtest( '-w --config config' )
+    remove_results()
+    out,np,nd,nf,nn = run_vvtest( '--config config' )
     assert np == 1 and nd == 1 and nf == 0 and nn == 0
+    tdir = os.path.abspath( results_dir() )
     assert len( filegrep( os.path.join(tdir,'cat','execute.log'),
                           'kitten output no' ) ) == 1
     assert len( filegrep( os.path.join(tdir,'dog','execute.log'),
@@ -385,7 +389,9 @@ def test05():
           </execute>
         </rtest>""" )
 
-    out,np,nd,nf,nn = run_vvtest( '-w --config config' )
+    remove_results()
+    out,np,nd,nf,nn = run_vvtest( '--config config' )
+    tdir = os.path.abspath( results_dir() )
     assert np == 1 and nd == 1 and nf == 0 and nn == 0
     assert len( filegrep( os.path.join(tdir,'cat','execute.log'),
                           'andie is my kitty EOM' ) ) == 1
