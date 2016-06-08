@@ -247,7 +247,8 @@ class TestList:
         
         return vers, lineL
     
-    def loadTests(self, filter_dir=None, analyze_only=0, prune=False ):
+    def loadAndFilter(self, maxprocs, filter_dir=None,
+                            analyze_only=0, prune=False ):
         """
         Creates the active test list using the scanned tests and the tests
         read in from a test list file.  A subdirectory filter is applied and
@@ -283,7 +284,9 @@ class TestList:
               self.active[ xdir ] = t
 
         pruneL = []
+        cntmax = 0
         if prune:
+            
             # remove analyze tests from the active set if they have inactive
             # children that have a bad result
             for xdir,t in self.scantests.items()+self.filetests.items():
@@ -298,7 +301,29 @@ class TestList:
                         pt = self.active.pop( pxdir )
                         pruneL.append( (pt,t) )
 
-        return pruneL
+            # Remove tests that exceed the platform resources (num processors).
+            # For execute/analyze, if an execute test exceeds the resources
+            # then the entire test set is removed.
+            rmD = {}
+            for t in self.active.values():
+                np = int( t.getParameters().get( 'np', 1 ) )
+                assert maxprocs != None
+                if np > maxprocs:
+                    k = ( t.getFilepath(), t.getName() )
+                    rmD[k] = t
+            cntmax = len(rmD)
+            xdL = []
+            if cntmax > 0:
+                for xdir,t in self.active.items():
+                    k = ( t.getFilepath(), t.getName() )
+                    if k in rmD:
+                        xdL.append( xdir )
+            for xdir in xdL:
+                self.active.pop( xdir )
+            xdL = None
+            rmD = None
+
+        return pruneL, cntmax
     
     def _apply_filters(self, xdir, tspec, subdir, analyze_only):
         """

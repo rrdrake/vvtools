@@ -13,7 +13,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02 test03
+        argL = """test01 test02 test03 test04 test05
                """.split()
 
     cwd = os.getcwd()
@@ -321,6 +321,96 @@ def test03():
     L = extract_files( out, cwd )
     print "files", L
     assert len(L) == 0
+
+
+def test04():
+    """
+    using --files with a multi-test script test
+    """
+    writescript( "multi.vvt", """
+        #!/bin/sh
+        #VVT: name = zebra
+        #VVT: name = horse
+        #VVT: keywords (testname=zebra) : stripes
+        #VVT: keywords (testname=horse) : patchwork
+        echo "hello world"
+        """ )
+    
+    cwd = os.getcwd()
+
+    out,np,nd,nf,nn = run_vvtest( '--files' )
+    L = extract_files( out, cwd )
+    print "files", L
+    assert len(L) == 1
+
+    out,np,nd,nf,nn = run_vvtest( '--files -k stripes' )
+    L = extract_files( out, cwd )
+    print "files", L
+    assert len(L) == 1
+
+    out,np,nd,nf,nn = run_vvtest( '--files -k patchwork' )
+    L = extract_files( out, cwd )
+    print "files", L
+    assert len(L) == 1
+
+    out,np,nd,nf,nn = run_vvtest( '--files -k stripes -k patchwork' )
+    L = extract_files( out, cwd )
+    print "files", L
+    assert len(L) == 0
+
+
+############################################################################
+
+def test05():
+    """
+    using --files should apply max processors filtering
+    """
+    writescript( "null.vvt", """
+        #!/bin/sh
+        echo "null"
+        """ )
+    out,np,nd,nf,nn = run_vvtest()
+    platname = platform_name( out )
+    tdir = results_dir()
+    os.remove( 'null.vvt' )
+    L = grep( out, 'max procs' )
+    assert len(L) == 1
+    maxprocs = L[0].split( 'max procs', 1 )[1].strip().lstrip('=').strip()
+    maxprocs = int( maxprocs )
+    assert maxprocs > 0
+    remove_results()
+
+    writescript( 'atest.vvt', """
+        #!/usr/bin/env python
+        #VVT: parameterize : np=1
+        import vvtest_util as vvt
+        print ( 'executing test, np='+str(vvt.np) )
+        """ )
+    writescript( 'btest.vvt', """
+        #!/usr/bin/env python
+        #VVT: parameterize : np="""+str(maxprocs)+"""
+        import vvtest_util as vvt
+        print ( 'executing test, np='+str(vvt.np) )
+        """ )
+    writescript( 'ctest.vvt', """
+        #!/usr/bin/env python
+        #VVT: parameterize : np="""+str(maxprocs+1)+"""
+        import vvtest_util as vvt
+        print ( 'executing test, np='+str(vvt.np) )
+        """ )
+    writescript( 'dtest.vvt', """
+        #!/usr/bin/env python
+        #VVT: parameterize : np="""+str(maxprocs+2)+"""
+        import vvtest_util as vvt
+        print ( 'executing test, np='+str(vvt.np) )
+        """ )
+    
+    rootd = os.getcwd()
+
+    out,np,nd,nf,nn = run_vvtest( '--files' )
+    L = extract_files( out, rootd )
+    print "files", L
+    assert L == [ 'atest.vvt', 'btest.vvt']
 
 
 ############################################################################

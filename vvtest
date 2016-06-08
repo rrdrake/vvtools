@@ -245,9 +245,15 @@ OPTIONS
             The special value "any" will search for a scratch disk.
 
       -n integer
-            Set the number of processers to the given value.  By default, an
-            attempt is made to determine the full number of processors
-            available on a machine and utilize all of them.
+            Set the number of available processers to the given value.  By
+            default, this number is set to the maximum number of processors
+            on the platform.
+      
+      -N integer
+            Set the maximum number of processers available on the current
+            platform.  By default, the system is probed to determine this
+            value.  Note that tests requiring more than this number of
+            processors are not run.
       
       --plat platform_name
             Use the given platform name for the plugin and defaults.
@@ -497,7 +503,7 @@ def generateTestList( dirs, plat, ufilter ):
         sys.exit(1);
       tlist.scanDirectory( d, optdict.get('-S',None) )
     
-    tlist.loadTests()
+    tlist.loadAndFilter( plat.getMaxProcs() )
     
     test_dir = None
     cwd = os.getcwd()
@@ -540,7 +546,7 @@ def extractTestFiles( dirs, plat, target_dir, ufilter ):
         sys.exit(1);
       tlist.scanDirectory( d, optdict.get('-S',None) )
     
-    tlist.loadTests()
+    tlist.loadAndFilter( plat.getMaxProcs() )
     
     if not os.path.isabs(target_dir):
       target_dir = os.path.abspath(target_dir)
@@ -950,8 +956,9 @@ def runTests( dirs, plat, ufilter ):
     if os.path.exists( tfile ):
         tlist.readFile( tfile )  # merge in existing test results
     
-    pruneL = tlist.loadTests( analyze_only=optdict.has_key('-a'),
-                              prune=True )
+    pruneL,cntmax = tlist.loadAndFilter( plat.getMaxProcs(),
+                                         analyze_only=optdict.has_key('-a'),
+                                         prune=True )
     
     if len(pruneL) > 0:
         print3()
@@ -960,6 +967,11 @@ def runTests( dirs, plat, ufilter ):
                     relative_execute_directory( pt, test_dir, os.getcwd() ),
                     'will not be run due to child',
                     relative_execute_directory( ct, test_dir, os.getcwd() ) )
+    if cntmax > 0:
+        print3()
+        print3( 'Note: there were', cntmax, 'tests that exceeded the',
+                'maximum number of processors on this machine - they',
+                'will not be run' )
 
     loadExecutionTimes( tlist, plat )
     
@@ -973,9 +985,6 @@ def runTests( dirs, plat, ufilter ):
         
         if len(tlist.active) > 0:
           
-          if '--pipeline' not in optdict:
-            plat.initProcs( test_dir )
-
           print3( "Running these tests:" )
           printResults( tlist, True, test_dir, False, perms, True )
           print3()
@@ -1528,6 +1537,7 @@ class Pipelines:
         if '-e' in optdict: commonopts += ' -e'
         if '-m' in optdict: commonopts += ' -m'
         if '-C' in optdict: commonopts += ' -C'
+        if '-N' in optdict: commonopts += ' -N '+str( optdict['-N'] )
         for s in optdict.get('-p',[]):
             s = s.replace( '!', '\\!' )  # have to escape exclamation points
             commonopts += ' -p "'+s+'"'
@@ -1945,9 +1955,10 @@ def restartTests( test_dir, plat, ufilter ):
     
     reld = computeRelativePath( os.path.abspath(test_dir), os.getcwd() )
     
-    pruneL = tlist.loadTests( filter_dir=reld,
-                              analyze_only=optdict.has_key('-a'),
-                              prune=True )
+    pruneL,cntmax = tlist.loadAndFilter( plat.getMaxProcs(),
+                                         filter_dir=reld,
+                                         analyze_only=optdict.has_key('-a'),
+                                         prune=True )
     
     if len(pruneL) > 0:
         print3()
@@ -1956,6 +1967,11 @@ def restartTests( test_dir, plat, ufilter ):
                     relative_execute_directory( pt, test_dir, os.getcwd() ),
                     'will not be run due to child',
                     relative_execute_directory( ct, test_dir, os.getcwd() ) )
+    if cntmax > 0:
+        print3()
+        print3( 'Note: there were', cntmax, 'tests that exceeded the',
+                'maximum number of processors on this machine - they',
+                'will not be run' )
     
     if qid == None:
       loadExecutionTimes( tlist, plat )
@@ -1981,8 +1997,7 @@ def restartTests( test_dir, plat, ufilter ):
             tag = optdict.get('--results-tag',None)
             saveResults( tlist, plat, test_dir, tag, inprogress=True )
           
-          if not optdict.has_key('--pipeline'):
-            plat.initProcs( test_dir )
+          if '--pipeline' not in optdict:
             tlist.createTestExecs( test_dir, plat, config, perms )
             executeTestList( tlist, test_dir, plat, perms, tfile )
           
@@ -2027,7 +2042,7 @@ def baselineTests( test_dir, plat, ufilter ):
     if not keyword_expr.containsResultsKeywords():
       keyword_expr.append( ['diff'], 'and' )
     
-    tlist.loadTests( filter_dir=filter_dir )
+    tlist.loadAndFilter( plat.getMaxProcs(), filter_dir=filter_dir )
     
     if len(tlist.active) > 0:
       
@@ -2037,8 +2052,6 @@ def baselineTests( test_dir, plat, ufilter ):
       perms = None
       if '--perms' in optdict:
           perms = PermissionSetter( test_dir, optdict['--perms'] )
-      
-      plat.initProcs( test_dir )
       
       tlist.createTestExecs( test_dir, plat, config, perms )
       
@@ -2204,7 +2217,7 @@ def parseOptionsAndGenerateOptionDictionary():
     
     import getopt
     try: opts, dirs = getopt.getopt( argL,
-                        'hHvgGk:K:p:P:S:o:O:wAj:FRM:n:ibT:Lmeas:x:X:C',
+                        'hHvgGk:K:p:P:S:o:O:wAj:FRM:n:N:ibT:Lmeas:x:X:C',
                         longopts=['version','plat=','platopt=',
                                   'keys', 'files', 'pipeline',
                                   'qsub-id=', 'qsub-limit=', 'qsub-length=',
@@ -2460,6 +2473,21 @@ def parseOptionsAndGenerateOptionDictionary():
               ': error: the -n option must specify a positive integer\n')
         sys.exit(1);
      
+    if optdict.has_key('-N'):
+      if len(optdict['-N']) > 1:
+          sys.stderr.write('*** ' + exeName + \
+                ': error: only one -N option is allowed\n')
+          sys.exit(1)
+      try: val = int(optdict['-N'][0])
+      except:
+          sys.stderr.write('*** ' + exeName + \
+                ': error: the -N option must be followd by an integer\n')
+          sys.exit(1)
+      if val <= 0:
+        sys.stderr.write('*** ' + exeName + \
+              ': error: the -N option must specify a positive integer\n')
+        sys.exit(1);
+     
     if optdict.has_key('-T'):
       if len(optdict['-T']) > 1:
           sys.stderr.write('*** ' + exeName + \
@@ -2507,7 +2535,9 @@ def parseOptionsAndGenerateOptionDictionary():
       optdict['-M'] = optdict['-M'][0]
     
     if optdict.has_key('-n'):
-      optdict['-n'] = optdict['-n'][0]
+      optdict['-n'] = int( optdict['-n'][0] )
+    if optdict.has_key('-N'):
+      optdict['-N'] = int( optdict['-N'][0] )
     
     if optdict.has_key('--extract'):
       optdict['--extract'] = optdict['--extract'][-1]
@@ -2626,23 +2656,24 @@ if __name__ == '__main__':
     if test_dir != None:
       tfile = os.path.join( test_dir, testlist_name )
       tlist.readFile( tfile )
-      tlist.loadTests( filter_dir=computeRelativePath( test_dir, os.getcwd() ) )
+      tlist.loadAndFilter( plat.getMaxProcs(),
+                    filter_dir=computeRelativePath( test_dir, os.getcwd() ) )
     elif os.path.exists( testResultsDir(plat.getName()) ):
       test_dir = os.path.join( os.getcwd(), testResultsDir(plat.getName()) )
       tfile = os.path.join( test_dir, testlist_name )
       tlist.readFile( tfile )
-      tlist.loadTests()
+      tlist.loadAndFilter( plat.getMaxProcs() )
     elif optdict.has_key('--keys') or optdict.has_key('--files'):
       if len(dirs) == 0:
         dirs = ['.']
       for d in dirs:
         if os.path.exists(d):
           tlist.scanDirectory( d, optdict.get('-S',None) )
-      tlist.loadTests()
+      tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
     else:
       print "*** warning: previous TestResults directory not found"
       test_dir = os.path.join( os.getcwd(), testResultsDir(plat.getName()) )
-      tlist.loadTests()
+      tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
     
     if optdict.has_key('--keys') or optdict.has_key('--files'):
       keywordInformation(tlist)

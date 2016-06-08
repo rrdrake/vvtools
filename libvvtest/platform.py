@@ -15,6 +15,7 @@ class Platform:
         self.vvtesthome = vvtesthome
         self.optdict = optdict
         
+        self.maxprocs = 1
         self.nprocs = 0
         self.nfree = 0
         
@@ -33,11 +34,13 @@ class Platform:
     def getName(self):  return self.platname
     def getCompiler(self): return self.cplrname
     def getOptions(self): return self.optdict
+    def getMaxProcs(self): return self.maxprocs
     
     def display(self):
         s = "Platform " + self.platname
         if self.nprocs > 0:
-            s += " with " + str(self.nprocs) + " processors"
+            s += ", num procs = " + str(self.nprocs)
+        s += ", max procs = " + str(self.maxprocs)
         print s
     
     def getEnvironment(self):
@@ -148,48 +151,37 @@ class Platform:
         
         return jobD
     
-    def initProcs(self, test_dir):
+    def initProcs(self, set_num, set_max):
         """
-        """
-        if self.optdict.has_key( '--qsub-id' ):
-            # in qsub mode, force the number of processors to be one
-            self.optdict['-n'] = n = 1
-        
-        elif '-n' in self.optdict:
-            n = int( self.optdict['-n'] )
-        
-        elif 'numprocs' in self.attrs:
-            n = int( self.attrs['numprocs'] )
+        Determines the number of processors and the maximum number for the
+        current platform.
 
-        elif os.path.exists( '/proc/cpuinfo' ):
-            # try to probe the number of available processors by
-            # looking at the proc file system
-            n = 0
-            repat = re.compile( 'processor\s*:' )
-            try:
-                fp = open( '/proc/cpuinfo', 'r' )
-                for line in fp.readlines():
-                    if repat.match(line) != None:
-                        n = n + 1
-                fp.close()
-            except:
-                n = 1
-            
-        elif os.uname()[0].startswith( 'Darwin' ):
-            # try to use sysctl on Macs
-            try:
-                fp = os.popen( 'sysctl -n hw.physicalcpu 2>/dev/null' )
-                s = fp.read().strip()
-                fp.close()
-                n = int(s)
-            except:
-                n = 1
-            
+        For max procs:
+            1. Use 'set_max' if not None
+            2. The "maxprocs" attribute if set by the platform plugin
+            3. Try to probe the system
+            4. The value one if all else fails
+
+        For num procs:
+            1. Use 'set_num' if not None
+            2. The value of max procs
+
+        This function should not be called for batch/pipeline mode.
+        """
+        if set_max == None:
+            mx = self.attrs.get( 'maxprocs', None )
+            if mx == None:
+                mx = probe_max_processors()
+            self.maxprocs = mx if mx != None else 1
         else:
-            n = 1
+            self.maxprocs = set_max
+
+        if set_num == None:
+            self.nprocs = self.maxprocs
+        else:
+            self.nprocs = set_num
         
-        self.nprocs = n
-        self.nfree = n
+        self.nfree = self.nprocs
     
     def queryProcs(self, np):
         """
@@ -310,6 +302,8 @@ def construct_Platform( toolsdir, optdict ):
         if hasattr( platform_plugin, 'initialize' ):
             platform_plugin.initialize( plat )
 
+    plat.initProcs( optdict.get( '-n', None ), optdict.get( '-N', None ) )
+
     return plat
 
 
@@ -324,6 +318,41 @@ class JobInfo:
     def __init__(self, np):
         self.np = np
         self.mpi_opts = ''
+
+
+def probe_max_processors():
+    """
+    Tries to determine the number of processors on the current machine.  On
+    Linux systems, it uses /proc/cpuinfo.  On OSX systems, it uses sysctl.
+    Returns the max, or None if the probe failed.
+    """
+    mx = None
+    
+    if os.uname()[0].startswith( 'Darwin' ):
+        # try to use sysctl on Macs
+        try:
+            fp = os.popen( 'sysctl -n hw.physicalcpu 2>/dev/null' )
+            s = fp.read().strip()
+            fp.close()
+            mx = int(s)
+        except:
+            mx = None
+    
+    if mx == None and os.path.exists( '/proc/cpuinfo' ):
+        # try to probe the number of available processors by
+        # looking at the proc file system
+        repat = re.compile( 'processor\s*:' )
+        mx = 0
+        try:
+            fp = open( '/proc/cpuinfo', 'r' )
+            for line in fp.readlines():
+                if repat.match(line) != None:
+                    mx += 1
+            fp.close()
+        except:
+            mx = None
+
+    return mx
 
 
 ##########################################################################
