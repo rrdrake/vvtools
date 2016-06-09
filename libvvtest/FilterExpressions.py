@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os
+import os, sys
 import string, re
 import types
 import fnmatch
@@ -252,6 +252,8 @@ class WordExpression:
         self.expr = None
         self.nr_expr = None
         
+        # TODO: when keyword expressions are deprecated, will wordL be
+        #       needed anymore ??
         self.wordL = []   # list of the words in the expression
         
         self.has_results_keywords = 0
@@ -749,3 +751,42 @@ class ParamFilter:
               return 1
             except: pass
             return v > self.v
+
+
+######################################################################
+
+if __name__ == "__main__":
+
+    # this component is called as a 
+
+    import getopt
+    optL,argL = getopt.getopt( sys.argv[1:], "p:o:f:" )
+    for n,v in optL:
+        if n == '-p':
+            pD = {}
+            for param,value in [ s.split('/') for s in argL[0].split() ]:
+                pD[param] = value
+            pf = ParamFilter( v )
+            if pf.evaluate( pD ):
+                sys.stdout.write( 'true' )
+            else:
+                sys.stdout.write( 'false' )
+            break
+
+        elif n == '-f':
+            wx = WordExpression( v )
+            if wx.evaluate( lambda wrd: wrd == argL[0] ):
+                sys.stdout.write( 'true' )
+            else:
+                sys.stdout.write( 'false' )
+            break
+
+        elif n == '-o':
+            opts = argL[0].split()
+            wx = WordExpression( v )
+            if wx.evaluate( opts.count ):
+                sys.stdout.write( 'true' )
+            else:
+                sys.stdout.write( 'false' )
+            break
+

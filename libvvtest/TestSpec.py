@@ -203,7 +203,7 @@ class TestSpec:
         """
         Returns, in order, raw fragments and named execution fragments for
         the given platform.  Returns a list of tuples
-          ( name, fragment, exit status, analyze flag )
+          ( name, fragment, exit status, analyze boolean )
         where 'name' is None for raw fragments and 'exit status' is a string.
         """
         return [] + self.execL
@@ -279,7 +279,7 @@ class TestSpec:
                                    #   (name, fragment, exit status, analyze)
                                    # where name is None when the
                                    # fragment is a raw fragment, exit status
-                                   # is any string, and analyze is yes or no
+                                   # is any string, and analyze is true/false
         self.lnfiles = []          # list of (src name, test name)
         self.cpfiles = []          # list of (src name, test name)
         self.baseline = {}         # baseline specifications
@@ -417,7 +417,7 @@ class TestSpec:
         """
         assert name
         s = string.join( string.split(content) )  # remove embedded newlines
-        self.execL.append( (name, s, exit_status, "no") )
+        self.execL.append( (name, s, exit_status, False) )
    
     def addLinkFile(self, srcname, destname=None):
         """

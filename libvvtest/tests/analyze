@@ -15,7 +15,7 @@ def main():
     if len(argL) == 0:
         argL = """test01 test02 test03 test04 test05 test06 test07
                   test08 test09 test10 test11 test12
-                  test13 test14 test15 test16
+                  test13 test14 test15 test16 test17
                """.split()
 
     # set these for the pipeline tests
@@ -932,6 +932,96 @@ def test16():
         assert not os.path.exists( tdir+'/scr.V=b/execute.log' )
         assert len( filegrep( tdir+'/scr/execute.log', 'running analyze' ) ) == 1
 
+
+########################################################################
+
+def test17():
+    """
+    using the -a or --analyze option
+    """    
+    writefile( 'atest.xml', """
+        <rtest name="atest">
+          <parameterize ival="1 2"/>
+          <execute>
+            echo "running touch"
+            touch afile.$ival
+          </execute>
+          <execute analyze="yes">
+            echo "running execute analyze"
+          </execute>
+          <analyze>
+            echo "running analyze"
+            ls ../atest.ival=1/afile.1 || exit 1
+            ls ../atest.ival=2/afile.2 || exit 1
+          </analyze>
+        </rtest>""" )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+    platname = platform_name( out )
+
+    assert len( filegrep( tdir+'/atest.ival=1/execute.log',
+                          'running touch' ) ) == 1
+    assert len( filegrep( tdir+'/atest.ival=1/execute.log',
+                          'running execute analyze' ) ) == 1
+    assert len( filegrep( tdir+'/atest.ival=2/execute.log',
+                          'running touch' ) ) == 1
+    assert len( filegrep( tdir+'/atest.ival=2/execute.log',
+                          'running execute analyze' ) ) == 1
+    assert len( filegrep( tdir+'/atest/execute.log',
+                          'running analyze' ) ) == 1
+    assert len( filegrep( tdir+'/atest/execute.log',
+                          'running touch' ) ) == 0
+    
+    out,np,nd,nf,nn = run_vvtest( '-Ra' )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+    assert len( filegrep( tdir+'/atest.ival=1/execute.log',
+                          'running touch' ) ) == 0
+    assert len( filegrep( tdir+'/atest.ival=1/execute.log',
+                          'running execute analyze' ) ) == 1
+    assert len( filegrep( tdir+'/atest.ival=2/execute.log',
+                          'running touch' ) ) == 0
+    assert len( filegrep( tdir+'/atest.ival=2/execute.log',
+                          'running execute analyze' ) ) == 1
+    assert len( filegrep( tdir+'/atest/execute.log',
+                          'running analyze' ) ) == 1
+    assert len( filegrep( tdir+'/atest/execute.log',
+                          'running touch' ) ) == 0
+
+    if platname in batchplatforms:
+        remove_results()
+        
+        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+        assert len( filegrep( tdir+'/atest.ival=1/execute.log',
+                              'running touch' ) ) == 1
+        assert len( filegrep( tdir+'/atest.ival=1/execute.log',
+                              'running execute analyze' ) ) == 1
+        assert len( filegrep( tdir+'/atest.ival=2/execute.log',
+                              'running touch' ) ) == 1
+        assert len( filegrep( tdir+'/atest.ival=2/execute.log',
+                              'running execute analyze' ) ) == 1
+        assert len( filegrep( tdir+'/atest/execute.log',
+                              'running analyze' ) ) == 1
+        assert len( filegrep( tdir+'/atest/execute.log',
+                              'running touch' ) ) == 0
+        
+        out,np,nd,nf,nn = run_vvtest( '-Ra --pipeline' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        assert len( filegrep( tdir+'/atest.ival=1/execute.log',
+                              'running touch' ) ) == 0
+        assert len( filegrep( tdir+'/atest.ival=1/execute.log',
+                              'running execute analyze' ) ) == 1
+        assert len( filegrep( tdir+'/atest.ival=2/execute.log',
+                              'running touch' ) ) == 0
+        assert len( filegrep( tdir+'/atest.ival=2/execute.log',
+                              'running execute analyze' ) ) == 1
+        assert len( filegrep( tdir+'/atest/execute.log',
+                              'running analyze' ) ) == 1
+        assert len( filegrep( tdir+'/atest/execute.log',
+                              'running touch' ) ) == 0
 
 ########################################################################
 

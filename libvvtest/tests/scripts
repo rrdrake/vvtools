@@ -16,7 +16,7 @@ def main():
     if len(argL) == 0:
         argL = """test01 test01b test02 test03 test04 test05 test06
                   test07 test08 test09 test10 test11 test12 test13
-                  test14
+                  test14 test15 test16
                """.split()
 
     # set these for the pipeline tests
@@ -780,6 +780,230 @@ def test14():
         assert os.path.exists( dbgdir+'/another/file3.txt' )
         assert not os.path.islink( dbgdir+'/another/file3.txt' )
 
+
+########################################################################
+
+def test15():
+    """
+    using the vvtest system utility functions
+    """
+    writescript( "null.vvt", """
+        #!/bin/sh
+        echo null
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    platname = platform_name( out )
+    tdir = results_dir()
+    remove_results()
+    os.remove( 'null.vvt' )
+
+    writescript( 'pytest.vvt', """
+        #!/usr/bin/env python
+        #VVT: parameterize : A = 1 3 5
+        import vvtest_util as vvt
+        print3 = vvt.print3
+        if vvt.parameter_expr( "A<3 or A=5" ):
+            print3( "with A="+vvt.A+" param expr true" )
+        else:
+            print3( "with A="+vvt.A+" param expr false" )
+        if vvt.platform_expr( 'Junk or """+platname+"""' ):
+            print3( "plat expr true" )
+        else:
+            print3( "plat expr false" )
+        if vvt.platform_expr( 'Junk' ):
+            print3( "plat expr2 true" )
+        else:
+            print3( "plat expr2 false" )
+        if vvt.option_expr( 'dbg and not intel' ):
+            print3( "option expr true" )
+        else:
+            print3( "option expr false" )
+        """ )
+    writescript( 'shtest.vvt', """
+        #!/bin/sh
+        #VVT: parameterize : B = 1 3 5
+        source vvtest_util.sh
+        if parameter_expr "B<3 or B=5"
+        then
+            echo "with B=$B param expr true"
+        else
+            echo "with B=$B param expr false"
+        fi
+        if platform_expr 'Junk or """+platname+"""'
+        then
+            echo "plat expr true"
+        else
+            echo "plat expr false"
+        fi
+        if platform_expr 'Junk'
+        then
+            echo "plat expr2 true"
+        else
+            echo "plat expr2 false"
+        fi
+        if option_expr 'dbg and not intel'
+        then
+            echo "option expr true"
+        else
+            echo "option expr false"
+        fi
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 6 and nd == 0 and nf == 0 and nn == 0
+
+    assert len( filegrep( tdir+'/pytest.A=1/execute.log',
+                          'with A=1 param expr true' ) ) == 1
+    assert len( filegrep( tdir+'/pytest.A=3/execute.log',
+                          'with A=3 param expr false' ) ) == 1
+    assert len( filegrep( tdir+'/pytest.A=5/execute.log',
+                          'with A=5 param expr true' ) ) == 1
+    assert len( filegrep( tdir+'/shtest.B=1/execute.log',
+                          'with B=1 param expr true' ) ) == 1
+    assert len( filegrep( tdir+'/shtest.B=3/execute.log',
+                          'with B=3 param expr false' ) ) == 1
+    assert len( filegrep( tdir+'/shtest.B=5/execute.log',
+                          'with B=5 param expr true' ) ) == 1
+    
+    assert len( filegrep( tdir+'/pytest.A=3/execute.log',
+                          'plat expr true' ) ) == 1
+    assert len( filegrep( tdir+'/pytest.A=3/execute.log',
+                          'plat expr2 false' ) ) == 1
+    assert len( filegrep( tdir+'/shtest.B=5/execute.log',
+                          'plat expr true' ) ) == 1
+    assert len( filegrep( tdir+'/shtest.B=5/execute.log',
+                          'plat expr2 false' ) ) == 1
+    
+    assert len( filegrep( tdir+'/pytest.A=1/execute.log',
+                          'option expr false' ) ) == 1
+    assert len( filegrep( tdir+'/shtest.B=1/execute.log',
+                          'option expr false' ) ) == 1
+    
+    remove_results()
+    out,np,nd,nf,nn = run_vvtest( '-o dbg' )
+    assert np == 6 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+    assert len( filegrep( tdir+'/pytest.A=1/execute.log',
+                          'option expr true' ) ) == 1
+    assert len( filegrep( tdir+'/shtest.B=1/execute.log',
+                          'option expr true' ) ) == 1
+    
+    remove_results()
+    out,np,nd,nf,nn = run_vvtest( '-o dbg+intel' )
+    assert np == 6 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+    assert len( filegrep( tdir+'/pytest.A=1/execute.log',
+                          'option expr false' ) ) == 1
+    assert len( filegrep( tdir+'/shtest.B=1/execute.log',
+                          'option expr false' ) ) == 1
+
+
+def test16():
+    """
+    using the vvtest system utility functions in an analyze test
+    """
+    writescript( "null.vvt", """
+        #!/bin/sh
+        echo null
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest( '-o dbg' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    platname = platform_name( out )
+    tdir = results_dir()
+    remove_results()
+    os.remove( 'null.vvt' )
+
+    writescript( 'pytest.vvt', """
+        #!/usr/bin/env python
+        #VVT: parameterize : A = 1 2
+        #VVT: analyze : -a
+        import sys
+        import vvtest_util as vvt
+        print3 = vvt.print3
+        if '-a' in sys.argv:
+            pass
+            if vvt.parameter_expr( "not A" ):
+                print3( "analyze param expr true" )
+            else:
+                print3( "analyze param expr false" )
+            if vvt.platform_expr( 'Junk or """+platname+"""' ):
+                print3( "analyze plat expr true" )
+            else:
+                print3( "analyze plat expr false" )
+            if vvt.platform_expr( 'Junk' ):
+                print3( "analyze plat expr2 true" )
+            else:
+                print3( "analyze plat expr2 false" )
+            if vvt.option_expr( 'dbg and not intel' ):
+                print3( "analyze option expr true" )
+            else:
+                print3( "analyze option expr false" )
+        """ )
+    writescript( 'shtest.vvt', """
+        #!/bin/sh
+        #VVT: parameterize : B = 1 2
+        #VVT: analyze : -a
+        source vvtest_util.sh
+        analyze=false
+        for opt in "$@"
+        do
+          [ "$opt" = "-a" ] && analyze=true
+        done
+        if [ $analyze = true ]
+        then
+            if parameter_expr "B"
+            then
+                echo "analyze param expr true"
+            else
+                echo "analyze param expr false"
+            fi
+            if platform_expr 'Junk or """+platname+"""'
+            then
+                echo "analyze plat expr true"
+            else
+                echo "analyze plat expr false"
+            fi
+            if platform_expr 'Junk'
+            then
+                echo "analyze plat expr2 true"
+            else
+                echo "analyze plat expr2 false"
+            fi
+            if option_expr 'dbg and not intel'
+            then
+                echo "analyze option expr true"
+            else
+                echo "analyze option expr false"
+            fi
+        fi
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest( '-o dbg' )
+    assert np == 6 and nd == 0 and nf == 0 and nn == 0
+    
+    for f in glob.glob( tdir+'/*=*/execute.log' ):
+        assert len( filegrep( f, 'analyze' ) ) == 0
+    
+    assert len( filegrep( tdir+'/pytest/execute.log',
+                          'analyze param expr true' ) ) == 1
+    assert len( filegrep( tdir+'/pytest/execute.log',
+                          'analyze plat expr true' ) ) == 1
+    assert len( filegrep( tdir+'/pytest/execute.log',
+                          'analyze plat expr2 false' ) ) == 1
+    assert len( filegrep( tdir+'/pytest/execute.log',
+                          'analyze option expr true' ) ) == 1
+    
+    assert len( filegrep( tdir+'/shtest/execute.log',
+                          'analyze param expr false' ) ) == 1
+    assert len( filegrep( tdir+'/shtest/execute.log',
+                          'analyze plat expr true' ) ) == 1
+    assert len( filegrep( tdir+'/shtest/execute.log',
+                          'analyze plat expr2 false' ) ) == 1
+    assert len( filegrep( tdir+'/shtest/execute.log',
+                          'analyze option expr true' ) ) == 1
 
 ########################################################################
 

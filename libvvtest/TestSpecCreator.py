@@ -1957,15 +1957,15 @@ def parseExecuteList( t, filedoc, ufilter ):
         
         xname = nd.getAttr('name', None)
         
-        analyze = "no"
+        analyze = False
         if xname == None:
           if string.lower( string.strip( nd.getAttr('analyze','') ) ) == 'yes':
-            analyze = "yes"
+            analyze = True
         else:
           if not xname or not allowableString(xname):
             raise TestSpecError( 'invalid name value: "' + xname + \
                                  '", line ' + str(nd.line_no) )
-        
+
         xstatus = nd.getAttr( 'expect', None )
         
         content = nd.getContent()

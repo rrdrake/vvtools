@@ -33,20 +33,10 @@ def writeScript( testobj, filename, lang, config, plat ):
 
         w.add( 'import os, sys',
                'sys.path.insert( 0, "'+vvtlib+'" )' )
-        w.add( 'from script_util import *' )
-        cdir = config.get('configdir')
-        if cdir:
-            w.add( 'sys.path.insert( 0, "'+cdir+'" )' )
         
-        w.add( '',
-               'def print3( *args, **kwargs ):',
-               '    "a python 2 & 3 compatible print function"',
-               '    s = " ".join( [ str(x) for x in args ] )',
-               '    if len(kwargs) > 0:',
-               '        L = [ str(k)+"="+str(v) for k,v in kwargs.items() ]',
-               '        s += " " + " ".join( L )',
-               '    sys.stdout.write( s + os.linesep )',
-               '    sys.stdout.flush()' )
+        cdir = config.get('configdir')
+        if cdir and os.path.exists( cdir ):
+            w.add( 'sys.path.insert( 0, "'+cdir+'" )' )
 
         w.add( '',
                'NAME = "'+tname+'"',
@@ -63,7 +53,9 @@ def writeScript( testobj, filename, lang, config, plat ):
             w.add( 'os.environ["'+k+'"] = "'+v+'"' )
 
         w.add( '', '# parameters defined by the test' )
-        for k,v in testobj.getParameters().items():
+        paramD = testobj.getParameters()
+        w.add( 'PARAM_DICT = '+repr( paramD ) )
+        for k,v in paramD.items():
             w.add( k+' = "'+v+'"' )
         
         if testobj.getParent() == None and testobj.hasAnalyze():
@@ -80,121 +72,41 @@ def writeScript( testobj, filename, lang, config, plat ):
                     n2 = '_'.join( n )
                     w.add( 'PARAM_'+n2+' = ' + repr(L) )
         
-        w.add(  """
-                # a test can call set_have_diff() one or more times if it
-                # decides the test should diff, then at the end of the test,
-                # call if_diff_exit_diff()
+        w.add( '', 'from script_util import *' )
 
-                diff_exit_status = 64
-                have_diff = False
-                
-                def set_have_diff():
-                    global have_diff
-                    have_diff = diff_exit_status
-                
-                def exit_diff():
-                    print3( "*** exitting diff" )
-                    sys.exit( diff_exit_status )
-                
-                def if_diff_exit_diff():
-                    if have_diff:
-                        exit_diff()
-                """ )
+        w.add( """
+            def platform_expr( expr ):
+                '''
+                Evaluates the given word expression against the current
+                platform name.  For example, the expression could be
+                "Linux or Darwin" and would be true if the current platform
+                name is "Linux" or if it is "Darwin".
+                '''
+                wx = FilterExpressions.WordExpression( expr )
+                return wx.evaluate( lambda wrd: wrd == PLATFORM )
+            
+            def parameter_expr( expr ):
+                '''
+                Evaluates the given parameter expression against the parameters
+                defined for the current test.  For example, the expression
+                could be "dt<0.01 and dh=0.1" where dt and dh are parameters
+                defined in the test.
+                '''
+                pf = FilterExpressions.ParamFilter( expr )
+                return pf.evaluate( PARAM_DICT )
+            
+            def option_expr( expr ):
+                '''
+                Evaluates the given option expression against the options
+                given on the vvtest command line.  For example, the expression
+                could be "not dbg and not intel", which would be false if
+                "-o dbg" or "-o intel" were given on the command line.
+                '''
+                wx = FilterExpressions.WordExpression( expr )
+                return wx.evaluate( OPTIONS.count )
+            """ )
 
-        w.add(  """
-                def sedfile( filename, pattern, replacement, *more ):
-                    '''
-                    Apply one or more regex pattern replacements to each
-                    line of the given file.  If the file is a regular file,
-                    its contents is replaced.  If the file is a soft link, the
-                    soft link is removed and a regular file is written with
-                    the new contents in its place.
-                    '''
-                    import re
-                    assert len(more) % 2 == 0
-                    
-                    info = 'sedfile: filename="'+filename+'":'
-                    info += ' '+pattern+' -> '+replacement
-                    prL = [ ( re.compile( pattern ), replacement ) ]
-                    for i in range( 0, len(more), 2 ):
-                        info += ', '+more[i]+' -> '+more[i+1]
-                        prL.append( ( re.compile( more[i] ), more[i+1] ) )
-                    
-                    print3( info )
-
-                    fpin = open( filename, 'r' )
-                    fpout = open( filename+'.sedfile_tmp', 'w' )
-                    line = fpin.readline()
-                    while line:
-                        for cpat,repl in prL:
-                            line = cpat.sub( repl, line )
-                        fpout.write( line )
-                        line = fpin.readline()
-                    fpin.close()
-                    fpout.close()
-
-                    os.remove( filename )
-                    os.rename( filename+'.sedfile_tmp', filename )
-                """ )
-
-        w.add(  """
-                def unixdiff( file1, file2 ):
-                    '''
-                    If the filenames 'file1' and 'file2' are different, then
-                    the differences are printed and set_have_diff() is called.
-                    Returns True if there is a diff, otherwise False.
-                    '''
-                    assert os.path.exists( file1 ), "file does not exist: "+file1
-                    assert os.path.exists( file2 ), "file does not exist: "+file2
-                    import filecmp
-                    print3( 'unixdiff: diff '+file1+' '+file2 )
-                    if not filecmp.cmp( file1, file2 ):
-                        print3( '*** unixdiff: files are different,',
-                                'setting have_diff' )
-                        set_have_diff()
-                        fp1 = open( file1, 'r' )
-                        flines1 = fp1.readlines()
-                        fp2 = open( file2, 'r' )
-                        flines2 = fp2.readlines()
-                        import difflib
-                        diffs = difflib.unified_diff( flines1, flines2,
-                                                      file1, file2 )
-                        fp1.close()
-                        fp2.close()
-                        sys.stdout.writelines( diffs )
-                        sys.stdout.flush()
-                        return True
-                    return False
-                """ )
-        
-        w.add(  """
-                def nlinesdiff( filename, maxlines ):
-                    '''
-                    Counts the number of lines in 'filename' and if more
-                    than 'maxlines' then have_diff is set and True is returned.
-                    Otherwise, False is returned.
-                    '''
-                    fp = open( filename, 'r' )
-                    n = 0
-                    line = fp.readline()
-                    while line:
-                        n += 1
-                        line = fp.readline()
-                    fp.close()
-
-                    print3( 'nlinesdiff: filename = '+filename + \\
-                            ', num lines = '+str(n) + \\
-                            ', max lines = '+str(maxlines) )
-                    if n > maxlines:
-                        print3( '*** nlinesdiff: number of lines exceeded',
-                                'max, setting have_diff' )
-                        set_have_diff()
-                        return True
-                    return False
-                """ )
-    
-    elif lang == 'pl':
-        pass
+        # TODO: import script_util_plugin.py from config directory
     
     elif lang in ['sh','bash']:
 
@@ -204,8 +116,8 @@ def writeScript( testobj, filename, lang, config, plat ):
                'COMPILER="'+cplrname+'"',
                'VVTESTSRC="'+tdir+'"',
                'PROJECT="'+projdir+'"',
-               'OPTIONS="'+'+'.join( onopts )+'"',
-               'OPTIONS_OFF="'+'+'.join( offopts )+'"',
+               'OPTIONS="'+' '.join( onopts )+'"',
+               'OPTIONS_OFF="'+' '.join( offopts )+'"',
                'SRCDIR="'+srcdir+'"' )
 
         w.add( '', '# platform settings' )
@@ -213,7 +125,10 @@ def writeScript( testobj, filename, lang, config, plat ):
             w.add( 'export '+k+'="'+v+'"' )
 
         w.add( '', '# parameters defined by the test' )
-        for k,v in testobj.getParameters().items():
+        paramD = testobj.getParameters()
+        s = ' '.join( [ n+'/'+v for n,v in paramD.items() ] )
+        w.add( 'PARAM_DICT="'+s+'"' )
+        for k,v in paramD.items():
             w.add( k+'="'+v+'"' )
         
         if testobj.getParent() == None and testobj.hasAnalyze():
@@ -227,123 +142,71 @@ def writeScript( testobj, filename, lang, config, plat ):
                 L2 = [ '/'.join( v ) for v in L ]
                 w.add( 'PARAM_'+n2+'="' + ' '.join(L2) + '"' )
         
-        w.add(  """
-                # a test can call "set_have_diff" one or more times if it
-                # decides the test should diff, then at the end of the test,
-                # call "if_diff_exit_diff"
-
-                diff_exit_status=64
-                have_diff=0
-
-                set_have_diff() {
-                    have_diff=1
-                }
-
-                exit_diff() {
-                    echo "*** exitting diff"
-                    exit $diff_exit_status
-                }
-
-                if_diff_exit_diff() {
-                    if [ $have_diff -ne 0 ]
-                    then
-                        exit_diff
-                    fi
-                }
-                """ )
+        w.add( 'source '+ os.path.join( vvtlib, 'script_util.sh' ) )
         
-        w.add(  """
-                sedfile() {
-                    # arguments are the file name then a substitution
-                    # expression, such as "s/pattern/replacement/"
-                    # additional expressions can be given but you must
-                    # preceed each with -e
-                    # note that an edit of a soft linked file will remove
-                    # the soft link and replace the file name with a regular
-                    # file with modified contents
-
-                    if [ $# -lt 2 ]
-                    then
-                        echo "*** error: sedfile() requires at least 2 arguments"
-                        exit 1
-                    fi
-
-                    fname=$1
-                    shift
-                    
-                    echo "sedfile: sed -e $@ $fname > $fname.sedfile_tmp"
-                    sed -e "$@" $fname > $fname.sedfile_tmp || exit 1
-
-                    echo "sedfile: mv $fname.sedfile_tmp $fname"
-                    rm -f $fname
-                    mv $fname.sedfile_tmp $fname
-                }
-                """ )
-
-        w.add(  """
-                unixdiff() {
-                    # two arguments are accepted, 'file1' and 'file2'
-                    # If the filenames are different, then the differences are
-                    # printed and set_have_diff() is called.
-                    
-                    if [ $# -ne 2 ]
-                    then
-                        echo "*** error: unixdiff requires exactly 2 arguments"
-                        exit 1
-                    fi
-                    file1=$1
-                    file2=$2
-
-                    if [ ! -f $file1 ]
-                    then
-                        echo "*** unixdiff: file does not exist: $file1"
-                        exit 1
-                    fi
-                    if [ ! -f $file2 ]
-                    then
-                        echo "*** unixdiff: file does not exist: $file2"
-                        exit 1
-                    fi
-                    echo "unixdiff: diff $file1 $file2"
-                    setdiff=0
-                    diff $file1 $file2 || setdiff=1
-                    if [ $setdiff -eq 1 ]
-                    then
-                        echo "*** unixdiff: files are different, setting have_diff"
-                        set_have_diff
-                    fi
-                }
-                """ )
-        
-        w.add(  """
-                nlinesdiff() {
-                    # Counts the number of lines in 'filename' and if more
-                    # than 'maxlines' then print this fact and set have_diff
-                    
-                    if [ $# -ne 2 ]
-                    then
-                        echo "*** error: nlinesdiff requires exactly 2 arguments"
-                        exit 1
-                    fi
-                    filename=$1
-                    maxlines=$2
-
-                    if [ ! -f $filename ]
-                    then
-                        echo "*** nlinesdiff: file does not exist: $filename"
-                        exit 1
-                    fi
-
-                    nlines=`cat $filename | wc -l`
-                    
-                    echo "nlinesdiff: filename = $filename, num lines = $nlines, max lines = $maxlines"
-                    if [ $nlines -gt $maxlines ]
-                    then
-                        echo "*** nlinesdiff: number of lines exceeded max, setting have_diff"
-                        set_have_diff
-                    fi
-                }
-                """ )
+        fex = sys.executable + ' ' + \
+              os.path.join( vvtlib, 'FilterExpressions.py' )
+        w.add( """
+            platform_expr() {
+                # Evaluates the given platform expression against the current
+                # platform name.  For example, the expression could be
+                # "Linux or Darwin" and would be true if the current platform
+                # name is "Linux" or if it is "Darwin".
+                # Returns 0 (zero) if the expression evaluates to true,
+                # otherwise non-zero.
+                
+                result=`"""+fex+""" -f "$1" "$PLATFORM"`
+                xval=$?
+                if [ $xval -ne 0 ]
+                then
+                    echo "$result"
+                    echo "*** error: failed to evaluate platform expression $1"
+                    exit 1
+                fi
+                [ "$result" = "true" ] && return 0
+                return 1
+            }
+            
+            parameter_expr() {
+                # Evaluates the given parameter expression against the
+                # parameters defined for the current test.  For example, the
+                # expression could be "dt<0.01 and dh=0.1" where dt and dh are
+                # parameters defined in the test.
+                # Returns 0 (zero) if the expression evaluates to true,
+                # otherwise non-zero.
+                
+                result=`"""+fex+""" -p "$1" "$PARAM_DICT"`
+                xval=$?
+                if [ $xval -ne 0 ]
+                then
+                    echo "$result"
+                    echo "*** error: failed to evaluate parameter expression $1"
+                    exit 1
+                fi
+                [ "$result" = "true" ] && return 0
+                return 1
+            }
+            
+            option_expr() {
+                # Evaluates the given option expression against the options
+                # given on the vvtest command line.  For example, the expression
+                # could be "not dbg and not intel", which would be false if
+                # "-o dbg" or "-o intel" were given on the command line.
+                # Returns 0 (zero) if the expression evaluates to true,
+                # otherwise non-zero.
+                
+                result=`"""+fex+""" -o "$1" "$OPTIONS"`
+                xval=$?
+                if [ $xval -ne 0 ]
+                then
+                    echo "$result"
+                    echo "*** error: failed to evaluate option expression $1"
+                    exit 1
+                fi
+                [ "$result" = "true" ] && return 0
+                return 1
+            }
+            """ )
     
     elif lang in ['csh','tcsh']:
 
@@ -353,8 +216,8 @@ def writeScript( testobj, filename, lang, config, plat ):
                'set COMPILER="'+cplrname+'"',
                'set VVTESTSRC="'+tdir+'"',
                'set PROJECT="'+projdir+'"',
-               'set OPTIONS="'+'+'.join( onopts )+'"',
-               'set OPTIONS_OFF="'+'+'.join( offopts )+'"',
+               'set OPTIONS="'+' '.join( onopts )+'"',
+               'set OPTIONS_OFF="'+' '.join( offopts )+'"',
                'set SRCDIR="'+srcdir+'"' )
 
         w.add( '', '# platform settings' )
@@ -384,6 +247,9 @@ def writeScript( testobj, filename, lang, config, plat ):
                 alias exit_diff 'echo "*** exitting diff" ; exit $diff_exit_status'
                 alias if_diff_exit_diff 'if ( $have_diff ) echo "*** exitting diff" ; if ( $have_diff ) exit $diff_exit_status'
                 """ )
+    
+    elif lang == 'pl':
+        pass
     
     w.write( filename )
 
