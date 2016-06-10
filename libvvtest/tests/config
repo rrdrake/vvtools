@@ -12,7 +12,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02
+        argL = """test01 test02 test03 test04
                """.split()
     
     # set these for the pipeline tests
@@ -202,6 +202,88 @@ def test02():
             assert len( glob.glob( tdir+'/btest*/execute.log' ) ) == 1
             assert len( glob.glob( tdir+'/ctest*/execute.log' ) ) == 0
             assert len( glob.glob( tdir+'/dtest*/execute.log' ) ) == 0
+
+
+def test03():
+    """
+    platform env vars get set in the script util
+    """
+    writefile( "config/platform_plugin.py", """
+        import os, sys
+        def initialize( plat ):
+            plat.setenv( 'MY_PLATFORM_VAR', 'my platform value' )
+        """ )
+
+    writescript( 'pytest.vvt', """
+        #!/usr/bin/env python
+        import os
+        import vvtest_util as vvt
+        vvt.print3( 'plat vars =', vvt.PLATFORM_VARIABLES )
+        vvt.print3( 'plat var =', os.environ['MY_PLATFORM_VAR'] )
+        """ )
+    writescript( 'shtest.vvt', """
+        #!/bin/sh
+        source vvtest_util.sh
+        echo "plat vars = $PLATFORM_VARIABLES"
+        echo "my var = $PLATVAR_MY_PLATFORM_VAR"
+        echo "my var from env = $MY_PLATFORM_VAR"
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest( '--config config' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+    
+    assert len( filegrep( tdir+'/pytest/execute.log',
+                          "plat vars = .*MY_PLATFORM_VAR" ) ) == 1
+    assert len( filegrep( tdir+'/pytest/execute.log',
+                          "plat var = my platform value" ) ) == 1
+    
+    assert len( filegrep( tdir+'/shtest/execute.log',
+                          "plat vars = .*MY_PLATFORM_VAR" ) ) == 1
+    assert len( filegrep( tdir+'/shtest/execute.log',
+                          "my var = my platform value" ) ) == 1
+    assert len( filegrep( tdir+'/shtest/execute.log',
+                          "my var from env = my platform value" ) ) == 1
+    
+
+########################################################################
+
+def test04():
+    """
+    use a script util plugin from the config dir
+    """
+    writescript( 'pytest.vvt', """
+        #!/usr/bin/env python
+        import vvtest_util as vvt
+        vvt.special_function()
+        """ )
+    writescript( 'shtest.vvt', """
+        #!/bin/sh
+        source vvtest_util.sh
+        special_function
+        """ )
+    
+    writefile( "config/script_util_plugin.py", """
+        import os, sys
+        from script_util import *
+        def special_function():
+            print3( 'hello from spec func' )
+        """ )
+    writefile( "config/script_util_plugin.sh", """
+        source $VVTESTLIB/script_util.sh
+        special_function() {
+            echo 'hello from sh spec func'
+        }
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest( '--config config' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+    
+    assert len( filegrep( tdir+'/pytest/execute.log',
+                          "hello from spec func" ) ) == 1
+    assert len( filegrep( tdir+'/shtest/execute.log',
+                          "hello from sh spec func" ) ) == 1
 
 
 ########################################################################

@@ -14,6 +14,8 @@ def writeScript( testobj, filename, lang, config, plat ):
     trel = os.path.dirname( testobj.getFilepath() )
     srcdir = os.path.normpath( os.path.join( troot, trel ) )
     
+    configdir = config.get('configdir')
+
     tdir = config.get('toolsdir')
     assert tdir
     vvtlib = os.path.join( tdir, 'libvvtest' )
@@ -32,25 +34,27 @@ def writeScript( testobj, filename, lang, config, plat ):
     if lang == 'py':
 
         w.add( 'import os, sys',
-               'sys.path.insert( 0, "'+vvtlib+'" )' )
-        
-        cdir = config.get('configdir')
-        if cdir and os.path.exists( cdir ):
-            w.add( 'sys.path.insert( 0, "'+cdir+'" )' )
-
-        w.add( '',
+               '',
                'NAME = "'+tname+'"',
                'PLATFORM = "'+platname+'"',
                'COMPILER = "'+cplrname+'"',
                'VVTESTSRC = "'+tdir+'"',
+               'VVTESTLIB = "'+vvtlib+'"',
                'PROJECT = "'+projdir+'"',
                'OPTIONS = '+repr( onopts ),
                'OPTIONS_OFF = '+repr( offopts ),
-               'SRCDIR = "'+srcdir+'"' )
+               'SRCDIR = "'+srcdir+'"',
+               '',
+               'sys.path.insert( 0, VVTESTLIB )' )
 
-        w.add( '', '# platform settings' )
-        for k,v in plat.getEnvironment().items():
-            w.add( 'os.environ["'+k+'"] = "'+v+'"' )
+        platenv = plat.getEnvironment()
+        w.add( '',
+               '# platform settings',
+               'PLATFORM_VARIABLES = '+repr(platenv),
+               'def apply_platform_variables():',
+               '    "sets the platform variables in os.environ"' )
+        for k,v in platenv.items():
+            w.add( '    os.environ["'+k+'"] = "'+v+'"' )
 
         w.add( '', '# parameters defined by the test' )
         paramD = testobj.getParameters()
@@ -72,9 +76,25 @@ def writeScript( testobj, filename, lang, config, plat ):
                     n2 = '_'.join( n )
                     w.add( 'PARAM_'+n2+' = ' + repr(L) )
         
-        w.add( '', 'from script_util import *' )
+        if configdir:
+            w.add( """
+                CONFIGDIR = '"""+configdir+"""'
+                sys.path.insert( 0, CONFIGDIR )
+                plug = os.path.join( CONFIGDIR, 'script_util_plugin.py' )
+                if os.path.exists( plug ):
+                    from script_util_plugin import *
+                else:
+                    from script_util import *
+                    apply_platform_variables()
+                """ )
+        else:
+            w.add( '',
+                   'from script_util import *',
+                   'apply_platform_variables()' )
 
         w.add( """
+            import FilterExpressions
+
             def platform_expr( expr ):
                 '''
                 Evaluates the given word expression against the current
@@ -106,7 +126,7 @@ def writeScript( testobj, filename, lang, config, plat ):
                 return wx.evaluate( OPTIONS.count )
             """ )
 
-        # TODO: import script_util_plugin.py from config directory
+        ###################################################################
     
     elif lang in ['sh','bash']:
 
@@ -115,14 +135,25 @@ def writeScript( testobj, filename, lang, config, plat ):
                'PLATFORM="'+platname+'"',
                'COMPILER="'+cplrname+'"',
                'VVTESTSRC="'+tdir+'"',
+               'VVTESTLIB="'+vvtlib+'"',
                'PROJECT="'+projdir+'"',
                'OPTIONS="'+' '.join( onopts )+'"',
                'OPTIONS_OFF="'+' '.join( offopts )+'"',
                'SRCDIR="'+srcdir+'"' )
 
-        w.add( '', '# platform settings' )
-        for k,v in plat.getEnvironment().items():
-            w.add( 'export '+k+'="'+v+'"' )
+        platenv = plat.getEnvironment()
+        w.add( '',
+               '# platform settings',
+               'PLATFORM_VARIABLES="'+' '.join( platenv.keys() )+'"' )
+        for k,v in platenv.items():
+            w.add( 'PLATVAR_'+k+'="'+v+'"' )
+        w.add( 'apply_platform_variables() {',
+               '    # sets the platform variables in the environment' )
+        for k,v in platenv.items():
+            w.add( '    export '+k+'="'+v+'"' )
+        if len(platenv) == 0:
+            w.add( '    :' )  # cannot have an empty function
+        w.add( '}' )
 
         w.add( '', '# parameters defined by the test' )
         paramD = testobj.getParameters()
@@ -142,7 +173,21 @@ def writeScript( testobj, filename, lang, config, plat ):
                 L2 = [ '/'.join( v ) for v in L ]
                 w.add( 'PARAM_'+n2+'="' + ' '.join(L2) + '"' )
         
-        w.add( 'source '+ os.path.join( vvtlib, 'script_util.sh' ) )
+        if configdir:
+            w.add( """
+                CONFIGDIR='"""+configdir+"""'
+                if [ -e $CONFIGDIR/script_util_plugin.sh ]
+                then
+                    source $CONFIGDIR/script_util_plugin.sh
+                else
+                    source $VVTESTLIB/script_util.sh
+                    apply_platform_variables
+                fi
+                """ )
+        else:
+            w.add( '',
+                   'source $VVTESTLIB/script_util.sh )',
+                   'apply_platform_variables' )
         
         fex = sys.executable + ' ' + \
               os.path.join( vvtlib, 'FilterExpressions.py' )
@@ -207,6 +252,8 @@ def writeScript( testobj, filename, lang, config, plat ):
                 return 1
             }
             """ )
+
+        ###################################################################
     
     elif lang in ['csh','tcsh']:
 
@@ -247,6 +294,8 @@ def writeScript( testobj, filename, lang, config, plat ):
                 alias exit_diff 'echo "*** exitting diff" ; exit $diff_exit_status'
                 alias if_diff_exit_diff 'if ( $have_diff ) echo "*** exitting diff" ; if ( $have_diff ) exit $diff_exit_status'
                 """ )
+    
+        ###################################################################
     
     elif lang == 'pl':
         pass
