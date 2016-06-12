@@ -16,7 +16,7 @@ def main():
     if len(argL) == 0:
         argL = """test01 test01b test02 test03 test04 test05 test06
                   test07 test08 test09 test10 test11 test12 test13
-                  test14 test15 test16
+                  test14 test15 test16 test17 test18
                """.split()
 
     # set these for the pipeline tests
@@ -1004,6 +1004,146 @@ def test16():
                           'analyze plat expr2 false' ) ) == 1
     assert len( filegrep( tdir+'/shtest/execute.log',
                           'analyze option expr true' ) ) == 1
+
+
+########################################################################
+
+def test17():
+    """
+    test the runcmd script util
+    """
+    writescript( 'py1.vvt', """
+        #!/usr/bin/env python
+        import vvtest_util as vvt
+        print3 = vvt.print3
+        x = vvt.runcmd( 'ls -l' )
+        assert x == 0
+        """ )
+    writescript( 'py2.vvt', """
+        #!/usr/bin/env python
+        import vvtest_util as vvt
+        print3 = vvt.print3
+        x = vvt.runcmd( 'failprogram', ignore_exit=True )
+        assert x != 0
+        """ )
+    writescript( 'py3.vvt', """
+        #!/usr/bin/env python
+        import vvtest_util as vvt
+        print3 = vvt.print3
+        vvt.runcmd( 'failprogram' )
+        print3( 'should not get here' )
+        """ )
+    writescript( 'py4.vvt', """
+        #!/usr/bin/env python
+        import vvtest_util as vvt
+        print3 = vvt.print3
+        out = vvt.runcmd( 'ls -l', capture_output=True )
+        print3( out )
+        for line in out.split( '\\n' ):
+            line = line.rstrip()
+            if line and line.split()[-1].endswith( 'vvtest_util.py' ):
+                print3( 'found', line.split()[-1] )
+        """ )
+
+    writescript( 'helloworld', """
+        #!/bin/sh
+        echo "hello world"
+        """ )
+    writescript( 'py5.vvt', """
+        #!/usr/bin/env python
+        #VVT: link : helloworld
+        import vvtest_util as vvt
+        print3 = vvt.print3
+        vvt.runcmd( './helloworld progargs', echo=False )
+        """ )
+
+    writescript( 'py6.vvt', """
+        #!/usr/bin/env python
+        #VVT: link : helloworld
+        import vvtest_util as vvt
+        print3 = vvt.print3
+        vvt.runcmd( './helloworld', redirect='prog.out' )
+        """ )
+    
+    writescript( 'hellomars', """
+        #!/bin/sh
+        echo "hello mars"
+        """ )
+    writescript( 'py7.vvt', """
+        #!/usr/bin/env python
+        #VVT: link : helloworld hellomars
+        import vvtest_util as vvt
+        print3 = vvt.print3
+        vvt.runcmd( './helloworld', redirect='prog.out' )
+        vvt.runcmd( './hellomars', redirect='prog.out' )
+        """ )
+    writescript( 'py8.vvt', """
+        #!/usr/bin/env python
+        #VVT: link : helloworld hellomars
+        import vvtest_util as vvt
+        print3 = vvt.print3
+        vvt.runcmd( './helloworld', redirect='prog.out' )
+        vvt.runcmd( './hellomars', redirect='prog.out', append=True )
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 7 and nd == 0 and nf == 1 and nn == 0
+    tdir = results_dir()
+    
+    assert len( filegrep( tdir+'/py1/execute.log',
+                          'vvtest_util.py' ) ) >= 1
+    assert len( greptestlist( out, 'pass.*py2' ) ) == 1
+    assert len( filegrep( tdir+'/py2/execute.log',
+                          'failprogram' ) ) > 0
+    assert len( greptestlist( out, 'pass.*py3' ) ) == 0
+    assert len( filegrep( tdir+'/py3/execute.log',
+                          'command failed.*failprogram' ) ) > 0
+    assert len( filegrep( tdir+'/py4/execute.log',
+                          'found .*vvtest_util.py' ) ) == 1
+    assert len( greptestlist( out, 'pass.*py5' ) ) == 1
+    assert len( filegrep( tdir+'/py5/execute.log',
+                          'helloworld.*progargs' ) ) == 0
+    assert len( filegrep( tdir+'/py6/execute.log',
+                          'hello world' ) ) == 0
+    assert len( filegrep( tdir+'/py6/prog.out',
+                          'hello world' ) ) == 1
+    assert len( filegrep( tdir+'/py7/execute.log',
+                          'hello world' ) ) == 0
+    assert len( filegrep( tdir+'/py7/execute.log',
+                          'hello mars' ) ) == 0
+    assert len( filegrep( tdir+'/py7/prog.out',
+                          'hello world' ) ) == 0
+    assert len( filegrep( tdir+'/py7/prog.out',
+                          'hello mars' ) ) == 1
+    assert len( filegrep( tdir+'/py8/prog.out',
+                          'hello world' ) ) == 1
+    assert len( filegrep( tdir+'/py8/prog.out',
+                          'hello mars' ) ) == 1
+
+
+def test18():
+    """
+    test permissions helpers in script util
+    """
+    writescript( 'py1.vvt', """
+        #!/usr/bin/env python
+        from vvtest_util import *
+        fp = open( 'script', 'w' )
+        fp.write( '#!/bin/sh\\n' )
+        fp.write( 'echo "script got executed"\\n' )
+        fp.close()
+        assert get_permissions( 'script', 'read' )
+        assert get_permissions( 'script', 'write' )
+        assert not get_permissions( 'script', 'execute' )
+        change_permissions( 'script', 'u+x', 'g+x' )
+        assert get_permissions( 'script', 'execute' )
+        runcmd( './script' )
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+
 
 ########################################################################
 

@@ -128,9 +128,322 @@ def nlinesdiff( filename, maxlines ):
 
 ############################################################################
 
-import FilterExpressions
+def runcmd( cmd, echo=True, ignore_exit=False, capture_output=False,
+                 redirect=None, append=False ):
+    """
+    Execute a command as a subprocess and wait for it to finish.
+
+    If the exit status is non-zero and 'ignore_exit' is False, then
+    an exception is raised.
+
+    If 'capture_output' is True, then stdout & stderr is captured and
+    returned in a string.
+
+    If 'redirect' is a file name, then stdout & stderr goes to the file.
+    If 'append' is True, then 'redirect' appends to the file rather than
+    overwriting it.  Using 'redirect' cancels 'capture_output'.
+    
+    If 'capture_output' is True, then the output is returned (a string).
+    Otherwise the exit status is returned.
+    """
+    import subprocess
+    
+    if type(cmd) != type(''):
+        # assume a list; note that the quoting prevents shell expansions
+        cmd = '"' + '" "'.join( cmd ) + '"'
+    
+    opts = {}
+
+    outfp = fdout = None
+    if redirect != None:
+        capture_output = False
+        if append:
+            outfp = open( redirect, "a" )
+        else:
+            outfp = open( redirect, "w" )
+        fdout = outfp.fileno()
+        opts['stdout'] = fdout
+        opts['stderr'] = subprocess.STDOUT
+    
+    elif capture_output:
+        opts['stdout'] = subprocess.PIPE
+        opts['stderr'] = subprocess.STDOUT
+    
+    if echo:
+        if outfp == None:
+            sys.stdout.write( cmd + '\n' )
+        else:
+            sys.stdout.write( cmd + ' > ' + redirect + '\n' )
+        sys.stdout.flush()
+    
+    opts['shell'] = True
+
+    if capture_output:
+        proc = subprocess.Popen( cmd, **opts )
+        out = proc.communicate()[0]
+        x = proc.returncode
+    else:
+        x = subprocess.call( cmd, **opts )
+
+    if outfp != None:
+        outfp.close()
+    outfp = fdout = None
+
+    if not ignore_exit and x != 0:
+        raise Exception( 'command failed: '+cmd )
+
+    if capture_output:
+        return out
+    return x
+
+############################################################################
+
+def get_permissions( path_or_fmode, which ):
+    """
+    Given a file path name and a specification string, returns True/False.
+    The specification for 'which':
+
+        read    : True if the file has read permission
+        write   : True if the file has read permission
+        execute : True if the file has read permission
+
+        setuid  : True if the file is marked set-uid
+
+        owner <mode> : True if the file satisfies the given mode for owner
+        group <mode> : True if the file satisfies the given mode for group
+        world <mode> : True if the file satisfies the given mode for world
+
+    where <mode> specifies the file mode, such as rx, rwx, r-x, r, w, x, s.
+    If a minus sign is in the <mode> then an exact match of the file mode
+    must be true for this function to return True.
+
+    The 'path_or_fmode' can be an integer file mode instead of a path.
+    """
+    if which == 'read':
+        assert type(path_or_fmode) == type('')
+        return os.access( path_or_fmode, os.R_OK )
+    
+    elif which == 'write':
+        assert type(path_or_fmode) == type('')
+        return os.access( path_or_fmode, os.W_OK )
+    
+    elif which == 'execute':
+        assert type(path_or_fmode) == type('')
+        return os.access( path_or_fmode, os.X_OK )
+    
+    else:
+        
+        import stat
+        if type(path_or_fmode) == type(2):
+            fmode = path_or_fmode
+        else:
+            fmode = filemode( path_or_fmode )
+
+        if which == 'setuid':
+            return True if ( fmode & stat.S_ISUID ) else False
+
+        elif which.startswith( 'owner ' ):
+            owner_mask, owner_bits = get_owner_bits()
+            s = which.split()[1]
+            if '-' in s:
+                return (fmode & owner_mask) == owner_bits[s]
+            return (fmode & owner_bits[s]) == owner_bits[s]
+        
+        elif which.startswith( 'group ' ):
+            group_mask, group_bits = get_group_bits()
+            s = which.split()[1]
+            if '-' in s:
+                return (fmode & group_mask) == group_bits[s]
+            return (fmode & group_bits[s]) == group_bits[s]
+        
+        elif which.startswith( 'world ' ):
+            world_mask, world_bits = get_world_bits()
+            s = which.split()[1]
+            if '-' in s:
+                return (fmode & world_mask) == world_bits[s]
+            return (fmode & world_bits[s]) == world_bits[s]
+        
+        raise Exception( "unknown 'which' value: "+str(which) )
 
 
+def change_permissions( pathname, spec, *more_specs ):
+    """
+    Modifies the file path name permissions according to 'spec'.
+
+    A specification is a string with format
+
+        {u|g|o}{=|+|-}{one two or three letter sequence}
+
+    where
+
+        the first character: u=user/owner, g=group, o=other/world
+        the second character: '=' means set, '+' means add, '-' means remove
+        the permission characters: r=read, w=write, x=execute, s=sticky
+
+    For example, "u+x" means add user execute permission, and "g=rx" means
+    set the group permissions to exactly read, no write, execute.
+
+    Additional specifications can be given as separate arguments.
+    """
+    m = filemode( pathname )
+    m = change_filemode( m, *( (spec,)+more_specs ) )
+    os.chmod( pathname, m )
 
 
+def filemode( path ):
+    """
+    Helper function for get_permissions() and change_permissions().
 
+    Returns the integer containing the file mode permissions for the
+    given pathname.
+    """
+    import stat
+    return stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+
+
+def get_owner_bits():
+    """
+    Helper function for get_permissions() and change_permissions().
+    
+    Returns a pair, the mask for the owner bits (an int), and a dict mapping
+    strings to bits (integers).
+    """
+    import stat
+    
+    owner_mask = (stat.S_ISUID|stat.S_IRWXU)
+    
+    owner_bits = {
+            'r' : stat.S_IRUSR,
+            'w' : stat.S_IWUSR,
+            'x' : stat.S_IXUSR,
+            's' : stat.S_IXUSR|stat.S_ISUID,
+            'rw' : stat.S_IRUSR|stat.S_IWUSR,
+            'rx' : stat.S_IRUSR|stat.S_IXUSR,
+            'rs' : stat.S_IRUSR|stat.S_IXUSR|stat.S_ISUID,
+            'wx' : stat.S_IWUSR|stat.S_IXUSR,
+            'ws' : stat.S_IWUSR|stat.S_IXUSR|stat.S_ISUID,
+            'rwx' : stat.S_IRWXU,
+            'rws' : stat.S_IRWXU|stat.S_ISUID,
+        }
+    owner_bits['---'] = 0
+    owner_bits['r--'] = owner_bits['r']
+    owner_bits['-w-'] = owner_bits['w']
+    owner_bits['--x'] = owner_bits['x']
+    owner_bits['--s'] = owner_bits['s']
+    owner_bits['rw-'] = owner_bits['rw']
+    owner_bits['r-x'] = owner_bits['rx']
+    owner_bits['r-s'] = owner_bits['rs']
+    owner_bits['-wx'] = owner_bits['wx']
+    owner_bits['-ws'] = owner_bits['ws']
+
+    return owner_mask, owner_bits
+
+
+def get_group_bits():
+    """
+    Helper function for get_permissions() and change_permissions().
+    Same as get_owner_bits() except for group.
+    """
+    import stat
+
+    group_mask = (stat.S_ISGID|stat.S_IRWXG)
+    
+    group_bits = {
+            'r' : stat.S_IRGRP,
+            'w' : stat.S_IWGRP,
+            'x' : stat.S_IXGRP,
+            's' : stat.S_IXGRP|stat.S_ISGID,
+            'rw' : stat.S_IRGRP|stat.S_IWGRP,
+            'rx' : stat.S_IRGRP|stat.S_IXGRP,
+            'rs' : stat.S_IRGRP|stat.S_IXGRP|stat.S_ISGID,
+            'wx' : stat.S_IWGRP|stat.S_IXGRP,
+            'ws' : stat.S_IWGRP|stat.S_IXGRP|stat.S_ISGID,
+            'rwx' : stat.S_IRWXG,
+            'rws' : stat.S_IRWXG|stat.S_ISGID,
+        }
+    group_bits['---'] = 0
+    group_bits['r--'] = group_bits['r']
+    group_bits['-w-'] = group_bits['w']
+    group_bits['--x'] = group_bits['x']
+    group_bits['--s'] = group_bits['s']
+    group_bits['rw-'] = group_bits['rw']
+    group_bits['r-x'] = group_bits['rx']
+    group_bits['r-s'] = group_bits['rs']
+    group_bits['-wx'] = group_bits['wx']
+    group_bits['-ws'] = group_bits['ws']
+
+    return group_mask, group_bits
+
+
+def get_world_bits():
+    """
+    Helper function for get_permissions() and change_permissions().
+    Same as get_owner_bits() except for group.
+    """
+    import stat
+
+    world_mask = stat.S_IRWXO
+    
+    world_bits = {
+            'r' : stat.S_IROTH,
+            'w' : stat.S_IWOTH,
+            'x' : stat.S_IXOTH,
+            'rw' : stat.S_IROTH|stat.S_IWOTH,
+            'rx' : stat.S_IROTH|stat.S_IXOTH,
+            'wx' : stat.S_IWOTH|stat.S_IXOTH,
+            'rwx' : stat.S_IRWXO,
+        }
+    world_bits['---'] = 0
+    world_bits['r--'] = world_bits['r']
+    world_bits['-w-'] = world_bits['w']
+    world_bits['--x'] = world_bits['x']
+    world_bits['rw-'] = world_bits['rw']
+    world_bits['r-x'] = world_bits['rx']
+    world_bits['-wx'] = world_bits['wx']
+
+    return world_mask, world_bits
+
+
+def change_filemode( fmode, spec, *more_specs ):
+    """
+    Helper function for get_permissions() and change_permissions().
+
+    Modifies the given file mode (an int) according to one or more
+    specifications.  A specification is a string with format
+
+        {u|g|o}{=|+|-}{one two or three letter sequence}
+
+    where
+
+        the first character: u=user/owner, g=group, o=other/world
+        the second character: '=' means set, '+' means add, '-' means remove
+        the permission characters: r=read, w=write, x=execute, s=sticky
+
+    For example, "u+x" means add user execute permission, and "g=rx" means
+    set the group permissions to exactly read, no write, execute.
+
+    Returns the file mode as modified by the specifications (an int).
+    """
+    for s in (spec,)+more_specs:
+        assert len(s) >= 3
+        who = s[0] ; assert who in 'ugo'
+        op = s[1] ; assert op in '=+-'
+        what = s[2:]
+        if who == 'u':
+            owner_mask, owner_bits = get_owner_bits()
+            mask = owner_mask
+            bits = owner_bits[what]
+        elif who == 'g':
+            group_mask, group_bits = get_group_bits()
+            mask = group_mask
+            bits = group_bits[what]
+        else:
+            world_mask, world_bits = get_world_bits()
+            mask = world_mask
+            bits = world_bits[what]
+
+        if op == '=':   fmode = ( fmode & (~mask) ) | bits
+        elif op == '+': fmode = fmode | bits
+        else:           fmode = fmode & ( ~(bits) )
+
+    return fmode

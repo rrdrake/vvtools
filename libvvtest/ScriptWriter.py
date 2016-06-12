@@ -76,6 +76,41 @@ def writeScript( testobj, filename, lang, config, plat ):
                     n2 = '_'.join( n )
                     w.add( 'PARAM_'+n2+' = ' + repr(L) )
         
+        w.add( """
+            def platform_expr( expr ):
+                '''
+                Evaluates the given word expression against the current
+                platform name.  For example, the expression could be
+                "Linux or Darwin" and would be true if the current platform
+                name is "Linux" or if it is "Darwin".
+                '''
+                import FilterExpressions
+                wx = FilterExpressions.WordExpression( expr )
+                return wx.evaluate( lambda wrd: wrd == PLATFORM )
+
+            def parameter_expr( expr ):
+                '''
+                Evaluates the given parameter expression against the parameters
+                defined for the current test.  For example, the expression
+                could be "dt<0.01 and dh=0.1" where dt and dh are parameters
+                defined in the test.
+                '''
+                import FilterExpressions
+                pf = FilterExpressions.ParamFilter( expr )
+                return pf.evaluate( PARAM_DICT )
+
+            def option_expr( expr ):
+                '''
+                Evaluates the given option expression against the options
+                given on the vvtest command line.  For example, the expression
+                could be "not dbg and not intel", which would be false if
+                "-o dbg" or "-o intel" were given on the command line.
+                '''
+                import FilterExpressions
+                wx = FilterExpressions.WordExpression( expr )
+                return wx.evaluate( OPTIONS.count )
+            """ )
+
         if configdir:
             w.add( """
                 CONFIGDIR = '"""+configdir+"""'
@@ -92,40 +127,6 @@ def writeScript( testobj, filename, lang, config, plat ):
                    'from script_util import *',
                    'apply_platform_variables()' )
 
-        w.add( """
-            import FilterExpressions
-
-            def platform_expr( expr ):
-                '''
-                Evaluates the given word expression against the current
-                platform name.  For example, the expression could be
-                "Linux or Darwin" and would be true if the current platform
-                name is "Linux" or if it is "Darwin".
-                '''
-                wx = FilterExpressions.WordExpression( expr )
-                return wx.evaluate( lambda wrd: wrd == PLATFORM )
-            
-            def parameter_expr( expr ):
-                '''
-                Evaluates the given parameter expression against the parameters
-                defined for the current test.  For example, the expression
-                could be "dt<0.01 and dh=0.1" where dt and dh are parameters
-                defined in the test.
-                '''
-                pf = FilterExpressions.ParamFilter( expr )
-                return pf.evaluate( PARAM_DICT )
-            
-            def option_expr( expr ):
-                '''
-                Evaluates the given option expression against the options
-                given on the vvtest command line.  For example, the expression
-                could be "not dbg and not intel", which would be false if
-                "-o dbg" or "-o intel" were given on the command line.
-                '''
-                wx = FilterExpressions.WordExpression( expr )
-                return wx.evaluate( OPTIONS.count )
-            """ )
-
         ###################################################################
     
     elif lang in ['sh','bash']:
@@ -139,7 +140,8 @@ def writeScript( testobj, filename, lang, config, plat ):
                'PROJECT="'+projdir+'"',
                'OPTIONS="'+' '.join( onopts )+'"',
                'OPTIONS_OFF="'+' '.join( offopts )+'"',
-               'SRCDIR="'+srcdir+'"' )
+               'SRCDIR="'+srcdir+'"',
+               'PYTHONEXE="'+sys.executable+'"' )
 
         platenv = plat.getEnvironment()
         w.add( '',
@@ -173,6 +175,68 @@ def writeScript( testobj, filename, lang, config, plat ):
                 L2 = [ '/'.join( v ) for v in L ]
                 w.add( 'PARAM_'+n2+'="' + ' '.join(L2) + '"' )
         
+        w.add( """
+            platform_expr() {
+                # Evaluates the given platform expression against the current
+                # platform name.  For example, the expression could be
+                # "Linux or Darwin" and would be true if the current platform
+                # name is "Linux" or if it is "Darwin".
+                # Returns 0 (zero) if the expression evaluates to true,
+                # otherwise non-zero.
+                
+                result=`"$PYTHONEXE" "$VVTESTLIB/FilterExpressions.py" -f "$1" "$PLATFORM"`
+                xval=$?
+                if [ $xval -ne 0 ]
+                then
+                    echo "$result"
+                    echo "*** error: failed to evaluate platform expression $1"
+                    exit 1
+                fi
+                [ "$result" = "true" ] && return 0
+                return 1
+            }
+
+            parameter_expr() {
+                # Evaluates the given parameter expression against the
+                # parameters defined for the current test.  For example, the
+                # expression could be "dt<0.01 and dh=0.1" where dt and dh are
+                # parameters defined in the test.
+                # Returns 0 (zero) if the expression evaluates to true,
+                # otherwise non-zero.
+                
+                result=`"$PYTHONEXE" "$VVTESTLIB/FilterExpressions.py" -p "$1" "$PARAM_DICT"`
+                xval=$?
+                if [ $xval -ne 0 ]
+                then
+                    echo "$result"
+                    echo "*** error: failed to evaluate parameter expression $1"
+                    exit 1
+                fi
+                [ "$result" = "true" ] && return 0
+                return 1
+            }
+
+            option_expr() {
+                # Evaluates the given option expression against the options
+                # given on the vvtest command line.  For example, the expression
+                # could be "not dbg and not intel", which would be false if
+                # "-o dbg" or "-o intel" were given on the command line.
+                # Returns 0 (zero) if the expression evaluates to true,
+                # otherwise non-zero.
+                
+                result=`"$PYTHONEXE" "$VVTESTLIB/FilterExpressions.py" -o "$1" "$OPTIONS"`
+                xval=$?
+                if [ $xval -ne 0 ]
+                then
+                    echo "$result"
+                    echo "*** error: failed to evaluate option expression $1"
+                    exit 1
+                fi
+                [ "$result" = "true" ] && return 0
+                return 1
+            }
+            """ )
+
         if configdir:
             w.add( """
                 CONFIGDIR='"""+configdir+"""'
@@ -188,70 +252,6 @@ def writeScript( testobj, filename, lang, config, plat ):
             w.add( '',
                    'source $VVTESTLIB/script_util.sh )',
                    'apply_platform_variables' )
-        
-        fex = sys.executable + ' ' + \
-              os.path.join( vvtlib, 'FilterExpressions.py' )
-        w.add( """
-            platform_expr() {
-                # Evaluates the given platform expression against the current
-                # platform name.  For example, the expression could be
-                # "Linux or Darwin" and would be true if the current platform
-                # name is "Linux" or if it is "Darwin".
-                # Returns 0 (zero) if the expression evaluates to true,
-                # otherwise non-zero.
-                
-                result=`"""+fex+""" -f "$1" "$PLATFORM"`
-                xval=$?
-                if [ $xval -ne 0 ]
-                then
-                    echo "$result"
-                    echo "*** error: failed to evaluate platform expression $1"
-                    exit 1
-                fi
-                [ "$result" = "true" ] && return 0
-                return 1
-            }
-            
-            parameter_expr() {
-                # Evaluates the given parameter expression against the
-                # parameters defined for the current test.  For example, the
-                # expression could be "dt<0.01 and dh=0.1" where dt and dh are
-                # parameters defined in the test.
-                # Returns 0 (zero) if the expression evaluates to true,
-                # otherwise non-zero.
-                
-                result=`"""+fex+""" -p "$1" "$PARAM_DICT"`
-                xval=$?
-                if [ $xval -ne 0 ]
-                then
-                    echo "$result"
-                    echo "*** error: failed to evaluate parameter expression $1"
-                    exit 1
-                fi
-                [ "$result" = "true" ] && return 0
-                return 1
-            }
-            
-            option_expr() {
-                # Evaluates the given option expression against the options
-                # given on the vvtest command line.  For example, the expression
-                # could be "not dbg and not intel", which would be false if
-                # "-o dbg" or "-o intel" were given on the command line.
-                # Returns 0 (zero) if the expression evaluates to true,
-                # otherwise non-zero.
-                
-                result=`"""+fex+""" -o "$1" "$OPTIONS"`
-                xval=$?
-                if [ $xval -ne 0 ]
-                then
-                    echo "$result"
-                    echo "*** error: failed to evaluate option expression $1"
-                    exit 1
-                fi
-                [ "$result" = "true" ] && return 0
-                return 1
-            }
-            """ )
 
         ###################################################################
     
