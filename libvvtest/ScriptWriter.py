@@ -5,7 +5,8 @@ import os, sys
 
 def writeScript( testobj, filename, lang, config, plat ):
     """
-    TODO: add helper functions for evaluating testname, options, parameters, etc
+    Writes a helper script for the test.  The script language is based on
+    the 'lang' argument.
     """
     tname = testobj.getName()
 
@@ -36,6 +37,7 @@ def writeScript( testobj, filename, lang, config, plat ):
         w.add( 'import os, sys',
                '',
                'NAME = "'+tname+'"',
+               'TESTID = "'+testobj.getExecuteDirectory()+'"',
                'PLATFORM = "'+platname+'"',
                'COMPILER = "'+cplrname+'"',
                'VVTESTSRC = "'+tdir+'"',
@@ -98,6 +100,7 @@ def writeScript( testobj, filename, lang, config, plat ):
 
         w.add( '',
                'NAME="'+tname+'"',
+               'TESTID="'+testobj.getExecuteDirectory()+'"',
                'PLATFORM="'+platname+'"',
                'COMPILER="'+cplrname+'"',
                'VVTESTSRC="'+tdir+'"',
@@ -162,6 +165,7 @@ def writeScript( testobj, filename, lang, config, plat ):
 
         w.add( '',
                'set NAME="'+tname+'"',
+               'set TESTID = "'+testobj.getExecuteDirectory()+'"',
                'set PLATFORM="'+platname+'"',
                'set COMPILER="'+cplrname+'"',
                'set VVTESTSRC="'+tdir+'"',
