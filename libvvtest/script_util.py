@@ -2,6 +2,43 @@
 
 import os, sys
 
+# vvtest_util imported the current file, but we re-import vvtest_util here
+# in order to inject its symbols into the current scope
+from vvtest_util import *
+
+def platform_expr( expr ):
+    '''
+    Evaluates the given word expression against the current
+    platform name.  For example, the expression could be
+    "Linux or Darwin" and would be true if the current platform
+    name is "Linux" or if it is "Darwin".
+    '''
+    import FilterExpressions
+    wx = FilterExpressions.WordExpression( expr )
+    return wx.evaluate( lambda wrd: wrd == PLATFORM )
+
+def parameter_expr( expr ):
+    '''
+    Evaluates the given parameter expression against the parameters
+    defined for the current test.  For example, the expression
+    could be "dt<0.01 and dh=0.1" where dt and dh are parameters
+    defined in the test.
+    '''
+    import FilterExpressions
+    pf = FilterExpressions.ParamFilter( expr )
+    return pf.evaluate( PARAM_DICT )
+
+def option_expr( expr ):
+    '''
+    Evaluates the given option expression against the options
+    given on the vvtest command line.  For example, the expression
+    could be "not dbg and not intel", which would be false if
+    "-o dbg" or "-o intel" were given on the command line.
+    '''
+    import FilterExpressions
+    wx = FilterExpressions.WordExpression( expr )
+    return wx.evaluate( OPTIONS.count )
+
 ############################################################################
 
 # a test can call set_have_diff() one or more times if it

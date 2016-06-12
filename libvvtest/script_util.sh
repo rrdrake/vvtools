@@ -1,5 +1,65 @@
 #!/bin/sh
 
+platform_expr() {
+    # Evaluates the given platform expression against the current
+    # platform name.  For example, the expression could be
+    # "Linux or Darwin" and would be true if the current platform
+    # name is "Linux" or if it is "Darwin".
+    # Returns 0 (zero) if the expression evaluates to true,
+    # otherwise non-zero.
+    
+    result=`"$PYTHONEXE" "$VVTESTLIB/FilterExpressions.py" -f "$1" "$PLATFORM"`
+    xval=$?
+    if [ $xval -ne 0 ]
+    then
+        echo "$result"
+        echo "*** error: failed to evaluate platform expression $1"
+        exit 1
+    fi
+    [ "$result" = "true" ] && return 0
+    return 1
+}
+
+parameter_expr() {
+    # Evaluates the given parameter expression against the
+    # parameters defined for the current test.  For example, the
+    # expression could be "dt<0.01 and dh=0.1" where dt and dh are
+    # parameters defined in the test.
+    # Returns 0 (zero) if the expression evaluates to true,
+    # otherwise non-zero.
+    
+    result=`"$PYTHONEXE" "$VVTESTLIB/FilterExpressions.py" -p "$1" "$PARAM_DICT"`
+    xval=$?
+    if [ $xval -ne 0 ]
+    then
+        echo "$result"
+        echo "*** error: failed to evaluate parameter expression $1"
+        exit 1
+    fi
+    [ "$result" = "true" ] && return 0
+    return 1
+}
+
+option_expr() {
+    # Evaluates the given option expression against the options
+    # given on the vvtest command line.  For example, the expression
+    # could be "not dbg and not intel", which would be false if
+    # "-o dbg" or "-o intel" were given on the command line.
+    # Returns 0 (zero) if the expression evaluates to true,
+    # otherwise non-zero.
+    
+    result=`"$PYTHONEXE" "$VVTESTLIB/FilterExpressions.py" -o "$1" "$OPTIONS"`
+    xval=$?
+    if [ $xval -ne 0 ]
+    then
+        echo "$result"
+        echo "*** error: failed to evaluate option expression $1"
+        exit 1
+    fi
+    [ "$result" = "true" ] && return 0
+    return 1
+}
+
 ############################################################################
 
 # a test can call "set_have_diff" one or more times if it

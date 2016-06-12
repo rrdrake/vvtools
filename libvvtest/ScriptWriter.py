@@ -76,41 +76,6 @@ def writeScript( testobj, filename, lang, config, plat ):
                     n2 = '_'.join( n )
                     w.add( 'PARAM_'+n2+' = ' + repr(L) )
         
-        w.add( """
-            def platform_expr( expr ):
-                '''
-                Evaluates the given word expression against the current
-                platform name.  For example, the expression could be
-                "Linux or Darwin" and would be true if the current platform
-                name is "Linux" or if it is "Darwin".
-                '''
-                import FilterExpressions
-                wx = FilterExpressions.WordExpression( expr )
-                return wx.evaluate( lambda wrd: wrd == PLATFORM )
-
-            def parameter_expr( expr ):
-                '''
-                Evaluates the given parameter expression against the parameters
-                defined for the current test.  For example, the expression
-                could be "dt<0.01 and dh=0.1" where dt and dh are parameters
-                defined in the test.
-                '''
-                import FilterExpressions
-                pf = FilterExpressions.ParamFilter( expr )
-                return pf.evaluate( PARAM_DICT )
-
-            def option_expr( expr ):
-                '''
-                Evaluates the given option expression against the options
-                given on the vvtest command line.  For example, the expression
-                could be "not dbg and not intel", which would be false if
-                "-o dbg" or "-o intel" were given on the command line.
-                '''
-                import FilterExpressions
-                wx = FilterExpressions.WordExpression( expr )
-                return wx.evaluate( OPTIONS.count )
-            """ )
-
         if configdir:
             w.add( """
                 CONFIGDIR = '"""+configdir+"""'
@@ -174,68 +139,6 @@ def writeScript( testobj, filename, lang, config, plat ):
                 n2 = '_'.join( n )
                 L2 = [ '/'.join( v ) for v in L ]
                 w.add( 'PARAM_'+n2+'="' + ' '.join(L2) + '"' )
-        
-        w.add( """
-            platform_expr() {
-                # Evaluates the given platform expression against the current
-                # platform name.  For example, the expression could be
-                # "Linux or Darwin" and would be true if the current platform
-                # name is "Linux" or if it is "Darwin".
-                # Returns 0 (zero) if the expression evaluates to true,
-                # otherwise non-zero.
-                
-                result=`"$PYTHONEXE" "$VVTESTLIB/FilterExpressions.py" -f "$1" "$PLATFORM"`
-                xval=$?
-                if [ $xval -ne 0 ]
-                then
-                    echo "$result"
-                    echo "*** error: failed to evaluate platform expression $1"
-                    exit 1
-                fi
-                [ "$result" = "true" ] && return 0
-                return 1
-            }
-
-            parameter_expr() {
-                # Evaluates the given parameter expression against the
-                # parameters defined for the current test.  For example, the
-                # expression could be "dt<0.01 and dh=0.1" where dt and dh are
-                # parameters defined in the test.
-                # Returns 0 (zero) if the expression evaluates to true,
-                # otherwise non-zero.
-                
-                result=`"$PYTHONEXE" "$VVTESTLIB/FilterExpressions.py" -p "$1" "$PARAM_DICT"`
-                xval=$?
-                if [ $xval -ne 0 ]
-                then
-                    echo "$result"
-                    echo "*** error: failed to evaluate parameter expression $1"
-                    exit 1
-                fi
-                [ "$result" = "true" ] && return 0
-                return 1
-            }
-
-            option_expr() {
-                # Evaluates the given option expression against the options
-                # given on the vvtest command line.  For example, the expression
-                # could be "not dbg and not intel", which would be false if
-                # "-o dbg" or "-o intel" were given on the command line.
-                # Returns 0 (zero) if the expression evaluates to true,
-                # otherwise non-zero.
-                
-                result=`"$PYTHONEXE" "$VVTESTLIB/FilterExpressions.py" -o "$1" "$OPTIONS"`
-                xval=$?
-                if [ $xval -ne 0 ]
-                then
-                    echo "$result"
-                    echo "*** error: failed to evaluate option expression $1"
-                    exit 1
-                fi
-                [ "$result" = "true" ] && return 0
-                return 1
-            }
-            """ )
 
         if configdir:
             w.add( """
@@ -262,17 +165,27 @@ def writeScript( testobj, filename, lang, config, plat ):
                'set PLATFORM="'+platname+'"',
                'set COMPILER="'+cplrname+'"',
                'set VVTESTSRC="'+tdir+'"',
+               'set VVTESTLIB="'+vvtlib+'"',
                'set PROJECT="'+projdir+'"',
                'set OPTIONS="'+' '.join( onopts )+'"',
                'set OPTIONS_OFF="'+' '.join( offopts )+'"',
-               'set SRCDIR="'+srcdir+'"' )
+               'set SRCDIR="'+srcdir+'"',
+               'set PYTHONEXE="'+sys.executable+'"' )
 
-        w.add( '', '# platform settings' )
-        for k,v in plat.getEnvironment().items():
+        platenv = plat.getEnvironment()
+        w.add( '',
+               '# platform settings',
+               'set PLATFORM_VARIABLES="'+' '.join( platenv.keys() )+'"' )
+        for k,v in platenv.items():
+            w.add( 'set PLATVAR_'+k+'="'+v+'"' )
+        for k,v in platenv.items():
             w.add( 'setenv '+k+' "'+v+'"' )
 
         w.add( '', '# parameters defined by the test' )
-        for k,v in testobj.getParameters().items():
+        paramD = testobj.getParameters()
+        s = ' '.join( [ n+'/'+v for n,v in paramD.items() ] )
+        w.add( 'PARAM_DICT="'+s+'"' )
+        for k,v in paramD.items():
             w.add( 'set '+k+'="'+v+'"' )
         
         if testobj.getParent() == None and testobj.hasAnalyze():
