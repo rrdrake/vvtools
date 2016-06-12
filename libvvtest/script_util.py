@@ -73,6 +73,45 @@ def print3( *args, **kwargs ):
 
 ############################################################################
 
+def prependPATH( path ):
+    """
+    Inserts the given directory path to the beginning of the PATH list.
+    """
+    if 'PATH' in os.environ:
+        os.environ['PATH'] = path+':'+os.environ['PATH']
+    else:
+        os.environ['PATH'] = path
+
+def appendPATH( path ):
+    """
+    Inserts the given directory path to the end of the PATH list.
+    """
+    if 'PATH' in os.environ:
+        os.environ['PATH'] = os.environ['PATH']+':'+path
+    else:
+        os.environ['PATH'] = path
+
+############################################################################
+
+def which( program ):
+    """
+    Returns the full path to the given program name if found in PATH.  If
+    not found, None is returned.
+    """
+    if os.path.isabs( program ):
+        return program
+
+    pth = os.environ.get( 'PATH', None )
+    if pth:
+        for d in pth.split(':'):
+            f = os.path.join( d, program )
+            if not os.path.isdir(f) and os.access( f, os.X_OK ):
+                return f
+
+    return None
+
+############################################################################
+
 def sedfile( filename, pattern, replacement, *more ):
     '''
     Apply one or more regex pattern replacements to each
@@ -232,6 +271,50 @@ def runcmd( cmd, echo=True, ignore_exit=False, capture_output=False,
     if capture_output:
         return out
     return x
+
+############################################################################
+
+def catfile( filename ):
+    """
+    Reads the given file name and writes it back out to stdout.
+    """
+    fp = open( filename, 'r' )
+    try:
+        line = fp.readline()
+        while line:
+            sys.stdout.write( line )
+            line = fp.readline()
+    except:
+        fp.close()
+        raise
+    fp.close()
+
+def grepfile( regex_pattern, filename ):
+    """
+    Searches the file 'filename' line-by-line for a regular expression pattern.
+    Returns a list of strings of the lines that matched.
+
+    TODO: could allow 'filename' to be a glob pattern
+    """
+    import re
+    pat = re.compile( regex_pattern )
+
+    L = []
+    fp = open( filename, 'r' )
+    try:
+        line = fp.readline()
+        while line:
+            line = line.rstrip()
+            if pat.search( line ):
+                L.append( line )
+            line = fp.readline()
+    except:
+        fp.close()
+        raise
+
+    fp.close()
+
+    return L
 
 ############################################################################
 

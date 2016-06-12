@@ -16,7 +16,7 @@ def main():
     if len(argL) == 0:
         argL = """test01 test01b test02 test03 test04 test05 test06
                   test07 test08 test09 test10 test11 test12 test13
-                  test14 test15 test16 test17 test18
+                  test14 test15 test16 test17 test18 test19
                """.split()
 
     # set these for the pipeline tests
@@ -1146,6 +1146,45 @@ def test18():
     
     assert len( filegrep( tdir+'/py1/execute.log',
                           'script got executed' ) ) == 1
+
+
+def test19():
+    """
+    util functions: catfile, grepfile, prependPATH, which
+    """
+    writefile( 'file1.txt', """
+        this is line one
+        and line two
+        """ )
+    writefile( 'file2.txt', """
+        the quick brown fox
+        jumps over the lazy dog
+        """ )
+    writescript( 'subdir/myscript', """
+        #!/bin/sh
+        echo "hello from myscript"
+        """ )
+    writescript( 'py1.vvt', """
+        #!/usr/bin/env python
+        #VVT: link : file1.txt file2.txt
+        import os
+        from vvtest_util import *
+        assert len( grepfile( 'tw[op]', 'file1.txt' ) ) == 1
+        catfile( 'file2.txt' )
+        prependPATH( os.path.join( SRCDIR, 'subdir' ) )
+        print3( 'which =', which( 'myscript' ) )
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+    
+    assert len( filegrep( tdir+'/py1/execute.log',
+                          'quick brown fox' ) ) == 1
+    assert len( filegrep( tdir+'/py1/execute.log',
+                          'lazy dog' ) ) == 1
+    assert len( filegrep( tdir+'/py1/execute.log',
+                          'which = '+os.getcwd()+'/subdir/myscript' ) ) == 1
 
 
 ########################################################################
