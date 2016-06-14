@@ -15,7 +15,7 @@ def main():
     if len(argL) == 0:
         argL = """test01 test02 test03 test04 test05 test06 test07
                   test08 test09 test10 test11 test12
-                  test13 test14 test15 test16 test17
+                  test13 test14 test15 test16 test17 test18
                """.split()
 
     # set these for the pipeline tests
@@ -1022,6 +1022,120 @@ def test17():
                               'running analyze' ) ) == 1
         assert len( filegrep( tdir+'/atest/execute.log',
                               'running touch' ) ) == 0
+
+
+def test18():
+    """
+    using the -a or --analyze option with script test
+    """    
+    writescript( 'pytest.vvt', """
+        #!/usr/bin/env python
+        #VVT: parameterize : ival = 1 2
+        #VVT: analyze : --analyze
+        import os
+        from vvtest_util import *
+        if '--analyze' not in sys.argv[1:]:
+            if not analyze_only():
+                print3( 'running touch' )
+                fp = open( 'afile.'+ival, 'w' ) ; fp.close()
+            print3( 'running execute' )
+        else:
+            print3( "running analyze" )
+            assert os.path.exists( '../pytest.ival=1/afile.1' )
+            assert os.path.exists( '../pytest.ival=2/afile.2' )
+        """ )
+    writescript( 'shtest.vvt', """
+        #!/bin/sh
+        #VVT: parameterize : ival = 1 2
+        #VVT: analyze : --analyze
+        source vvtest_util.sh
+        if cmdline_option --analyze ;
+        then
+            echo "running analyze"
+            ls ../shtest.ival=1/afile.1 || exit 1
+            ls ../shtest.ival=2/afile.2 || exit 1
+        else
+            analyze_only || {
+                echo "running touch"
+                touch afile.$ival
+            }
+            echo "running execute"
+        fi
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 6 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+    platname = platform_name( out )
+    
+    for tname in ['pytest','shtest']:
+        assert len( filegrep( tdir+'/'+tname+'.ival=1/execute.log',
+                              'running touch' ) ) == 1
+        assert len( filegrep( tdir+'/'+tname+'.ival=1/execute.log',
+                              'running execute' ) ) == 1
+        assert len( filegrep( tdir+'/'+tname+'.ival=2/execute.log',
+                              'running touch' ) ) == 1
+        assert len( filegrep( tdir+'/'+tname+'.ival=2/execute.log',
+                              'running execute' ) ) == 1
+        assert len( filegrep( tdir+'/'+tname+'/execute.log',
+                              'running analyze' ) ) == 1
+        assert len( filegrep( tdir+'/'+tname+'/execute.log',
+                              'running touch' ) ) == 0
+    
+    out,np,nd,nf,nn = run_vvtest( '-Ra' )
+    assert np == 6 and nd == 0 and nf == 0 and nn == 0
+    
+    for tname in ['pytest','shtest']:
+        assert len( filegrep( tdir+'/'+tname+'.ival=1/execute.log',
+                              'running touch' ) ) == 0
+        assert len( filegrep( tdir+'/'+tname+'.ival=1/execute.log',
+                              'running execute' ) ) == 1
+        assert len( filegrep( tdir+'/'+tname+'.ival=2/execute.log',
+                              'running touch' ) ) == 0
+        assert len( filegrep( tdir+'/'+tname+'.ival=2/execute.log',
+                              'running execute' ) ) == 1
+        assert len( filegrep( tdir+'/'+tname+'/execute.log',
+                              'running analyze' ) ) == 1
+        assert len( filegrep( tdir+'/'+tname+'/execute.log',
+                              'running touch' ) ) == 0
+
+    if platname in batchplatforms:
+        remove_results()
+
+        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+        
+        for tname in ['pytest','shtest']:
+            assert len( filegrep( tdir+'/'+tname+'.ival=1/execute.log',
+                                  'running touch' ) ) == 1
+            assert len( filegrep( tdir+'/'+tname+'.ival=1/execute.log',
+                                  'running execute' ) ) == 1
+            assert len( filegrep( tdir+'/'+tname+'.ival=2/execute.log',
+                                  'running touch' ) ) == 1
+            assert len( filegrep( tdir+'/'+tname+'.ival=2/execute.log',
+                                  'running execute' ) ) == 1
+            assert len( filegrep( tdir+'/'+tname+'/execute.log',
+                                  'running analyze' ) ) == 1
+            assert len( filegrep( tdir+'/'+tname+'/execute.log',
+                                  'running touch' ) ) == 0
+        
+        out,np,nd,nf,nn = run_vvtest( '-Ra --pipeline' )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+
+        for tname in ['pytest','shtest']:
+            assert len( filegrep( tdir+'/'+tname+'.ival=1/execute.log',
+                                  'running touch' ) ) == 0
+            assert len( filegrep( tdir+'/'+tname+'.ival=1/execute.log',
+                                  'running execute' ) ) == 1
+            assert len( filegrep( tdir+'/'+tname+'.ival=2/execute.log',
+                                  'running touch' ) ) == 0
+            assert len( filegrep( tdir+'/'+tname+'.ival=2/execute.log',
+                                  'running execute' ) ) == 1
+            assert len( filegrep( tdir+'/'+tname+'/execute.log',
+                                  'running analyze' ) ) == 1
+            assert len( filegrep( tdir+'/'+tname+'/execute.log',
+                                  'running touch' ) ) == 0
+
 
 ########################################################################
 

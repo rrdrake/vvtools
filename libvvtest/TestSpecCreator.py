@@ -1148,8 +1148,16 @@ def parseAnalyze_scr( t, vspecs, ufilter ):
             form = 'file'
         elif spec.attrs and 'argument' in spec.attrs:
             form = 'arg'
+            if specval == '--execute_analysis_sections':
+                raise TestSpecError( "cannot use reserved word for " + \
+                    "analyze argument '"+specval+"', " + \
+                    "line " + str(spec.lineno) )
         elif specval.startswith('-'):
             form = 'arg'
+            if specval == '--execute_analysis_sections':
+                raise TestSpecError( "cannot use reserved word for " + \
+                    "analyze argument '"+specval+"', " + \
+                    "line " + str(spec.lineno) )
         else:
             form = 'file'
 

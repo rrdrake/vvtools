@@ -77,7 +77,7 @@ def writeScript( tspec, xdb, plat, \
       '      setenv MPI_OPT "$argv[$i]"',
       '      echo "MPI_OPT=$MPI_OPT"',
       '      breaksw',
-      '    case --analyze:',
+      '    case --execute_analysis_sections:',
       '      set analyze = 1',
       '      breaksw',
       '  endsw',

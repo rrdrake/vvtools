@@ -1,5 +1,29 @@
 #!/bin/sh
 
+analyze_only() {
+    # the --analyze option means only execute operations in the test that
+    # analyze previously computed results, such as comparing to baseline or
+    # examining order of convergence
+    if [ $opt_analyze = 1 ]
+    then
+        return 0  # this is true as an exit status
+    else
+        return 1  # this is false as an exit status
+    fi
+}
+
+cmdline_option() {
+    # given a command line option name, this returns true if that option
+    # was given on the command line
+    optname=$1
+    for var in $CMDLINE_VARS ; do
+        eval val="\$$var"
+        [ "X$val" = "X$optname" ] && return 0
+    done
+    return 1
+}
+
+
 platform_expr() {
     # Evaluates the given platform expression against the current
     # platform name.  For example, the expression could be
@@ -65,9 +89,6 @@ option_expr() {
 # a test can call "set_have_diff" one or more times if it
 # decides the test should diff, then at the end of the test,
 # call "if_diff_exit_diff"
-
-diff_exit_status=64
-have_diff=0
 
 set_have_diff() {
     have_diff=1

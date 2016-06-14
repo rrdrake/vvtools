@@ -49,6 +49,11 @@ def writeScript( testobj, filename, lang, config, plat ):
                '',
                'sys.path.insert( 0, VVTESTLIB )' )
 
+        w.add( '',
+               'diff_exit_status = 64',
+               'have_diff = False',
+               'opt_analyze = "--execute_analysis_sections" in sys.argv[1:]' )
+
         platenv = plat.getEnvironment()
         w.add( '',
                '# platform settings',
@@ -98,6 +103,19 @@ def writeScript( testobj, filename, lang, config, plat ):
     
     elif lang in ['sh','bash']:
 
+        w.add( """
+            # save the command line arguments into variables
+            opt_analyze=0
+            NUMCMDLINE=0
+            CMDLINE_VARS=
+            for arg in "$@" ; do
+              NUMCMDLINE=$((NUMCMDLINE+1))
+              eval CMDLINE_${NUMCMDLINE}='$arg'
+              CMDLINE_VARS="$CMDLINE_VARS CMDLINE_${NUMCMDLINE}"
+              [ "X$arg" = "X--execute_analysis_sections" ] && opt_analyze=1
+            done
+            """ )
+        
         w.add( '',
                'NAME="'+tname+'"',
                'TESTID="'+testobj.getExecuteDirectory()+'"',
@@ -110,6 +128,10 @@ def writeScript( testobj, filename, lang, config, plat ):
                'OPTIONS_OFF="'+' '.join( offopts )+'"',
                'SRCDIR="'+srcdir+'"',
                'PYTHONEXE="'+sys.executable+'"' )
+
+        w.add( '',
+               'diff_exit_status=64',
+               'have_diff=0' )
 
         platenv = plat.getEnvironment()
         w.add( '',
@@ -176,6 +198,10 @@ def writeScript( testobj, filename, lang, config, plat ):
                'set SRCDIR="'+srcdir+'"',
                'set PYTHONEXE="'+sys.executable+'"' )
 
+        w.add( '',
+               'set diff_exit_status=64',
+               'set have_diff=0' )
+
         platenv = plat.getEnvironment()
         w.add( '',
                '# platform settings',
@@ -204,9 +230,6 @@ def writeScript( testobj, filename, lang, config, plat ):
                 w.add( 'set PARAM_'+n2+'="' + ' '.join(L2) + '"' )
         
         w.add(  """
-                set diff_exit_status=64
-                set have_diff=0
-
                 alias set_have_diff 'set have_diff=1'
                 alias exit_diff 'echo "*** exitting diff" ; exit $diff_exit_status'
                 alias if_diff_exit_diff 'if ( $have_diff ) echo "*** exitting diff" ; if ( $have_diff ) exit $diff_exit_status'

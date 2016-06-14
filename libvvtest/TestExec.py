@@ -139,7 +139,7 @@ class TestExec:
             cmd_list.extend(['--mpirun_opts', self.plugin_obj.mpi_opts])
           
           if self.config.get('analyze'):
-            cmd_list.append('--analyze')
+            cmd_list.append('--execute_analysis_sections')
         
         self.tzero = time.time()
         
