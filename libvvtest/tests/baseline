@@ -15,7 +15,7 @@ def main():
 
     if len(argL) == 0:
         argL = """test01 test02 test03 test04 test05 test06 test07 test08
-                  test09
+                  test09 test10
                """.split()
 
     savedir = os.getcwd()
@@ -385,6 +385,61 @@ def test09():
     out,np,nd,nf,nn = run_vvtest( '-b' )
     out,np,nd,nf,nn = run_vvtest( '-R' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+def test10():
+    """
+    filter baseline by parameter value
+    """
+    writefile( "bline.xml", """
+        <rtest name="bline">
+          <parameterize foo="1 2"/>
+          <execute> <![CDATA[
+            # create a single baseline file to use for the first differencing
+            echo "baseline test data file" >! bline.txt
+            echo "line two" >> bline.txt
+            ]]>
+          </execute>
+          <execute name="unixdiff"> bline.txt ${XMLDIR}/bline_base.txt </execute>
+          <baseline parameters="foo=1"
+                    file="$NAME.txt" destination="${NAME}_base.txt"/>
+        </rtest>""" )
+    writescript( "pybase.vvt", """
+        #!/usr/bin/env python
+        #VVT: parameterize : foo = 1 2
+        #VVT: baseline (parameters="foo=1") : $NAME.txt, ${NAME}_base.txt
+        import script_util as vvt
+        # create a single baseline file to use for the first differencing
+        fp = open( 'pybase.txt', 'w' )
+        fp.write( "baseline test data file\\n" + \\
+                  "line two\\n" )
+        fp.close()
+        vvt.unixdiff( 'pybase.txt', vvt.SRCDIR+'/pybase_base.txt' )
+        vvt.if_diff_exit_diff()
+        """ )
+
+    writefile( "bline_base.txt", "" )
+    writefile( "pybase_base.txt", "" )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 4 and nf == 0 and nn == 0
+    tdir = results_dir()
+
+    # run baseline; only the foo=1 tests should rebaseline
+    out,np,nd,nf,nn = run_vvtest( '-b' )
+    assert len( grep( out, 'baselining (bline|pybase).foo=1' ) ) == 2
+    assert len( grep( out, 'baselining (bline|pybase).foo=2' ) ) == 2
+    assert len( filegrep( tdir+'/bline.foo=1/baseline.log',
+                          'bline.txt .*/bline_base.txt' ) ) == 1
+    assert len( filegrep( tdir+'/bline.foo=2/baseline.log',
+                          'bline.txt .*/bline_base.txt' ) ) == 0
+    assert len( filegrep( tdir+'/pybase.foo=1/baseline.log',
+                          'pybase.txt .*/pybase_base.txt' ) ) == 1
+    assert len( filegrep( tdir+'/pybase.foo=2/baseline.log',
+                          'pybase.txt .*/pybase_base.txt' ) ) == 0
+
+    # on rerun, all should pass
+    out,np,nd,nf,nn = run_vvtest( '-R' )
+    assert np == 4 and nd == 0 and nf == 0 and nn == 0
 
 
 #####################################################################
