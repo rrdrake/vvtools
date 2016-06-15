@@ -232,15 +232,16 @@ class TestExec:
                 cmd_list = sshcmd
               
               if lang == 'py':
-                # Python seems to follow soft links for script execution, which
-                # means the script directory that is prepended to the sys.path
-                # is the test source directory.  But we want to be able to just
-                #      import vvtest_util
-                # within the test script.  A simple solution is to set the
-                # test execution directory in the PYTHONPATH before launching.
+                # set up python pathing to make import of script utils easy
+                pth = os.getcwd()
+                if self.config.get('configdir'):
+                    # make sure the config dir comes before libvvtest
+                    pth += ':'+self.config.get('configdir')
+                d = self.config.get('toolsdir')
+                pth += ':'+os.path.join( d, 'libvvtest' )
                 val = os.environ.get( 'PYTHONPATH', '' )
-                if val: os.environ['PYTHONPATH'] = os.getcwd() + ':' + val
-                else:   os.environ['PYTHONPATH'] = os.getcwd()
+                if val: os.environ['PYTHONPATH'] = pth + ':' + val
+                else:   os.environ['PYTHONPATH'] = pth
 
               sys.stdout.write( '\n' )
               sys.stdout.flush()

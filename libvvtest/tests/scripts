@@ -192,13 +192,12 @@ def test05():
     writescript( 'tdiff.vvt', """
         #!/usr/bin/env python
         import os, sys
-        import vvtest_util as vvt
-        vvt.exit_diff()
+        from script_util import *
+        exit_diff()
         """ )
     writescript( 'tfail.vvt', """
         #!/usr/bin/env python
         import os, sys
-        import vvtest_util as vvt
         def myfunc():
             raise Exception( "test failed" )
         myfunc()
@@ -398,21 +397,21 @@ def test09():
     writescript( 'pypass.vvt', """
         #!/usr/bin/env python
         import os, sys
-        import vvtest_util as vvt
-        vvt.if_diff_exit_diff()
+        from script_util import *
+        if_diff_exit_diff()
         """ )
     writescript( 'pydiff.vvt', """
         #!/usr/bin/env python
         import os, sys
-        import vvtest_util as vvt
-        vvt.set_have_diff()
-        vvt.if_diff_exit_diff()
+        from script_util import *
+        set_have_diff()
+        if_diff_exit_diff()
         """ )
     writescript( 'pydiff2.vvt', """
         #!/usr/bin/env python
         import os, sys
-        import vvtest_util as vvt
-        vvt.exit_diff()
+        from script_util import *
+        exit_diff()
         """ )
     writescript( 'shpass.vvt', """
         #!/bin/sh
@@ -493,9 +492,9 @@ def test10():
         #!/usr/bin/env python
         #VVT: link = changeme.txt
         import os
-        import vvtest_util as vvt
+        from script_util import *
         assert os.path.islink( 'changeme.txt' )
-        vvt.sedfile( 'changeme.txt', 'quick', 'lazy', 'jumps', 'steps' )
+        sedfile( 'changeme.txt', 'quick', 'lazy', 'jumps', 'steps' )
         assert not os.path.islink( 'changeme.txt' )
         """ )
     writescript( 'shtest.vvt', """
@@ -534,25 +533,25 @@ def test11():
         #!/usr/bin/env python
         #VVT: link = baseline.txt
         import os
-        import vvtest_util as vvt
+        from script_util import *
         fp = open( 'genfile.txt', 'w' )
         fp.write( 'the quick brown fox jumps\\n' + \
                   'over the lazy dog\\n' )
         fp.close()
-        vvt.unixdiff( 'baseline.txt', 'genfile.txt' )
-        vvt.if_diff_exit_diff()
+        unixdiff( 'baseline.txt', 'genfile.txt' )
+        if_diff_exit_diff()
         """ )
     writescript( 'pydiff.vvt', """
         #!/usr/bin/env python
         #VVT: link = baseline.txt
         import os
-        import vvtest_util as vvt
+        from script_util_plugin import *
         fp = open( 'genfile.txt', 'w' )
         fp.write( 'the quick brown fox jumps\\n' + \
                   'over the super lazy dog\\n' )
         fp.close()
-        vvt.unixdiff( 'baseline.txt', 'genfile.txt' )
-        vvt.if_diff_exit_diff()
+        unixdiff( 'baseline.txt', 'genfile.txt' )
+        if_diff_exit_diff()
         """ )
     writescript( 'shpass.vvt', """
         #!/bin/sh
@@ -593,25 +592,25 @@ def test12():
     writescript( 'pypass.vvt', """
         #!/usr/bin/env python
         import os
-        import vvtest_util as vvt
+        from script_util import *
         fp = open( 'genfile.txt', 'w' )
         fp.write( 'the speedy brown fox jumps\\n' + \
                   'over the lazy dog\\n' )
         fp.close()
-        vvt.nlinesdiff( 'genfile.txt', 2 )
-        vvt.if_diff_exit_diff()
+        nlinesdiff( 'genfile.txt', 2 )
+        if_diff_exit_diff()
         """ )
     writescript( 'pydiff.vvt', """
         #!/usr/bin/env python
         import os
-        import vvtest_util as vvt
+        from script_util import *
         fp = open( 'genfile.txt', 'w' )
         fp.write( 'the speedy brown fox jumps\\n' + \
                   'over the super lazy dog\\n' + \
                   'and laughed\\n' )
         fp.close()
-        vvt.nlinesdiff( 'genfile.txt', 2 )
-        vvt.if_diff_exit_diff()
+        nlinesdiff( 'genfile.txt', 2 )
+        if_diff_exit_diff()
         """ )
     writescript( 'shpass.vvt', """
         #!/bin/sh
@@ -741,7 +740,7 @@ def test14():
         #VVT: copy (rename, platforms="""+platname+""") : file5.txt,cfile5
         
         import os
-        import vvtest_util as vvt
+        import script_util as vvt
         if vvt.NAME == 'files':
             assert os.path.exists( 'file1.txt' )
             assert os.path.islink( 'file1.txt' )
@@ -804,7 +803,7 @@ def test15():
     writescript( 'pytest.vvt', """
         #!/usr/bin/env python
         #VVT: parameterize : A = 1 3 5
-        import vvtest_util as vvt
+        import script_util as vvt
         print3 = vvt.print3
         if vvt.parameter_expr( "A<3 or A=5" ):
             print3( "with A="+vvt.A+" param expr true" )
@@ -923,7 +922,7 @@ def test16():
         #VVT: parameterize : A = 1 2
         #VVT: analyze : -a
         import sys
-        import vvtest_util as vvt
+        import script_util_plugin as vvt
         print3 = vvt.print3
         if '-a' in sys.argv:
             pass
@@ -1016,28 +1015,28 @@ def test17():
     """
     writescript( 'py1.vvt', """
         #!/usr/bin/env python
-        import vvtest_util as vvt
+        import script_util as vvt
         print3 = vvt.print3
         x = vvt.runcmd( 'ls -l' )
         assert x == 0
         """ )
     writescript( 'py2.vvt', """
         #!/usr/bin/env python
-        import vvtest_util as vvt
+        import script_util as vvt
         print3 = vvt.print3
         x = vvt.runcmd( 'failprogram', ignore_exit=True )
         assert x != 0
         """ )
     writescript( 'py3.vvt', """
         #!/usr/bin/env python
-        import vvtest_util as vvt
+        import script_util as vvt
         print3 = vvt.print3
         vvt.runcmd( 'failprogram' )
         print3( 'should not get here' )
         """ )
     writescript( 'py4.vvt', """
         #!/usr/bin/env python
-        import vvtest_util as vvt
+        import script_util as vvt
         print3 = vvt.print3
         out = vvt.runcmd( 'ls -l', capture_output=True )
         print3( out )
@@ -1054,7 +1053,7 @@ def test17():
     writescript( 'py5.vvt', """
         #!/usr/bin/env python
         #VVT: link : helloworld
-        import vvtest_util as vvt
+        import script_util as vvt
         print3 = vvt.print3
         vvt.runcmd( './helloworld progargs', echo=False )
         """ )
@@ -1062,7 +1061,7 @@ def test17():
     writescript( 'py6.vvt', """
         #!/usr/bin/env python
         #VVT: link : helloworld
-        import vvtest_util as vvt
+        import script_util as vvt
         print3 = vvt.print3
         vvt.runcmd( './helloworld', redirect='prog.out' )
         """ )
@@ -1074,7 +1073,7 @@ def test17():
     writescript( 'py7.vvt', """
         #!/usr/bin/env python
         #VVT: link : helloworld hellomars
-        import vvtest_util as vvt
+        import script_util as vvt
         print3 = vvt.print3
         vvt.runcmd( './helloworld', redirect='prog.out' )
         vvt.runcmd( './hellomars', redirect='prog.out' )
@@ -1082,7 +1081,7 @@ def test17():
     writescript( 'py8.vvt', """
         #!/usr/bin/env python
         #VVT: link : helloworld hellomars
-        import vvtest_util as vvt
+        import script_util as vvt
         print3 = vvt.print3
         vvt.runcmd( './helloworld', redirect='prog.out' )
         vvt.runcmd( './hellomars', redirect='prog.out', append=True )
@@ -1129,7 +1128,7 @@ def test18():
     """
     writescript( 'py1.vvt', """
         #!/usr/bin/env python
-        from vvtest_util import *
+        from script_util import *
         fp = open( 'script', 'w' )
         fp.write( '#!/bin/sh\\n' )
         fp.write( 'echo "script got executed"\\n' )
@@ -1170,7 +1169,7 @@ def test19():
         #!/usr/bin/env python
         #VVT: link : file1.txt file2.txt
         import os
-        from vvtest_util import *
+        from script_util import *
         assert len( grepfile( 'tw[op]', 'file1.txt' ) ) == 1
         catfile( 'file2.txt' )
         prependPATH( os.path.join( SRCDIR, 'subdir' ) )

@@ -83,21 +83,11 @@ def writeScript( testobj, filename, lang, config, plat ):
                     n2 = '_'.join( n )
                     w.add( 'PARAM_'+n2+' = ' + repr(L) )
         
-        if configdir:
-            w.add( """
-                CONFIGDIR = '"""+configdir+"""'
-                sys.path.insert( 0, CONFIGDIR )
-                plug = os.path.join( CONFIGDIR, 'script_util_plugin.py' )
-                if os.path.exists( plug ):
-                    from script_util_plugin import *
-                else:
-                    from script_util import *
-                    apply_platform_variables()
-                """ )
-        else:
-            w.add( '',
-                   'from script_util import *',
-                   'apply_platform_variables()' )
+        w.add( """
+            # to avoid circular imports in python, the script_util.py
+            # or the script_util_plugin.py must be imported by the
+            # test manually; those scripts then import this script
+            """ )
 
         ###################################################################
     
@@ -165,6 +155,8 @@ def writeScript( testobj, filename, lang, config, plat ):
                 L2 = [ '/'.join( v ) for v in L ]
                 w.add( 'PARAM_'+n2+'="' + ' '.join(L2) + '"' )
 
+        # for sh/bash, all variables go into a global namespace; therefore,
+        # we can just source the utility scripts from here
         if configdir:
             w.add( """
                 CONFIGDIR='"""+configdir+"""'
@@ -173,13 +165,11 @@ def writeScript( testobj, filename, lang, config, plat ):
                     source $CONFIGDIR/script_util_plugin.sh
                 else
                     source $VVTESTLIB/script_util.sh
-                    apply_platform_variables
                 fi
                 """ )
         else:
             w.add( '',
-                   'source $VVTESTLIB/script_util.sh )',
-                   'apply_platform_variables' )
+                   'source $VVTESTLIB/script_util.sh )' )
 
         ###################################################################
     

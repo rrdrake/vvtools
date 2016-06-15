@@ -2,10 +2,7 @@
 
 import os, sys
 
-
-# NOTE: The test variables/parameters are contained in vvtest_util.py but
-#       this file should not be imported in the module scope.  Instead, it
-# should be imported in a function definition.  This prevents a cyclic import.
+from vvtest_util import *
 
 
 def analyze_only():
@@ -14,8 +11,7 @@ def analyze_only():
     analyze previously computed results, such as comparing to baseline or
     examining order of convergence
     """
-    import vvtest_util as vvt
-    return vvt.opt_analyze
+    return opt_analyze
 
 
 def platform_expr( expr ):
@@ -26,9 +22,8 @@ def platform_expr( expr ):
     name is "Linux" or if it is "Darwin".
     '''
     import FilterExpressions
-    import vvtest_util as vvt
     wx = FilterExpressions.WordExpression( expr )
-    return wx.evaluate( lambda wrd: wrd == vvt.PLATFORM )
+    return wx.evaluate( lambda wrd: wrd == PLATFORM )
 
 def parameter_expr( expr ):
     '''
@@ -38,9 +33,8 @@ def parameter_expr( expr ):
     defined in the test.
     '''
     import FilterExpressions
-    import vvtest_util as vvt
     pf = FilterExpressions.ParamFilter( expr )
-    return pf.evaluate( vvt.PARAM_DICT )
+    return pf.evaluate( PARAM_DICT )
 
 def option_expr( expr ):
     '''
@@ -50,9 +44,8 @@ def option_expr( expr ):
     "-o dbg" or "-o intel" were given on the command line.
     '''
     import FilterExpressions
-    import vvtest_util as vvt
     wx = FilterExpressions.WordExpression( expr )
-    return wx.evaluate( vvt.OPTIONS.count )
+    return wx.evaluate( OPTIONS.count )
 
 ############################################################################
 
@@ -61,17 +54,15 @@ def option_expr( expr ):
 # call if_diff_exit_diff()
 
 def set_have_diff():
-    import vvtest_util as vvt
-    vvt.have_diff = vvt.diff_exit_status
+    global have_diff
+    have_diff = True
 
 def exit_diff():
-    import vvtest_util as vvt
     print3( "*** exitting diff" )
-    sys.exit( vvt.diff_exit_status )
+    sys.exit( diff_exit_status )
 
 def if_diff_exit_diff():
-    import vvtest_util as vvt
-    if vvt.have_diff:
+    if have_diff:
         exit_diff()
 
 ############################################################################

@@ -206,7 +206,7 @@ def test02():
 
 def test03():
     """
-    platform env vars get set in the script util
+    setting platform env vars
     """
     writefile( "config/platform_plugin.py", """
         import os, sys
@@ -216,14 +216,16 @@ def test03():
 
     writescript( 'pytest.vvt', """
         #!/usr/bin/env python
-        import os
+        import os, sys
         import vvtest_util as vvt
-        vvt.print3( 'plat vars =', vvt.PLATFORM_VARIABLES )
-        vvt.print3( 'plat var =', os.environ['MY_PLATFORM_VAR'] )
+        vvt.apply_platform_variables()
+        sys.stdout.write( 'plat vars = '+str(vvt.PLATFORM_VARIABLES)+'\\n' )
+        sys.stdout.write( 'plat var = '+os.environ['MY_PLATFORM_VAR']+'\\n' )
         """ )
     writescript( 'shtest.vvt', """
         #!/bin/sh
         source vvtest_util.sh
+        apply_platform_variables
         echo "plat vars = $PLATFORM_VARIABLES"
         echo "my var = $PLATVAR_MY_PLATFORM_VAR"
         echo "my var from env = $MY_PLATFORM_VAR"
@@ -254,8 +256,8 @@ def test04():
     """
     writescript( 'pytest.vvt', """
         #!/usr/bin/env python
-        import vvtest_util as vvt
-        vvt.special_function()
+        from script_util_plugin import *
+        special_function()
         """ )
     writescript( 'shtest.vvt', """
         #!/bin/sh
