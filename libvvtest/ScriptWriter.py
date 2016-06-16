@@ -51,7 +51,6 @@ def writeScript( testobj, filename, lang, config, plat ):
 
         w.add( '',
                'diff_exit_status = 64',
-               'have_diff = False',
                'opt_analyze = "--execute_analysis_sections" in sys.argv[1:]' )
 
         platenv = plat.getEnvironment()
@@ -120,8 +119,7 @@ def writeScript( testobj, filename, lang, config, plat ):
                'PYTHONEXE="'+sys.executable+'"' )
 
         w.add( '',
-               'diff_exit_status=64',
-               'have_diff=0' )
+               'diff_exit_status=64' )
 
         platenv = plat.getEnvironment()
         w.add( '',
@@ -189,8 +187,7 @@ def writeScript( testobj, filename, lang, config, plat ):
                'set PYTHONEXE="'+sys.executable+'"' )
 
         w.add( '',
-               'set diff_exit_status=64',
-               'set have_diff=0' )
+               'set diff_exit_status=64' )
 
         platenv = plat.getEnvironment()
         w.add( '',
@@ -220,9 +217,10 @@ def writeScript( testobj, filename, lang, config, plat ):
                 w.add( 'set PARAM_'+n2+'="' + ' '.join(L2) + '"' )
         
         w.add(  """
+                set have_diff=0
                 alias set_have_diff 'set have_diff=1'
-                alias exit_diff 'echo "*** exitting diff" ; exit $diff_exit_status'
-                alias if_diff_exit_diff 'if ( $have_diff ) echo "*** exitting diff" ; if ( $have_diff ) exit $diff_exit_status'
+                alias exit_diff 'echo "*** exiting diff" ; exit $diff_exit_status'
+                alias if_diff_exit_diff 'if ( $have_diff ) echo "*** exiting diff" ; if ( $have_diff ) exit $diff_exit_status'
                 """ )
     
         ###################################################################

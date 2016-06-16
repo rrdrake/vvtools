@@ -16,7 +16,7 @@ def main():
     if len(argL) == 0:
         argL = """test01 test01b test02 test03 test04 test05 test06
                   test07 test08 test09 test10 test11 test12 test13
-                  test14 test15 test16 test17 test18 test19
+                  test14 test15 test16 test17 test18 test19 test20
                """.split()
 
     # set these for the pipeline tests
@@ -450,34 +450,34 @@ def test09():
     assert np == 3 and nd == 6 and nf == 0 and nn == 0
     platname = platform_name( out )
     tdir = results_dir()
-    assert len( filegrep( tdir+'/pydiff/execute.log', 'exitting diff' ) ) == 1
-    assert len( filegrep( tdir+'/shdiff/execute.log', 'exitting diff' ) ) == 1
-    assert len( filegrep( tdir+'/cshdiff/execute.log', 'exitting diff' ) ) == 1
-    assert len( filegrep( tdir+'/pypass/execute.log', 'exitting diff' ) ) == 0
-    assert len( filegrep( tdir+'/shpass/execute.log', 'exitting diff' ) ) == 0
-    assert len( filegrep( tdir+'/cshpass/execute.log', 'exitting diff' ) ) == 0
+    assert len( filegrep( tdir+'/pydiff/execute.log', 'exiting diff' ) ) == 1
+    assert len( filegrep( tdir+'/shdiff/execute.log', 'exiting diff' ) ) == 1
+    assert len( filegrep( tdir+'/cshdiff/execute.log', 'exiting diff' ) ) == 1
+    assert len( filegrep( tdir+'/pypass/execute.log', 'exiting diff' ) ) == 0
+    assert len( filegrep( tdir+'/shpass/execute.log', 'exiting diff' ) ) == 0
+    assert len( filegrep( tdir+'/cshpass/execute.log', 'exiting diff' ) ) == 0
 
     if platname in batchplatforms:
         remove_results()
         
         out,np,nd,nf,nn = run_vvtest( '--pipeline' )
         assert np == 3 and nd == 6 and nf == 0 and nn == 0
-        assert len( filegrep( tdir+'/pydiff/execute.log', 'exitting diff' ) ) == 1
-        assert len( filegrep( tdir+'/shdiff/execute.log', 'exitting diff' ) ) == 1
-        assert len( filegrep( tdir+'/cshdiff/execute.log', 'exitting diff' ) ) == 1
-        assert len( filegrep( tdir+'/pypass/execute.log', 'exitting diff' ) ) == 0
-        assert len( filegrep( tdir+'/shpass/execute.log', 'exitting diff' ) ) == 0
-        assert len( filegrep( tdir+'/cshpass/execute.log', 'exitting diff' ) ) == 0
+        assert len( filegrep( tdir+'/pydiff/execute.log', 'exiting diff' ) ) == 1
+        assert len( filegrep( tdir+'/shdiff/execute.log', 'exiting diff' ) ) == 1
+        assert len( filegrep( tdir+'/cshdiff/execute.log', 'exiting diff' ) ) == 1
+        assert len( filegrep( tdir+'/pypass/execute.log', 'exiting diff' ) ) == 0
+        assert len( filegrep( tdir+'/shpass/execute.log', 'exiting diff' ) ) == 0
+        assert len( filegrep( tdir+'/cshpass/execute.log', 'exiting diff' ) ) == 0
 
     os.chdir( tdir )
     out,np,nd,nf,nn = run_vvtest( '-R' )
     assert np == 3 and nd == 6 and nf == 0 and nn == 0
-    assert len( filegrep( 'pydiff/execute.log', 'exitting diff' ) ) == 1
-    assert len( filegrep( 'shdiff/execute.log', 'exitting diff' ) ) == 1
-    assert len( filegrep( 'cshdiff/execute.log', 'exitting diff' ) ) == 1
-    assert len( filegrep( 'pypass/execute.log', 'exitting diff' ) ) == 0
-    assert len( filegrep( 'shpass/execute.log', 'exitting diff' ) ) == 0
-    assert len( filegrep( 'cshpass/execute.log', 'exitting diff' ) ) == 0
+    assert len( filegrep( 'pydiff/execute.log', 'exiting diff' ) ) == 1
+    assert len( filegrep( 'shdiff/execute.log', 'exiting diff' ) ) == 1
+    assert len( filegrep( 'cshdiff/execute.log', 'exiting diff' ) ) == 1
+    assert len( filegrep( 'pypass/execute.log', 'exiting diff' ) ) == 0
+    assert len( filegrep( 'shpass/execute.log', 'exiting diff' ) ) == 0
+    assert len( filegrep( 'cshpass/execute.log', 'exiting diff' ) ) == 0
 
 
 def test10():
@@ -1186,6 +1186,63 @@ def test19():
                           'lazy dog' ) ) == 1
     assert len( filegrep( tdir+'/py1/execute.log',
                           'which = '+os.getcwd()+'/subdir/myscript' ) ) == 1
+
+
+def test20():
+    """
+    ut
+    """
+    writescript( 'py1.vvt', """
+        #!/usr/bin/env python
+        from script_util import *
+        def lastcall():
+            print3( 'lastcall called' )
+        register_termination_function( lastcall )
+        try:
+            raise Exception( 'fake exception' )
+        except:
+            pass
+        """ )
+    writescript( 'py2.vvt', """
+        #!/usr/bin/env python
+        from script_util import *
+        def lastcall():
+            print3( 'lastcall called' )
+        register_termination_function( lastcall )
+        raise Exception( 'fake exception' )
+        print 'should not be here'
+        """ )
+    writescript( 'py3.vvt', """
+        #!/usr/bin/env python
+        from script_util import *
+        def lastcall():
+            print3( 'lastcall called' )
+        register_termination_function( lastcall )
+        set_have_diff()
+        if_diff_exit_diff()
+        print 'should not be here'
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 1 and nf == 1 and nn == 0
+    tdir = results_dir()
+    
+    assert len( filegrep( tdir+'/py1/execute.log',
+                          'fake exception' ) ) == 0
+    assert len( filegrep( tdir+'/py1/execute.log',
+                          'lastcall called' ) ) == 1
+    assert len( filegrep( tdir+'/py2/execute.log',
+                          'fake exception' ) ) > 0
+    assert len( filegrep( tdir+'/py2/execute.log',
+                          'lastcall called' ) ) == 0
+    assert len( filegrep( tdir+'/py2/execute.log',
+                          'should not be here' ) ) == 0
+    assert len( filegrep( tdir+'/py3/execute.log',
+                          'exiting diff' ) ) == 1
+    assert len( filegrep( tdir+'/py3/execute.log',
+                          'lastcall called' ) ) == 0
+    assert len( filegrep( tdir+'/py3/execute.log',
+                          'should not be here' ) ) == 0
 
 
 ########################################################################

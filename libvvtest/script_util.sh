@@ -90,12 +90,13 @@ option_expr() {
 # decides the test should diff, then at the end of the test,
 # call "if_diff_exit_diff"
 
+have_diff=0
 set_have_diff() {
     have_diff=1
 }
 
 exit_diff() {
-    echo "*** exitting diff"
+    echo "*** exiting diff"
     exit $diff_exit_status
 }
 

@@ -53,17 +53,67 @@ def option_expr( expr ):
 # decides the test should diff, then at the end of the test,
 # call if_diff_exit_diff()
 
+have_diff = False
+
 def set_have_diff():
     global have_diff
     have_diff = True
 
 def exit_diff():
-    print3( "*** exitting diff" )
+    print3( "\n*** exiting diff,", TESTID )
+    # prevent termination func from being called, if one was registered
+    global _user_terminate_func_
+    _user_terminate_func_ = None
     sys.exit( diff_exit_status )
 
 def if_diff_exit_diff():
     if have_diff:
         exit_diff()
+
+############################################################################
+
+def register_termination_function( func ):
+    """
+    Register a function to be called right before the script exits.  Some
+    tricks are played here so that the function is not called if the script
+    is exiting due to a failure (an uncaught exception).
+    """
+    global _user_terminate_func_
+    _user_terminate_func_ = func
+    if func != None:
+        import atexit
+        atexit.register( _terminate_func_ )
+        sys.excepthook = _except_hook_
+    else:
+        sys.excepthook = sys.__excepthook__
+
+def _except_hook_( exctype, excvalue, tb ):
+    """
+    An internal function to catch exceptions.  We do this in order to avoid
+    calling a user registered termination function when there is an exception.
+    This function just increments an exception counter and prints the
+    exception message.  It also unsets the exception hook just in case.
+    """
+    sys.excepthook = sys.__excepthook__
+    global _num_exceptions_
+    _num_exceptions_ += 1
+    import traceback
+    traceback.print_exception( exctype, excvalue, tb )
+
+def _terminate_func_():
+    """
+    An internal function that wraps user registered termination functions.
+    The purpose is to check if the shutdown is due to a failure or not.
+    If not a failure, the user function is called.
+    """
+    if _num_exceptions_ == 0 and _user_terminate_func_ != None:
+        _user_terminate_func_()
+
+_user_terminate_func_ = None
+_num_exceptions_ = 0
+
+# some pythons hang if the excepthook is not the default, so make sure it is
+sys.excepthook = sys.__excepthook__
 
 ############################################################################
 
