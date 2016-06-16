@@ -128,7 +128,7 @@ def sedfile( filename, pattern, replacement, *more ):
     import re
     assert len(more) % 2 == 0
     
-    info = 'sedfile: filename="'+filename+'":'
+    info = '\nsedfile: filename="'+filename+'":'
     info += ' '+pattern+' -> '+replacement
     prL = [ ( re.compile( pattern ), replacement ) ]
     for i in range( 0, len(more), 2 ):
@@ -162,7 +162,7 @@ def unixdiff( file1, file2 ):
     assert os.path.exists( file1 ), "file does not exist: "+file1
     assert os.path.exists( file2 ), "file does not exist: "+file2
     import filecmp
-    print3( 'unixdiff: diff '+file1+' '+file2 )
+    print3( '\nunixdiff: diff '+file1+' '+file2 )
     if not filecmp.cmp( file1, file2 ):
         print3( '*** unixdiff: files are different,',
                 'setting have_diff' )
@@ -197,7 +197,7 @@ def nlinesdiff( filename, maxlines ):
         line = fp.readline()
     fp.close()
 
-    print3( 'nlinesdiff: filename = '+filename + \
+    print3( '\nnlinesdiff: filename = '+filename + \
             ', num lines = '+str(n) + \
             ', max lines = '+str(maxlines) )
     if n > maxlines:
