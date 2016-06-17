@@ -343,6 +343,7 @@ def catfile( filename ):
         fp.close()
         raise
     fp.close()
+    sys.stdout.flush()
 
 def grepfile( regex_pattern, filename ):
     """
