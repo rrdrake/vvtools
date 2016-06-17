@@ -117,6 +117,77 @@ sys.excepthook = sys.__excepthook__
 
 ############################################################################
 
+def set_python_trace( turnon=True ):
+    """
+    This function sets a hook that traces the execution of python.  It can
+    be useful to debug test scripts.
+    """
+    if turnon:
+        sys.settrace( _tracer_ )
+    else:
+        sys.settrace( None )
+
+import inspect
+
+def _tracer_( frame, event, arg ):
+    """
+    Internal function for tracing python execution.  Send this function
+    into sys.settrace().
+
+    TODO: add a way to select whether files in sys.prefix are traced or not
+    TODO: make the the max argument length settable in set_python_trace()
+    """
+    # the namespace can get weird in some cases and 'inspect' can be None
+    if inspect != None:
+        
+        # this returns (filename, lineno, function, code_context, index)
+        infT = inspect.getframeinfo( frame, 1 )
+        fileloc = infT[0]+':'+str(infT[1])  # the file name and line
+        codeline = infT[3][ infT[4] ].rstrip()  # the relevant line of code
+
+        # try to avoid tracing files inside of the python installation
+        p1 = os.path.realpath( sys.prefix )
+        p2 = os.path.realpath( infT[0] )
+        if p2[:len(p1)] == p1:
+            return None
+
+        if event == 'call':
+            if infT[2] == 'print3':
+                return None
+
+            # try to determine if this call was made from a location that is
+            # not being traced; if so, write out the line that made the call
+            frL = inspect.getouterframes( frame, 1 )
+            if len(frL) > 1:
+                # the frame list is a list of tuples
+                #   (frame obj, filename, line num, func name,
+                #    list list, line index )
+                frT = frL[1]  # the frame record of the caller
+                fr = frT[0]  # the frame instance of the caller
+                if hasattr( fr, 'f_trace' ) and fr.f_trace == None:
+                    line = frT[4][ frT[5] ].rstrip()
+                    floc = frT[1]+':'+str(frT[2])
+                    sys.stdout.write( '>>> '+"%-60s"%line+' @ '+floc+'\n' )
+            
+            # for a call, the arguments to the function are written too
+            argT = inspect.getargvalues( frame )
+            try:
+                args = ' '+inspect.formatargvalues( *argT )
+            except:
+                args = '(??)'
+            if len(args) > 300:
+                args = args[:300]+' ...)'  # truncate large argument values
+            sys.stdout.write( '>>> '+"%-60s"%codeline+args+' @ '+fileloc+'\n' )
+        
+        elif event == 'line':
+            sys.stdout.write( '>>> '+"%-60s"%codeline+' @ '+fileloc+'\n' )
+        
+        # return the current function, otherwise tracing deeper into the
+        # call stack stops
+        return _tracer_
+
+############################################################################
+
 def print3( *args, **kwargs ):
     "a python 2 & 3 compatible print function"
     s = " ".join( [ str(x) for x in args ] )

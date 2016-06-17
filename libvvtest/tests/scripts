@@ -17,6 +17,7 @@ def main():
         argL = """test01 test01b test02 test03 test04 test05 test06
                   test07 test08 test09 test10 test11 test12 test13
                   test14 test15 test16 test17 test18 test19 test20
+                  test21
                """.split()
 
     # set these for the pipeline tests
@@ -1190,7 +1191,7 @@ def test19():
 
 def test20():
     """
-    ut
+    test the user termination function
     """
     writescript( 'py1.vvt', """
         #!/usr/bin/env python
@@ -1243,6 +1244,48 @@ def test20():
                           'lastcall called' ) ) == 0
     assert len( filegrep( tdir+'/py3/execute.log',
                           'should not be here' ) ) == 0
+
+
+def test21():
+    """
+    test the python trace utility
+    """
+    writefile( 'file1.txt', """
+        this is line one
+        and line two
+        """ )
+    writescript( 'py1.vvt', """
+        #!/usr/bin/env python
+        #VVT: link : file1.txt
+        from script_util import *
+        def myfunc( ivar=5 ):
+            funcvar = 2*ivar
+            otherfunc( funcvar )
+        def otherfunc( *args ):
+            assert len(args) == 1
+            print3( 'otherfunc args =', args )
+            catfile( 'file1.txt' )
+            if 'FOOBAR_NOEXIST_VNAME' in os.environ:
+                print3( 'how could that happen!!' )
+        set_python_trace()
+        ivar = 4
+        myfunc( ivar )
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+    
+    xlog = tdir+'/py1/execute.log'
+    assert len( filegrep( xlog, 'myfunc[(] *ivar *[)].*py1.vvt:15' ) ) == 1
+    assert len( filegrep( xlog,
+        'def myfunc[(] ivar=5 [)]:.*[(]ivar=4[)].*py1.vvt:4' ) ) == 1
+    assert len( filegrep( xlog,
+        'def otherfunc[(] [*]args [)]:.*args=.*8.*py1.vvt:7' ) ) == 1
+    assert len( filegrep( xlog, "catfile[(] 'file1.txt' [)]" ) ) == 1
+    # this one tries to catch a function name that is internal to python,
+    # which should be filtered out
+    assert len( filegrep( xlog, "__contains__" ) ) == 0
 
 
 ########################################################################
