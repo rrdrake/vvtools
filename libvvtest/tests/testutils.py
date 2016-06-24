@@ -2,6 +2,7 @@ import os, sys
 import re
 import shutil
 import stat
+import fnmatch
 import time
 
 # this file is expected to be imported from a script that was run
@@ -112,6 +113,36 @@ def run_cmd( cmd, directory=None ):
       return True, out
     return False, out
 
+def rmallfiles( not_these=None ):
+    for f in os.listdir("."):
+      if not_these == None or not fnmatch.fnmatch( f, not_these ):
+        if os.path.islink(f):
+          os.remove(f)
+        elif os.path.isdir(f):
+          shutil.rmtree(f)
+        else:
+          os.remove(f)
+
+def filegrep(fname, pat):
+    L = []
+    fp = open(fname,"r")
+    repat = re.compile(pat)
+    for line in fp.readlines():
+      line = line.rstrip()
+      if repat.search(line):
+        L.append(line)
+    fp.close()
+    return L
+
+def grep(out, pat):
+    L = []
+    repat = re.compile(pat)
+    for line in out.split( os.linesep ):
+      line = line.rstrip()
+      if repat.search(line):
+        L.append(line)
+    return L
+
 def run_vvtest( args='', ignore_errors=0, directory=None ):
     """
     Runs vvtest with the given argument string and returns
@@ -182,14 +213,6 @@ def remove_results():
         else:
           print 'rm -r ' + f
           shutil.rmtree( f, 1 )
-
-def rmallfiles():
-    for f in os.listdir("."):
-      if f != "conflicts.out":
-        if not os.path.islink(f) and os.path.isdir(f):
-          shutil.rmtree(f)
-        else:
-          os.remove(f)
 
 # these have to be modified if/when the output format changes in vvtest
 def check_pass(L): return len(L) >= 5 and L[2] == 'pass'
@@ -297,26 +320,6 @@ def testlist(out):
         L = []  # reset list so only last cluster is considered
     return L
 
-def filegrep(fname, pat):
-    L = []
-    fp = open(fname,"r")
-    repat = re.compile(pat)
-    for line in fp.readlines():
-      line = line.rstrip()
-      if repat.search(line):
-        L.append(line)
-    fp.close()
-    return L
-
-def grep(out, pat):
-    L = []
-    repat = re.compile(pat)
-    for line in out.split( os.linesep ):
-      line = line.rstrip()
-      if repat.search(line):
-        L.append(line)
-    return L
-
 def greptestlist(out, pat):
     repat = re.compile(pat)
     L = []
@@ -366,6 +369,9 @@ def testtimes(out):
             pass
 
     return timesL
+
+
+###########################################################################
 
 if not os.environ.has_key('TOOLSET_RUNDIR'):
     # directly executing a test script can be done but rm -rf * is performed;
