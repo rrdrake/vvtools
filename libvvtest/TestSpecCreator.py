@@ -597,7 +597,6 @@ class ScriptReader:
         return L
 
     vvtpat = re.compile( '[ \t]*#[ \t]*VVT[ \t]*:' )
-    cmtpat = re.compile( '[ \t]*#+$' )
 
     def readfile(self, filename):
         """
@@ -642,18 +641,22 @@ class ScriptReader:
         """
         done = False
         line = line.strip()
-        if line and not ScriptReader.cmtpat.match( line ):
-            if line[0] != '#':
-                done = True
-            m = ScriptReader.vvtpat.match( line )
-            if m != None:
-                spec = self.parse_spec( line[m.end():], spec, lineno )
+        if line:
+            if line[0] == '#':
+                m = ScriptReader.vvtpat.match( line )
+                if m == None:
+                    # comment line, which stops any continuation
+                    if spec != None:
+                        self.speclineL.append( spec )
+                        spec = None
+                else:
+                    spec = self.parse_spec( line[m.end():], spec, lineno )
             else:
-                # not #VVT: and not an empty comment or empty line
+                # not empty and not a comment
                 done = True
         
         elif spec != None:
-            # an empty line or comment stops any continuation
+            # an empty line stops any continuation
             self.speclineL.append( spec )
             spec = None
 

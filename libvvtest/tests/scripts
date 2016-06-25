@@ -292,10 +292,21 @@ def test07():
         import vvtest_util as vvt
         print ( "hello from the "+vvt.NAME+" test" )
         """ )
+    writescript( 'tst5.vvt', """
+        #!/usr/bin/env python
+        # regular comments can be interleaved
+        #VVT: name=test5a
+
+        # this test should also be run
+        #VVT: name=test5b
+
+        import vvtest_util as vvt
+        print ( "hello from the "+vvt.NAME+" test" )
+        """ )
 
     out,np,nd,nf,nn = run_vvtest()
     tdir = results_dir()
-    assert np == 5 and nd == 0 and nf == 0 and nn == 0
+    assert np == 7 and nd == 0 and nf == 0 and nn == 0
     assert len( greptestlist(out,'pass.*tst1') ) == 0
     assert len( greptestlist(out,'pass.*test1') ) == 1
     assert len( greptestlist(out,'pass.*tst2') ) == 0
@@ -304,6 +315,8 @@ def test07():
     assert len( greptestlist(out,'pass.*test3') ) == 0
     assert len( greptestlist(out,'pass.*test4a') ) == 1
     assert len( greptestlist(out,'pass.*test4b') ) == 1
+    assert len( greptestlist(out,'pass.*test5a') ) == 1
+    assert len( greptestlist(out,'pass.*test5b') ) == 1
 
     assert len( filegrep( tdir+'/test1/execute.log',
                           "hello from the test1 test" ) ) == 1
@@ -315,6 +328,10 @@ def test07():
                           "hello from the test4a test" ) ) == 1
     assert len( filegrep( tdir+'/test4b/execute.log',
                           "hello from the test4b test" ) ) == 1
+    assert len( filegrep( tdir+'/test5a/execute.log',
+                          "hello from the test5a test" ) ) == 1
+    assert len( filegrep( tdir+'/test5b/execute.log',
+                          "hello from the test5b test" ) ) == 1
 
 
 def test08():
