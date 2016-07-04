@@ -792,10 +792,6 @@ def writeCommandInfo( test_dir, plat, perms ):
         fp.write( 'PLATFORM=' + string.strip(optdict['--plat']) + '\n' )
       else:
         fp.write( 'PLATFORM=' + plat.getName() + '\n' )
-      # only write the non-results expression to the info file
-      expr = keyword_expr.getNonResultsExpression()
-      if expr and expr.strip():
-        fp.write( 'KEYWORDS=' + expr + '\n' )
       if optdict.has_key('-p'):
         fp.write( 'PARAMETERS=' + str( optdict['-p'] ) + '\n' )
       if config.get('exepath'):
@@ -860,16 +856,6 @@ def readCommandInfo():
           previous_run_dir = kvpair[1]
         elif kvpair[0] == 'PLATFORM':
           optdict['--plat'] = kvpair[1]
-        elif kvpair[0] == 'KEYWORDS':
-          if write_version < 27:
-            L = string.split(kvpair[1])
-            if len(L) > 0:
-              keyword_expr.append( L, 'and' )
-          else:
-            expr = kvpair[1].strip()
-            if expr:
-              keyword_expr.append( expr, 'and' )
-          
         elif kvpair[0] == 'PARAMETERS':
           L = eval( kvpair[1] )
           if optdict.has_key('-p'): optdict['-p'].extend(L)
