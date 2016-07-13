@@ -171,7 +171,10 @@ class Platform:
         if set_max == None:
             mx = self.attrs.get( 'maxprocs', None )
             if mx == None:
-                mx = probe_max_processors()
+                if self.batch == None:
+                    mx = probe_max_processors()
+                else:
+                    mx = 2**31 - 1  # by default, no limit for batch systems
             self.maxprocs = mx if mx != None else 1
         else:
             self.maxprocs = set_max
