@@ -1176,7 +1176,7 @@ def files01():
     # globbing files
     optD = {}
     fL = ['file.txt']
-    results.process_files( optD, fL )
+    results.process_files( optD, fL, None )
     assert fL == ['file.txt']
 
     writefile( 'file1.txt', """
@@ -1194,7 +1194,7 @@ def files01():
     
     optD = { '-g':['file*.txt','fo*.*'] }
     fL = ['bar.txt']
-    results.process_files( optD, fL )
+    results.process_files( optD, fL, None )
     fL.sort()
     assert fL == ['bar.txt','file1.txt','file2.txt','foo.dat']
     
@@ -1203,7 +1203,7 @@ def files01():
               'results.2016_02_10.SunOS.gnu4.bnb',
               'results.2016_02_11.Linux.gnu4.bnb' ]
     optD = { '-p':['Linux'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
                      'results.2016_02_11.Linux.gnu4.bnb']
     
@@ -1211,7 +1211,7 @@ def files01():
               'results.2016_02_10.SunOS.gnu4.bnb',
               'results.2016_02_11.Darwin.gnu4.bnb' ]
     optD = { '-p':['SunOS','TLCC'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_10.TLCC.gnu4.bnb',
                      'results.2016_02_10.SunOS.gnu4.bnb']
     
@@ -1219,7 +1219,7 @@ def files01():
               'results.2016_02_10.SunOS.gnu4.bnb',
               'results.2016_02_11.Darwin.gnu4.bnb' ]
     optD = { '-P':['TLCC'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_10.SunOS.gnu4.bnb',
                      'results.2016_02_11.Darwin.gnu4.bnb']
     
@@ -1227,14 +1227,14 @@ def files01():
               'results.2016_02_10.SunOS.gnu4.bnb',
               'results.2016_02_11.Darwin.gnu4.bnb' ]
     optD = { '-P':['Darwin','TLCC'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_10.SunOS.gnu4.bnb' ]
     
     fileL = [ 'results.2016_02_10.TLCC.gnu4.bnb',
               'results.2016_02_10.SunOS.gnu4.bnb',
               'results.2016_02_11.Darwin.gnu4.bnb' ]
     optD = { '-p':['SunOS'], '-P':['Darwin'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_10.SunOS.gnu4.bnb' ]
     
     # specifying options
@@ -1242,7 +1242,7 @@ def files01():
               'results.2016_02_10.Linux.gnu4.dev',
               'results.2016_02_11.Linux.gnu4.bnb' ]
     optD = { '-t':['bnb'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
                     'results.2016_02_11.Linux.gnu4.bnb' ]
     
@@ -1251,7 +1251,7 @@ def files01():
               'results.2016_02_10.Linux.gnu4+cxx11.dev',
               'results.2016_02_11.Linux.gnu4.bnb' ]
     optD = { '-o':['gnu4'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
                      'results.2016_02_10.Linux.gnu4+cxx11.dev',
                      'results.2016_02_11.Linux.gnu4.bnb' ]
@@ -1260,14 +1260,14 @@ def files01():
               'results.2016_02_10.Linux.gnu4+cxx11.dev',
               'results.2016_02_11.Linux.gnu4.bnb' ]
     optD = { '-o':['cxx11'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_10.Linux.gnu4+cxx11.dev' ]
     
     fileL = [ 'results.2016_02_10.Linux.intel.bnb',
               'results.2016_02_10.Linux.gnu4.dev',
               'results.2016_02_11.Linux.intel+cxx11.bnb' ]
     optD = { '-o':['intel','cxx11'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_10.Linux.intel.bnb',
                      'results.2016_02_11.Linux.intel+cxx11.bnb' ]
     
@@ -1275,7 +1275,7 @@ def files01():
               'results.2016_02_10.Linux.gnu4.dev',
               'results.2016_02_11.Linux.intel+cxx11.bnb' ]
     optD = { '-o':['gnu4','cxx11'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_10.Linux.gnu4.dev',
                      'results.2016_02_11.Linux.intel+cxx11.bnb' ]
     
@@ -1283,14 +1283,14 @@ def files01():
               'results.2016_02_10.Linux.gnu4+cxx11.dev',
               'results.2016_02_11.Linux.intel+cxx11.bnb' ]
     optD = { '-o':['intel'], '-O':['cxx11'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_10.Linux.intel.bnb' ]
     
     fileL = [ 'results.2016_02_10.Linux.intel+dbg.bnb',
               'results.2016_02_10.Linux.gnu4+dbg.dev',
               'results.2016_02_11.Linux.intel+cxx11.bnb' ]
     optD = { '-O':['cxx11','gnu4'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_10.Linux.intel+dbg.bnb' ]
     
     # specifying tags
@@ -1298,7 +1298,7 @@ def files01():
               'results.2016_02_10.Linux.gnu4.dev',
               'results.2016_02_11.Linux.gnu4.bnb' ]
     optD = { '-t':['bnb'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
                      'results.2016_02_11.Linux.gnu4.bnb' ]
     
@@ -1306,7 +1306,7 @@ def files01():
               'results.2016_02_10.Linux.gnu4.dev',
               'results.2016_02_11.Linux.gnu4.bnb' ]
     optD = { '-T':['dev'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
                      'results.2016_02_11.Linux.gnu4.bnb' ]
     
@@ -1314,7 +1314,7 @@ def files01():
               'results.2016_02_10.Linux.gnu4.dev',
               'results.2016_02_11.Linux.gnu4.longbnb' ]
     optD = { '-T':['dev'], '-t':['longbnb'] }
-    results.process_files( optD, fileL )
+    results.process_files( optD, fileL, None )
     assert fileL == ['results.2016_02_11.Linux.gnu4.longbnb' ]
 
 
@@ -1355,7 +1355,7 @@ def report01():
     ok,out = run_cmd( resultspy + ' report ' + rf1 + ' ' + rf2 )
     assert ok
 
-    assert len( grep( out, 'Fake/gnu' ) ) == 3
+    assert len( grep( out, 'Fake.gnu' ) ) == 3
     assert len( grep( out, 'pass=1 ' ) ) == 2
     assert len( grep( out, 'diff=1 ' ) ) == 2
     assert len( grep( out, 'fail=1 ' ) ) == 2

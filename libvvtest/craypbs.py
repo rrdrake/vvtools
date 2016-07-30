@@ -9,7 +9,7 @@ class BatchCrayPBS:
     """
     """
 
-    def __init__(self, ppn):
+    def __init__(self, ppn, **kwargs):
         """
         """
         if ppn <= 0: ppn = 1

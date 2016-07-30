@@ -23,6 +23,7 @@ USAGE
     results.py save  [OPTIONS] [file1 file2 ...]
     results.py list  [OPTIONS] <file>
     results.py clean [OPTIONS] <file>
+    results.py report [OPTIONS] <file>
 
 Run "results.py help" for an overview, or append "merge", "save", "list",
 or "clean" for a help screen on each of those subcommands.
@@ -143,6 +144,8 @@ overall results on each platform/compiler is given, followed by details of
 the history on each platform of tests that diff, fail, or timeout.  Tests
 are only detailed if they diff/fail/timeout the last time they were run.
 
+    --html <directory>
+            output report as two static html files, dash.html & testrun.html
     -d <days back>
             examine results files back this many days; default is 15 days
     -D <days back>
@@ -312,7 +315,7 @@ def report_main( argv ):
     import getopt
     try:
         optL,argL = getopt.getopt( argv[1:], "d:D:r:o:O:t:T:p:P:g:G:",
-                                             longopts=['plat='] )
+                        longopts=['plat=','html=','config=','webloc='] )
     except getopt.error, e:
         print3( "*** error:", e )
         sys.exit(1)
@@ -327,6 +330,12 @@ def report_main( argv ):
     process_option( optD, '-d', float, "positive" )
     process_option( optD, '-D', float, "positive" )
     process_option( optD, '-r', int, "positive" )
+
+    if '--html' in optD:
+        d = optD['--html']
+        if not os.path.exists( d ):
+            print3( '*** error: invalid --html directory: "'+d+'"' )
+            sys.exit(1)
 
     warnings = report_generation( optD, argL )
     for s in warnings:
@@ -979,12 +988,12 @@ class TestResults:
             return (None,None)
         return ( self.daterange[0], self.daterange[1] )
 
-    def getSummary(self):
+    def getCounts(self):
         """
-        Counts the number of tests that pass, fail, diff, timeout, notrun,
-        and notdone, and returns a string with the counts.
+        Counts the number of tests that pass, diff, fail, timeout, notrun,
+        and unknown, and returns a tuple with the counts of each.
         """
-        np = nf = nd = nr = nt = unk = 0
+        np = nd = nf = nt = nr = unk = 0
         for d,tD in self.dataD.items():
             for tn,aD in tD.items():
                 st = aD.get( 'state', '' )
@@ -998,17 +1007,25 @@ class TestResults:
                 elif st == 'notrun': nr += 1
                 elif st == 'timeout': nt += 1
                 else: unk += 1
+        return np,nd,nf,nt,nr,unk
+    
+    def getSummary(self):
+        """
+        Counts the number of tests that pass, fail, diff, timeout, etc, and
+        returns a string with labels and the counts.
+        """
+        np, nd, nf, nt, nr, unk = self.getCounts()
         return 'pass='+str(np) + ' diff='+str(nd) + ' fail='+str(nf) + \
                ' timeout='+str(nt) + ' notrun='+str(nr) + ' ?='+str(unk)
 
-    def collectResults(self, *args):
+    def collectResults(self, *args, **kwargs):
         """
         Collects all the test results into a dictionary mapping
 
-            ( test directory, test name ) -> ( run date, results string )
+            ( test directory, test name ) -> ( run date, result string )
 
         where the "run date" is zero if the test did not get run, and the
-        "results string" is:
+        "result string" is:
 
                 state=<state>   : if the state matches one of the 'args'
                 result=<result> : if the result matches one of the 'args'
@@ -1016,7 +1033,12 @@ class TestResults:
 
         The dictionary is returned plus the number of tests that match the
         'args'.
+
+        If 'matchlist=True' is given as a keyword argument, then the resulting
+        dictionary will only contain test items if they match one of the 'args'.
         """
+        getall = ( kwargs.get( 'matchlist', False ) == False )
+
         nmatch = 0
         resD = {}
         for d,tD in self.dataD.items():
@@ -1033,9 +1055,9 @@ class TestResults:
                 else:
                     res = ''
 
-                xd = aD.get( 'xdate', 0 )
-
-                resD[ (d,tn) ] = ( xd, res )
+                if getall or res:
+                    xd = aD.get( 'xdate', 0 )
+                    resD[ (d,tn) ] = ( xd, res )
 
         return resD,nmatch
 
@@ -1339,7 +1361,7 @@ def multiplatform_merge( optD, fileL ):
     wopt = '-w' in optD
     xopt = '-x' in optD
 
-    process_files( optD, fileL )
+    process_files( optD, fileL, None )
     
     mr = MultiResults()
     if os.path.exists( multiruntimes_filename ):
@@ -1479,7 +1501,57 @@ def merge_check( existD, newD, dcut, xopt, wopt ):
     return False
 
 
-def process_files( optD, fileL, fileG=None ):
+def parse_results_filename( filename ):
+    """
+    Assuming a file name of the form
+
+        results.<date>.<platform>.<options>.<tag>
+    
+    this function returns a tuple
+
+        ( date, platform, options, tag )
+
+    where an entry will be None if the filename form did not have that data or
+    if parsing for that entry failed.  The 'date' is seconds since epoch.
+    The rest are strings.
+    """
+    f = os.path.basename( filename )
+    L = [ s.strip() for s in f.split('.',4) ]
+
+    ftime = None
+    if len(L) >= 2:
+        try:
+            T = time.strptime( L[1], '%Y_%m_%d' )
+            ftime = time.mktime( T )
+        except:
+            ftime = None
+    
+    platname = None
+    if len(L) >= 3:
+        platname = L[2]
+    
+    opts = None
+    if len(L) >= 4:
+        opts = L[3]
+    
+    tag = None
+    if len(L) >= 5:
+        tag = L[4]
+
+    return ftime, platname, opts, tag
+
+
+def date_round_down( tm ):
+    """
+    Given a date in seconds, this function rounds down to midnight of the
+    date.  Returns a date in seconds.
+    """
+    s = time.strftime( "%Y %m %d", time.localtime( tm ) )
+    T = time.strptime( s, "%Y %m %d" )
+    return time.mktime( T )
+
+
+def process_files( optD, fileL, fileG, **kwargs ):
     """
     Apply -g and -d options to the 'fileL' list, in place.  The order
     of 'fileL' is retained, but each glob list is sorted by ascending file
@@ -1491,6 +1563,9 @@ def process_files( optD, fileL, fileG=None ):
     The -o option to form "results.YYYY_MM_DD.platform.options.*", where the
     options are separated by a plus sign.
     The -t option to form "results.YYYY_MM_DD.platform.options.tag".
+
+    If '-d' is not in 'optD' and 'default_d' is contained in 'kwargs', then
+    that value is used for the -d option.
     """
     if '-g' in optD:
         gL = []
@@ -1512,20 +1587,16 @@ def process_files( optD, fileL, fileG=None ):
 
     for fL in fLL:
 
-        if '-d' in optD:
+        dval = optD.get( '-d', kwargs.get( 'default_d', None ) )
+        if dval != None:
+            dval = int(dval)
             # filter out results files that are too old
-            cutoff = int( time.time() - optD['-d']*24*60*60 )
+            cutoff = date_round_down( int( time.time() - dval*24*60*60 ) )
             newL = []
             for f in fL:
-                try:
-                    L = os.path.basename(f).split('.')
-                    T = time.strptime( L[1], '%Y_%m_%d' )
-                    ftime = time.mktime( T )
-                except:
-                    newL.append( f )  # don't apply filter to this file
-                else:
-                    if ftime >= cutoff:
-                        newL.append( f )
+                ft,plat,opts,tag = parse_results_filename( f )
+                if ft == None or ft >= cutoff:
+                    newL.append( f )
             del fL[:]
             fL.extend( newL )
 
@@ -1537,14 +1608,11 @@ def process_files( optD, fileL, fileG=None ):
             # include/exclude results files based on platform name
             newL = []
             for f in fL:
-                try:
-                    platname = os.path.basename(f).split('.')[2]
-                except:
-                    newL.append( f )  # don't apply filter to this file
-                else:
-                    if ( platL == None or platname in platL ) and \
-                       ( xplatL == None or platname not in xplatL ):
-                        newL.append( f )
+                ft,plat,opts,tag = parse_results_filename( f )
+                if plat == None or \
+                   ( platL == None or plat in platL ) and \
+                   ( xplatL == None or plat not in xplatL ):
+                    newL.append( f )
             del fL[:]
             fL.extend( newL )
 
@@ -1553,17 +1621,17 @@ def process_files( optD, fileL, fileG=None ):
             optnL = '+'.join( optD['-o'] ).split('+')
             newL = []
             for f in fL:
-                try:
-                    foptL = os.path.basename(f).split('.')[3].split('+')
-                except:
-                    newL.append( f )  # don't apply filter to this file
-                else:
+                ft,plat,opts,tag = parse_results_filename( f )
+                if opts != None:
                     # if at least one of the -o values from the command line
                     # is contained in the file name options, then keep the file
+                    foptL = opts.split('+')
                     for op in optnL:
                         if op in foptL:
                             newL.append( f )
                             break
+                else:
+                    newL.append( f )  # don't apply filter to this file
             del fL[:]
             fL.extend( newL )
 
@@ -1572,13 +1640,11 @@ def process_files( optD, fileL, fileG=None ):
             optnL = '+'.join( optD['-O'] ).split('+')
             newL = []
             for f in fL:
-                try:
-                    foptL = os.path.basename(f).split('.')[3].split('+')
-                except:
-                    newL.append( f )  # don't apply filter to this file
-                else:
+                ft,plat,opts,tag = parse_results_filename( f )
+                if opts != None:
                     # if at least one of the -O values from the command line is
                     # contained in the file name options, then exclude the file
+                    foptL = opts.split('+')
                     keep = True
                     for op in optnL:
                         if op in foptL:
@@ -1586,6 +1652,8 @@ def process_files( optD, fileL, fileG=None ):
                             break
                     if keep:
                         newL.append( f )
+                else:
+                    newL.append( f )  # don't apply filter to this file
             del fL[:]
             fL.extend( newL )
 
@@ -1595,14 +1663,11 @@ def process_files( optD, fileL, fileG=None ):
             # include/exclude based on tag
             newL = []
             for f in fL:
-                try:
-                    tag = os.path.basename(f).split('.')[4]
-                except:
-                    newL.append( f )  # don't apply filter to this file
-                else:
-                    if ( tagL == None or tag in tagL ) and \
-                       ( xtagL == None or tag not in xtagL ):
-                        newL.append( f )
+                ft,plat,opts,tag = parse_results_filename( f )
+                if tag == None or \
+                   ( tagL == None or tag in tagL ) and \
+                   ( xtagL == None or tag not in xtagL ):
+                    newL.append( f )
             del fL[:]
             fL.extend( newL )
 
@@ -1897,8 +1962,6 @@ def report_generation( optD, fileL ):
     warnL = []
     curtm = time.time()
 
-    if '-d' not in optD:
-        optD['-d'] = 15.0  # default to 15 days old
     if '-D' in optD:
         showage = optD['-D']
     else:
@@ -1908,88 +1971,113 @@ def report_generation( optD, fileL ):
     else:
         maxreport = 25  # default to 25 tests
     
+    if '--html' in optD:
+        dohtml = True
+    else:
+        dohtml = False
+    
+    plug = get_results_plugin( optD )
+
     # this collects the files and applies filters
     fileG = []
-    process_files( optD, fileL, fileG )
+    process_files( optD, fileL, fileG, default_d=15 )
 
-    # read all the results files that fall within the -d range
+    # read all the results files
     rmat = ResultsMatrix()
     for f in fileL:
-        ftime,tr = read_results_file( f, warnL )
+        ftime,tr,rkey = read_results_file( f, warnL )
         if ftime != None:
             tr.detail_ok = True  # inject a boolean flag to do detailing
-            rmat.add( ftime, tr )
+            rmat.add( ftime, tr, rkey )
     for f in fileG:
-        ftime,tr = read_results_file( f, warnL )
+        ftime,tr,rkey = read_results_file( f, warnL )
         if ftime != None:
             tr.detail_ok = False  # inject a boolean flag to NOT do detailing
-            rmat.add( ftime, tr )
+            rmat.add( ftime, tr, rkey )
 
-    if len( rmat.platcplrs() ) == 0:
-        print3( 'No files to process (after filtering)' )
-        return []
+    if len( rmat.testruns() ) == 0:
+        print3( 'No results files to process (after filtering)' )
+        return warnL
     
     # the DateMap object helps format the test results output
-    dmin = min( curtm-optD['-d']*24*60*60, rmat.minFileDate() )
-    dmax = max( 0                        , rmat.maxFileDate() )
+    if '-d' in optD:
+        df = date_round_down( curtm-optD['-d']*24*60*60 )
+        dmin = min( df, rmat.minFileDate() )
+    else:
+        dmin = rmat.minFileDate()
+    dmax = max(  0, rmat.maxFileDate() )
     dmap = DateMap( dmin, dmax )
 
-    # write out the summary for each plat/cplr combination; use the machine
-    # and location of the run to separate the vvtest executions
+    # write out the summary for each platform/options/tag combination
 
-    print3( "A summary by platform/compiler is next." )
-    print3( "vvtest run codes: s=started, r=ran and finished." )
+    if not dohtml:
+        print3( "A summary by platform/compiler is next." )
+        print3( "vvtest run codes: s=started, r=ran and finished." )
 
-    pclen = 0
+    # these for html output
+    primary = []
+    secondary = []
+    runlist = []
+
+    keylen = 0
     redD = {}
-    for pc in rmat.platcplrs():
+    for rkey in rmat.testruns():
         
         # find max plat/cplr string length for below
-        pclen = max( pclen, len(pc) )
+        keylen = max( keylen, len(rkey) )
 
-        testD = {}  # (testdir,testname) -> (xdate,result)
+        loc = rmat.location(rkey)
 
-        for loc in rmat.locations(pc):
-            
+        if not dohtml:
             print3()
-            print3( pc, '@', loc )
-            
-            rL = []
-            for fdate,tr in rmat.resultsList( pc, loc ):
-                if tr.inProgress(): rL.append( (fdate,'started') )
-                else:               rL.append( (fdate,'run') )
-            hist = dmap.history(rL)
+            print3( rkey, '@', loc )
+        
+        rL = []
+        for fdate,tr in rmat.resultsList( rkey ):
+            if tr.inProgress(): rL.append( (fdate,'start') )
+            else:               rL.append( (fdate,'ran') )
+        hist = dmap.history(rL)
 
-            fdate,tr,tr2,started = rmat.latestResults( pc, loc )
-            
+        fdate,tr,tr2,started = rmat.latestResults( rkey )
+        
+
+        if dohtml:
+            if tr.detail_ok:
+                primary.append( (rkey, tr.getCounts(), rL) )
+            else:
+                secondary.append( (rkey, tr.getCounts(), rL) )
+            runlist.append( (rkey,fdate,tr) )
+        else:
             print3( '  ', dmap.legend() )
             print3( '  ', hist, '  ', tr.getSummary() )
             if not tr.detail_ok:
                 s = '(tests for this platform/compiler are not detailed below)'
                 print3( '  '+s )
 
-            # don't itemize tests if they are still running, or if they
-            # ran too long ago
-            if not started and tr.detail_ok and \
-               fdate > curtm - showage*24*60*60:
-                
-                resD,nmatch = tr.collectResults( 'fail', 'diff', 'timeout' )
-                
-                rD2 = None
-                if tr2 != None:
-                    # get tests that timed out in the 2-nd most recent results
-                    rD2,nm2 = tr2.collectResults( 'timeout' )
-                
-                # do not report individual test results for a test
-                # execution that has massive failures
-                if nmatch <= maxreport:
-                    for k,T in resD.items():
-                        xd,res = T
-                        if xd > 0 and ( k not in testD or testD[k][0] < xd ):
-                            if rD2 != None:
-                                testD[k] = xd,res,rD2.get( k, None )
-                            else:
-                                testD[k] = xd,res,None
+        testD = {}  # (testdir,testname) -> (xdate,result)
+
+        # don't itemize tests if they are still running, or if they
+        # ran too long ago
+        if not started and tr.detail_ok and \
+           fdate > curtm - showage*24*60*60:
+            
+            resD,nmatch = tr.collectResults( 'fail', 'diff', 'timeout' )
+            
+            rD2 = None
+            if tr2 != None:
+                # get tests that timed out in the 2-nd most recent results
+                rD2,nm2 = tr2.collectResults( 'timeout' )
+            
+            # do not report individual test results for a test
+            # execution that has massive failures
+            if nmatch <= maxreport:
+                for k,T in resD.items():
+                    xd,res = T
+                    if xd > 0 and ( k not in testD or testD[k][0] < xd ):
+                        if rD2 != None:
+                            testD[k] = xd,res,rD2.get( k, None )
+                        else:
+                            testD[k] = xd,res,None
 
         for k,T in testD.items():
             xd,res,v2 = T
@@ -2001,55 +2089,139 @@ def report_generation( optD, fileL ):
                         redD[k] = res
                 else:
                     redD[k] = res
+
+    if dohtml:
+
+        print3( dashboard_preamble )
+        if '--webloc' in optD:
+            print3( 'Go to the <a href="' + optD['--webloc'] + \
+                    '">full report</a>.\n<br>\n' )
+        html_start_rollup( sys.stdout, dmap, "Rollup", 7 )
+        for rkey,cnts,rL in primary:
+            html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
+        html_end_rollup( sys.stdout )
+        
+        if len(secondary) > 0:
+            html_start_rollup( sys.stdout, dmap, "Secondary Rollup", 7 )
+            for rkey,cnts,rL in secondary:
+                html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
+            html_end_rollup( sys.stdout )
+        print3( '\n<br>\n<hr>\n' )
+
+        fn = os.path.join( optD['--html'], 'dash.html' )
+        dashfp = open( fn, 'w' )
+        dashfp.write( dashboard_preamble )
+        html_start_rollup( dashfp, dmap, "Rollup" )
+        for rkey,cnts,rL in primary:
+            html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
+        html_end_rollup( dashfp )
+        
+        if len(secondary) > 0:
+            html_start_rollup( dashfp, dmap,
+                "Secondary Rollup (these test runs will not trigger detail below)" )
+            for rkey,cnts,rL in secondary:
+                html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
+            html_end_rollup( dashfp )
+        dashfp.write( '\n<br>\n<hr>\n' )
     
-    print3()
-    print3( 'Tests that have diffed, failed, or timed out are next.' )
-    print3( 'Result codes: p=pass, D=diff, F=fail, T=timeout, n=notrun' )
-    print3()
+    if not dohtml:
+        print3()
+        print3( 'Tests that have diffed, failed, or timed out are next.' )
+        print3( 'Result codes: p=pass, D=diff, F=fail, T=timeout, n=notrun' )
+        print3()
 
     # for each test that fail/diff/timeout, collect and print the history of
     # the test on each plat/cplr and for each results date stamp
 
-    pcfmt = "   %-"+str(pclen)+"s"
+    detailed = {}
+    tnum = 1
+
+    keyfmt = "   %-"+str(keylen)+"s"
     redL = redD.keys()
     redL.sort()
     for d,tn in redL:
         
-        # print the path to the test and the date legend
-        print3( d+'/'+tn )
-        print3( pcfmt % ' ', dmap.legend() )
+
+        if dohtml:
+            html_start_detail( dashfp, dmap, d+'/'+tn, tnum )
+            detailed[ d+'/'+tn ] = tnum
+            tnum += 1
+        else:
+            # print the path to the test and the date legend
+            print3( d+'/'+tn )
+            print3( keyfmt % ' ', dmap.legend() )
 
         res = redD[ (d,tn) ]
-        for pc in rmat.platcplrs():
-            tests,location = rmat.resultsForTest( pc, d, tn, result=res )
+        for rkey in rmat.testruns( d, tn ):
+            tests,location = rmat.resultsForTest( rkey, d, tn, result=res )
             rL = []
             for fd,aD in tests:
                 if aD == None:
-                    rL.append( (fd,'started') )
+                    rL.append( (fd,'start') )
                 else:
                     st = aD.get( 'state', '' )
                     rs = aD.get( 'result', '' )
                     if rs: rL.append( (fd,rs) )
                     else: rL.append( (fd,st) )
-            print3( pcfmt%pc, dmap.history( rL ), location )
 
-        print3()
+            if dohtml:
+                html_detail_line( dashfp, dmap, rkey, rL )
+            else:
+                print3( keyfmt%rkey, dmap.history( rL ), location )
 
+
+        if dohtml:
+            dashfp.write( '\n</table>\n' )
+        else:
+            print3()
+    
+    if dohtml:
+        dashfp.write( dashboard_close )
+        dashfp.close()
+
+        fn = os.path.join( optD['--html'], 'testrun.html' )
+        trunfp = open( fn, 'w' )
+        trunfp.write( dashboard_preamble )
+        for rkey,fdate,tr in runlist:
+            write_testrun_entry( trunfp, plug, rkey, fdate, tr, detailed )
+        trunfp.write( dashboard_close )
+        trunfp.close()
+    
     return warnL
+
+
+def get_results_plugin( optD ):
+    """
+    Looks for a config directory the same way vvtest does.  If a file called
+    "results_plugin.py" exists there, it is imported and the module returned.
+    """
+    if '--config' in optD:
+        cfg = os.path.abspath( optD['--config'] )
+    else:
+        d = os.getenv( 'VVTEST_CONFIGDIR' )
+        if d == None:
+            d = os.path.join( mydir, 'config' )
+        cfg = os.path.abspath( d )
+    if os.path.exists( os.path.join( d, 'results_plugin.py' ) ):
+        sys.path.insert( 0, d )
+        import results_plugin
+        return results_plugin
+    return None
 
 
 def read_results_file( filename, warnL ):
     """
     Constructs a TestResults class and loads it with the contents of
     'filename', which is expected to be a results.<date>.* file.  Returns
-    the file date and TestResults object.  If the read fails, then None,None
-    is returned and the 'warnL' list is appended with the error message.
+    the file date, the TestResults object, and the results key.  If the read
+    fails, then None,None,None is returned and the 'warnL' list is appended
+    with the error message.
     """
+    # parse the file name to get things like the date stamp
+    ftime,plat,opts,tag = parse_results_filename( filename )
+    
     try:
-        # get the date stamp on the file
-        L = os.path.basename( filename ).split('.')
-        T = time.strptime( L[1], '%Y_%m_%d' )
-        ftime = time.mktime( T )
+        assert ftime != None
 
         # try to read the file
         fmt,vers,hdr,nskip = read_file_header( filename )
@@ -2063,9 +2235,15 @@ def read_results_file( filename, warnL ):
     except Exception, e:
         warnL.append( "skipping results file: " + filename + \
                                 ", Exception = " + str(e) )
-        return None,None
+        return None,None,None
     
-    return ftime,tr
+    results_key = plat
+    if opts != None:
+        results_key += '.'+opts
+    if tag != None:
+        results_key += '.'+tag
+
+    return ftime,tr,results_key
 
 
 class ResultsMatrix:
@@ -2080,33 +2258,19 @@ class ResultsMatrix:
         self.matrixD = {}
         self.daterange = None  # will be [ min date, max date ]
 
-    def add(self, filedate, results):
+    def add(self, filedate, results, results_key):
         """
-        Based on the 'results' instance (of a TestResults class), this function
-        determines the location in the matrix to append the results, and does
-        the append.
+        Based on the 'results_key', this function determines the location in
+        the matrix to append the results, and does the append.
         """
-        plat,cplr = results.platform(), results.compiler()
-        if plat == None: plat = '?'
-        if cplr == None: cplr = '?'
+        if results_key not in self.matrixD:
+            self.matrixD[results_key] = []
         
-        mach,rdir = results.machine(), results.testdir()
-        if mach == None: mach = '?'
-        if rdir == None: rdir = '?'
-        
-        rowk = plat+'/'+cplr
-        colk = mach+':'+rdir
-        
-        if rowk not in self.matrixD:
-            self.matrixD[rowk] = {}
-        row = self.matrixD[rowk]
+        row = self.matrixD[results_key]
 
-        if colk not in row:
-            row[colk] = []
+        row.append( (filedate,results) )
 
-        row[colk].append( (filedate,results) )
-
-        row[colk].sort()  # kept sorted by increasing file date
+        row.sort()  # kept sorted by increasing file date
         
         # for convenience, the track the date range of all test results files
         if self.daterange == None:
@@ -2120,38 +2284,70 @@ class ResultsMatrix:
     def maxFileDate(self):
         if self.daterange != None: return self.daterange[1]
 
-    def platcplrs(self):
+    def testruns(self, testdir=None, testname=None):
         """
-        Return a sorted list of the platform/compiler names.  That is, the
-        rows in the matrix.
+        Return a sorted list of the test results keys.  That is, the rows in
+        the matrix.  If 'testdir' and 'testname' are both non-None, then
+        only results keys are included that have at least one test results
+        object containing the specified test.
         """
-        L = self.matrixD.keys()
-        L.sort()
+        if testdir == None or testname == None:
+            L = self.matrixD.keys()
+            L.sort()
+        else:
+            L = []
+            for rkey,trL in self.matrixD.items():
+                n = 0
+                for fdate,tr in trL:
+                    attrD = tr.testAttrs( testdir, testname )
+                    n += len(attrD)
+                if n > 0:
+                    L.append( rkey )
+            L.sort()
+
         return L
 
-    def locations(self, platcplr):
+    def _get_platcplr(self, trL):
+        """
+        Given a row of the matrix, returns the platform and compiler names
+        of the most recent test results object.  Ignores test results objects
+        if either the platform name or compiler name is None or empty.
+        """
+        dupL = [] + trL
+        dupL.reverse()
+
+        for fdate,tr in dupL:
+            p,c = tr.platform(), tr.compiler()
+            if p and c:
+                return p,c
+
+        return None, None
+
+    def location(self, platcplr):
         """
         For the given 'platcplr', return a sorted list of the
-        machine:testdirectory names.  That is, the columns of the matrix for
-        that row.
+        machine:testdirectory name for most recent test results date.
         """
-        L = self.matrixD[platcplr].keys()
-        L.sort()
-        return L
+        row = self.matrixD[platcplr]
 
-    def resultsList(self, platcplr, location):
-        """
-        Returns a list of (file date, results) pairs for the test results in
-        the 'platcplr' row and 'location' column.  The list is sorted by
-        increasing date.
-        """
-        return [] + self.matrixD[platcplr][location]
+        tr = row[-1][1]
+        mach,rdir = tr.machine(), tr.testdir()
+        if mach == None: mach = '?'
+        if rdir == None: rdir = '?'
+        
+        return mach+':'+rdir
 
-    def latestResults(self, platcplr, location):
+    def resultsList(self, results_key):
         """
-        For the given platform/compiler and location, finds the test results
-        with the most recent date stamp, but that is not in progress.  Returns
-        a tuple
+        Returns a list of (file date, results) pairs for the test results
+        corresponding to 'results_key'.  The list is sorted by increasing date.
+        """
+        return [] + self.matrixD[results_key]
+
+    def latestResults(self, results_key):
+        """
+        For the given test run key, finds the test results with the most
+        recent date stamp, but that is not in progress.  Returns a tuple
 
             ( file date, TestResults, TestResults, started )
 
@@ -2159,7 +2355,7 @@ class ResultsMatrix:
         is the second latest, and 'started' is True if the most recent test
         results are in progress.
         """
-        L = [] + self.matrixD[platcplr][location]
+        L = [] + self.matrixD[results_key]
         L.reverse()
         started = L[0][1].inProgress()
         # pick the most recent and second most recent which is not in-progress
@@ -2200,35 +2396,39 @@ class ResultsMatrix:
         """
         D = {}
         maxloc = None
-        for loc,L in self.matrixD[platcplr].items():
-            for filedate,results in L:
-                
-                attrD = results.testAttrs( testdir, testname )
-                if len(attrD) > 0:
-                    
-                    if 'xdate' not in attrD and results.inProgress():
-                        if filedate not in D:
-                            # mark the test on this date as in progress
-                            D[filedate] = None
-                    
-                    else:
-                        if filedate in D:
-                            i = self._tie_break( D[filedate], attrD, result )
-                            if i > 0:
-                                D[filedate] = attrD  # prefer new test results
-                        else:
-                            D[filedate] = attrD
+        for filedate,results in self.matrixD[platcplr]:
+            
+            mach,rdir = results.machine(), results.testdir()
+            if mach == None: mach = '?'
+            if rdir == None: rdir = '?'
+            loc = mach+':'+rdir
 
-                        if maxloc == None:
+            attrD = results.testAttrs( testdir, testname )
+            if len(attrD) > 0:
+                
+                if 'xdate' not in attrD and results.inProgress():
+                    if filedate not in D:
+                        # mark the test on this date as in progress
+                        D[filedate] = None
+                
+                else:
+                    if filedate in D:
+                        i = self._tie_break( D[filedate], attrD, result )
+                        if i > 0:
+                            D[filedate] = attrD  # prefer new test results
+                    else:
+                        D[filedate] = attrD
+
+                    if maxloc == None:
+                        maxloc = [ filedate, loc, attrD ]
+                    elif filedate > maxloc[0]:
+                        maxloc = [ filedate, loc, attrD ]
+                    elif abs( filedate - maxloc[0] ) < 2:
+                        # the test appears in more than one results file
+                        # on the same file date, so try to break the tie
+                        i = self._tie_break( maxloc[2], attrD, result )
+                        if i > 0:
                             maxloc = [ filedate, loc, attrD ]
-                        elif filedate > maxloc[0]:
-                            maxloc = [ filedate, loc, attrD ]
-                        elif abs( filedate - maxloc[0] ) < 2:
-                            # the test appears in more than one results file
-                            # on the same file date, so try to break the tie
-                            i = self._tie_break( maxloc[2], attrD, result )
-                            if i > 0:
-                                maxloc = [ filedate, loc, attrD ]
         
         L = D.items()
         L.sort()
@@ -2299,46 +2499,58 @@ class DateMap:
         # initialize the list of days
         if mindate > maxdate:
             # date range not available; default to today
-            self.histL = [ self._day( time.localtime() ) ]
+            self.dateL = [ DateInfoString( time.time() ) ]
         else:
-            self.histL = []
+            self.dateL = []
             d = mindate
             while not d > maxdate:
-                day = self._day( time.localtime(d) )
-                if day not in self.histL:
-                    self.histL.append( day )
+                day = DateInfoString( d )
+                if day not in self.dateL:
+                    self.dateL.append( day )
                 d += 24*60*60
-            day = self._day( time.localtime(maxdate) )
-            if day not in self.histL:
-                self.histL.append( day )
+            day = DateInfoString( maxdate )
+            if day not in self.dateL:
+                self.dateL.append( day )
 
         # determine number of characters in first group (week)
         num1 = 0
-        for day in self.histL:
+        for day in self.dateL:
             doy,yr,dow,m,d = day.split()
             if num1 and dow == '1':
                 break
             num1 += 1
 
         # compute the dates that start each week (or partial week)
-        self.dateL = []
+        self.wkdateL = []
         n = 0
-        for day in self.histL:
+        for day in self.dateL:
             doy,yr,dow,m,d = day.split()
             if not n:
-                self.dateL.append( '%-7s' % (m+'/'+d) )
+                self.wkdateL.append( '%-7s' % (m+'/'+d) )
             n += 1
             if dow == '0':
                 n = 0
         
         # the first group is a little special; first undo the padding
-        self.dateL[0] = self.dateL[0].strip()
-        if len( self.dateL[0] ) < num1:
+        self.wkdateL[0] = self.wkdateL[0].strip()
+        if len( self.wkdateL[0] ) < num1:
             # pad the first legend group on the right with spaces
-            self.dateL[0] = ( '%-'+str(num1)+'s') % self.dateL[0]
+            self.wkdateL[0] = ( '%-'+str(num1)+'s') % self.wkdateL[0]
+
+    def getDateList(self, numdays=None):
+        """
+        Returns a list of strings of the dates in the range for the current
+        report.  The strings are the output of the DateInfoString() function.
+
+        If 'numdays' is not None, it limits the dates to this number of (most
+        recent) days.
+        """
+        if numdays:
+            return self.dateL[-numdays:]
+        return [] + self.dateL
 
     def legend(self):
-        return ' '.join( self.dateL )
+        return ' '.join( self.wkdateL )
 
     def history(self, resultL):
         """
@@ -2348,14 +2560,14 @@ class DateMap:
         # create a map of the date to the result character
         hist = {}
         for xd,rs in resultL:
-            day = self._day( time.localtime(xd) )
+            day = DateInfoString( xd )
             hist[ day ] = self._char( rs )
 
         # walk the full history range and accumulate the result characters
         # in order (if a test is absent on a given day, a period is used)
         cL = []
         s = ''
-        for day in self.histL:
+        for day in self.dateL:
             doy,yr,dow,m,d = day.split()
             if s and dow == '1':
                 cL.append( s )
@@ -2365,11 +2577,12 @@ class DateMap:
             cL.append( s )
         
         # may need to pad the first date group
-        if len(cL[0]) < len(self.dateL[0]):
-            fmt = '%'+str(len(self.dateL[0]))+'s'
+        if len(cL[0]) < len(self.wkdateL[0]):
+            fmt = '%'+str(len(self.wkdateL[0]))+'s'
             cL[0] = fmt % cL[0]
         
         return ' '.join( cL )
+
 
     def _char(self, result):
         """
@@ -2380,16 +2593,408 @@ class DateMap:
         if result == 'fail': return 'F'
         if result == 'timeout': return 'T'
         if result == 'notrun': return 'n'
-        if result == 'started': return 's'   # this is for vvtest runs
-        if result == 'run': return 'r'   # this is for vvtest runs
+        if result == 'start': return 's'
+        if result == 'ran': return 'r'
         return '?'
 
-    def _day(self, tm):
-        """
-        Return a time tuple for the given time, with strategic entries.
-        """
-        return time.strftime( "%j %Y %w %m %d", tm )
+def DateInfoString( tm ):
+    """
+    Given a date in seconds, return a string that contains the day of the
+    year, the year, the day of the week, the month, and the day of the month.
+    These are white space separated.
+    """
+    return time.strftime( "%j %Y %w %m %d", time.localtime(tm) )
 
+
+####################################################################
+
+# this defines the beginning of an html file that "style" specifications
+# that are used later in the tables
+dashboard_preamble = '''
+<!DOCTYPE html>
+<html lang = "en-US">
+
+  <head>
+    <meta charset = "UTF-8">
+    <title>Dashboard</title>
+    <style>
+      .thintable {
+        border: 1px solid black;
+        border-collapse: collapse;
+      }
+
+      .grptr {
+        border-bottom: 4px solid black
+      }
+      .midtr {
+        border-bottom: 1px solid black
+      }
+
+      .grpth {
+        border-left: 4px solid black;
+      }
+      .midth {
+        border-style: none;
+        border-left: 1px solid black;
+        text-align: center;
+      }
+
+      .grptdw {
+        border-left: 4px solid black;
+        text-align: center;
+      }
+      .midtdw {
+        border-style: none;
+        border-left: 1px solid black;
+        text-align: center;
+      }
+      .grptdg {
+        border-left: 4px solid black;
+        text-align: center;
+        background-color: lightgreen;
+        color: black;
+      }
+      .midtdg {
+        border-style: none;
+        border-left: 1px solid black;
+        text-align: center;
+        background-color: lightgreen;
+        color: black;
+      }
+      .grptdr {
+        border-left: 4px solid black;
+        text-align: center;
+        background-color: tomato;
+        color: black;
+      }
+      .midtdr {
+        border-style: none;
+        border-left: 1px solid black;
+        text-align: center;
+        background-color: tomato;
+        color: black;
+      }
+      .grptdy {
+        border-left: 4px solid black;
+        text-align: center;
+        background-color: yellow;
+        color: black;
+      }
+      .midtdy {
+        border-style: none;
+        border-left: 1px solid black;
+        text-align: center;
+        background-color: yellow;
+        color: black;
+      }
+      .grptdc {
+        border-left: 4px solid black;
+        text-align: center;
+        background-color: cyan;
+        color: black;
+      }
+      .midtdc {
+        border-style: none;
+        border-left: 1px solid black;
+        text-align: center;
+        background-color: cyan;
+        color: black;
+      }
+      .grptdh {
+        border-left: 4px solid black;
+        text-align: center;
+        background-color: wheat;
+        color: black;
+      }
+      .midtdh {
+        border-style: none;
+        border-left: 1px solid black;
+        text-align: center;
+        background-color: wheat;
+        color: black;
+      }
+      .grptdm {
+        border-left: 4px solid black;
+        text-align: center;
+        background-color: magenta;
+        color: black;
+      }
+      .midtdm {
+        border-style: none;
+        border-left: 1px solid black;
+        text-align: center;
+        background-color: magenta;
+        color: black;
+      }
+    </style>
+  </head>
+  <body>
+'''.lstrip()
+
+dashboard_close = '''
+  </body>
+</html>
+'''
+
+
+def html_start_rollup( fp, dmap, title, numdays=None ):
+    """
+    Begin a table that contains the latest results for each test run and
+    a "status" word for historical dates.
+    """
+    dL = dmap.getDateList( numdays )
+
+    fp.write( '\n' + \
+        '<h3>'+title+'</h3>\n' + \
+        '<table class="thintable">\n' + \
+        '<tr style="border-style: none;">\n' + \
+        '<th></th>\n' + \
+        '<th class="grpth" colspan="4" style="text-align: center;">Test Results</th>\n' + \
+        '<th class="grpth" colspan="'+str(len(dL))+'">Execution Status</th>\n' + \
+        '</tr>\n' )
+    fp.write(
+        '<tr class="grptr">\n' + \
+        '<th>Platform.Options.Variation</th>\n' + \
+        '<th class="grpth">pass</th>\n' + \
+        '<th class="midth">diff</th>\n' + \
+        '<th class="midth">fail</th>\n' + \
+        '<th class="midth">othr</th>\n' )
+    cl = 'grpth'
+    for day in dL:
+        doy,yr,dow,m,d = day.split()
+        if dow == '1':
+            fp.write( '<th class="grpth">'+m+'/'+d+'</th>\n' )
+        else:
+            fp.write( '<th class="'+cl+'">'+m+'/'+d+'</th>\n' )
+        cl = 'midth'
+    fp.write(
+        '</tr>\n' )
+
+html_dowmap = {
+    'sunday'    : 0, 'sun': 0,
+    'monday'    : 1, 'mon': 1,
+    'tuesday'   : 2, 'tue': 2,
+    'wednesday' : 3, 'wed': 3,
+    'thursday'  : 4, 'thu': 4,
+    'friday'    : 5, 'fri': 5,
+    'saturday'  : 6, 'sat': 6,
+}
+
+def html_rollup_line( fp, plug, dmap, label, cnts, stats, shorten=None ):
+    """
+    Each entry in the rollup table is written by calling this function.  It
+    is called for each test run id, which is the 'label'.
+
+    If 'shorten' is not None, it should be the number of days to display.  It
+    also prevents any html links to be written.
+    """
+    dL = dmap.getDateList( shorten )
+
+    schedL = None
+    if plug:
+        sched = plug.get_test_run_info( label, 'schedule' )
+        if sched:
+            schedL = []
+            for s in sched.split():
+                dow = html_dowmap.get( s.lower(), None )
+                if dow != None:
+                    schedL.append( dow )
+
+    # create a map of the date to the result color
+    hist = {}
+    for xd,rs in stats:
+        day = DateInfoString( xd )
+        hist[ day ] = ( rs, result_color( rs ) )
+    
+    np,nd,nf,nt,nr,unk = cnts
+    fp.write( '\n<tr class="midtr">\n' )
+    if shorten == None:
+        fp.write( '<td><a href="testrun.html#'+label+'">'+label+'</a></td>\n' )
+    else:
+        fp.write( '<td>'+label+'</td>\n' )
+    fp.write( '<td class="grptdg"><b>'+str(np)+'</b></td>\n' )
+    cl = ( "midtdy" if nd > 0 else "midtdg" )
+    fp.write( '<td class="'+cl+'"><b>'+str(nd)+'</b></td>\n' )
+    cl = ( "midtdr" if nf > 0 else "midtdg" )
+    fp.write( '<td class="'+cl+'"><b>'+str(nf)+'</b></td>\n' )
+    cl = ( "midtdy" if nt+nr+unk > 0 else "midtdg" )
+    fp.write( '<td class="'+cl+'"><b>'+str(nt+nr+unk)+'</b></td>\n' )
+
+    ent = 'grptd'
+    for day in dL:
+        doy,yr,dow,m,d = day.split()
+        if day in hist:
+            rs,c = hist[day]
+            #rs,c = hist.get( day, ( '', 'w' ) )
+        elif schedL != None:
+            if int(dow) in schedL:
+                rs,c = 'AWOL', result_color('AWOL')
+            else:
+                rs,c = '','w'
+        else:
+            rs,c = '','w'
+        if dow == '1':
+            fp.write( '<td class="grptd'+c+'">'+rs+'</td>\n' )
+        else:
+            fp.write( '<td class="'+ent+c+'">'+rs+'</td>\n' )
+        ent = 'midtd'
+    fp.write( '</tr>\n' )
+
+
+def html_end_rollup( fp ):
+    """
+    """
+    fp.write( '\n</table>\n' )
+
+
+def html_start_detail( fp, dmap, testid, marknum ):
+    """
+    Call this function for individual test to be detailed, which will show
+    the result status for each of the dates.
+    """
+    dL = dmap.getDateList()
+
+    fp.write( '\n' + \
+        '<h3 id="test'+str(marknum)+'">' + html_escape(testid) + '</h3>\n' + \
+        '<table class="thintable">\n' + \
+        '<tr class="grptr">\n' + \
+        '<th></th>\n' )
+    cl = 'grpth'
+    for day in dL:
+        doy,yr,dow,m,d = day.split()
+        if dow == '1':
+            fp.write( '<th class="grpth">'+m+'/'+d+'</th>\n' )
+        else:
+            fp.write( '<th class="'+cl+'">'+m+'/'+d+'</th>\n' )
+        cl = 'midth'
+    fp.write(
+        '</tr>\n' )
+
+
+def html_detail_line( fp, dmap, label, resL ):
+    """
+    Called once per line for detailing a test.  The 'label' is the test run id.
+    """
+    dL = dmap.getDateList()
+
+    # create a map of the date to the result color
+    hist = {}
+    for fd,rs in resL:
+        day = DateInfoString( fd )
+        hist[ day ] = ( rs, result_color( rs ) )
+    
+    fp.write( '\n' + \
+        '<tr class="midtr">\n' + \
+        '<td><a href="testrun.html#'+label+'">'+label+'</a></td>\n' )
+    
+    ent = 'grptd'
+    for day in dL:
+        doy,yr,dow,m,d = day.split()
+        rs,c = hist.get( day, ( '', 'w' ) )
+        if dow == '1':
+            fp.write( '<td class="grptd'+c+'">'+rs+'</td>\n' )
+        else:
+            fp.write( '<td class="'+ent+c+'">'+rs+'</td>\n' )
+        ent = 'midtd'
+
+    fp.write( '</tr>\n' )
+
+def html_escape( s ):
+    """
+    """
+    s = s.replace( '&', '&amp' )
+    s = s.replace( '<', '&lt' )
+    s = s.replace( '>', '&gt' )
+    return s
+
+def write_testrun_entry( fp, plug, results_key, fdate, tr, detailed ):
+    """
+    The test run page shows information about the test run, such as which
+    machine and directory, the compiler, and the schedule.  It draws on data
+    from the config directory, if present.
+    """
+    desc = None
+    if plug and hasattr( plug, 'get_test_run_info' ):
+        desc = plug.get_test_run_info( results_key, 'description' )
+        log = plug.get_test_run_info( results_key, 'log' )
+        sched = plug.get_test_run_info( results_key, 'schedule' )
+
+    resD,num = tr.collectResults( 'fail', 'diff', 'timeout', 'notrun', 'notdone',
+                                  matchlist=True )
+    datestr = time.strftime( "%Y %m %d", time.localtime(fdate) )
+    resL = []
+    for kT,vT in resD.items():
+        d,tn = kT
+        xd,res = vT
+        resL.append( ( d+'/'+tn, res.split('=',1)[1] ) )
+    resL.sort()
+
+    fp.write( '\n' + \
+        '<h2 id="'+results_key+'">'+results_key+'</h2>\n' + \
+        '<ul>\n' )
+    if desc:
+        fp.write( 
+        '<li><b>Description:</b> '+html_escape(desc)+'</li>\n' )
+    fp.write(
+        '<li><b>Machine:</b> '+tr.machine()+'</li>\n' + \
+        '<li><b>Compiler:</b> '+tr.compiler()+'</li>\n' + \
+        '<li><b>Test Directory:</b> '+tr.testdir()+'</li>\n' )
+    if log:
+        fp.write(
+        '<li><b>Log File:</b> '+html_escape(log)+'</li>\n' )
+    if sched:
+        fp.write(
+        '<li><b>Schedule:</b> '+html_escape(sched)+'</li>\n' )
+    fp.write(
+        '<li><b>Latest Results:</b> '+datestr )
+    if len(resL) > 0:
+        fp.write( \
+            '<br>\n' + \
+            '<table style="border: 1px solid black; border-collapse: collapse;">\n' )
+        maxlist = 40  # TODO: make this number configurable
+        i = 0
+        for tn,res in resL:
+            if i >= maxlist:
+                i = len(resL)+1
+                break
+            cl = 'midtd'+result_color(res)
+            fp.write( \
+                '<tr style="border: 1px solid black;">\n' + \
+                '<td class="'+cl+'" style="border: 1px solid black;">'+res+'</td>\n' )
+            tid = detailed.get( tn, None )
+            if tid:
+                fp.write( \
+                    '<td><a href="dash.html#test'+str(tid)+'">' + \
+                    html_escape(tn) + '</a></td></tr>\n' )
+            else:
+                fp.write( '<td>' + html_escape(tn) + '</td></tr>\n' )
+            i += 1
+        fp.write( \
+            '</table>\n' )
+        if i > len(resL):
+            fp.write( \
+                '<br>\n' + \
+                '*** this list truncated; num entries = '+str(len(resL))+'\n' )
+    fp.write( '</li>\n' )
+    fp.write( '</ul>\n' )
+    fp.write( '<br>\n' )
+
+
+def result_color( result ):
+    """
+    Translate the result string into a color character.  These colors must
+    be known to the preample "style" list.
+    """
+    if result == 'pass': return 'g'
+    if result == 'ran': return 'g'
+    if result == 'start': return 'c'
+    if result == 'notdone': return 'c'
+    if result == 'diff': return 'y'
+    if result == 'fail': return 'r'
+    if result == 'notrun': return 'h'
+    if result == 'timeout': return 'm'
+    if result == 'AWOL': return 'y'
+    return 'w'
 
 ########################################################################
 
@@ -2511,6 +3116,10 @@ def process_option( optD, option_name, value_type, *restrictions ):
 
 
 ########################################################################
+
+d = sys.path[0]
+if d: mydir = os.path.abspath( d )
+else: mydir = os.getcwd()
 
 if __name__ == "__main__":
     results_main()

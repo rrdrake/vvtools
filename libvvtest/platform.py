@@ -69,7 +69,7 @@ class Platform:
         else:
             self.attrs[name] = value
 
-    def setBatchSystem(self, batch, ppn ):
+    def setBatchSystem(self, batch, ppn, **kwargs ):
         """
         Set the batch system for this platform.  If 'batch' is a string, it
         must be one of the known batch systems, such as
@@ -85,13 +85,13 @@ class Platform:
         if type(batch) == type(''):
             if batch == 'craypbs':
                 import craypbs
-                self.batch = craypbs.BatchCrayPBS( ppn )
+                self.batch = craypbs.BatchCrayPBS( ppn, **kwargs )
             elif batch == 'pbs':
                 import pbs
-                self.batch = pbs.BatchPBS( ppn )
+                self.batch = pbs.BatchPBS( ppn, **kwargs )
             elif batch == 'slurm':
                 import slurm
-                self.batch = slurm.BatchSLURM( ppn )
+                self.batch = slurm.BatchSLURM( ppn, **kwargs )
             else:
                 raise Exception( "Unknown batch system name: "+str(batch) )
         else:
