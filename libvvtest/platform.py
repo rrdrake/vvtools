@@ -270,7 +270,7 @@ class Platform:
         return None
 
 
-def construct_Platform( toolsdir, optdict ):
+def construct_Platform( toolsdir, optdict, **kwargs ):
     """
     This function constructs a Platform object, determines the platform &
     compiler, and loads the platform plugin.
@@ -279,18 +279,28 @@ def construct_Platform( toolsdir, optdict ):
     assert os.path.exists( toolsdir )
     assert os.path.isdir( toolsdir )
     
+    if 'debug' in kwargs:
+        print 'construct_Platform A:', toolsdir, optdict
+
     plat = Platform( toolsdir, optdict )
 
     # set the platform name and compiler name
     try:
         # this comes from the config directory
         import idplatform
-    except:
+    except ImportError:
         plat.platname = os.uname()[0]
         plat.cplrname = 'gnu'
+        if 'debug' in kwargs:
+            print 'construct_Platform B:', plat.platname, plat.cplrname
     else:
+        if 'debug' in kwargs:
+            idplatform.debug = True
         plat.platname = idplatform.platform( optdict )
         plat.cplrname = idplatform.compiler( plat.platname, optdict )
+        if 'debug' in kwargs:
+            print 'construct_Platform C:', plat.platname, plat.cplrname
+            idplatform.debug = False
     
     try:
         # this comes from the config directory
