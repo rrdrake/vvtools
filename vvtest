@@ -978,8 +978,7 @@ def runTests( dirs, plat, ufilter ):
           tlist.createTestExecs( test_dir, plat, config, perms )
           
           if optdict.has_key('--save-results'):
-            tag = optdict.get('--results-tag',None)
-            saveResults( tlist, plat, test_dir, tag, inprogress=True )
+            saveResults( tlist, plat, test_dir, inprogress=True )
 
           if not optdict.has_key('--pipeline'):
             executeTestList( tlist, test_dir, plat, perms, tfile )
@@ -990,8 +989,7 @@ def runTests( dirs, plat, ufilter ):
           print3( "Test directory:", testdirname )
           
           if optdict.has_key('--save-results'):
-            tag = optdict.get('--results-tag',None)
-            saveResults( tlist, plat, test_dir, tag )
+            saveResults( tlist, plat, test_dir )
         
         else:
           print "\n--------- no tests to run -----------\n"
@@ -1875,7 +1873,7 @@ def batchset( qid ):
     return 'batchset' + str( int( float(qid)/50 + 0.5 ) )
 
 
-def saveResults( tlist, plat, test_dir, tag, inprogress=False ):
+def saveResults( tlist, plat, test_dir, inprogress=False ):
     """
     Option is
     
@@ -1886,11 +1884,32 @@ def saveResults( tlist, plat, test_dir, tag, inprogress=False ):
     
       --results-tag <string>
     
-    which is appended to the results file name.
+    which is appended to the results file name.  A date string is embedded in
+    the file name, which is obtained from the date of the first test that
+    ran.  But if the option
+
+      --results-date <float or string>
+
+    is given on the vvtest command line, then that date is used instead.
     """
     pname = plat.getName()
     cplr = plat.getCompiler()
+
+    rtag = optdict.get( '--results-tag', None )
     
+    # determine the date stamp to embed in the file name
+    rdate = optdict.get( '--results-date', None )
+    if rdate != None:
+      try:
+        val = float(rdate)
+        # assume format was seconds since epoch
+        datestr = time.strftime( "%Y_%m_%d", time.localtime( val ) )
+      except:
+        datestr = rdate  # just take date string verbatim
+    else:
+      datestamp = tlist.getDateStamp( time.time() )
+      datestr = time.strftime( "%Y_%m_%d", time.localtime( datestamp ) )
+
     L = []
     for o in optdict.get('-o',[]):
       if o != cplr:
@@ -1903,11 +1922,8 @@ def saveResults( tlist, plat, test_dir, tag, inprogress=False ):
     if rdir == None or not os.path.isdir(rdir):
       raise Exception( "invalid testing directory: " + str(rdir) )
     
-    datestamp = tlist.getDateStamp( time.time() )
-    
-    datestr = time.strftime( "%Y_%m_%d", time.localtime( datestamp ) )
     L = ['results',datestr,pname,optstag]
-    if tag != None: L.append(tag)
+    if rtag != None: L.append(rtag)
     fname = os.path.join( rdir, string.join( L, '.' ) )
     
     tr = results.TestResults()
@@ -1981,8 +1997,7 @@ def restartTests( test_dir, plat, ufilter ):
           print3()
           
           if optdict.has_key('--save-results'):
-            tag = optdict.get('--results-tag',None)
-            saveResults( tlist, plat, test_dir, tag, inprogress=True )
+            saveResults( tlist, plat, test_dir, inprogress=True )
           
           if '--pipeline' not in optdict:
             tlist.createTestExecs( test_dir, plat, config, perms )
@@ -1993,8 +2008,7 @@ def restartTests( test_dir, plat, ufilter ):
             pipeLineTestList( tlist, test_dir, plat, perms )
         
           if optdict.has_key('--save-results'):
-            tag = optdict.get('--results-tag',None)
-            saveResults( tlist, plat, test_dir, tag )
+            saveResults( tlist, plat, test_dir )
         
         else:
           print3( "\n--------- no tests to run -----------\n" )
@@ -2202,17 +2216,18 @@ def parseOptionsAndGenerateOptionDictionary():
       else:
         argL.append(s)
     
+    singles = 'hHvgGk:K:p:P:S:o:O:wAj:FRM:n:N:ibT:Lmeas:x:X:C'
+    doubles = [ 'version','plat=','platopt=',
+                'keys', 'files', 'pipeline',
+                'qsub-id=', 'qsub-limit=', 'qsub-length=',
+                'html', 'check=', 'analyze', 'cdir=',
+                'search=', 'extract=',
+                'timeout-multiplier=', 'postclean',
+                'vg', 'config=', 'perms=', 'sort=', 'force',
+                'save-results', 'results-tag=','results-date=',
+              ]
     import getopt
-    try: opts, dirs = getopt.getopt( argL,
-                        'hHvgGk:K:p:P:S:o:O:wAj:FRM:n:N:ibT:Lmeas:x:X:C',
-                        longopts=['version','plat=','platopt=',
-                                  'keys', 'files', 'pipeline',
-                                  'qsub-id=', 'qsub-limit=', 'qsub-length=',
-                                  'html', 'check=', 'analyze', 'cdir=',
-                                  'search=', 'extract=',
-                                  'timeout-multiplier=', 'postclean',
-                                  'vg', 'save-results', 'results-tag=',
-                                  'config=', 'perms=', 'sort=', 'force' ] )
+    try: opts, dirs = getopt.getopt( argL, singles, longopts=doubles )
     except getopt.error, e:
       sys.stderr.write('*** ' + exeName + ': error: ' + str(e) + '\n')
       sys.exit(1)
@@ -2223,7 +2238,7 @@ def parseOptionsAndGenerateOptionDictionary():
       elif n == '--search' : n = '-s'
       elif n == '--postclean': n = '-C'
       elif n == '-F': n = '-R'  # -F is deprecated, use -R instead
-      if n == '--results-tag':
+      if n in ['--results-tag','--results-date']:
         optdict[n] = optpair[1]
       elif not optdict.has_key(n):
         optdict[n] = [optpair[1]]
@@ -2665,7 +2680,7 @@ if __name__ == '__main__':
     if optdict.has_key('--keys') or optdict.has_key('--files'):
       keywordInformation(tlist)
     elif optdict.has_key('--save-results'):
-      saveResults( tlist, plat, test_dir, optdict.get('--results-tag',None) )
+      saveResults( tlist, plat, test_dir )
     else:
       printResults( tlist, True, test_dir, optdict.has_key('--html'), None )
  

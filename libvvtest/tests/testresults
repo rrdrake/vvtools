@@ -30,7 +30,7 @@ def main():
                   runtimes01 runtimes02
                   list01
                   files01 report01 report02
-                  inprogress
+                  inprogress datestamp
                   timeouts
                """.split()
 
@@ -1418,21 +1418,15 @@ def inprogress():
     """
     writefile( "cat.xml", """
         <rtest name="cat">
-          <execute>
-            sleep 1
-          </execute>
+          <execute> sleep 1 </execute>
         </rtest>""" )
     writefile( "dog.xml", """
         <rtest name="dog">
-          <execute>
-            sleep 2
-          </execute>
+          <execute> sleep 2 </execute>
         </rtest>""" )
     writefile( "circle.xml", """
         <rtest name="circle">
-          <execute>
-            sleep 3
-          </execute>
+          <execute> sleep 3 </execute>
         </rtest>""" )
 
     os.environ['VVTEST_INTERRUPT_COUNT'] = '2'
@@ -1453,6 +1447,55 @@ def inprogress():
             s = line.split('pass')[0].strip()
             assert s[-1] == 's'
             break
+
+def datestamp():
+    """
+    use the --results-date option
+    """
+    writefile( "cat.xml", """
+        <rtest name="cat">
+          <execute> sleep 1 </execute>
+        </rtest>""" )
+    writefile( "dog.xml", """
+        <rtest name="dog">
+          <execute> sleep 2 </execute>
+        </rtest>""" )
+    writefile( "circle.xml", """
+        <rtest name="circle">
+          <execute> sleep 3 </execute>
+        </rtest>""" )
+
+    olddate = time.time() - 2*24*60*60
+    out,np,nd,nf,nn = run_vvtest(
+        '--save-results --results-date ' + str(olddate) )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+    tdir = os.path.abspath( results_dir() )
+
+    rfile1 = glob.glob('results.*')[0]
+    
+    out,np,nd,nf,nn = run_vvtest( '-w --save-results' )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+    L = glob.glob('results.*')
+    assert len(L) == 2
+    L.sort()
+    assert L[0] == rfile1
+    assert L[1] != rfile1
+    rfile2 = L[1]
+    print3( 'results files:', rfile1, rfile2 )
+
+    out,np,nd,nf,nn = run_vvtest(
+        '-w --save-results --results-date 2016_07_15' )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+    L = glob.glob('results.*')
+    assert len(L) == 3
+    L.sort()
+    assert L[1] == rfile1
+    assert L[2] == rfile2
+    rfile3 = L[0]
+    assert '2016_07_15' in rfile3
+    assert rfile3 not in [ rfile1, rfile2 ]
+    print3( 'results files:', rfile1, rfile2, rfile3 )
+
 
 ############################################################################
 
