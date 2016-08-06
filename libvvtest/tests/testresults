@@ -1322,6 +1322,8 @@ def report01():
     """
     test the report subcommand
     """
+    os.mkdir( 'config' )  # force the test to use default plat & cplr
+
     writefile( "one/cat.xml", """
         <rtest name="cat">
           <execute> sleep 1 </execute>
@@ -1335,14 +1337,14 @@ def report01():
           <execute> exit 1 </execute>
         </rtest>""" )
     
-    out,np,nd,nf,nn = run_vvtest()
+    out,np,nd,nf,nn = run_vvtest( '--config config' )
     assert np == 1 and nd == 1 and nf == 1 and nn == 0
     tdir = os.path.abspath( results_dir() )
 
     # bootstrap with runtimes files then save the test results
     ok,out = run_cmd( resultspy + ' save', directory='one' )
     assert ok
-    run_vvtest( '-i --save-results' )
+    run_vvtest( '--config config -i --save-results' )
     
     rf1 = glob.glob('results.*')[0]
     tr = results.TestResults( rf1 )
