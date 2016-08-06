@@ -290,14 +290,27 @@ def construct_Platform( toolsdir, optdict, **kwargs ):
         import idplatform
     except ImportError:
         plat.platname = os.uname()[0]
-        plat.cplrname = 'gnu'
+        plat.cplrname = 'gcc'
         if 'debug' in kwargs:
             print 'construct_Platform B:', plat.platname, plat.cplrname
     else:
         if 'debug' in kwargs:
             idplatform.debug = True
-        plat.platname = idplatform.platform( optdict )
-        plat.cplrname = idplatform.compiler( plat.platname, optdict )
+        
+        plat.platname = None
+        if '--plat' in optdict:
+            plat.platname = optdict['--plat']
+        elif hasattr( idplatform, "platform" ):
+            plat.platname = idplatform.platform( optdict )
+        if not plat.platname:
+            plat.platname = os.uname()[0]
+
+        plat.cplrname = None
+        if hasattr( idplatform, "compiler" ):
+            plat.cplrname = idplatform.compiler( plat.platname, optdict )
+        if not plat.cplrname:
+            plat.cplrname = 'gcc'
+        
         if 'debug' in kwargs:
             print 'construct_Platform C:', plat.platname, plat.cplrname
             idplatform.debug = False

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import os, sys, re
-import time, glob
+import time, glob, shutil
 
 # this will os.chdir() to a subdirectory
 from testutils import *
@@ -12,7 +12,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02 test03 test04
+        argL = """test01 test02 test03 test04 test05
                """.split()
     
     # set these for the pipeline tests
@@ -286,6 +286,219 @@ def test04():
                           "hello from spec func" ) ) == 1
     assert len( filegrep( tdir+'/shtest/execute.log',
                           "hello from sh spec func" ) ) == 1
+
+
+########################################################################
+
+def test05():
+    """
+    exercise defaults and checking in idplatform.py
+    """
+    writefile( "tst.xml", """
+        <rtest name="tst">
+          <execute> echo "the COMPILER is $COMPILER" </execute>
+        </rtest>""" )
+    
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    platname = platform_name( out )
+    tdir = results_dir()
+    L = filegrep( os.path.join( tdir, 'tst', 'execute.log' ),
+                  'the COMPILER is' )
+    assert len(L) == 1
+    cplr = L[0].split()[-1]
+
+    shutil.rmtree( tdir )
+
+    # misspell the function names - they should just not be called
+    writefile( "config/idplatform.py", """
+        def platforms( opts ):
+            return "XBox"
+        def compilers( platname, opts ):
+            return "BASIC"
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest( '--config config' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    plat2 = platform_name( out )
+    tdir2 = results_dir()
+    L = filegrep( os.path.join( tdir2, 'tst', 'execute.log' ),
+                  'the COMPILER is' )
+    assert len(L) == 1
+    cplr2 = L[0].split()[-1]
+
+    assert plat2 == platname
+    assert tdir2 == tdir
+    assert cplr2 == cplr
+    
+    shutil.rmtree( tdir )
+
+    # if the functions return an empty string, the defaults should be used
+    writefile( "config/idplatform.py", """
+        def platform( opts ):
+            return ''
+        def compiler( platname, opts ):
+            return ''
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest( '--config config' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    plat2 = platform_name( out )
+    tdir2 = results_dir()
+    L = filegrep( os.path.join( tdir2, 'tst', 'execute.log' ),
+                  'the COMPILER is' )
+    assert len(L) == 1
+    cplr2 = L[0].split()[-1]
+
+    assert plat2 == platname
+    assert tdir2 == tdir
+    assert cplr2 == cplr
+    
+    shutil.rmtree( tdir )
+
+    # if the functions do not return a value, the defaults should be used
+    writefile( "config/idplatform.py", """
+        def platform( opts ):
+            if False: return "XBox"
+        def compiler( platname, opts ):
+            if False: return "BASIC"
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest( '--config config' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    plat2 = platform_name( out )
+    tdir2 = results_dir()
+    L = filegrep( os.path.join( tdir2, 'tst', 'execute.log' ),
+                  'the COMPILER is' )
+    assert len(L) == 1
+    cplr2 = L[0].split()[-1]
+
+    assert plat2 == platname
+    assert tdir2 == tdir
+    assert cplr2 == cplr
+    
+    shutil.rmtree( tdir )
+
+    # the command line option --plat should take precedence
+    writefile( "config/idplatform.py", """
+        def platform( opts ):
+            return "XBox"
+        def compiler( platname, opts ):
+            if platname == 'PlayStation': return "BASIC"
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest( '--config config --plat PlayStation' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    plat2 = platform_name( out )
+    tdir2 = results_dir()
+    L = filegrep( os.path.join( tdir2, 'tst', 'execute.log' ),
+                  'the COMPILER is' )
+    assert len(L) == 1
+    cplr2 = L[0].split()[-1]
+
+    assert plat2 == 'PlayStation'
+    assert cplr2 == "BASIC"
+    
+    if platname in batchplatforms:
+        remove_results()
+
+        # misspell the function names - they should just not be called
+        writefile( "config/idplatform.py", """
+            def platforms( opts ):
+                return "XBox"
+            def compilers( platname, opts ):
+                return "BASIC"
+            """ )
+
+        out,np,nd,nf,nn = run_vvtest( '--pipeline --config config' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        plat2 = platform_name( out )
+        tdir2 = results_dir()
+        L = filegrep( os.path.join( tdir2, 'tst', 'execute.log' ),
+                      'the COMPILER is' )
+        assert len(L) == 1
+        cplr2 = L[0].split()[-1]
+
+        assert plat2 == platname
+        assert tdir2 == tdir
+        assert cplr2 == cplr
+        
+        shutil.rmtree( tdir )
+
+        # if the functions return an empty string, the defaults should be used
+        writefile( "config/idplatform.py", """
+            def platform( opts ):
+                return ''
+            def compiler( platname, opts ):
+                return ''
+            """ )
+
+        out,np,nd,nf,nn = run_vvtest( '--pipeline --config config' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        plat2 = platform_name( out )
+        tdir2 = results_dir()
+        L = filegrep( os.path.join( tdir2, 'tst', 'execute.log' ),
+                      'the COMPILER is' )
+        assert len(L) == 1
+        cplr2 = L[0].split()[-1]
+
+        assert plat2 == platname
+        assert tdir2 == tdir
+        assert cplr2 == cplr
+        
+        shutil.rmtree( tdir )
+
+        # if the functions do not return a value, the defaults should be used
+        writefile( "config/idplatform.py", """
+            def platform( opts ):
+                if False: return "XBox"
+            def compiler( platname, opts ):
+                if False: return "BASIC"
+            """ )
+
+        out,np,nd,nf,nn = run_vvtest( '--pipeline --config config' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        plat2 = platform_name( out )
+        tdir2 = results_dir()
+        L = filegrep( os.path.join( tdir2, 'tst', 'execute.log' ),
+                      'the COMPILER is' )
+        assert len(L) == 1
+        cplr2 = L[0].split()[-1]
+
+        assert plat2 == platname
+        assert tdir2 == tdir
+        assert cplr2 == cplr
+        
+        shutil.rmtree( tdir )
+
+        # the command line option --plat should take precedence
+        writefile( "config/idplatform.py", """
+            def platform( opts ):
+                return "XBox"
+            def compiler( platname, opts ):
+                if platname == 'PlayStation': return "BASIC"
+            """ )
+
+        out,np,nd,nf,nn = run_vvtest(
+                            '--pipeline --config config --plat PlayStation' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        plat2 = platform_name( out )
+        tdir2 = results_dir()
+        L = filegrep( os.path.join( tdir2, 'tst', 'execute.log' ),
+                      'the COMPILER is' )
+        assert len(L) == 1
+        cplr2 = L[0].split()[-1]
+
+        assert plat2 == 'PlayStation'
+        assert cplr2 == "BASIC"
 
 
 ########################################################################
