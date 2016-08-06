@@ -294,12 +294,18 @@ def test05():
     """
     exercise defaults and checking in idplatform.py
     """
+    # using an empty config directory ensures the behavior is always as if
+    # there is not a config directory (having a config directory may be the
+    # case if vvtest is copied into a project in a location with a config
+    # subdirectory)
+    os.mkdir( 'config' )
+
     writefile( "tst.xml", """
         <rtest name="tst">
           <execute> echo "the COMPILER is $COMPILER" </execute>
         </rtest>""" )
     
-    out,np,nd,nf,nn = run_vvtest()
+    out,np,nd,nf,nn = run_vvtest( '--config config' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     platname = platform_name( out )
     tdir = results_dir()
