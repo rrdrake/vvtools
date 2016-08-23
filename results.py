@@ -2096,7 +2096,7 @@ def report_generation( optD, fileL ):
         if '--webloc' in optD:
             print3( 'Go to the <a href="' + optD['--webloc'] + \
                     '">full report</a>.\n<br>\n' )
-        html_start_rollup( sys.stdout, dmap, "Rollup", 7 )
+        html_start_rollup( sys.stdout, dmap, "Production Rollup", 7 )
         for rkey,cnts,rL in primary:
             html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
         html_end_rollup( sys.stdout )
@@ -2111,18 +2111,24 @@ def report_generation( optD, fileL ):
         fn = os.path.join( optD['--html'], 'dash.html' )
         dashfp = open( fn, 'w' )
         dashfp.write( dashboard_preamble )
-        html_start_rollup( dashfp, dmap, "Rollup" )
+        html_start_rollup( dashfp, dmap, "Production Rollup" )
         for rkey,cnts,rL in primary:
             html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
         html_end_rollup( dashfp )
         
         if len(secondary) > 0:
-            html_start_rollup( dashfp, dmap,
-                "Secondary Rollup (these test runs will not trigger detail below)" )
+            html_start_rollup( dashfp, dmap, "Secondary Rollup" )
             for rkey,cnts,rL in secondary:
                 html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
             html_end_rollup( dashfp )
         dashfp.write( '\n<br>\n<hr>\n' )
+
+        if len(redD) > 0:
+            dashfp.write( \
+                '<h2>Below are the tests that failed or diffed in ' + \
+                'the most recent test sequence of at least one ' + \
+                'Production Rollup platform combination.</h2>' + \
+                '\n<br>\n<hr>\n' )
     
     if not dohtml:
         print3()
@@ -2141,7 +2147,6 @@ def report_generation( optD, fileL ):
     redL.sort()
     for d,tn in redL:
         
-
         if dohtml:
             html_start_detail( dashfp, dmap, d+'/'+tn, tnum )
             detailed[ d+'/'+tn ] = tnum
@@ -2828,7 +2833,7 @@ def html_rollup_line( fp, plug, dmap, label, cnts, stats, shorten=None ):
             #rs,c = hist.get( day, ( '', 'w' ) )
         elif schedL != None:
             if int(dow) in schedL:
-                rs,c = 'AWOL', result_color('AWOL')
+                rs,c = 'MIA', result_color('MIA')
             else:
                 rs,c = '','w'
         else:
@@ -2993,7 +2998,7 @@ def result_color( result ):
     if result == 'fail': return 'r'
     if result == 'notrun': return 'h'
     if result == 'timeout': return 'm'
-    if result == 'AWOL': return 'y'
+    if result == 'MIA': return 'y'
     return 'w'
 
 ########################################################################
