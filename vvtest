@@ -345,6 +345,11 @@ OPTIONS
             When used with --save-results, this adds a string to the results
             file name within the testing directory.
       
+      --junit=<filename>
+            Writes a test summary to a file in the JUnit XML format.  Should
+            be compatible with Jenkins JUnit test results plugin.  Can be used
+            as part of the vvtest run, or given with the -i option.
+
       --vg, -vg
             Pass the -vg option to the test launch script.
 '''
@@ -516,7 +521,7 @@ def generateTestList( dirs, plat, ufilter ):
     
     createTestDir( testdirname, perms )
     writeCommandInfo( test_dir, plat, perms )
-    printResults( tlist, False, test_dir, False, perms )
+    printResults( tlist, test_dir, perms, add_date=False )
     tlist.createTestExecs( test_dir, plat, config, perms )
 
     tf = os.path.join( test_dir, testlist_name )
@@ -972,7 +977,7 @@ def runTests( dirs, plat, ufilter ):
         if len(tlist.active) > 0:
           
           print3( "Running these tests:" )
-          printResults( tlist, True, test_dir, False, perms, True )
+          printResults( tlist, test_dir, perms, short=True )
           print3()
 
           tlist.createTestExecs( test_dir, plat, config, perms )
@@ -1000,7 +1005,9 @@ def runTests( dirs, plat, ufilter ):
     tlist.writeFinished()
 
 
-def printResults( atestlist, add_date, test_dir, do_html, perms, short=False ):
+def printResults( atestlist, test_dir, perms,
+                  short=False, add_date=True,
+                  tostdout=True, tohtml=False, tojunit='' ):
     """
     Prints a summary to the screen and also creates an HTML summary file.
     If 'short' is True, then only a handfull of tests are written to the
@@ -1024,23 +1031,40 @@ def printResults( atestlist, add_date, test_dir, do_html, perms, short=False ):
              str(len(Lnrun)) + " notrun, " + \
              str(len(Lndone)) + " notdone"
     
-    cwd = os.getcwd()
-    print3( "==================================================" )
-    if short and len(rawlist) > 16:
-        for atest in rawlist[:8]:
-            print3( XstatusString( atest, add_date, test_dir, cwd ) )
-        print3( "..." )
-        for atest in rawlist[-8:]:
-            print3( XstatusString( atest, add_date, test_dir, cwd ) )
-    else:
-        for atest in rawlist:
-            print3( XstatusString( atest, add_date, test_dir, cwd ) )
-    print3( "==================================================" )
-    print3( "Summary:", sumstr )
+    if tostdout:
+        cwd = os.getcwd()
+        print3( "==================================================" )
+        if short and len(rawlist) > 16:
+            for atest in rawlist[:8]:
+                print3( XstatusString( atest, add_date, test_dir, cwd ) )
+            print3( "..." )
+            for atest in rawlist[-8:]:
+                print3( XstatusString( atest, add_date, test_dir, cwd ) )
+        else:
+            for atest in rawlist:
+                print3( XstatusString( atest, add_date, test_dir, cwd ) )
+        print3( "==================================================" )
+        print3( "Summary:", sumstr )
     
-    if do_html:
+    if tohtml:
         printHTMLResults( sumstr, test_dir, perms,
                           Lfail, Ltime, Ldiff, Lpass, Lnrun, Lndone )
+
+    if tojunit:
+
+        rdate = optdict.get( '--results-date', None )
+        if rdate != None:
+          try:
+            datestamp = float(rdate)
+          except:
+            print3( '*** vvtest error: --results-date must be seconds ' + \
+                    'since epoch for use with --junit option' )
+            sys.exit(1)
+        else:
+          datestamp = atestlist.getDateStamp( time.time() )
+        
+        print3( "Writing", len(rawlist), "tests to JUnit file", tojunit )
+        results.write_JUnit_file( test_dir, rawlist, tojunit, datestamp )
 
 
 def printHTMLResults( sumstr, test_dir, perms,
@@ -1209,9 +1233,12 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
                 tx.atest.getExecuteDirectory() + \
                 '" due to child "' + deptx.atest.getExecuteDirectory() + '"' )
     
-    print3()
     do_html = ( '--qsub-id' not in optdict )
-    printResults( tlist, True, test_dir, do_html, perms )
+    do_junit = ''
+    if '--qsub-id' not in optdict and '--junit' in optdict:
+        do_junit = optdict['--junit']
+    print3()
+    printResults( tlist, test_dir, perms, tohtml=do_html, tojunit=do_junit )
     
     elapsed = pretty_time( time.time() - starttime )
     print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
@@ -1302,7 +1329,8 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
                 '" due to child "' + deptx.atest.getExecuteDirectory() + '"' )
     
     print3()
-    printResults( tlist, True, test_dir, True, perms )
+    do_junit = optdict.get( '--junit', '' )
+    printResults( tlist, test_dir, perms, tohtml=True, tojunit=do_junit )
     
     elapsed = pretty_time( time.time() - starttime )
     print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
@@ -1993,7 +2021,7 @@ def restartTests( test_dir, plat, ufilter ):
         if len(tlist.active) > 0:
           
           print3( "Running these tests:" )
-          printResults( tlist, True, test_dir, False, perms, True )
+          printResults( tlist, test_dir, perms, short=True )
           print3()
           
           if optdict.has_key('--save-results'):
@@ -2048,7 +2076,7 @@ def baselineTests( test_dir, plat, ufilter ):
     if len(tlist.active) > 0:
       
       print "Baselining these tests:"
-      printResults( tlist, True, test_dir, False, None, False )
+      printResults( tlist, test_dir, None, short=False )
       
       perms = None
       if '--perms' in optdict:
@@ -2220,7 +2248,7 @@ def parseOptionsAndGenerateOptionDictionary():
     doubles = [ 'version','plat=','platopt=',
                 'keys', 'files', 'pipeline',
                 'qsub-id=', 'qsub-limit=', 'qsub-length=',
-                'html', 'check=', 'analyze', 'cdir=',
+                'html', 'junit=', 'check=', 'analyze', 'cdir=',
                 'search=', 'extract=',
                 'timeout-multiplier=', 'postclean',
                 'vg', 'config=', 'perms=', 'sort=', 'force',
@@ -2229,21 +2257,23 @@ def parseOptionsAndGenerateOptionDictionary():
     import getopt
     try: opts, dirs = getopt.getopt( argL, singles, longopts=doubles )
     except getopt.error, e:
-      sys.stderr.write('*** ' + exeName + ': error: ' + str(e) + '\n')
-      sys.exit(1)
+        sys.stderr.write('*** ' + exeName + ': error: ' + str(e) + '\n')
+        sys.exit(1)
     
     for optpair in opts:
-      n = optpair[0]
-      if   n == '--analyze': n = '-a'
-      elif n == '--search' : n = '-s'
-      elif n == '--postclean': n = '-C'
-      elif n == '-F': n = '-R'  # -F is deprecated, use -R instead
-      if n in ['--results-tag','--results-date']:
-        optdict[n] = optpair[1]
-      elif not optdict.has_key(n):
-        optdict[n] = [optpair[1]]
-      else:
-        optdict[n].append(optpair[1])
+        n = optpair[0]
+        if   n == '--analyze': n = '-a'
+        elif n == '--search' : n = '-s'
+        elif n == '--postclean': n = '-C'
+        elif n == '-F': n = '-R'  # -F is deprecated, use -R instead
+        if n in ['--results-tag','--results-date']:
+            optdict[n] = optpair[1]
+        elif n == '--junit':
+            optdict[n] = os.path.abspath( optpair[1] )
+        elif not optdict.has_key(n):
+            optdict[n] = [optpair[1]]
+        else:
+            optdict[n].append(optpair[1])
     
     if optdict.has_key('-h'): return []
     if optdict.has_key('-H'): return []
@@ -2678,11 +2708,17 @@ if __name__ == '__main__':
       tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
     
     if optdict.has_key('--keys') or optdict.has_key('--files'):
-      keywordInformation(tlist)
+        keywordInformation(tlist)
     elif optdict.has_key('--save-results'):
-      saveResults( tlist, plat, test_dir )
+        saveResults( tlist, plat, test_dir )
     else:
-      printResults( tlist, True, test_dir, optdict.has_key('--html'), None )
+        do_stdout = True
+        do_html = ( '--html' in optdict )
+        do_junit = optdict.get('--junit','')
+        if do_html or do_junit:
+            do_stdout = False
+        printResults( tlist, test_dir, None,
+                      tostdout=do_stdout, tohtml=do_html, tojunit=do_junit )
  
   elif optdict.has_key('-b'):
     

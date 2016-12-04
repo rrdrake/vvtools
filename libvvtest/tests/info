@@ -13,7 +13,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02 test03 test04 test05
+        argL = """test01 test02 test03 test04 test05 test06
                """.split()
 
     cwd = os.getcwd()
@@ -411,6 +411,54 @@ def test05():
     L = extract_files( out, rootd )
     print "files", L
     assert L == [ 'atest.vvt', 'btest.vvt']
+
+########################################################################
+
+def test06():
+    """
+    producing a JUnit results file
+    """
+    writefile( "subdir/param.xml", """
+        <rtest name="param">
+          <parameterize hello="world mars"/>
+          <execute> <![CDATA[
+        sleep 1
+        echo "parm=$hello"
+        ]]>
+          </execute>
+        </rtest>""" )
+
+    writefile( "FailTest.xml", """
+        <rtest name="FailTest">
+          <execute> <![CDATA[
+        sleep 1
+        echo "Exiting with failure status"
+        exit 1
+        ]]>
+          </execute>
+        </rtest>""")
+
+    writefile( "DiffTest.xml", """
+        <rtest name="DiffTest">
+          <parameterize np="1 2"/>
+          <execute> <![CDATA[
+        sleep 1
+        echo "Exiting with diff status"
+        set have_diff = yes
+        ]]>
+          </execute>
+        </rtest>""")
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 2 and nd == 2 and nf == 1 and nn == 0
+    assert len( testlist(out) ) == 5, "expected 5 tests to have run"
+
+    # cd into the run directory and produce the JUnit XML file
+    saved = os.getcwd()
+    os.chdir( results_dir() )
+    run_vvtest( '-i --junit=../ju.xml' )
+    os.chdir(saved)
+    assert len( filegrep( 'ju.xml', '<testcase ' ) ) == 5
 
 
 ############################################################################
