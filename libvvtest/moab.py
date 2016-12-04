@@ -4,21 +4,25 @@ import os, sys
 import time
 
 """
-This batch handler was used on the Cray XE machines.  Most commands are MOAB
-but it has aspects of PBS.
+This batch handler was written for Trinity, but it may also work for general
+MOAB systems.
 """
 
 from runcmd import runcmd
 
-class BatchCrayPBS:
+class BatchMOAB:
     """
     """
-
     def __init__(self, ppn, **kwargs):
         """
+        The 'variation' keyword can be
+
+            knl : Cray KNL partition
         """
         if ppn <= 0: ppn = 1
         self.ppn = ppn
+
+        self.variation = kwargs.get( 'variation', '' )
 
     def header(self, np, qtime, workdir, outfile):
         """
@@ -28,12 +32,16 @@ class BatchCrayPBS:
         if (np%self.ppn) != 0:
             nnodes += 1
         
-        hdr = '#MSUB -l nodes='+str(nnodes)+':ppn='+str(self.ppn)+ \
-                      ',walltime='+str(qtime) + '\n' + \
-              '#MSUB -j oe' + '\n' + \
-              '#MSUB -o '+outfile + '\n' + \
-              '#MSUB -d '+workdir + '\n' + \
-              'cd '+workdir
+        if self.variation == 'knl':
+            hdr = '#MSUB -l nodes='+str(nnodes)+':knl\n'
+            hdr += '#MSUB -los=CLE_quad_cache\n'
+        else:
+            hdr = '#MSUB -l nodes='+str(nnodes) + '\n'
+        hdr += '#MSUB -l walltime='+str(qtime) + '\n' + \
+               '#MSUB -j oe' + '\n' + \
+               '#MSUB -o '+outfile + '\n' + \
+               '#MSUB -d '+workdir + '\n' + \
+               'cd '+workdir
         
         return hdr
 
@@ -110,7 +118,7 @@ class BatchCrayPBS:
         err = ''
         for line in out.strip().split( os.linesep ):
             try:
-                L = line.split()
+                L = line.strip().split()
                 if len(L) >= 4:
                     jid = L[0]
                     st = L[2]
@@ -146,33 +154,42 @@ class BatchCrayPBS:
         return str(nhrs) + ':' + nmin + ':' + nsec
 
 
+def print3( *args ):
+    s = ' '.join( [ str(arg) for arg in args ] )
+    sys.stdout.write( s + '\n' )
+    sys.stdout.flush()
+
 ########################################################################
 
 if __name__ == "__main__":
     
-    bat = BatchCrayPBS()
+    #bat = BatchMOAB( 32 )
+    bat = BatchMOAB( 64, variation='knl' )
 
-    fp = open('tmp.sub','w')
+    fp = open('tmpk.sub','w')
     fp.write( '#!/bin/csh -f'+os.linesep )
-    fp.write( bat.make_batch_header( 1, 16, 65, os.getcwd(), 'tmp.out' ) )
+    fp.write( bat.header( 1, 60, os.getcwd(), 'tmpk.out' ) )
     fp.write( os.linesep + os.linesep + \
-              'echo running tmp.sub job script' + os.linesep + \
-              'sleep 5' + os.linesep )
+              'echo running tmpk.sub job script' + os.linesep + \
+              'env' + os.linesep + \
+              'aprun -n 1 cat /proc/cpuinfo' + os.linesep + \
+              'sleep 15' + os.linesep )
     fp.close()
-    cmd, out, jobid, err = bat.submit( 'tmp.sub', os.getcwd(), 'tmp.out', confirm=1 )
-    print cmd
-    print out
-    print 'jobid', jobid
+    cmd, out, jobid, err = \
+        bat.submit( 'tmpk.sub', os.getcwd(), 'tmpk.out', confirm=False )
+    print3( cmd )
+    print3( out )
+    print3( 'jobid', jobid )
     if err:
-        print 'error:', err
-    time.sleep(2)
+        print3( 'error:', err )
+    time.sleep(5)
     while 1:
         cmd, out, err, stateD = bat.query([jobid])
         if err:
-            print cmd
-            print out
-            print err
-        print "state", stateD[jobid]
+            print3( cmd )
+            print3( out )
+            print3( err )
+        print3( "state", stateD[jobid] )
         if not stateD[jobid]:
             break
-        time.sleep(1)
+        time.sleep(5)

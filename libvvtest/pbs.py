@@ -107,9 +107,10 @@ class BatchPBS:
         cmd = ' '.join( cmdL )
         x, out = runcmd(cmdL)
         
+        # create a dictionary with the results; maps job id to a status string
         stateD = {}
-        for jid in jobidL:
-            stateD[jid] = ''  # default to done
+        for j in jobidL:
+            stateD[j] = ''  # default to done
         
         err = ''
         for line in out.strip().split( os.linesep ):
@@ -118,11 +119,15 @@ class BatchPBS:
                 if len(L) == 6:
                     jid = L[0]
                     st = L[4]
-                    if stateD.has_key(jid):
-                        if st in ['R']: st = 'running'
-                        elif st in ['Q']: st = 'pending'
-                        else: st = ''
-                        stateD[jid] = st
+                    # the output from qstat may return a truncated job id,
+                    # so match the beginning of the incoming 'jobidL' strings
+                    for j in jobidL:
+                        if j.startswith( jid ):
+                            if st in ['R']: st = 'running'
+                            elif st in ['Q']: st = 'pending'
+                            else: st = ''
+                            stateD[j] = st
+                            break
             except Exception, e:
                 err = "failed to parse squeue output: " + str(e)
         

@@ -74,9 +74,10 @@ class Platform:
         Set the batch system for this platform.  If 'batch' is a string, it
         must be one of the known batch systems, such as
 
-              craypbs     : for Cray machines running PBS (or PBS-like)
-              pbs         : standard PBS system
-              slurm       : standard SLURM system
+              craypbs   : for Cray machines running PBS (or PBS-like)
+              moab      : for Cray machines running Moab (may work in general)
+              pbs       : standard PBS system
+              slurm     : standard SLURM system
 
         It can also be a python object which implements the batch functions.
         """
@@ -92,6 +93,9 @@ class Platform:
             elif batch == 'slurm':
                 import slurm
                 self.batch = slurm.BatchSLURM( ppn, **kwargs )
+            elif batch == 'moab':
+                import moab
+                self.batch = moab.BatchMOAB( ppn, **kwargs )
             else:
                 raise Exception( "Unknown batch system name: "+str(batch) )
         else:

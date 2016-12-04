@@ -20,11 +20,11 @@ def runcmd( cmdL, changedir=None ):
     
     os.close(outWrite)
     out = ''
-    while 1:
+    while True:
         buf = os.read(outRead,2048)
         if not buf:
             break
-        out = out + buf
+        out += buf
     os.close(outRead)
     (cpid, xs) = os.waitpid(pid,0)
     
