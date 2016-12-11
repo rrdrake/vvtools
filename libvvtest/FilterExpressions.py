@@ -21,6 +21,7 @@ class ExpressionSet:
        'platform_expr_list',  # k-format or string platform expression
        'search_file_globs',  # file glob patterns used with 'search_patterns'
        'search_patterns',  # list of regex patterns for seaching within files
+       'include_tdd',      # if True, tests marked TDD are not excluded
        'include_all',      # boolean to turn off test inclusion filtering
     ]
     

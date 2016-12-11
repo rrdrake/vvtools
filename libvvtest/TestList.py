@@ -329,14 +329,14 @@ class TestList:
         """
         """
         if self.ufilter.getAttr('include_all',0):
-          return 1
+            return True
         
         kwL = tspec.getResultsKeywords() + tspec.getKeywords()
         if not self.ufilter.satisfies_keywords( kwL ):
-          return 0
+            return False
         
         if subdir != None and subdir != xdir and not is_subdir( subdir, xdir ):
-          return 0
+            return False
         
         # want child tests to run with the "analyze only" option ?
         # if yes, then comment this out; if no, then uncomment it
@@ -344,9 +344,13 @@ class TestList:
         #  return 0
         
         if not self.ufilter.evaluate_parameters( tspec.getParameters() ):
-          return 0
+            return False
+
+        if not self.ufilter.getAttr( 'include_tdd', False ) and \
+           tspec.hasAttr( 'TDD' ):
+            return False
         
-        return 1
+        return True
     
     def getActiveTests(self, sorting=''):
         """

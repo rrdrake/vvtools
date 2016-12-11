@@ -1252,6 +1252,8 @@ def make_attr_string( attrD ):
         rs = attrD.get('result',None)
         if rs != None:
           s = s + ' ' + rs
+    if 'TDD' in attrD:
+        s += ' TDD'
     return string.strip(s)
 
 
@@ -1281,6 +1283,9 @@ def read_attrs( attrL ):
             i += 1
             if i < len(attrL):
                 attrD['result'] = attrL[i]
+    if i < len(attrL) and attrL[i] == 'TDD':
+        i += 1
+        attrD['TDD'] = True
     return attrD
 
 

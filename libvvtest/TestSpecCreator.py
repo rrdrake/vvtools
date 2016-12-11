@@ -110,6 +110,9 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
     if not ufilter.satisfies_nonresults_keywords( keywords ):
       return []
     
+    if not ufilter.getAttr( 'include_tdd', False ) and 'TDD' in keywords:
+      return []
+
     # create the test instances
     
     testL = []
@@ -180,6 +183,9 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
     
     if not ufilter.satisfies_nonresults_keywords( keywords ):
         return []
+    
+    if not ufilter.getAttr( 'include_tdd', False ) and 'TDD' in keywords:
+      return []
     
     testL = []
 
@@ -306,6 +312,7 @@ def refreshTest( testobj, ufilter=None ):
       ufilter = FilterExpressions.ExpressionSet()
     
     filt = not ufilter.getAttr( 'include_all', False )
+    xtdd = not ufilter.getAttr( 'include_tdd', False )
     keep = True
     
     if ext == '.xml':
@@ -326,6 +333,9 @@ def refreshTest( testobj, ufilter=None ):
         if filt and not ufilter.satisfies_keywords( testobj.getKeywords(1) ):
           keep = False
         
+        if xtdd and 'TDD' in keywords:
+          keep = False
+
         if filt and not ufilter.evaluate_parameters( testobj.getParameters() ):
           keep = False
         
@@ -369,6 +379,9 @@ def refreshTest( testobj, ufilter=None ):
         if filt and not ufilter.satisfies_keywords( testobj.getKeywords(1) ):
           keep = False
         
+        if xtdd and 'TDD' in keywords:
+          keep = False
+
         if filt and not ufilter.evaluate_parameters( testobj.getParameters() ):
           keep = False
         
@@ -439,6 +452,10 @@ def toString( tspec ):
         s = s + ' "' + n + '=I' + str(v) + '"'
       elif type(v) == types.FloatType:
         s = s + ' "' + n + '=F' + str(v) + '"'
+      elif type(v) == type(True):
+        s = s + ' "' + n + '=B'
+        if v: s += '1"'
+        else: s += '0"'
       elif type(v) == types.NoneType:
         s = s + ' "' + n + '=N"'
       else:
@@ -488,6 +505,7 @@ def fromString( strid ):
       elif nvL[1][0] == 'I': tspec.setAttr( nvL[0], int(nvL[1][1:]) )
       elif nvL[1][0] == 'F': tspec.setAttr( nvL[0], float(nvL[1][1:]) )
       elif nvL[1][0] == 'N': tspec.setAttr( nvL[0], None )
+      elif nvL[1][0] == 'B': tspec.setAttr( nvL[0], nvL[1][1:] == '1' )
       else:                  tspec.setAttr( nvL[0], nvL[1][1:] )
     
     return tspec

@@ -815,6 +815,8 @@ def writeCommandInfo( test_dir, plat, perms ):
         fp.write( 'USE_ENV=1\n' )
       if optdict.has_key('-A'):
         fp.write( 'ALL_PLATFORMS=1\n' )
+      if '--include-tdd' in optdict:
+        fp.write( 'INCLUDE_TDD=True\n' )
       if optdict.has_key('--check'):
         fp.write( 'CHECK=' + string.join( optdict['--check'] ) + '\n' )
       fp.close()
@@ -889,6 +891,8 @@ def readCommandInfo():
           optdict['-e'] = ''
         elif kvpair[0] == 'ALL_PLATFORMS':
           optdict['-A'] = ''
+        elif kvpair[0] == 'INCLUDE_TDD':
+          optdict['--include-tdd'] = ''
         elif kvpair[0] == 'CHECK':
           optdict['--check'] = string.split( kvpair[1] )
       fp.close()
@@ -2249,7 +2253,7 @@ def parseOptionsAndGenerateOptionDictionary():
                 'keys', 'files', 'pipeline',
                 'qsub-id=', 'qsub-limit=', 'qsub-length=',
                 'html', 'junit=', 'check=', 'analyze', 'cdir=',
-                'search=', 'extract=',
+                'search=', 'extract=', 'include-tdd',
                 'timeout-multiplier=', 'postclean',
                 'vg', 'config=', 'perms=', 'sort=', 'force',
                 'save-results', 'results-tag=','results-date=',
@@ -2670,7 +2674,8 @@ if __name__ == '__main__':
                 ignore_platforms=optdict.has_key('-A'),
                 platform_expr_list=optdict.get('-x', None),
                 search_file_globs=search_fnmatch,
-                search_patterns=optdict.get('-s',None) )
+                search_patterns=optdict.get('-s',None),
+                include_tdd='--include-tdd' in optdict )
   if optdict.has_key('--qsub-id'):
     ufilter.setAttr( 'include_all', True )
   
@@ -2693,6 +2698,7 @@ if __name__ == '__main__':
     elif os.path.exists( testResultsDir(plat.getName()) ):
       test_dir = os.path.join( os.getcwd(), testResultsDir(plat.getName()) )
       tfile = os.path.join( test_dir, testlist_name )
+      ufilter.setAttr( 'include_tdd', True )  # always include tdd with -i
       tlist.readFile( tfile )
       tlist.loadAndFilter( plat.getMaxProcs() )
     elif optdict.has_key('--keys') or optdict.has_key('--files'):

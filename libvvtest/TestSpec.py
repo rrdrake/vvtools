@@ -342,6 +342,10 @@ class TestSpec:
         A list of strings.
         """
         self.keywords = [] + keyword_list
+
+        # transfer TDD marks to the attributes
+        if 'TDD' in self.keywords:
+            self.setAttr( 'TDD', True )
     
     def setParameters(self, param_dict):
         """
