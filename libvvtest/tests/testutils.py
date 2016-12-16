@@ -4,6 +4,10 @@ import shutil
 import stat
 import fnmatch
 import time
+import subprocess
+import signal
+import shlex
+import pipes
 
 # this file is expected to be imported from a script that was run
 # within the tests directory (which is how all the tests are run)
@@ -74,6 +78,7 @@ def writescript( fname, content ):
     try: os.chmod(fname, perm)
     except: pass
 
+
 def run_cmd( cmd, directory=None ):
     """
     """
@@ -112,6 +117,77 @@ def run_cmd( cmd, directory=None ):
     if os.WIFEXITED(x) and os.WEXITSTATUS(x) == 0:
       return True, out
     return False, out
+
+
+def run_redirect( cmd, redirect_filename ):
+    """
+    Executes the given command as a child process, waits for it, and returns
+    True if the exit status is zero.
+    
+    The 'redirect_filename' string is the filename to redirect the output.
+
+    If 'cmd' is a string, then the /bin/sh shell is used to interpret the
+    command.  If 'cmd' is a python list, then the shell is not used and each
+    argument is sent verbatim to the program being executed.
+    """
+    append = False
+
+    outfp = None
+    fdout = None
+    if type(redirect_filename) == type(2):
+        fdout = redirect_filename
+    elif type(redirect_filename) == type(''):
+        if append:
+            outfp = open( redirect_filename, "a" )
+        else:
+            outfp = open( redirect_filename, "w" )
+        fdout = outfp.fileno()
+
+    if type(cmd) == type(''):
+        scmd = cmd
+    else:
+        scmd = shell_escape( cmd )
+    if outfp == None:
+        sys.stdout.write( scmd + '\n' )
+    else:
+        sys.stdout.write( scmd + ' > ' + redirect_filename + '\n' )
+    sys.stdout.flush()
+    
+    # build the arguments for subprocess.Popen()
+    argD = {}
+
+    if type(cmd) == type(''):
+        argD['shell'] = True
+    
+    argD['bufsize'] = -1  # use system buffer size (is this needed?)
+
+    if fdout != None:
+        argD['stdout'] = fdout
+        argD['stderr'] = subprocess.STDOUT
+
+    p = subprocess.Popen( cmd, **argD )
+
+    x = p.wait()
+
+    if outfp != None:
+      outfp.close()
+    outfp = None
+    fdout = None
+
+    return x == 0
+
+
+def shell_escape( cmd ):
+    """
+    Returns a string with shell special characters escaped so they are not
+    interpreted by the shell.
+
+    The 'cmd' can be a string or a python list.
+    """
+    if type(cmd) == type(''):
+        return ' '.join( [ pipes.quote(s) for s in shlex.split( cmd ) ] )
+    return ' '.join( [ pipes.quote(s) for s in cmd ] )
+
 
 def rmallfiles( not_these=None ):
     for f in os.listdir("."):

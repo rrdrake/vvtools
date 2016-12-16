@@ -24,7 +24,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """filter01 results01
+        argL = """filter01 results01 report01
                """.split()
     
     # set these for the pipeline tests
@@ -195,6 +195,67 @@ def results01():
     assert len( filegrep( resultsfname, "testthree.*pass" ) ) == 1
     assert len( filegrep( resultsfname, "testthree.*TDD" ) ) == 0
     assert len( filegrep( resultsfname, "testfour.*TDD" ) ) == 1
+
+
+def report01():
+    """
+    tests marked TDD are handled distinguished in the reporting
+    """
+    os.mkdir( 'config' )  # force the test to use default plat & cplr
+
+    writefile( "testone.xml", """
+        <rtest name="testone">
+            <keywords> junk TDD </keywords>
+            <execute> sleep 1 </execute>
+        </rtest>""" )
+    writefile( "testtwo.xml", """
+        <rtest name="testtwo">
+            <keywords> gold </keywords>
+            <execute> sleep 1 </execute>
+        </rtest>""" )
+    writescript( 'testthree.vvt', """
+        #!/usr/bin/env python
+        #VVT: keywords = pink
+        import time
+        time.sleep(1)
+        """ )
+    writescript( 'testfour.vvt', """
+        #!/usr/bin/env python
+        #VVT: keywords = blue TDD
+        import time
+        time.sleep(1)
+        """ )
+    
+    out,np,nd,nf,nn = run_vvtest( '--include-tdd --config config' )
+    assert np == 4 and nd == 0 and nf == 0 and nn == 0
+    tdir = os.path.abspath( results_dir() )
+    
+    # bootstrap with runtimes files then save the test results
+    ok,out = run_cmd( resultspy + ' save' )
+    assert ok
+    run_vvtest( '--config config -i --save-results' )
+    
+    rf1 = glob.glob('results.*')[0]
+    tr = results.TestResults( rf1 )
+    platname,cplrname = tr.platform(), tr.compiler()
+    L = rf1.split('.')
+    rf2 = L[0]+'.'+L[1]+'.Fake.'+L[3]
+    mach = os.uname()[1]
+    tr.writeResults( rf2, 'Fake', L[3], mach, '/some/fake/path' )
+
+    ok,out = run_cmd( resultspy + ' report ' + rf1 + ' ' + rf2 )
+    assert ok
+
+    assert len( grep( out, 'Fake.gcc' ) ) == 1
+    assert len( grep( out, 'pass=2 ' ) ) == 2
+    assert len( grep( out, 'diff= ' ) ) == 0
+    assert len( grep( out, 'fail= ' ) ) == 0
+
+    # excercise this, but verifying the values is hard without just
+    # bringing up a browser
+    ok = run_redirect( resultspy + ' report --html . ' + rf1 + ' ' + rf2,
+                       'short.html' )
+    assert ok
 
 
 ############################################################################

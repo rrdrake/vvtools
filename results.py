@@ -988,25 +988,29 @@ class TestResults:
             return (None,None)
         return ( self.daterange[0], self.daterange[1] )
 
-    def getCounts(self):
+    def getCounts(self, tdd=False):
         """
         Counts the number of tests that pass, diff, fail, timeout, notrun,
-        and unknown, and returns a tuple with the counts of each.
+        and unknown, and returns a tuple with the counts of each.  If 'tdd' is
+        False, then tests marked TDD are excluded.  If 'tdd' is True, then
+        only tests marked TDD are included.
         """
         np = nd = nf = nt = nr = unk = 0
         for d,tD in self.dataD.items():
             for tn,aD in tD.items():
-                st = aD.get( 'state', '' )
-                if st == 'done':
-                    rs = aD.get( 'result', '' )
-                    if rs == 'pass': np += 1
-                    elif rs == 'fail': nf += 1
-                    elif rs == 'diff': nd += 1
-                    elif rs == 'timeout': nt += 1
+                if ( tdd == False and 'TDD' not in aD ) or \
+                   ( tdd == True and 'TDD' in aD ):
+                    st = aD.get( 'state', '' )
+                    if st == 'done':
+                        rs = aD.get( 'result', '' )
+                        if rs == 'pass': np += 1
+                        elif rs == 'fail': nf += 1
+                        elif rs == 'diff': nd += 1
+                        elif rs == 'timeout': nt += 1
+                        else: unk += 1
+                    elif st == 'notrun': nr += 1
+                    elif st == 'timeout': nt += 1
                     else: unk += 1
-                elif st == 'notrun': nr += 1
-                elif st == 'timeout': nt += 1
-                else: unk += 1
         return np,nd,nf,nt,nr,unk
     
     def getSummary(self):
@@ -1036,28 +1040,33 @@ class TestResults:
 
         If 'matchlist=True' is given as a keyword argument, then the resulting
         dictionary will only contain test items if they match one of the 'args'.
+
+        By default, tests marked TDD are ignored.  But if 'tdd=True' is given
+        as a keyword argument, then only tests marked TDD are included.
         """
         getall = ( kwargs.get( 'matchlist', False ) == False )
+        tdd = kwargs.get( 'tdd', False )
 
         nmatch = 0
         resD = {}
         for d,tD in self.dataD.items():
             for tn,aD in tD.items():
                 
-                st = aD.get( 'state', '' )
-                rs = aD.get( 'result', '' )
-                if st in args:
-                    res = 'state='+st
-                    nmatch += 1
-                elif rs in args:
-                    res = 'result='+rs
-                    nmatch += 1
-                else:
-                    res = ''
+                if ( tdd and 'TDD' in aD ) or ( not tdd and 'TDD' not in aD ):
+                    st = aD.get( 'state', '' )
+                    rs = aD.get( 'result', '' )
+                    if st in args:
+                        res = 'state='+st
+                        nmatch += 1
+                    elif rs in args:
+                        res = 'result='+rs
+                        nmatch += 1
+                    else:
+                        res = ''
 
-                if getall or res:
-                    xd = aD.get( 'xdate', 0 )
-                    resD[ (d,tn) ] = ( xd, res )
+                    if getall or res:
+                        xd = aD.get( 'xdate', 0 )
+                        resD[ (d,tn) ] = ( xd, res )
 
         return resD,nmatch
 
@@ -1278,11 +1287,12 @@ def read_attrs( attrL ):
         attrD['xtime'] = int( attrL[i].split('=')[1] )
         i += 1
     if i < len(attrL) and attrL[i] in ['done','notrun','notdone']:
-        attrD['state'] = attrL[i]
-        if attrL[i] == "done":
+        st = attrL[i]
+        attrD['state'] = st
+        i += 1
+        if st == "done" and i < len(attrL):
+            attrD['result'] = attrL[i]
             i += 1
-            if i < len(attrL):
-                attrD['result'] = attrL[i]
     if i < len(attrL) and attrL[i] == 'TDD':
         i += 1
         attrD['TDD'] = True
@@ -2022,6 +2032,7 @@ def report_generation( optD, fileL ):
     # these for html output
     primary = []
     secondary = []
+    tdd = []
     runlist = []
 
     keylen = 0
@@ -2045,12 +2056,12 @@ def report_generation( optD, fileL ):
 
         fdate,tr,tr2,started = rmat.latestResults( rkey )
         
-
         if dohtml:
             if tr.detail_ok:
                 primary.append( (rkey, tr.getCounts(), rL) )
             else:
                 secondary.append( (rkey, tr.getCounts(), rL) )
+            tdd.append( (rkey, tr.getCounts(tdd=True), rL) )
             runlist.append( (rkey,fdate,tr) )
         else:
             print3( '  ', dmap.legend() )
@@ -2111,6 +2122,12 @@ def report_generation( optD, fileL ):
             for rkey,cnts,rL in secondary:
                 html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
             html_end_rollup( sys.stdout )
+        
+        if len(tdd) > 0:
+            html_start_rollup( sys.stdout, dmap, "TDD Rollup", 7 )
+            for rkey,cnts,rL in tdd:
+                html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
+            html_end_rollup( sys.stdout )
         print3( '\n<br>\n<hr>\n' )
 
         fn = os.path.join( optD['--html'], 'dash.html' )
@@ -2125,6 +2142,13 @@ def report_generation( optD, fileL ):
             html_start_rollup( dashfp, dmap, "Secondary Rollup" )
             for rkey,cnts,rL in secondary:
                 html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
+            html_end_rollup( dashfp )
+        
+        if len(tdd) > 0:
+            html_start_rollup( dashfp, dmap, "TDD Rollup" )
+            for rkey,cnts,rL in tdd:
+                if sum(cnts) > 0:
+                    html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
             html_end_rollup( dashfp )
         dashfp.write( '\n<br>\n<hr>\n' )
 
@@ -2924,20 +2948,13 @@ def write_testrun_entry( fp, plug, results_key, fdate, tr, detailed ):
     from the config directory, if present.
     """
     desc = None
+    log = None
+    sched = None
     if plug and hasattr( plug, 'get_test_run_info' ):
         desc = plug.get_test_run_info( results_key, 'description' )
         log = plug.get_test_run_info( results_key, 'log' )
         sched = plug.get_test_run_info( results_key, 'schedule' )
-
-    resD,num = tr.collectResults( 'fail', 'diff', 'timeout', 'notrun', 'notdone',
-                                  matchlist=True )
     datestr = time.strftime( "%Y %m %d", time.localtime(fdate) )
-    resL = []
-    for kT,vT in resD.items():
-        d,tn = kT
-        xd,res = vT
-        resL.append( ( d+'/'+tn, res.split('=',1)[1] ) )
-    resL.sort()
 
     fp.write( '\n' + \
         '<h2 id="'+results_key+'">'+results_key+'</h2>\n' + \
@@ -2955,37 +2972,55 @@ def write_testrun_entry( fp, plug, results_key, fdate, tr, detailed ):
     if sched:
         fp.write(
         '<li><b>Schedule:</b> '+html_escape(sched)+'</li>\n' )
-    fp.write(
-        '<li><b>Latest Results:</b> '+datestr )
-    if len(resL) > 0:
-        fp.write( \
-            '<br>\n' + \
-            '<table style="border: 1px solid black; border-collapse: collapse;">\n' )
-        maxlist = 40  # TODO: make this number configurable
-        i = 0
-        for tn,res in resL:
-            if i >= maxlist:
-                i = len(resL)+1
-                break
-            cl = 'midtd'+result_color(res)
-            fp.write( \
-                '<tr style="border: 1px solid black;">\n' + \
-                '<td class="'+cl+'" style="border: 1px solid black;">'+res+'</td>\n' )
-            tid = detailed.get( tn, None )
-            if tid:
-                fp.write( \
-                    '<td><a href="dash.html#test'+str(tid)+'">' + \
-                    html_escape(tn) + '</a></td></tr>\n' )
-            else:
-                fp.write( '<td>' + html_escape(tn) + '</td></tr>\n' )
-            i += 1
-        fp.write( \
-            '</table>\n' )
-        if i > len(resL):
+    
+    for tdd in [False,True]:
+        resD,num = tr.collectResults( 'fail', 'diff', 'timeout',
+                                      'notrun', 'notdone',
+                                      matchlist=True, tdd=tdd )
+        if tdd:
+            if len(resD) == 0:
+                continue  # skip the TDD item altogether if no tests
+            fp.write(
+                '<li><b>Latest TDD Results:</b> '+datestr )
+        else:
+            fp.write(
+                '<li><b>Latest Results:</b> '+datestr )
+        if len(resD) > 0:
+            resL = []
+            for kT,vT in resD.items():
+                d,tn = kT
+                xd,res = vT
+                resL.append( ( d+'/'+tn, res.split('=',1)[1] ) )
+            resL.sort()
+
             fp.write( \
                 '<br>\n' + \
-                '*** this list truncated; num entries = '+str(len(resL))+'\n' )
-    fp.write( '</li>\n' )
+                '<table style="border: 1px solid black; border-collapse: collapse;">\n' )
+            maxlist = 40  # TODO: make this number configurable
+            i = 0
+            for tn,res in resL:
+                if i >= maxlist:
+                    i = len(resL)+1
+                    break
+                cl = 'midtd'+result_color(res)
+                fp.write( \
+                    '<tr style="border: 1px solid black;">\n' + \
+                    '<td class="'+cl+'" style="border: 1px solid black;">'+res+'</td>\n' )
+                tid = detailed.get( tn, None )
+                if tid:
+                    fp.write( \
+                        '<td><a href="dash.html#test'+str(tid)+'">' + \
+                        html_escape(tn) + '</a></td></tr>\n' )
+                else:
+                    fp.write( '<td>' + html_escape(tn) + '</td></tr>\n' )
+                i += 1
+            fp.write( \
+                '</table>\n' )
+            if i > len(resL):
+                fp.write( \
+                    '<br>\n' + \
+                    '*** this list truncated; num entries = '+str(len(resL))+'\n' )
+        fp.write( '</li>\n' )
     fp.write( '</ul>\n' )
     fp.write( '<br>\n' )
 
