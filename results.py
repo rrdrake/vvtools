@@ -2112,6 +2112,7 @@ def report_generation( optD, fileL ):
         if '--webloc' in optD:
             print3( 'Go to the <a href="' + optD['--webloc'] + \
                     '">full report</a>.\n<br>\n' )
+        
         html_start_rollup( sys.stdout, dmap, "Production Rollup", 7 )
         for rkey,cnts,rL in primary:
             html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
@@ -2123,11 +2124,6 @@ def report_generation( optD, fileL ):
                 html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
             html_end_rollup( sys.stdout )
         
-        if len(tdd) > 0:
-            html_start_rollup( sys.stdout, dmap, "TDD Rollup", 7 )
-            for rkey,cnts,rL in tdd:
-                html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
-            html_end_rollup( sys.stdout )
         print3( '\n<br>\n<hr>\n' )
 
         fn = os.path.join( optD['--html'], 'dash.html' )
@@ -2150,6 +2146,7 @@ def report_generation( optD, fileL ):
                 if sum(cnts) > 0:
                     html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
             html_end_rollup( dashfp )
+        
         dashfp.write( '\n<br>\n<hr>\n' )
 
         if len(redD) > 0:
