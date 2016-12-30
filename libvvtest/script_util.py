@@ -402,7 +402,7 @@ def runcmd( cmd, echo=True, ignore_exit=False, capture_output=False,
 
 def catfile( filename ):
     """
-    Reads the given file name and writes it back out to stdout.
+    Reads the given file name and writes it to stdout.
     """
     fp = open( filename, 'r' )
     try:
@@ -451,8 +451,8 @@ def get_permissions( path_or_fmode, which ):
     The specification for 'which':
 
         read    : True if the file has read permission
-        write   : True if the file has read permission
-        execute : True if the file has read permission
+        write   : True if the file has write permission
+        execute : True if the file has execute permission
 
         setuid  : True if the file is marked set-uid
 
@@ -464,7 +464,8 @@ def get_permissions( path_or_fmode, which ):
     If a minus sign is in the <mode> then an exact match of the file mode
     must be true for this function to return True.
 
-    The 'path_or_fmode' can be an integer file mode instead of a path.
+    The 'path_or_fmode' can be an integer file mode instead of a path, but
+    can only be a file path if 'which' is "read", "write" or "execute".
     """
     if which == 'read':
         assert type(path_or_fmode) == type('')
