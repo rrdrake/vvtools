@@ -2035,6 +2035,17 @@ def report_generation( optD, fileL ):
     tdd = []
     runlist = []
 
+    # If a test gets marked TDD, it will still show up in the test detail
+    # section until all test results (all platform combinations) run the
+    # test again.  To prevent this, we save all the tests that are marked
+    # as TDD for the most recent test results of each platform combination.
+    # Then later when the test detail is being produced, this dict is used
+    # to exclude tests that are marked TDD by any platform combination.
+    # The 'tddmarks' dict is just a union of the dicts coming back from
+    # calling TestResults.collectResults(), which is
+    #      ( test dir, test name ) -> ( run date, result string )
+    tddmarks = {}
+
     keylen = 0
     redD = {}
     for rkey in rmat.testruns():
@@ -2062,6 +2073,8 @@ def report_generation( optD, fileL ):
             else:
                 secondary.append( (rkey, tr.getCounts(), rL) )
             tdd.append( (rkey, tr.getCounts(tdd=True), rL) )
+            D,nm = tr.collectResults( tdd=True )
+            tddmarks.update( D )
             runlist.append( (rkey,fdate,tr) )
         else:
             print3( '  ', dmap.legend() )
@@ -2172,6 +2185,9 @@ def report_generation( optD, fileL ):
     redL = redD.keys()
     redL.sort()
     for d,tn in redL:
+
+        if (d,tn) in tddmarks:
+            continue
         
         if dohtml:
             html_start_detail( dashfp, dmap, d+'/'+tn, tnum )
