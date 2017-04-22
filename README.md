@@ -16,7 +16,7 @@ Vvtest is contained in the `vvt` subdirectory.
 
 For larger projects, automated process management gets quite involved.
 Interdependent jobs can become complex very quickly.
-When things do go according to plan, searching for and reading log files are
+When things do not go according to plan, searching for and reading log files are
 essential.  Finally, version controlling all the automated scripts being used
 provides the team much needed communication and history.
 
