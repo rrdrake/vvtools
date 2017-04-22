@@ -1,0 +1,1818 @@
+#!/usr/bin/env python
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import struct
+import getopt
+
+# this will os.chdir() to a subdirectory
+from testutils import *
+
+# this is the module we are testing
+import remotepython
+
+# By default, a "fake" ssh script is used that acts like ssh.  To use
+# an actual ssh, add the -s option to the unit test command line.  In this
+# case, make sure you can ssh to the current machine without a password.
+use_real_ssh = False
+
+# default the local and remote python to the current running python
+localpy = sys.executable
+remotepy = sys.executable
+
+# list of pythons to test with the -p option
+pyL = [ '/home/rrdrake/bin/Linux/py244/bin/python',
+        '/home/rrdrake/bin/Linux/py255/bin/python',
+        '/home/rrdrake/bin/Linux/py266/bin/python',
+        '/home/rrdrake/bin/Linux/py273/bin/python',
+        '/home/rrdrake/bin/Linux/py301/bin/python',
+        '/home/rrdrake/bin/Linux/py313/bin/python',
+        '/home/rrdrake/bin/Linux/py325/bin/python',
+        '/home/rrdrake/bin/Linux/py335/bin/python',
+        '/home/rrdrake/bin/Linux/py343/bin/python',
+        '/home/rrdrake/bin/Linux/py353/bin/python' ]
+
+
+def main():
+    """
+    """
+    optL,argL = getopt.getopt( sys.argv[1:], 'ps' )
+    cwd = os.getcwd()
+
+    if ('-s','') in optL:
+        global use_real_ssh
+        use_real_ssh = True
+
+    if ('-p','') not in optL:
+        runtests( cwd, argL )
+    else:
+        # run each python version for both local and remote
+        for lpy in pyL:
+            for rpy in pyL:
+                global localpy, remotepy
+                localpy = lpy
+                print3( 'local python:', localpy )
+                remotepy = rpy
+                print3( 'remote python:', remotepy )
+                runtests( cwd, argL )
+
+def runtests( cwd, argL ):
+    """
+    """
+    if len(argL) == 0:
+        argL = """func1
+                  err1 err2 err3 err4 err5
+                  return1
+                  persist1
+                  file1 file2 file3 file4 file5 file6 file7 file8
+                  binary1 binary2
+                  chunk1 chunk2
+                  preserve1 preserve2
+                  timeout1 timeout2 timeout3 timeout4 timeout5
+                  background1 background2 background3 background4
+               """.split()
+    
+    for func in argL:
+        os.chdir( cwd )
+        rmallfiles()
+        time.sleep(1)
+        print3( '====> ', func )
+        eval( func+'()' )
+
+
+#######################################################################
+
+def func1():
+    """
+    basic connection and function call
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+
+        def myfunc( myarg, arg2 ):
+            time.sleep( 1 )
+            return "my return value"
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        rtn = lnk.r_myfunc( 'myarg', 1 )
+        lnk.shutdown()
+        print3( 'return =', rtn )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'return = my return value' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def err1():
+    """
+    remote python script has error during load
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        v = undefined_variable_name  # this is an error
+        def myfunc( myarg, arg2 ):
+            pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.x_myfunc( 'myarg', 1 )
+        lnk.shutdown()
+        print3( 'return =', rtn )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'return =' ) ) == 0
+    assert len( grep( out, 'connection made' ) ) == 0
+    assert len( grep( out, 'ending' ) ) == 0
+    assert len( grep( out, 'Traceback' ) ) > 0
+
+
+def err2():
+    """
+    unknown remote function name
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        def myfunc( myarg, arg2 ):
+            return "my return value"
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.r_badfunc( 'myarg', 1 )
+        lnk.shutdown()
+        print3( 'return =', rtn )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'return =' ) ) == 0
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 0
+    assert len( grep( out, 'Traceback' ) ) > 0
+    assert len( grep( out, 'RemoteException' ) ) > 0
+
+
+def err3():
+    """
+    unknown remote function name but leave connection open
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        def myfunc( myarg, arg2 ):
+            return "my return value"
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3, RemoteException
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        try:
+            rtn = lnk.r_badfunc( 'myarg', 1 )
+        except RemoteException:
+            pass
+        rtn = lnk.r_myfunc( 'foo', 10 )
+        lnk.shutdown()
+        print3( 'return =', rtn )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'return = my return value' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) == 0
+    assert len( grep( out, 'RemoteException' ) ) == 0
+
+
+def err4():
+    """
+    wrong arguments to a remote function
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        def myfunc( myarg, arg2 ):
+            return "my return value"
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.x_myfunc( 'myarg' )
+        lnk.shutdown()
+        print3( 'return =', rtn )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'return =' ) ) == 0
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 0
+    assert len( grep( out, 'Traceback' ) ) > 0
+
+
+def err5():
+    """
+    exception in remote function
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        def myfunc( myarg, arg2 ):
+            time.sleep( 1 )
+            raise Exception( 'fake exception' )
+            return "my return value"
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.x_myfunc( 'myarg', 1 )
+        lnk.shutdown()
+        print3( 'return =', rtn )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'return =' ) ) == 0
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 0
+    assert len( grep( out, 'Traceback' ) ) > 0
+    assert len( grep( out, 'fake exception' ) ) > 0
+
+
+def return1():
+    """
+    return value from remote function
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        def myfunc( myarg, arg2 ):
+            if myarg:
+                return 'arg2 is', arg2
+            return None, None
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.x_myfunc( 'myarg', -1 )
+        assert len(rtn) == 2
+        assert rtn[0] == 'arg2 is' and rtn[1] == -1
+        rtn = lnk.x_myfunc( '', -1 )
+        assert len(rtn) == 2
+        assert rtn[0] == None and rtn[1] == None
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) == 0
+
+
+def persist1():
+    """
+    remote objects can persist
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        objcnt = 0
+        obj = None
+        def makeobj():
+            global objcnt, obj
+            objcnt += 1
+            obj = str( objcnt )
+            return objcnt
+        def useobj():
+            global objcnt, obj
+            return objcnt, obj
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.x_makeobj()
+        assert type(rtn) == type(2) and rtn == 1
+        rtn = lnk.x_useobj()
+        assert len(rtn) == 2
+        assert type(rtn[0]) == type(2) and rtn[0] == 1
+        assert type(rtn[1]) == type('') and rtn[1] == '1'
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) == 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+
+def file1():
+    """
+    file transfer - local to remote
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'srcfile.txt', """
+        Line One.
+        Line Two.
+        """ )
+
+    writefile( 'rmt.py', """
+        pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.putFile( 'srcfile.txt', os.path.abspath('dstfile.txt') )
+        print3( 'return =', rtn )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'return =' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) == 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+    assert filecmp.cmp( 'srcfile.txt', 'dstfile.txt', False )
+
+
+def file2():
+    """
+    file transfer - remote to local
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmtfile.txt', """
+        Line One.
+        Line Two.
+        """ )
+
+    writefile( 'rmt.py', """
+        pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.getFile( os.path.abspath('rmtfile.txt'), 'lclfile.txt' )
+        print3( 'return =', rtn )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'return =' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) == 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+    assert filecmp.cmp( 'rmtfile.txt', 'lclfile.txt', False )
+
+
+def file3():
+    """
+    file put: local file does not exist
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'srcfile.txt', """
+        Line One.
+        Line Two.
+        """ )
+
+    writefile( 'rmt.py', """
+        pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys, traceback
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        from remotepython import LocalException, RemoteException
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        # this put will raise an exception but not shutdown
+        try:
+            rtn = lnk.putFile( 'badfile.txt', os.path.abspath('dstfile.txt') )
+        except LocalException:
+            traceback.print_exc()
+            print3( 'caught LocalException' )
+        except RemoteException:
+            raise
+        else:
+            raise Exception( 'expected an exception' )
+        assert not os.path.exists( 'dstfile.txt' )
+        # a LocalException causes the connection to be shutdown
+        try:
+            lnk.rcall( '_ping' )
+        except LocalException:
+            pass
+        else:
+            raise Exception( "expected a LocalException" )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'caught LocalException' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) > 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+    assert not os.path.exists( 'dstfile.txt' )
+
+
+def file4():
+    """
+    file put: remote directory does not exist
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'srcfile.txt', """
+        Line One.
+        Line Two.
+        """ )
+
+    writefile( 'rmt.py', """
+        pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys, traceback
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        from remotepython import LocalException, RemoteException
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        # this put will raise an exception but not shutdown
+        dst = os.path.join( os.getcwd(), 'foobar', 'dstfile.txt' )
+        try:
+            rtn = lnk.putFile( 'srcfile.txt', dst )
+        except RemoteException:
+            traceback.print_exc()
+            print3( 'caught remote exception' )
+        except:
+            raise
+        else:
+            raise Exception( 'expected an exception' )
+        # this put should succeed
+        rtn = lnk.putFile( 'srcfile.txt', os.path.abspath('dstfile.txt') )
+        print3( 'return =', rtn )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'remote exception' ) ) == 1
+    assert len( grep( out, 'return =' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) > 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+    assert filecmp.cmp( 'srcfile.txt', 'dstfile.txt', False )
+
+
+def file5():
+    """
+    file get: remote file does not exist
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmtfile.txt', """
+        Line One.
+        Line Two.
+        """ )
+
+    writefile( 'rmt.py', """
+        pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys, traceback
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        from remotepython import LocalException, RemoteException
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        # this get will raise an exception but not shutdown
+        rmt = os.path.join( os.getcwd(), 'foobar.txt' )
+        try:
+            rtn = lnk.getFile( rmt, 'lclfile.txt' )
+        except RemoteException:
+            traceback.print_exc()
+            print3( 'remote exception' )
+        else:
+            raise Exception( 'expected an exception' )
+        assert not os.path.exists( 'lclfile.txt' )
+        # this get should succeed
+        rtn = lnk.getFile( os.path.abspath('rmtfile.txt'), 'lclfile.txt' )
+        print3( 'return =', rtn )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'remote exception' ) ) == 1
+    assert len( grep( out, 'return =' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) > 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+    assert filecmp.cmp( 'lclfile.txt', 'rmtfile.txt', False )
+
+
+def file6():
+    """
+    file get: local directory does not exist
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmtfile.txt', """
+        Line One.
+        Line Two.
+        """ )
+
+    writefile( 'rmt.py', """
+        pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys, traceback
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        from remotepython import LocalException, RemoteException
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        # this get will raise an exception but not shutdown
+        lcl = os.path.join( os.getcwd(), 'foobar', 'lclfile.txt' )
+        try:
+            rtn = lnk.getFile( os.path.abspath('rmtfile.txt'), lcl )
+        except LocalException:
+            traceback.print_exc()
+            print3( 'caught LocalException' )
+        else:
+            raise Exception( 'expected an exception' )
+        assert not os.path.exists( 'lclfile.txt' )
+        # a LocalException causes the connection to be shutdown
+        try:
+            lnk.rcall( '_ping' )
+        except LocalException:
+            pass
+        else:
+            raise Exception( "expected a LocalException" )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'caught LocalException' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) > 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+
+def file7():
+    """
+    get zero length file
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    t = time.time() - 600
+    fp = open( 'rmtfile.txt', 'wb' )
+    fp.close() ; fp = None
+    os.utime( 'rmtfile.txt', (t,t) )
+
+    writefile( 'rmt.py', """
+        pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.getFile( os.path.abspath('rmtfile.txt'), 'lclfile.txt',
+                           preserve=True )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) == 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+    assert os.path.getsize( 'rmtfile.txt' ) == 0
+    assert filecmp.cmp( 'rmtfile.txt', 'lclfile.txt', False )
+
+    assert os.path.getmtime('rmtfile.txt') < time.time()-300
+    dt = abs( os.path.getmtime('rmtfile.txt') - \
+              os.path.getmtime('lclfile.txt') )
+    assert dt < 10
+    m1 = stat.S_IMODE( os.stat('rmtfile.txt')[stat.ST_MODE] )
+    m2 = stat.S_IMODE( os.stat('lclfile.txt')[stat.ST_MODE] )
+    assert m1 == m2
+
+
+def file8():
+    """
+    put zero length file
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    t = time.time() - 600
+    fp = open( 'lclfile.txt', 'wb' )
+    fp.close() ; fp = None
+    os.utime( 'lclfile.txt', (t,t) )
+
+    writefile( 'rmt.py', """
+        pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.putFile( 'lclfile.txt', os.path.abspath('rmtfile.txt'),
+                           preserve=True )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) == 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+    assert os.path.getsize( 'lclfile.txt' ) == 0
+    assert filecmp.cmp( 'lclfile.txt', 'rmtfile.txt', False )
+
+    assert os.path.getmtime('lclfile.txt') < time.time()-300
+    dt = abs( os.path.getmtime('rmtfile.txt') - \
+              os.path.getmtime('lclfile.txt') )
+    assert dt < 10
+    m1 = stat.S_IMODE( os.stat('rmtfile.txt')[stat.ST_MODE] )
+    m2 = stat.S_IMODE( os.stat('lclfile.txt')[stat.ST_MODE] )
+    assert m1 == m2
+
+
+def binary1():
+    """
+    put a binary file
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    fp = open( 'src.dat', 'wb' )
+    buf = struct.pack( 'b', -128 ) * 10
+    for i in range( -127, 128 ):
+        buf += struct.pack( 'b', i ) * 10
+    # try:
+    #     buf = bytes()
+    #     for i in range(256):
+    #         buf += bytes( [i]*10 )
+    #     print3( 'using bytes' )
+    # except:
+    #     buf = ''
+    #     for i in range(256):
+    #         buf += chr(i)*10
+    #     print3( 'using string' )
+    fp.write( buf )
+    fp.close()
+
+    writefile( 'rmt.py', """
+        pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.putFile( 'src.dat', os.path.abspath('dst.dat') )
+        print3( 'return =', rtn )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'return =' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) == 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+    assert filecmp.cmp( 'src.dat', 'dst.dat', False )
+
+
+def binary2():
+    """
+    get a binary file
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    fp = open( 'rmt.dat', 'wb' )
+    buf = struct.pack( 'b', -128 ) * 10
+    for i in range( -127, 128 ):
+        buf += struct.pack( 'b', i ) * 10
+    fp.write( buf )
+    fp.close()
+
+    writefile( 'rmt.py', """
+        pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.getFile( os.path.abspath('rmt.dat'), 'lcl.dat' )
+        print3( 'return =', rtn )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'return =' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) == 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+    assert filecmp.cmp( 'rmt.dat', 'lcl.dat', False )
+
+
+def chunk1():
+    """
+    put file using small chunk size
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    fp = open( 'srcfile.txt', 'w' )
+    for i in range(100):
+        fp.write( ('abcdefghijklmnopqrstuvwxyz'[i%26])*100 )
+    fp.close()
+
+    writefile( 'rmt.py', """
+        pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.putFile( 'srcfile.txt', os.path.abspath('dstfile.txt'),
+                           bufsize=17 )
+        print3( 'return =', rtn )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'return =' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) == 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+    assert filecmp.cmp( 'srcfile.txt', 'dstfile.txt', False )
+
+
+def chunk2():
+    """
+    get file using small chunk size
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    fp = open( 'rmtfile.txt', 'w' )
+    for i in range(100):
+        fp.write( ('abcdefghijklmnopqrstuvwxyz'[i%26])*100 )
+    fp.close()
+
+    writefile( 'rmt.py', """
+        pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.getFile( os.path.abspath('rmtfile.txt'), 'lclfile.txt',
+                           bufsize=17 )
+        print3( 'return =', rtn )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'return =' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) == 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+    assert filecmp.cmp( 'rmtfile.txt', 'lclfile.txt', False )
+
+
+def preserve1():
+    """
+    put file with preserve=True
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    t = time.time() - 600
+    writefile( 'srcfile.txt', """
+        Line One.
+        Line Two.
+        """ )
+    os.utime( 'srcfile.txt', (t,t) )
+    writescript( 'script', '#!/bin/bash', """
+        echo "script file"
+        """ )
+    os.utime( 'script', (t,t) )
+
+    writefile( 'rmt.py', """
+        pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.putFile( 'srcfile.txt', os.path.abspath('dstfile.txt'),
+                           preserve=True )
+        rtn = lnk.putFile( 'script', os.path.abspath('script.sh'),
+                           preserve=True )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) == 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+    assert filecmp.cmp( 'srcfile.txt', 'dstfile.txt', False )
+    assert filecmp.cmp( 'script', 'script.sh', False )
+
+    assert os.path.getmtime('srcfile.txt') < time.time()-300
+    dt = abs( os.path.getmtime('srcfile.txt') - \
+              os.path.getmtime('dstfile.txt') )
+    assert dt < 10
+    m1 = stat.S_IMODE( os.stat('srcfile.txt')[stat.ST_MODE] )
+    m2 = stat.S_IMODE( os.stat('dstfile.txt')[stat.ST_MODE] )
+    assert m1 == m2
+    
+    assert os.path.getmtime('script') < time.time()-300
+    dt = abs( os.path.getmtime('script') - \
+              os.path.getmtime('script.sh') )
+    assert dt < 10
+    m1 = stat.S_IMODE( os.stat('script')[stat.ST_MODE] )
+    m2 = stat.S_IMODE( os.stat('script.sh')[stat.ST_MODE] )
+    assert m1 == m2
+
+
+def preserve2():
+    """
+    get file with preserve=True
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    t = time.time() - 600
+    writefile( 'rmtfile.txt', """
+        Line One.
+        Line Two.
+        """ )
+    os.utime( 'rmtfile.txt', (t,t) )
+    writescript( 'script', '#!/bin/bash', """
+        echo "script file"
+        """ )
+    os.utime( 'script', (t,t) )
+
+    writefile( 'rmt.py', """
+        pass
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made' )
+        rtn = lnk.getFile( os.path.abspath('rmtfile.txt'), 'lclfile.txt',
+                           preserve=True )
+        rtn = lnk.getFile( os.path.abspath('script'), 'script.sh',
+                           preserve=True )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'connection made' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'Traceback' ) ) == 0
+    assert len( grep( out, 'Assert' ) ) == 0
+
+    assert filecmp.cmp( 'rmtfile.txt', 'lclfile.txt', False )
+    assert filecmp.cmp( 'script', 'script.sh', False )
+
+    assert os.path.getmtime('rmtfile.txt') < time.time()-300
+    dt = abs( os.path.getmtime('rmtfile.txt') - \
+              os.path.getmtime('lclfile.txt') )
+    assert dt < 10
+    m1 = stat.S_IMODE( os.stat('rmtfile.txt')[stat.ST_MODE] )
+    m2 = stat.S_IMODE( os.stat('lclfile.txt')[stat.ST_MODE] )
+    assert m1 == m2
+    
+    assert os.path.getmtime('script') < time.time()-300
+    dt = abs( os.path.getmtime('script') - \
+              os.path.getmtime('script.sh') )
+    assert dt < 10
+    m1 = stat.S_IMODE( os.stat('script')[stat.ST_MODE] )
+    m2 = stat.S_IMODE( os.stat('script.sh')[stat.ST_MODE] )
+    assert m1 == m2
+
+
+def timeout1():
+    """
+    timeout a remote function call
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        def func():
+            time.sleep(20)
+            return 'ok'
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys, traceback, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, LocalException, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made', time.time() )
+        lnk.startTimeout( 3 )
+        try:
+            rtn = lnk.x_func()
+        except LocalException:
+            traceback.print_exc()
+            print3( "caught LocalException" )
+        else:
+            raise Exception( "expected an exception" )
+        print3( 'final time', time.time() )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    L = grep( out, 'connection made' )
+    assert len(L) == 1
+    t0 = int( float( L[0].split()[-1].strip() ) )
+    assert len( grep( out, 'caught LocalException' ) ) == 1
+    L = grep( out, 'final time' )
+    assert len(L) == 1
+    t1 = int( float( L[0].split()[-1].strip() ) )
+    assert t1-t0 < 10  # the remote func sleeps 20 so check this time
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def timeout2():
+    """
+    timeout the connect() function
+    """
+    sshprog,sshmach = get_ssh_pair( fake_ssh_pause=20 )
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        def func():
+            return 'ok'
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys, traceback, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, LocalException, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        print3( 'connection start', time.time() )
+        lnk.startTimeout( 4 )
+        try:
+            lnk.connect()
+        except LocalException:
+            traceback.print_exc()
+            print3( "caught LocalException" )
+        else:
+            raise Exception( "expected a LocalException" )
+        print3( 'final time', time.time() )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    L = grep( out, 'connection start' )
+    assert len(L) == 1
+    t0 = int( float( L[0].split()[-1].strip() ) )
+    assert len( grep( out, 'caught LocalException' ) ) == 1
+    L = grep( out, 'final time' )
+    assert len(L) == 1
+    t1 = int( float( L[0].split()[-1].strip() ) )
+    assert t1-t0 < 10  # the fake ssh sleeps 20 so check this time
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def timeout3():
+    """
+    timeout an rcall
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        def func():
+            time.sleep(20)
+            return 'ok'
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys, traceback, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, LocalException, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made', time.time() )
+        lnk.startTimeout( 3 )
+        try:
+            rtn = lnk.r_func()
+        except LocalException:
+            traceback.print_exc()
+            print3( "caught LocalException" )
+        else:
+            raise Exception( "expected an exception" )
+        print3( 'final time', time.time() )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    L = grep( out, 'connection made' )
+    assert len(L) == 1
+    t0 = int( float( L[0].split()[-1].strip() ) )
+    assert len( grep( out, 'caught LocalException' ) ) == 1
+    L = grep( out, 'final time' )
+    assert len(L) == 1
+    t1 = int( float( L[0].split()[-1].strip() ) )
+    assert t1-t0 < 10  # the remote func sleeps 20 so check this time
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def timeout4():
+    """
+    timeout does not trigger, followed by one that does
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        def func( numsecs ):
+            time.sleep(numsecs)
+            return 'ok'
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys, traceback, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, LocalException, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made', time.time() )
+        lnk.startTimeout( 5 )
+        rtn = lnk.r_func( 2 )
+        print3( "short finished with", rtn, time.time() )
+        time.sleep( 5 )  # make sure the timer does not trigger
+        print3( 'no timeout start', time.time() )
+        rtn = lnk.r_func( 2 )
+        print3( "no timeout finished with", rtn, time.time() )
+        lnk.startTimeout( 5 )
+        try:
+            rtn = lnk.r_func( 20 )
+        except LocalException:
+            traceback.print_exc()
+            print3( "caught LocalException" )
+        else:
+            raise Exception( "expected an exception" )
+        print3( 'final time', time.time() )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    L = grep( out, 'connection made' )
+    assert len(L) == 1
+    t0 = int( float( L[0].split()[-1].strip() ) )
+    
+    L = grep( out, 'short finished with' )
+    assert len(L) == 1
+    t1 = int( float( L[0].split()[-1].strip() ) )
+    assert t1-t0 < 5
+    
+    L = grep( out, 'no timeout start' )
+    assert len(L) == 1
+    t1 = int( float( L[0].split()[-1].strip() ) )
+    L = grep( out, 'no timeout finished with' )
+    assert len(L) == 1
+    t2 = int( float( L[0].split()[-1].strip() ) )
+    assert t2-t1 < 5
+    
+    assert len( grep( out, 'caught LocalException' ) ) == 1
+    L = grep( out, 'final time' )
+    assert len(L) == 1
+    t3 = int( float( L[0].split()[-1].strip() ) )
+    assert t3-t2 < 10  # the remote func sleeps 20 so check this time
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def timeout5():
+    """
+    same as timeout4 but use xcall
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        def func( numsecs ):
+            time.sleep(numsecs)
+            return 'ok'
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys, traceback, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, LocalException, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made', time.time() )
+        lnk.startTimeout( 5 )
+        rtn = lnk.x_func( 2 )
+        print3( "short finished with", rtn, time.time() )
+        time.sleep( 5 )  # make sure the timer does not trigger
+        print3( 'no timeout start', time.time() )
+        rtn = lnk.x_func( 2 )
+        print3( "no timeout finished with", rtn, time.time() )
+        lnk.startTimeout( 5 )
+        try:
+            rtn = lnk.x_func( 20 )
+        except LocalException:
+            traceback.print_exc()
+            print3( "caught LocalException" )
+        else:
+            raise Exception( "expected an exception" )
+        print3( 'final time', time.time() )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    L = grep( out, 'connection made' )
+    assert len(L) == 1
+    t0 = int( float( L[0].split()[-1].strip() ) )
+    
+    L = grep( out, 'short finished with' )
+    assert len(L) == 1
+    t1 = int( float( L[0].split()[-1].strip() ) )
+    assert t1-t0 < 5
+    
+    L = grep( out, 'no timeout start' )
+    assert len(L) == 1
+    t1 = int( float( L[0].split()[-1].strip() ) )
+    L = grep( out, 'no timeout finished with' )
+    assert len(L) == 1
+    t2 = int( float( L[0].split()[-1].strip() ) )
+    assert t2-t1 < 5
+    
+    assert len( grep( out, 'caught LocalException' ) ) == 1
+    L = grep( out, 'final time' )
+    assert len(L) == 1
+    t3 = int( float( L[0].split()[-1].strip() ) )
+    assert t3-t2 < 10  # the remote func sleeps 20 so check this time
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def background1():
+    """
+    background job stays alive even if ssh process exits
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        def func( strcmd, logfile ):
+            pid = background_command( strcmd, logfile )
+            return pid
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys, traceback, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, LocalException, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made', time.time() )
+        cmd = 'echo foo; sleep 5; echo bar'
+        rtn = lnk.x_func( cmd, os.path.join( os.getcwd(), 'mylog.txt' ) )
+        print3( "return pid", rtn, time.time() )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+    time.sleep(10)
+
+    assert len( grep( out, 'starting' ) ) == 1
+    L = grep( out, 'connection made' )
+    assert len(L) == 1
+    t0 = int( float( L[0].split()[-1].strip() ) )
+    L = grep( out, 'return pid' )
+    assert len(L) == 1
+    t1 = int( float( L[0].split()[-1].strip() ) )
+    assert t1-t0 < 4  # x_func() call should be fast
+    assert len( grep( out, 'ending' ) ) == 1
+
+    assert os.path.exists( 'mylog.txt' )
+
+    # check job elapsed time from the log file
+    sd = filegrep( 'mylog.txt', 'Start Date:' )[0].split(':',1)[1]
+    sd = time.mktime( time.strptime( sd.strip() ) )
+    fd = filegrep( 'mylog.txt', 'Finish Date:' )[0].split(':',1)[1]
+    fd = time.mktime( time.strptime( fd.strip() ) )
+    assert fd-sd >= 5 and fd-sd < 15
+
+    L = filegrep( 'mylog.txt', 'foo' )
+    assert len(L) == 2 and L[1].strip() == "foo"
+    L = filegrep( 'mylog.txt', 'bar' )
+    assert len(L) == 2 and L[1].strip() == "bar"
+
+
+def background2():
+    """
+    timeout of a background job
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        def func( strcmd, logfile ):
+            pid = background_command( strcmd, logfile, 4 )
+            return pid
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys, traceback, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, LocalException, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made', time.time() )
+        cmd = 'echo AA; sleep 1; echo BB; sleep 1; echo CC; sleep 1; '
+        cmd += 'echo DD; sleep 1; echo EE; sleep 1; echo FF; sleep 1; '
+        cmd += 'echo GG; sleep 1; echo HH'
+        rtn = lnk.x_func( cmd, os.path.join( os.getcwd(), 'mylog.txt' ) )
+        print3( "return pid", rtn, time.time() )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+    time.sleep(10)
+
+    assert len( grep( out, 'starting' ) ) == 1
+    L = grep( out, 'connection made' )
+    assert len(L) == 1
+    t0 = int( float( L[0].split()[-1].strip() ) )
+    L = grep( out, 'return pid' )
+    assert len(L) == 1
+    t1 = int( float( L[0].split()[-1].strip() ) )
+    assert t1-t0 < 4  # x_func() call should be fast
+    assert len( grep( out, 'ending' ) ) == 1
+
+    assert os.path.exists( 'mylog.txt' )
+
+    # check job elapsed time from the log file
+    sd = filegrep( 'mylog.txt', 'Start Date:' )[0].split(':',1)[1]
+    sd = time.mktime( time.strptime( sd.strip() ) )
+    fd = filegrep( 'mylog.txt', 'Finish Date:' )[0].split(':',1)[1]
+    fd = time.mktime( time.strptime( fd.strip() ) )
+    assert fd-sd >= 5 and fd-sd < 15
+
+    # the early echos should print, but certainly not the last one
+    L = filegrep( 'mylog.txt', 'CC' )
+    assert len(L) == 2 and L[1].strip() == "CC"
+    L = filegrep( 'mylog.txt', 'HH' )
+    assert len(L) == 1 and L[0].strip() != "HH"
+
+    # the exit value should be None, indicating a timeout
+    L = filegrep( 'mylog.txt', 'Subcommand exit:' )
+    assert len(L) == 1 and L[0].split(':',1)[1].strip() == 'None'
+
+
+def background3():
+    """
+    background command can be a python list
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        def func( cmdL, logfile ):
+            pid = background_command( cmdL, logfile )
+            return pid
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys, traceback, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, LocalException, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made', time.time() )
+        cmdL = [ 'python', '-c',
+            'import os, sys; ' + \
+            'sys.stdout.write( "hello" + os.linesep ); ' + \
+            'sys.stdout.flush()' ]
+        rtn = lnk.x_func( cmdL, os.path.join( os.getcwd(), 'mylog.txt' ) )
+        print3( "return pid", rtn, time.time() )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+    time.sleep(5)
+
+    assert len( grep( out, 'starting' ) ) == 1
+    L = grep( out, 'connection made' )
+    assert len(L) == 1
+    t0 = int( float( L[0].split()[-1].strip() ) )
+    L = grep( out, 'return pid' )
+    assert len(L) == 1
+    t1 = int( float( L[0].split()[-1].strip() ) )
+    assert t1-t0 < 4  # x_func() call should be fast
+    assert len( grep( out, 'ending' ) ) == 1
+
+    assert os.path.exists( 'mylog.txt' )
+
+    # check job elapsed time from the log file
+    sd = filegrep( 'mylog.txt', 'Start Date:' )[0].split(':',1)[1]
+    sd = time.mktime( time.strptime( sd.strip() ) )
+    fd = filegrep( 'mylog.txt', 'Finish Date:' )[0].split(':',1)[1]
+    fd = time.mktime( time.strptime( fd.strip() ) )
+
+    L = filegrep( 'mylog.txt', 'hello' )
+    assert len(L) == 2 and L[1].strip() == "hello"
+
+
+def background4():
+    """
+    background command using workdir
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    os.mkdir( 'wdir' )
+
+    writefile( 'rmt.py', """
+        import os, sys, time
+        def func( cmdL, logfile, workdir ):
+            pid = background_command( cmdL, logfile, workdir=workdir )
+            return pid
+        """ )
+
+    writefile( 'lcl.py', """
+        import os, sys, traceback, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, LocalException, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        print3( 'connection made', time.time() )
+        cmd = 'echo content > afile.txt'
+        lg = os.path.join( os.getcwd(), 'mylog.txt' )
+        wd = os.path.join( os.getcwd(), 'wdir' )
+        rtn = lnk.x_func( cmd, lg, wd )
+        print3( "return pid", rtn, time.time() )
+        lnk.shutdown()
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+    time.sleep(2)
+
+    assert len( grep( out, 'starting' ) ) == 1
+    L = grep( out, 'connection made' )
+    assert len(L) == 1
+    t0 = int( float( L[0].split()[-1].strip() ) )
+    L = grep( out, 'return pid' )
+    assert len(L) == 1
+    t1 = int( float( L[0].split()[-1].strip() ) )
+    assert t1-t0 < 4  # x_func() call should be fast
+    assert len( grep( out, 'ending' ) ) == 1
+
+    assert os.path.exists( 'mylog.txt' )
+
+    # check job elapsed time from the log file
+    sd = filegrep( 'mylog.txt', 'Start Date:' )[0].split(':',1)[1]
+    sd = time.mktime( time.strptime( sd.strip() ) )
+    fd = filegrep( 'mylog.txt', 'Finish Date:' )[0].split(':',1)[1]
+    fd = time.mktime( time.strptime( fd.strip() ) )
+
+    L = filegrep( os.path.join( 'wdir', 'afile.txt' ), 'content' )
+    assert len(L) == 1 and L[0].strip() == "content"
+
+
+#######################################################################
+
+def get_ssh_pair( fake_ssh_pause=None ):
+    """
+    Returns a pair ( ssh program, ssh machine ).
+    """
+    if use_real_ssh and fake_ssh_pause == None:
+        sshprog = remotepython.which( 'ssh' )
+        import socket
+        sshmach = socket.gethostname()
+    
+    else:
+        st = str(1)
+        if fake_ssh_pause != None:
+            st = str(fake_ssh_pause)
+        writescript( 'fakessh', "#!"+localpy+" -E", """
+            import os, sys, getopt, time
+            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
+            argL.pop(0)  # remove the machine name
+            time.sleep( """+st+""" )
+            os.execl( '/bin/bash', '/bin/bash', '-c', ' '.join( argL ) )
+            """ )
+        sshprog = os.path.abspath( 'fakessh' )
+        sshmach = 'sparky'
+
+    return sshprog, sshmach
+
+#######################################################################
+
+main()
