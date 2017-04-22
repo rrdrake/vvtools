@@ -1,4 +1,4 @@
-The SCIDEV project is currently used to store and share a handful of software
+The SCIDEV project is currently used to store and share a few software
 development utilities.  Visit the
 [Wiki](https://gitlab.sandia.gov/rrdrake/scidev/wikis/home)
 for more documentation.
