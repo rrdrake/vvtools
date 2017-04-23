@@ -47,7 +47,7 @@ OPTIONS
   -g <integer> : granularity in seconds (default 15); this is the time between
                  job file scans (which then may result in job launches)
 
-  -a <integer> : seconds between activity log messages (default 15 minutes);
+  -a <integer> : seconds between activity log messages (default 30 minutes);
                  a short message is periodically written to the log file in
                  order to detect hangs; this is the time between messages
 
@@ -119,7 +119,7 @@ each month at one AM.
 
 
 DEFAULT_GRANULARITY = 15
-DEFAULT_ACTIVITY = 15*60
+DEFAULT_ACTIVITY = 30*60
 DEFAULT_ERROR_REPEAT = 1  # hours
 
 
