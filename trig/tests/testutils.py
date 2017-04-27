@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
@@ -81,7 +83,7 @@ def writescript( fname, header, content ):
     except: pass
 
 
-def runout( cmd ):
+def runout( cmd, raise_on_failure=False ):
     """
     """
     opts = {}
@@ -96,6 +98,11 @@ def runout( cmd ):
         out = s
     except:
         pass
+
+    x = p.returncode
+    if raise_on_failure and x != 0:
+        raise Exception( 'command failed: ' + str(cmd) )
+
     return out
 
     # the below method redirects output to a file rather than a pipe;
@@ -225,6 +232,18 @@ def grep(out, pat):
     return L
 
 
+def readfile( fname ):
+    """
+    Read and return the contents of the given filename.
+    """
+    fp = open(fname,'r')
+    try:
+        s = fp.read()
+    finally:
+        fp.close()
+    return s
+
+
 def which( program ):
     """
     Returns the absolute path to the given program name if found in PATH.
@@ -245,7 +264,7 @@ def which( program ):
 
 ###########################################################################
 
-if not os.environ.has_key('TOOLSET_RUNDIR'):
+if 'TOOLSET_RUNDIR' not in os.environ:
     # directly executing a test script can be done but rm -rf * is performed;
     # to avoid accidental removal of files, cd into a working directory
     d = os.path.join( os.path.basename( sys.argv[0] )+'_dir' )

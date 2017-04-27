@@ -494,7 +494,7 @@ class RemotePython:
         # from interpreting special characters, like parens
         cmdL.append( "'"+pycmd+"'" )
 
-        #print3( 'magic: ssh cmdL', cmdL )
+        #print3( 'debug: ssh cmdL', cmdL )
 
         self.pssh = subprocess.Popen( cmdL,
                                       stdin=pipein,
@@ -639,4 +639,3 @@ else:
 
     def stdout_write( b ):
         sys.stdout.buffer.write( b )
-

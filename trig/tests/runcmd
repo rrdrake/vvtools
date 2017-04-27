@@ -1,0 +1,680 @@
+#!/usr/bin/env python
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import getopt
+
+# this will os.chdir() to a subdirectory
+from testutils import *
+
+# this is the module we are testing
+import runcmd
+
+# list of pythons to test with the -p option
+pyL = [ '/home/rrdrake/bin/Linux/py244/bin/python',
+        '/home/rrdrake/bin/Linux/py255/bin/python',
+        '/home/rrdrake/bin/Linux/py266/bin/python',
+        '/home/rrdrake/bin/Linux/py273/bin/python',
+        '/home/rrdrake/bin/Linux/py301/bin/python',
+        '/home/rrdrake/bin/Linux/py313/bin/python',
+        '/home/rrdrake/bin/Linux/py325/bin/python',
+        '/home/rrdrake/bin/Linux/py335/bin/python',
+        '/home/rrdrake/bin/Linux/py343/bin/python',
+        '/home/rrdrake/bin/Linux/py353/bin/python' ]
+
+localpy = sys.executable
+
+
+def main():
+    """
+    """
+    optL,argL = getopt.getopt( sys.argv[1:], 'p' )
+    cwd = os.getcwd()
+
+    if ('-p','') not in optL:
+        runtests( cwd, argL )
+    else:
+        # run each python version separately
+        for py in pyL:
+            global localpy
+            localpy = py
+            print3( 'local python:', localpy )
+            runtests( cwd, argL )
+
+def runtests( cwd, argL ):
+    """
+    """
+    if len(argL) == 0:
+        argL = """cmd1 esc1
+                  echo1 echo2 echo3
+                  chdir1 chdir2 chdir3
+                  fail1 fail2 fail3
+                  redirect1 redirect2
+                  outerr1
+                  timeout1 timeout2
+               """.split()
+    
+    cwd = os.getcwd()
+    for func in argL:
+        os.chdir( cwd )
+        rmallfiles()
+        time.sleep(1)
+        print3( '====> ', func )
+        eval( func+'()' )
+
+
+#######################################################################
+
+def cmd1():
+    """
+    the command() function
+    """
+    s = runcmd.command()
+    assert type(s) == type('') and not s
+    s = runcmd.command( 'a', 'b' )
+    assert type(s) == type('') and s == 'a b'
+    s = runcmd.command( 'a b' )
+    assert type(s) == type('') and s == '"a b"'
+    s = runcmd.command( 'c', 'a b' )
+    assert type(s) == type('') and s == 'c "a b"'
+    s = runcmd.command( 'a b', 'c' )
+    assert type(s) == type('') and s == '"a b" c'
+    s = runcmd.command( 'c', 'a b', 'd' )
+    assert type(s) == type('') and s == 'c "a b" d'
+    s = runcmd.command( 'c', 'a b', 'd e' )
+    assert type(s) == type('') and s == 'c "a b" "d e"'
+
+
+def esc1():
+    """
+    the escape() function
+    """
+    s = runcmd.escape()
+    assert type(s) == type('') and not s
+    s = runcmd.escape('')
+    assert type(s) == type('') and s == '""'
+    s = runcmd.escape('','')
+    assert type(s) == type('') and s == '"" ""'
+    s = runcmd.escape('ls','-l','')
+    assert type(s) == type('') and s == 'ls -l ""'
+    s = runcmd.escape('ls','-l','*')
+    assert type(s) == type('') and s == "ls -l '*'"
+    s = runcmd.escape('ls','-l','*','a space')
+    assert type(s) == type('') and s == "ls -l '*' 'a space'"
+    s = runcmd.escape('ls','stupid" then\\n"\'blank man\'')
+    #print3( s )
+    assert type(s) == type('') and ( \
+            s == r"""ls 'stupid" then\n"'"'"'blank man'"'"''""" or \
+            s == r'''ls "stupid\" then\\n\"'blank man'"''' )
+
+
+def echo1():
+    """
+    the echo keyword argument with run_command
+    """
+    writefile( 'cmd1.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        run_command( 'ls', 'cmd1.py' )
+        """ )
+
+    writefile( 'cmd2.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        run_command( 'ls', 'cmd2.py', echo=False )
+        """ )
+
+    out1 = runout( localpy+' cmd1.py', raise_on_failure=True )
+    #print3( out1 )
+    out2 = runout( localpy+' cmd2.py', raise_on_failure=True )
+    #print3( out2 )
+
+    assert len( grep( out1, 'ls cmd1.py' ) ) == 1
+    assert len( grep( out1, '^cmd1.py' ) ) == 1
+    assert len( grep( out2, 'ls cmd2.py' ) ) == 0
+    assert len( grep( out2, '^cmd2.py' ) ) == 1
+
+
+def echo2():
+    """
+    the echo keyword argument with run_output
+    """
+    writefile( 'cmd1.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        out = run_output( 'ls', 'cmd1.py' )
+        assert out.find( 'ls cmd1.py' ) < 0
+        assert out.find( 'cmd1.py' ) >= 0
+        """ )
+
+    writefile( 'cmd2.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        out = run_output( 'ls', 'cmd2.py', echo=False )
+        assert out.find( 'ls cmd2.py' ) < 0
+        assert out.find( 'cmd2.py' ) >= 0
+        """ )
+
+    out1 = runout( localpy+' cmd1.py', raise_on_failure=True )
+    #print3( out1 )
+    out2 = runout( localpy+' cmd2.py', raise_on_failure=True )
+    #print3( out2 )
+
+    assert len( grep( out1, 'ls cmd1.py' ) ) == 1
+    assert len( grep( out1, '^cmd1.py' ) ) == 0
+    assert len( grep( out2, 'ls cmd2.py' ) ) == 0
+    assert len( grep( out2, '^cmd2.py' ) ) == 0
+
+
+def echo3():
+    """
+    the echo keyword argument with run_timeout
+    """
+    writefile( 'cmd1.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        run_timeout( 'ls', 'cmd1.py', timeout=10 )
+        """ )
+
+    writefile( 'cmd2.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        run_timeout( 'ls', 'cmd2.py', timeout=10, echo=False )
+        """ )
+
+    out1 = runout( localpy+' cmd1.py', raise_on_failure=True )
+    #print3( out1 )
+    out2 = runout( localpy+' cmd2.py', raise_on_failure=True )
+    #print3( out2 )
+
+    assert len( grep( out1, 'ls cmd1.py' ) ) == 1
+    assert len( grep( out1, '^cmd1.py' ) ) == 1
+    assert len( grep( out2, 'ls cmd2.py' ) ) == 0
+    assert len( grep( out2, '^cmd2.py' ) ) == 1
+
+
+def chdir1():
+    """
+    use chdir keyword argument
+    """
+    os.mkdir( 'subdir' )
+
+    x = runcmd.run_command( 'touch file1.txt' )
+    y = runcmd.run_command( 'touch file2.txt', chdir='subdir' )
+    z = runcmd.run_command( 'touch file3.txt' )
+
+    time.sleep(1)
+    assert x == 0 and y == 0 and z == 0
+    assert os.path.exists( 'file1.txt' )
+    assert os.path.exists( 'subdir/file2.txt' )
+    assert os.path.exists( 'file3.txt' )
+
+    x = runcmd.run_output( 'touch file4.txt ; echo hello' )
+    y = runcmd.run_output( 'touch file5.txt ; echo hello', chdir='subdir' )
+    z = runcmd.run_output( 'touch file6.txt ; echo hello' )
+
+    time.sleep(1)
+    assert x.strip()=="hello" and y.strip()=="hello" and z.strip()=="hello"
+    assert os.path.exists( 'file4.txt' )
+    assert os.path.exists( 'subdir/file5.txt' )
+    assert os.path.exists( 'file6.txt' )
+
+    x = runcmd.run_timeout( 'touch file7.txt', timeout=10 )
+    y = runcmd.run_timeout( 'touch file8.txt', chdir='subdir', timeout=10 )
+    z = runcmd.run_timeout( 'touch file9.txt', timeout=10 )
+
+    time.sleep(1)
+    assert x == 0 and y == 0 and z == 0
+    assert os.path.exists( 'file7.txt' )
+    assert os.path.exists( 'subdir/file8.txt' )
+    assert os.path.exists( 'file9.txt' )
+
+#TODO: check run_timeout where it times out (it should cd back to original)
+
+def chdir2():
+    """
+    use chdir with redirect
+    """
+    os.mkdir( 'subdir' )
+
+    x = runcmd.run_command( 'touch file1.txt ; echo hello',
+                            chdir='subdir', redirect='out1.txt' )
+
+    time.sleep(1)
+    assert x == 0
+    assert os.path.exists( 'subdir/file1.txt' )
+    assert os.path.exists( 'subdir/out1.txt' )
+    assert len( filegrep( 'subdir/out1.txt', 'hello' ) ) == 1
+
+    x = runcmd.run_timeout( 'touch file2.txt ; echo hello', timeout=10,
+                            chdir='subdir', redirect='out2.txt' )
+
+    time.sleep(1)
+    assert x == 0
+    assert os.path.exists( 'subdir/file2.txt' )
+    assert os.path.exists( 'subdir/out2.txt' )
+    assert len( filegrep( 'subdir/out2.txt', 'hello' ) ) == 1
+
+    x = runcmd.run_command( 'touch file3.txt ; echo hello',
+                            chdir='subdir',
+                            redirect=os.path.abspath('out3.txt') )
+
+    time.sleep(1)
+    assert x == 0
+    assert os.path.exists( 'subdir/file3.txt' )
+    assert os.path.exists( 'out3.txt' )
+    assert len( filegrep( 'out3.txt', 'hello' ) ) == 1
+
+    x = runcmd.run_timeout( 'touch file4.txt ; echo hello',
+                            chdir='subdir', timeout=10,
+                            redirect=os.path.abspath('out4.txt') )
+
+    time.sleep(1)
+    assert x == 0
+    assert os.path.exists( 'subdir/file4.txt' )
+    assert os.path.exists( 'out4.txt' )
+    assert len( filegrep( 'out4.txt', 'hello' ) ) == 1
+
+
+def chdir3():
+    """
+    chdir with a timeout
+    """
+    os.mkdir( 'subdir1' )
+    os.mkdir( 'subdir2' )
+
+    x = runcmd.run_timeout( 'touch file1.txt ; sleep 10', timeout=4,
+                            chdir='subdir1', raise_on_failure=False )
+    y = runcmd.run_timeout( 'touch file2.txt ; sleep 1', timeout=10,
+                            chdir='subdir2' )
+
+    time.sleep(1)
+    assert x == None and y == 0
+    assert os.path.exists( 'subdir1/file1.txt' )
+    assert os.path.exists( 'subdir2/file2.txt' )
+
+
+
+def fail1():
+    """
+    using raise_on_failure with run_command
+    """
+    try:
+        runcmd.run_command( 'echo hello ; exit 1' )
+    except runcmd.CommandException:
+        pass
+    else:
+        raise Exception( "expected an exception" )
+    try:
+        runcmd.run_command( 'echo hello ; exit 1', raise_on_failure=True )
+    except runcmd.CommandException:
+        pass
+    else:
+        raise Exception( "expected an exception" )
+    x = runcmd.run_command( 'echo hello ; exit 1', raise_on_failure=False )
+    assert x != None and x != 0
+
+
+def fail2():
+    """
+    using raise_on_failure with run_output
+    """
+    try:
+        runcmd.run_output( 'echo hello ; exit 1' )
+    except runcmd.CommandException:
+        pass
+    else:
+        raise Exception( "expected an exception" )
+    try:
+        runcmd.run_output( 'echo hello ; exit 1', raise_on_failure=True )
+    except runcmd.CommandException:
+        pass
+    else:
+        raise Exception( "expected an exception" )
+    x = runcmd.run_output( 'echo hello ; exit 1', raise_on_failure=False )
+    assert x != None and x != 0
+
+
+def fail3():
+    """
+    using raise_on_failure with run_timeout
+    """
+    try:
+        runcmd.run_timeout( 'echo hello ; exit 1', timeout=10 )
+    except runcmd.CommandException:
+        pass
+    else:
+        raise Exception( "expected an exception" )
+    try:
+        runcmd.run_timeout( 'echo hello ; exit 1', timeout=10,
+                            raise_on_failure=True )
+    except runcmd.CommandException:
+        pass
+    else:
+        raise Exception( "expected an exception" )
+    x = runcmd.run_timeout( 'echo hello ; exit 1', timeout=10,
+                            raise_on_failure=False )
+    assert x != None and x != 0
+
+
+def redirect1():
+    """
+    using redirect with run_command
+    """
+    runcmd.run_command( 'echo hello ; echo world', redirect="out.txt" )
+    assert readfile( 'out.txt' ).strip() == "hello\nworld"
+
+    runcmd.run_command( 'echo foobar', redirect="out.txt" )
+    assert readfile( 'out.txt' ).strip() == "foobar"
+
+    runcmd.run_command( 'echo next output', redirect="out.txt", append=True )
+    assert readfile( 'out.txt' ).strip() == "foobar\nnext output"
+
+    fpout = open( 'fdout.txt', 'w' )
+    runcmd.run_command( 'echo foobar', redirect=fpout.fileno() )
+    fpout.close()
+    assert readfile( 'fdout.txt' ).strip() == "foobar"
+
+
+def redirect2():
+    """
+    using redirect with run_timeout
+    """
+    runcmd.run_timeout( 'echo hello ; echo world', redirect="out.txt",
+                        timeout=10 )
+    assert readfile( 'out.txt' ).strip() == "hello\nworld"
+
+    runcmd.run_timeout( 'echo foobar', redirect="out.txt",
+                        timeout=10 )
+    assert readfile( 'out.txt' ).strip() == "foobar"
+
+    runcmd.run_timeout( 'echo next output', redirect="out.txt", append=True,
+                        timeout=10 )
+    assert readfile( 'out.txt' ).strip() == "foobar\nnext output"
+
+    fpout = open( 'fdout.txt', 'w' )
+    runcmd.run_timeout( 'echo foobar', redirect=fpout.fileno(),
+                        timeout=10 )
+    fpout.close()
+    assert readfile( 'fdout.txt' ).strip() == "foobar"
+
+
+def outerr1():
+    """
+    using include_stderr with run_output
+    """
+    py = 'import os,sys;'
+    py += ' sys.stdout.write( "hello"+os.linesep );'
+    py += ' sys.stderr.write( "world"+os.linesep )'
+    out = runcmd.run_output( 'python', '-c', py )
+    #print3( out )
+    assert len( grep( out, "hello" ) ) == 1
+    assert len( grep( out, "world" ) ) == 1
+
+    out = runcmd.run_output( 'python', '-c', py,
+                             include_stderr=False )
+    #print3( out )
+    assert len( grep( out, "hello" ) ) == 1
+    assert len( grep( out, "world" ) ) == 0
+
+    # run in a script to make sure stderr does not get lost
+    writefile( 'cmd1.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        out = run_output( 'python', '-c', """+repr(py)+""", echo=False )
+        """ )
+
+    writefile( 'cmd2.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        out = run_output( 'python', '-c', """+repr(py)+""",
+                          include_stderr=False, echo=False )
+        """ )
+
+    out1 = runout( localpy+' cmd1.py', raise_on_failure=True )
+    #print3( out1 )
+    assert out1.strip() == ""
+    out2 = runout( localpy+' cmd2.py', raise_on_failure=True )
+    #print3( out2 )
+    assert out2.strip() == "world"
+
+
+def timeout1():
+    """
+    return status of processes that timeout
+    """
+    writefile( 'ok.py', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        def log( *args ):
+            fp = open( 'ok.txt', 'a' )
+            fp.write( ' '.join( [ str(x) for x in args ] ) + os.linesep )
+            fp.close()
+        log( 'PID', os.getpid(), time.asctime() )
+        time.sleep(2)
+        log( 'DONE', time.asctime() )
+        """ )
+
+    writefile( 'fail.py', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        def log( *args ):
+            fp = open( 'fail.txt', 'a' )
+            fp.write( ' '.join( [ str(x) for x in args ] ) + os.linesep )
+            fp.close()
+        log( 'PID', os.getpid(), time.asctime() )
+        time.sleep(2)
+        log( 'RAISE', time.asctime() )
+        raise Exception( 'fake failure' )
+        log( 'DONE', time.asctime() )
+        """ )
+
+    writefile( 'tout.py', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        def log( *args ):
+            fp = open( 'tout.txt', 'a' )
+            fp.write( ' '.join( [ str(x) for x in args ] ) + os.linesep )
+            fp.close()
+        log( 'PID', os.getpid(), time.asctime() )
+        time.sleep(20)
+        log( 'DONE', time.asctime() )
+        """ )
+
+    t0 = time.time()
+    x = runcmd.run_timeout( 'python', 'ok.py', timeout=10 )
+    t1 = time.time()
+    assert x != None and x == 0
+    assert t1 - t0 < 8
+    time.sleep(1)
+    L = filegrep( 'ok.txt', 'PID' )[0].strip().split(' ',2)
+    t2 = time.mktime( time.strptime( L[-1] ) )
+    L = filegrep( 'ok.txt', 'DONE' )[0].strip().split(' ',1)
+    t3 = time.mktime( time.strptime( L[-1] ) )
+    assert t3 - t2 < 8
+
+    t0 = time.time()
+    x = runcmd.run_timeout( 'python', 'fail.py',
+                            timeout=10, raise_on_failure=False )
+    t1 = time.time()
+    assert x != None and type(x) == type(2) and x != 0
+    assert t1 - t0 < 8
+    time.sleep(1)
+    L = filegrep( 'fail.txt', 'PID' )[0].strip().split(' ',2)
+    t2 = time.mktime( time.strptime( L[-1] ) )
+    L = filegrep( 'fail.txt', 'RAISE' )[0].strip().split(' ',1)
+    t3 = time.mktime( time.strptime( L[-1] ) )
+    assert t3 - t2 < 8
+    assert len( filegrep( 'fail.txt', 'DONE' ) ) == 0
+
+    t0 = time.time()
+    x = runcmd.run_timeout( 'python', 'tout.py',
+                            timeout=5, raise_on_failure=False )
+    t1 = time.time()
+    assert x == None
+    assert t1-t0 >= 5 and t1-t0 < 15
+    time.sleep(1)
+    L = filegrep( 'tout.txt', 'PID' )[0].strip().split(' ',2)
+    t0 = time.mktime( time.strptime( L[-1] ) )
+    assert len( filegrep( 'tout.txt', 'DONE' ) ) == 0
+
+    os.remove( 'tout.txt' )
+    try:
+        t0 = time.time()
+        runcmd.run_timeout( 'python', 'tout.py', timeout=5 )
+    except runcmd.CommandException:
+        t1 = time.time()
+        msg = str( sys.exc_info()[1] )
+    assert msg.find( "Command timed out" ) >= 0
+    assert len( filegrep( 'tout.txt', 'PID' ) ) == 1
+    L = filegrep( 'tout.txt', 'PID' )[0].strip().split(' ',2)
+    t0 = time.mktime( time.strptime( L[-1] ) )
+    assert len( filegrep( 'tout.txt', 'DONE' ) ) == 0
+
+
+def timeout2():
+    """
+    make sure sub-sub processes get killed upon timeout
+    """
+    # first check a sub-sub process chain without a timeout
+
+    writefile( 'tout1.py', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        def log( *args ):
+            fp = open( 'tout1.txt', 'a' )
+            fp.write( ' '.join( [ str(x) for x in args ] ) + os.linesep )
+            fp.close()
+        log( 'PID', os.getpid(), time.asctime() )
+        import subprocess
+        subprocess.call( 'python """+os.getcwd()+"""/tout2.py', shell=True )
+        time.sleep(2)
+        log( 'DONE', time.asctime() )
+        """ )
+
+    writefile( 'tout2.py', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        def log( *args ):
+            fp = open( 'tout2.txt', 'a' )
+            fp.write( ' '.join( [ str(x) for x in args ] ) + os.linesep )
+            fp.close()
+        log( 'PID', os.getpid(), time.asctime() )
+        time.sleep(2)
+        log( 'DONE', time.asctime() )
+        """ )
+
+    t0 = time.time()
+    x = runcmd.run_timeout( 'python', 'tout1.py',
+                            timeout=10, raise_on_failure=False )
+    t1 = time.time()
+    assert x != None and x == 0
+    assert t1-t0 < 8
+
+    pid1 = filegrep( 'tout1.txt', 'PID' )[0].strip().split(' ',2)[1]
+    pid2 = filegrep( 'tout2.txt', 'PID' )[0].strip().split(' ',2)[1]
+    assert len( filegrep( 'tout1.txt', 'DONE' ) ) == 1
+    assert len( filegrep( 'tout2.txt', 'DONE' ) ) == 1
+
+    # make sure the child pids have disappeared
+    time.sleep(1)
+    psout = processes()
+    assert len( grep( psout, pid1 ) ) == 0
+    assert len( grep( psout, pid2 ) ) == 0
+
+    # same scripts but make the timeout larger
+    writefile( 'tout3.py', """
+        import os, sys, time
+        import subprocess
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        def log( *args ):
+            fp = open( 'tout3.txt', 'a' )
+            fp.write( ' '.join( [ str(x) for x in args ] ) + os.linesep )
+            fp.close()
+        log( 'PID', os.getpid(), time.asctime() )
+        subprocess.call( 'python """+os.getcwd()+"""/tout4.py', shell=True )
+        time.sleep(20)
+        log( 'DONE', time.asctime() )
+        """ )
+
+    writefile( 'tout4.py', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        def log( *args ):
+            fp = open( 'tout4.txt', 'a' )
+            fp.write( ' '.join( [ str(x) for x in args ] ) + os.linesep )
+            fp.close()
+        log( 'PID', os.getpid(), time.asctime() )
+        time.sleep(20)
+        log( 'DONE', time.asctime() )
+        """ )
+
+    # this time, the subprocess should timeout
+    t0 = time.time()
+    x = runcmd.run_timeout( 'python', 'tout3.py',
+                            timeout=5, raise_on_failure=False )
+    t1 = time.time()
+    assert x == None
+    assert t1-t0 >= 5 and t1-t0 < 15
+
+    pid1 = filegrep( 'tout3.txt', 'PID' )[0].strip().split(' ',2)[1]
+    pid2 = filegrep( 'tout4.txt', 'PID' )[0].strip().split(' ',2)[1]
+    assert len( filegrep( 'tout3.txt', 'DONE' ) ) == 0
+    assert len( filegrep( 'tout4.txt', 'DONE' ) ) == 0
+
+    # make sure the child pids have disappeared
+    time.sleep(1)
+    psout = processes()
+    assert len( grep( psout, pid1 ) ) == 0
+    assert len( grep( psout, pid2 ) ) == 0
+
+
+# TODO: test poll_interval in run_timeout()
+
+#######################################################################
+
+def processes():
+    """
+    Return a list of all processes on the current machine, where each line
+    contains
+
+        user pid ppid
+    """
+    plat = sys.platform.lower()
+    if plat.startswith( 'darwin' ):
+        cmd = 'ps -o user,pid,ppid'
+    elif plat.startswith( 'sunos' ):
+        cmd = '/usr/bin/ps -o user,pid,ppid'
+    else:
+        cmd = 'ps -o user,pid,ppid'
+    cmd += ' -e'
+
+    out = runout( cmd, raise_on_failure=True )
+
+    # strip off first non-empty line (the header)
+    out = out.strip() + os.linesep
+    i = 0
+    while i < len(out):
+        if out[i:].startswith( os.linesep ):
+            out = out[i:].lstrip()
+            break
+        i += 1
+
+    out = out.strip()
+    if out:
+        out += os.linesep
+
+    return out
+
+#######################################################################
+
+main()

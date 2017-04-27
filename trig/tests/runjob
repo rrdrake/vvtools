@@ -9,7 +9,7 @@ import getopt
 from testutils import *
 
 # this is the module we are testing
-import runjobs
+import runjob
 
 # list of pythons to test with the -p option
 pyL = [ '/home/rrdrake/bin/Linux/py244/bin/python',
@@ -55,14 +55,16 @@ def runtests( cwd, argL ):
     """
     """
     if len(argL) == 0:
-        argL = """runjob1 runjob1b runjob1c runjob2 runjob3
-                  jobfail1 jobfail2 jobfail3 jobfail4 jobfail5 jobfail6
+        argL = """runjob1 runjob1b runjob1c runjob1d runjob1e
+                  runjob2 runjob3
+                  jobfail1 jobfail2 jobfail3 jobfail4 jobfail5
                   multijob1
                   workdir1
                   jobcast1 jobcast2
                   remote1 remote2 remote3
                   timeout1 timeout2
                   remotefail1 remotefail2a remotefail2b
+                  update1
                """.split()
     
     cwd = os.getcwd()
@@ -83,11 +85,12 @@ def runjob1():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         print3( 'starting' )
-        jb = run_shell_job( 'ls', 'echo "hello" ; ls -l job.py ; sleep 2',
-                            poll_interval=2 )
+        jid = run_job( 'echo "hello" ; ls -l job.py ; sleep 2',
+                       poll_interval=2 )
+        jb = wait_job( jid )
         print3( 'exit =', jb.get( 'exit' ) )
         assert jb.get( 'exit' ) == 0
         print3( 'ending' )
@@ -100,7 +103,7 @@ def runjob1():
     assert len( grep( out, 'ending' ) ) == 1
     assert len( grep( out, 'exit = 0' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'ls-*.log' )
+    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
     assert len(fL) == 1
     assert len( filegrep( fL[0], 'hello' ) ) == 1
     assert len( filegrep( fL[0], 'job.py' ) ) == 1
@@ -113,41 +116,13 @@ def runjob1b():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         print3( 'starting' )
-        jb = run_job( 'ls', '/bin/bash', '-c',
-                      'echo "hello" ; ls -l job.py ; sleep 2',
-                      poll_interval=2 )
-        print3( 'exit =', jb.get( 'exit' ) )
-        assert jb.get( 'exit' ) == 0
-        print3( 'ending' )
-        """ )
-
-    out = runout( localpy+' job.py' )
-
-    assert len( grep( out, 'starting' ) ) == 1
-    assert len( grep( out, 'ending' ) ) == 1
-    assert len( grep( out, 'exit = 0' ) ) == 1
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'ls-*.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'hello' ) ) == 1
-    assert len( filegrep( fL[0], 'job.py' ) ) == 1
-
-
-def runjob1c():
-    """
-    run a shell command using an argument list
-    """
-    writefile( 'job.py', """
-        import os, sys
-        sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
-
-        print3( 'starting' )
-        jb = run_shell_job( 'ls', 'touch', 'file name',
-                            poll_interval=2 )
+        jid = run_job( '/bin/bash', '-c',
+                       'echo "hello" ; ls -l job.py ; sleep 2',
+                       poll_interval=2 )
+        jb = wait_job( jid )
         print3( 'exit =', jb.get( 'exit' ) )
         assert jb.get( 'exit' ) == 0
         print3( 'ending' )
@@ -160,24 +135,114 @@ def runjob1c():
     assert len( grep( out, 'ending' ) ) == 1
     assert len( grep( out, 'exit = 0' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'ls-*.log' )
+    fL = fnmatch.filter( os.listdir( '.' ), 'bash-*.log' )
+    assert len(fL) == 1
+    assert len( filegrep( fL[0], 'hello' ) ) == 1
+    assert len( filegrep( fL[0], 'job.py' ) ) == 1
+
+
+def runjob1c():
+    """
+    run a command as a python list
+    """
+    writefile( 'job.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        jid = run_job( ['touch', 'file name'],
+                       poll_interval=2 )
+        jb = wait_job( jid )
+        print3( 'exit =', jb.get( 'exit' ) )
+        assert jb.get( 'exit' ) == 0
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'exit = 0' ) ) == 1
+
+    fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
+    assert len(fL) == 1
+    assert os.path.exists( 'file name' )
+
+
+def runjob1d():
+    """
+    run a command as a python list plus a string
+    """
+    writefile( 'job.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        jid = run_job( ['touch'], 'file name',
+                       poll_interval=2 )
+        jb = wait_job( jid )
+        print3( 'exit =', jb.get( 'exit' ) )
+        assert jb.get( 'exit' ) == 0
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'exit = 0' ) ) == 1
+
+    fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
+    assert len(fL) == 1
+    assert os.path.exists( 'file name' )
+
+
+def runjob1e():
+    """
+    use the command() helper to create a command as a string
+    """
+    writefile( 'job.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        jid = run_job( command( 'touch', 'file name' ),
+                       poll_interval=2 )
+        jb = wait_job( jid )
+        print3( 'exit =', jb.get( 'exit' ) )
+        assert jb.get( 'exit' ) == 0
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'exit = 0' ) ) == 1
+
+    fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
     assert len(fL) == 1
     assert os.path.exists( 'file name' )
 
 
 def runjob2():
     """
-    run a command in the background
+    make sure the command is run in the background
     """
     writefile( 'job.py', """
         import os, sys, time
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         print3( 'starting' )
-        jid = run_shell_job_bg( 'job',
-                                'touch hello ; sleep 5 ; touch goodbye',
-                                poll_interval=2 )
+        jid = run_job( 'touch hello ; sleep 5 ; touch goodbye',
+                       poll_interval=2 )
         print3( 'jobid =', jid )
         time.sleep(1)
         assert not os.path.exists( 'goodbye' )
@@ -195,7 +260,7 @@ def runjob2():
     assert len( grep( out, 'ending' ) ) == 1
     assert len( grep( out, 'exit = 0' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'job-*.log' )
+    fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
     assert len(fL) == 1
     
     assert os.path.exists( 'hello' )
@@ -209,12 +274,11 @@ def runjob3():
     writefile( 'job.py', """
         import os, sys, time
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         print3( 'starting' )
-        jid = run_shell_job_bg( 'job',
-                                'touch hello ; sleep 5 ; touch goodbye',
-                                poll_interval=2 )
+        jid = run_job( 'touch hello ; sleep 5 ; touch goodbye',
+                       poll_interval=2 )
         print3( 'jobid =', jid )
         # poll should be false
         b = poll_job( jid )
@@ -252,7 +316,7 @@ def runjob3():
     assert len( grep( out, 'exit = 0' ) ) == 1
     assert len( grep( out, 'ending' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'job-*.log' )
+    fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
     assert len(fL) == 1
     
     assert os.path.exists( 'hello' )
@@ -266,11 +330,12 @@ def jobfail1():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         print3( 'starting' )
-        jb = run_shell_job( 'ls', 'echo "fake failure" ; exit 1',
-                            poll_interval=2 )
+        jid = run_job( 'echo "fake failure" ; exit 1',
+                       poll_interval=2 )
+        jb = wait_job( jid )
         print3( 'exit =', jb.get( 'exit', None ) )
         print3( 'exc =', jb.get( 'exc', 'unset' ) )
         print3( 'ending' )
@@ -285,89 +350,23 @@ def jobfail1():
     assert len( grep( out, 'Traceback' ) ) == 0
     assert len( grep( out, 'exc = unset' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'ls-*.log' )
+    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
     assert len(fL) == 1
     assert len( filegrep( fL[0], 'fake failure' ) ) == 1
 
 
 def jobfail2():
     """
-    a job that fails to even launch
-    """
-    writefile( 'job.py', """
-        import os, sys
-        sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
-
-        print3( 'starting' )
-        jb = run_job( 'bad', '/an/arbitrary/path/badprogram',
-                      poll_interval=2 )
-        print3( 'exit =', jb.get( 'exit', 'unset' ) )
-        print3( 'exc =', jb.get( 'exc', 'unset' ) )
-        print3( 'ending' )
-        """ )
-
-    out = runout( localpy+' job.py' )
-    #print3( out )
-
-    assert len( grep( out, 'starting' ) ) == 1
-    assert len( grep( out, 'Traceback' ) ) > 0
-    assert len( grep( out, 'Exception running jobid' ) ) == 1
-    assert len( grep( out, 'exit = unset' ) ) == 1
-    assert len( grep( out, 'exc =' ) ) == 1
-    assert len( grep( out, 'exc = unset' ) ) == 0
-    assert len( grep( out, 'ending' ) ) == 1
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'bad-*.log' )
-    assert len(fL) == 1
-
-
-def jobfail3():
-    """
-    a shell job that fails to launch
-    """
-    writefile( 'job.py', """
-        import os, sys
-        sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
-
-        print3( 'starting' )
-        jb = run_shell_job( 'bad', '/an/arbitrary/path/badprogram',
-                            poll_interval=2 )
-        print3( 'exit =', jb.get( 'exit', 'unset' ) )
-        print3( 'exc =', jb.get( 'exc', 'unset' ) )
-        print3( 'ending' )
-        """ )
-
-    out = runout( localpy+' job.py' )
-    #print3( out )
-
-    assert len( grep( out, 'starting' ) ) == 1
-    L = grep( out, 'JobDone:' )
-    assert len( L ) == 1
-    assert L[0].count( 'exit=' ) == 1 and L[0].count( 'exit= ' ) == 0
-    assert len( grep( out, 'Traceback' ) ) == 0
-    assert len( grep( out, 'exit =' ) ) == 1
-    assert len( grep( out, 'exit = 0' ) ) == 0
-    assert len( grep( out, 'exc = unset' ) ) == 1
-    assert len( grep( out, 'ending' ) ) == 1
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'bad-*.log' )
-    assert len(fL) == 1
-
-
-def jobfail4():
-    """
     a background job that fails to launch
     """
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         print3( 'starting' )
-        jid = run_job_bg( 'bad', '/an/arbitrary/path/badprogram',
-                          poll_interval=2 )
+        jid = run_job( '/an/arbitrary/path/badprogram', '-h',
+                       poll_interval=2 )
         jb = wait_job( jid )
         print3( 'exit =', jb.get( 'exit', 'unset' ) )
         print3( 'exc =', jb.get( 'exc', 'unset' ) )
@@ -388,24 +387,60 @@ def jobfail4():
     assert len( grep( out, 'exc = unset' ) ) == 0
     assert len( grep( out, 'ending' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'bad-*.log' )
+    fL = fnmatch.filter( os.listdir( '.' ), 'badprogram-*.log' )
     assert len(fL) == 1
 
 
-def jobfail5():
+def jobfail3():
+    """
+    a shell job that fails to launch
+    """
+    writefile( 'job.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        jid = run_job( '/an/arbitrary/path/badprogram',
+                       poll_interval=2 )
+        jb = wait_job( jid )
+        print3( 'exit =', jb.get( 'exit', 'unset' ) )
+        print3( 'exc =', jb.get( 'exc', 'unset' ) )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    L = grep( out, 'JobDone:' )
+    assert len( L ) == 1
+    assert L[0].count( 'exit=' ) == 1 and L[0].count( 'exit= ' ) == 0
+    assert len( grep( out, 'Traceback' ) ) == 0
+    assert len( grep( out, 'exit =' ) ) == 1
+    assert len( grep( out, 'exit = 0' ) ) == 0
+    assert len( grep( out, 'exc = unset' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+    fL = fnmatch.filter( os.listdir( '.' ), 'badprogram-*.log' )
+    assert len(fL) == 1
+
+
+def jobfail4():
     """
     an ill formed job
     """
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         print3( 'starting' )
-        jb = run_job( 'bad1', poll_interval=2 )
+        jid = run_job(  )
+        jb = wait_job( jid )
         print3( 'exit1 =', jb.get( 'exit', 'unset' ) )
         print3( 'exc1 =', jb.get( 'exc', 'unset' ) )
-        jid = run_job_bg( 'bad2', poll_interval=2 )
+        jid = run_job( 'ls', ['-l','uhoh'], poll_interval=2 )
         jb = wait_job( jid )
         print3( 'exit2 =', jb.get( 'exit', 'unset' ) )
         print3( 'exc2 =', jb.get( 'exc', 'unset' ) )
@@ -417,8 +452,8 @@ def jobfail5():
 
     assert len( grep( out, 'starting' ) ) == 1
     assert len( grep( out, 'Traceback' ) ) > 0
-    assert len( grep( out, 'RunJob: bad1' ) ) == 1
-    assert len( grep( out, 'RunJob: bad2' ) ) == 1
+    assert grep( out, 'RunJob: ' )[0].find('RunJob: ()') >= 1
+    assert grep( out, 'RunJob: ' )[1].find('uhoh') > 1
     assert len( grep( out, 'exit1 = unset' ) ) == 1
     assert len( grep( out, 'exc1 =' ) ) == 1
     assert len( grep( out, 'exc1 = unset' ) ) == 0
@@ -427,26 +462,25 @@ def jobfail5():
     assert len( grep( out, 'exc2 = unset' ) ) == 0
     assert len( grep( out, 'ending' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'bad1-*.log' )
-    assert len(fL) == 0
-    fL = fnmatch.filter( os.listdir( '.' ), 'bad2-*.log' )
+    fL = fnmatch.filter( os.listdir( '.' ), '*.log' )
     assert len(fL) == 0
 
 
-def jobfail6():
+def jobfail5():
     """
     bad attributes to job specification
     """
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         print3( 'starting' )
-        jb = run_job( 'bad1', 'ls', machine=' sparky.gov' )
+        jid = run_job( 'ls', machine=' sparky.gov' )
+        jb = wait_job( jid )
         print3( 'exit1 =', jb.get( 'exit', 'unset' ) )
         print3( 'exc1 =', jb.get( 'exc', 'unset' ) )
-        jid = run_job_bg( 'bad2 ', 'ls' )
+        jid = run_job( '' )
         jb = wait_job( jid )
         print3( 'exit2 =', jb.get( 'exit', 'unset' ) )
         print3( 'exc2 =', jb.get( 'exc', 'unset' ) )
@@ -458,8 +492,8 @@ def jobfail6():
 
     assert len( grep( out, 'starting' ) ) == 1
     assert len( grep( out, 'Traceback' ) ) > 0
-    assert len( grep( out, 'RunJob: bad1' ) ) == 1
-    assert len( grep( out, 'RunJob: bad2' ) ) == 1
+    assert grep( out, 'RunJob: ' )[0].find('RunJob: (\'ls\'') >= 1
+    assert grep( out, 'RunJob: ' )[1].find('RunJob: (\'\'') >= 1
     assert len( grep( out, 'exit1 = unset' ) ) == 1
     assert len( grep( out, 'exc1 =' ) ) == 1
     assert len( grep( out, 'exc1 = unset' ) ) == 0
@@ -468,9 +502,7 @@ def jobfail6():
     assert len( grep( out, 'exc2 = unset' ) ) == 0
     assert len( grep( out, 'ending' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'bad1-*.log' )
-    assert len(fL) == 0
-    fL = fnmatch.filter( os.listdir( '.' ), 'bad2-*.log' )
+    fL = fnmatch.filter( os.listdir( '.' ), '*.log' )
     assert len(fL) == 0
 
 
@@ -481,20 +513,20 @@ def multijob1():
     writefile( 'job.py', """
         import os, sys, time
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         print3( 'starting' )
 
         # the first job stalls before touching a file
-        jid1 = run_shell_job_bg( 'job1', 'sleep 8 ; touch file1',
-                                 poll_interval=2 )
+        jid1 = run_job( 'sleep 8 ; touch file1',
+                        poll_interval=2 )
         print3( 'jobid 1 =', jid1 )
         time.sleep(1)
         assert not os.path.exists( 'file1' )
 
         # the second job touches a file quickly
-        jid2 = run_shell_job_bg( 'job2', 'sleep 1 ; touch file2',
-                                 poll_interval=2 )
+        jid2 = run_job( 'sleep 1 ; touch file2',
+                        poll_interval=2 )
         print3( 'jobid 2 =', jid2 )
         time.sleep(1)
         assert not os.path.exists( 'file1' )
@@ -521,21 +553,16 @@ def multijob1():
 
     assert len( grep( out, 'starting' ) ) == 1
     assert len( grep( out, 'Traceback' ) ) == 0
-    assert len( grep( out, 'RunJob: job1' ) ) == 1
-    assert len( grep( out, 'RunJob: job2' ) ) == 1
+    assert grep( out, 'RunJob: ' )[0].find( 'sleep 8' ) >= 0
+    assert grep( out, 'RunJob: ' )[2].find( 'sleep 1' ) >= 0
     L = grep( out, 'JobDone:' )
     assert len( L ) == 2
     assert L[0].count( 'JobDone:' ) == 1 and L[1].count( 'JobDone:' ) == 1
-    assert L[0].count( 'job1' ) == 1 or L[1].count( 'job1' ) == 1
-    assert L[0].count( 'job1' ) == 0 or L[1].count( 'job1' ) == 0
-    assert L[0].count( 'job2' ) == 1 or L[1].count( 'job2' ) == 1
-    assert L[0].count( 'job2' ) == 0 or L[1].count( 'job2' ) == 0
+    assert L[0].count( 'sleep' ) == 1 and L[1].count( 'sleep' ) == 1
     assert len( grep( out, 'ending' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'job*.log' )
+    fL = fnmatch.filter( os.listdir( '.' ), 'sleep-*.log' )
     assert len(fL) == 2
-    assert fL[0].startswith( 'job1-' ) or fL[1].startswith( 'job1-' )
-    assert fL[0].startswith( 'job2-' ) or fL[1].startswith( 'job2-' )
 
 
 def workdir1():
@@ -547,12 +574,13 @@ def workdir1():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         print3( 'starting' )
-        jb = run_shell_job( 'wd', 'echo hello > afile.txt',
-                            workdir='"""+d+"""',
-                            poll_interval=2 )
+        jid = run_job( 'echo hello > afile.txt',
+                       workdir='"""+d+"""',
+                       poll_interval=2 )
+        jb = wait_job( jid )
         print3( 'exit =', jb.get( 'exit' ) )
         assert jb.get( 'exit' ) == 0
         print3( 'ending' )
@@ -565,7 +593,7 @@ def workdir1():
     assert len( grep( out, 'exit = 0' ) ) == 1
     assert len( grep( out, 'ending' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'wd-*.log' )
+    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
     assert len(fL) == 1
     fn = os.path.join( d, 'afile.txt' )
     assert os.path.exists( fn )
@@ -579,11 +607,12 @@ def jobcast1():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         print3( 'starting' )
-        jb = run_shell_job( 'cast', 'echo hello > afile.txt',
-                            poll_interval=2 )
+        jid = run_job( 'echo hello > afile.txt',
+                        poll_interval=2 )
+        jb = wait_job( jid )
         print3( 'exit =', jb.get( 'exit' ) )
         if jb:
             print3( "cast is True" )
@@ -600,7 +629,7 @@ def jobcast1():
     assert len( grep( out, 'cast is True' ) ) == 1
     assert len( grep( out, 'ending' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'cast-*.log' )
+    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
     assert len(fL) == 1
     assert os.path.exists( 'afile.txt' )
     assert len( filegrep( 'afile.txt', "hello" ) ) == 1
@@ -613,11 +642,12 @@ def jobcast2():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         print3( 'starting' )
-        jb = run_shell_job( 'cast', 'echo hello > afile.txt ; exit 1',
-                            poll_interval=2 )
+        jid = run_job( 'echo hello > afile.txt ; exit 1',
+                        poll_interval=2 )
+        jb = wait_job( jid )
         print3( 'exit =', jb.get( 'exit' ) )
         if jb:
             raise Exception( "cast should be False" )
@@ -634,7 +664,7 @@ def jobcast2():
     assert len( grep( out, 'cast is False' ) ) == 1
     assert len( grep( out, 'ending' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'cast-*.log' )
+    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
     assert len(fL) == 1
     assert os.path.exists( 'afile.txt' )
     assert len( filegrep( 'afile.txt', "hello" ) ) == 1
@@ -654,14 +684,15 @@ def remote1():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         tprint( 'starting in', os.getcwd() )
-        jb = run_shell_job( 'rjob', 'echo hello',
-                            machine='"""+sshmach+"""',
-                            sshexe='"""+sshprog+"""',
-                            workdir='"""+rd+"""',
-                            poll_interval=2 )
+        jid = run_job( 'echo hello',
+                       machine='"""+sshmach+"""',
+                       sshexe='"""+sshprog+"""',
+                       workdir='"""+rd+"""',
+                       poll_interval=2 )
+        jb = wait_job( jid )
         tprint( 'exit =', jb.get( 'exit' ) )
         tprint( 'ending' )
         """ )
@@ -677,11 +708,11 @@ def remote1():
     assert len( grep( out, 'exit = 0' ) ) == 1
     assert len( grep( out, 'ending' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( ld ), 'rjob-*.log' )
+    fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
     assert len(fL) == 1
     lf = os.path.join( ld, fL[0] )
 
-    fL = fnmatch.filter( os.listdir( rd ), 'rjob-*.log' )
+    fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
     assert len(fL) == 1
     rf = os.path.join( rd, fL[0] )
 
@@ -707,14 +738,15 @@ def remote2():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         tprint( 'starting in', os.getcwd() )
-        jb = run_shell_job( 'rjob', '/bad/program',
-                            machine='"""+sshmach+"""',
-                            sshexe='"""+sshprog+"""',
-                            workdir='"""+rd+"""',
-                            poll_interval=2 )
+        jid = run_job( '/bad/program',
+                       machine='"""+sshmach+"""',
+                       sshexe='"""+sshprog+"""',
+                       workdir='"""+rd+"""',
+                       poll_interval=2 )
+        jb = wait_job( jid )
         tprint( 'exit =', jb.get( 'exit' ) )
         tprint( 'ending' )
         """ )
@@ -733,11 +765,11 @@ def remote2():
     assert len( grep( out, 'exit = 0' ) ) == 0
     assert len( grep( out, 'ending' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( ld ), 'rjob-*.log' )
+    fL = fnmatch.filter( os.listdir( ld ), 'program-*.log' )
     assert len(fL) == 1
     lf = os.path.join( ld, fL[0] )
 
-    fL = fnmatch.filter( os.listdir( rd ), 'rjob-*.log' )
+    fL = fnmatch.filter( os.listdir( rd ), 'program-*.log' )
     assert len(fL) == 1
     rf = os.path.join( rd, fL[0] )
 
@@ -759,19 +791,19 @@ def remote3():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         tprint( 'starting in', os.getcwd() )
-        jid1 = run_shell_job_bg( 'rjob', 'sleep 1; echo hello',
-                            machine='"""+sshmach+"""',
-                            sshexe='"""+sshprog+"""',
-                            workdir='"""+rd+"""',
-                            poll_interval=2 )
-        jid2 = run_shell_job_bg( 'rjob', 'sleep 4; echo world',
-                            machine='"""+sshmach+"""',
-                            sshexe='"""+sshprog+"""',
-                            workdir='"""+rd+"""',
-                            poll_interval=2 )
+        jid1 = run_job( 'sleep 1; echo hello',
+                        machine='"""+sshmach+"""',
+                        sshexe='"""+sshprog+"""',
+                        workdir='"""+rd+"""',
+                        poll_interval=2 )
+        jid2 = run_job( 'sleep 4; echo world',
+                        machine='"""+sshmach+"""',
+                        sshexe='"""+sshprog+"""',
+                        workdir='"""+rd+"""',
+                        poll_interval=2 )
         jb = wait_job( jid1 )
         tprint( 'exit1 =', jb.get( 'exit' ) )
         jb = wait_job( jid2 )
@@ -791,12 +823,12 @@ def remote3():
     assert len( grep( out, 'exit2 = 0' ) ) == 1
     assert len( grep( out, 'ending' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( ld ), 'rjob-*.log' )
+    fL = fnmatch.filter( os.listdir( ld ), 'sleep-*.log' )
     assert len(fL) == 2
     fL.sort()
     lf1,lf2 = os.path.join( ld, fL[0] ), os.path.join( ld, fL[1] )
 
-    fL = fnmatch.filter( os.listdir( rd ), 'rjob-*.log' )
+    fL = fnmatch.filter( os.listdir( rd ), 'sleep-*.log' )
     assert len(fL) == 2
     fL.sort()
     rf1,rf2 = os.path.join( rd, fL[0] ), os.path.join( rd, fL[1] )
@@ -821,11 +853,12 @@ def timeout1():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         print3( 'starting', time.time() )
-        jb = run_shell_job( 'job', 'echo hello ; sleep 60 ; echo world',
-                            timeout=5, poll_interval=2 )
+        jid = run_job( 'echo hello ; sleep 60 ; echo world',
+                       timeout=5, poll_interval=2 )
+        jb = wait_job( jid )
         print3( 'exit =', jb.get( 'exit', 'unset' ), time.time() )
         assert jb.get( 'exit', 'unset' ) == None
         print3( 'exc =', jb.get( 'exc', 'unset' ), time.time() )
@@ -845,7 +878,7 @@ def timeout1():
     assert len( grep( out, 'exc = unset' ) ) == 1
     assert len( grep( out, 'ending' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'job-*.log' )
+    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
     assert len(fL) == 1
     assert len( filegrep( fL[0], 'hello' ) ) == 1
     assert len( filegrep( fL[0], 'world' ) ) == 0
@@ -865,14 +898,15 @@ def timeout2():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         print3( 'starting', time.time() )
-        jb = run_shell_job( 'job', 'echo hello ; sleep 60 ; echo world',
-                            machine='"""+sshmach+"""',
-                            sshexe='"""+sshprog+"""',
-                            workdir='"""+rd+"""',
-                            timeout=5, poll_interval=2 )
+        jid = run_job( 'echo hello ; sleep 60 ; echo world',
+                       machine='"""+sshmach+"""',
+                       sshexe='"""+sshprog+"""',
+                       workdir='"""+rd+"""',
+                       timeout=5, poll_interval=2 )
+        jb = wait_job( jid )
         print3( 'exit =', jb.get( 'exit', 'unset' ), time.time() )
         assert jb.get( 'exit', 'unset' ) == None
         print3( 'ending' )
@@ -898,11 +932,11 @@ def timeout2():
     assert L[0].count( 'exc=[' ) == 0
     assert len( grep( out, 'ending' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( ld ), 'job-*.log' )
+    fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
     assert len(fL) == 1
     lf = os.path.join( ld, fL[0] )
 
-    fL = fnmatch.filter( os.listdir( rd ), 'job-*.log' )
+    fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
     assert len(fL) == 1
     rf = os.path.join( rd, fL[0] )
 
@@ -932,15 +966,16 @@ def remotefail1():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         tprint( 'starting in', os.getcwd() )
-        jb = run_shell_job( 'rjob', 'echo hello',
-                            machine='"""+sshmach+"""',
-                            sshexe='"""+sshprog+"""',
-                            connection_attempts=2,
-                            workdir='"""+rd+"""',
-                            poll_interval=2 )
+        jid = run_job( 'echo hello',
+                       machine='"""+sshmach+"""',
+                       sshexe='"""+sshprog+"""',
+                       connection_attempts=2,
+                       workdir='"""+rd+"""',
+                       poll_interval=2 )
+        jb = wait_job( jid )
         tprint( 'exit =', jb.get( 'exit', 'unset' ) )
         tprint( 'exc =', jb.get( 'exc', 'unset' ) )
         tprint( 'ending' )
@@ -958,8 +993,8 @@ def remotefail1():
     assert len( grep( out, 'exc = unset' ) ) == 0
     assert len( grep( out, re.escape('exc = [') ) ) == 1
     assert len( grep( out, 'Fake connection falure to sparky' ) ) > 0
-    assert len( grep( out, 'Connection failed to .sparky' ) ) == 1
-    assert len( grep( out, 'Could not connect to sparky' ) ) == 2
+    assert len( grep( out, 'Connection failed to .sparky' ) ) > 0
+    assert len( grep( out, 'Could not connect to sparky' ) ) > 0
     assert len( grep( out, 'exc = .*Could not connect to sparky' ) ) == 1
     assert len( grep( out, 'ending' ) ) == 1
 
@@ -977,14 +1012,15 @@ def remotefail2a():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         tprint( 'starting in', os.getcwd() )
-        jb = run_shell_job( 'rjob', 'echo hello ; sleep 2 ; echo world',
-                            machine='"""+sshmach+"""',
-                            sshexe='"""+sshprog+"""',
-                            workdir='"""+rd+"""',
-                            poll_interval=2 )
+        jid = run_job( 'echo hello ; sleep 2 ; echo world',
+                       machine='"""+sshmach+"""',
+                       sshexe='"""+sshprog+"""',
+                       workdir='"""+rd+"""',
+                       poll_interval=2 )
+        jb = wait_job( jid )
         tprint( 'exit =', jb.get( 'exit', 'unset' ) )
         tprint( 'exc =', jb.get( 'exc', 'unset' ) )
         tprint( 'ending' )
@@ -1004,11 +1040,11 @@ def remotefail2a():
     assert len( grep( out, 'Warning: exception monitoring jobid' ) ) == 0
     assert len( grep( out, 'Exception ignored; continuing to monitor' ) ) == 0
     
-    fL = fnmatch.filter( os.listdir( ld ), 'rjob-*.log' )
+    fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
     assert len(fL) == 1
     lf = os.path.join( ld, fL[0] )
 
-    fL = fnmatch.filter( os.listdir( rd ), 'rjob-*.log' )
+    fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
     assert len(fL) == 1
     rf = os.path.join( rd, fL[0] )
 
@@ -1036,15 +1072,16 @@ def remotefail2b():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         tprint( 'starting in', os.getcwd() )
-        jb = run_shell_job( 'rjob', 'echo hello ; sleep 10 ; echo world',
-                            machine='"""+sshmach+"""',
-                            sshexe='"""+sshprog+"""',
-                            workdir='"""+rd+"""',
-                            poll_interval=2,
-                            exception_print_interval=3 )
+        jid = run_job( 'echo hello ; sleep 10 ; echo world',
+                       machine='"""+sshmach+"""',
+                       sshexe='"""+sshprog+"""',
+                       workdir='"""+rd+"""',
+                       poll_interval=2,
+                       exception_print_interval=3 )
+        jb = wait_job( jid )
         tprint( 'exit =', jb.get( 'exit', 'unset' ) )
         tprint( 'exc =', jb.get( 'exc', 'unset' ) )
         tprint( 'ending' )
@@ -1064,11 +1101,11 @@ def remotefail2b():
     assert len( grep( out, 'Warning: exception monitoring jobid' ) ) == 1
     assert len( grep( out, 'Exception ignored; continuing to monitor' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( ld ), 'rjob-*.log' )
+    fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
     assert len(fL) == 1
     lf = os.path.join( ld, fL[0] )
 
-    fL = fnmatch.filter( os.listdir( rd ), 'rjob-*.log' )
+    fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
     assert len(fL) == 1
     rf = os.path.join( rd, fL[0] )
 
@@ -1110,16 +1147,17 @@ def update1():
     writefile( 'job.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
-        from runjobs import *
+        from runjob import *
 
         tprint( 'starting in', os.getcwd() )
-        jb = run_shell_job( 'rjob', '"""+scr+"""',
-                            machine='"""+sshmach+"""',
-                            sshexe='"""+sshprog+"""',
-                            workdir='"""+rd+"""',
-                            poll_interval=2,
-                            getlog_small_file_size=1,  # force updates
-                            getlog_chunk_size=23 )
+        jid = run_job( '"""+scr+"""',
+                       machine='"""+sshmach+"""',
+                       sshexe='"""+sshprog+"""',
+                       workdir='"""+rd+"""',
+                       poll_interval=2,
+                       getlog_small_file_size=1,  # force updates
+                       getlog_chunk_size=23 )
+        jb = wait_job( jid )
         tprint( 'exit =', jb.get( 'exit' ) )
         tprint( 'ending' )
         """ )
@@ -1135,11 +1173,11 @@ def update1():
     assert len( grep( out, 'exit = 0' ) ) == 1
     assert len( grep( out, 'ending' ) ) == 1
 
-    fL = fnmatch.filter( os.listdir( ld ), 'rjob-*.log' )
+    fL = fnmatch.filter( os.listdir( ld ), 'makeout-*.log' )
     assert len(fL) == 1
     lf = os.path.join( ld, fL[0] )
 
-    fL = fnmatch.filter( os.listdir( rd ), 'rjob-*.log' )
+    fL = fnmatch.filter( os.listdir( rd ), 'makeout-*.log' )
     assert len(fL) == 1
     rf = os.path.join( rd, fL[0] )
 

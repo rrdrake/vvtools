@@ -10,53 +10,41 @@ import threading
 import pipes
 import traceback
 
+import runcmd
+from runcmd import command, escape
 
-def run_job( jobname, *args, **kwargs ):
+
+"""
+Functions in this file run commands in a subprocess, such that
+
+    1. Output is always redirected to a log file
+    2. Commands are run and managed in the background
+    3. Commands can be executed on remote machines
+
+The key functions are:
+
+    run_job  : start a command in the background, and return a Job object
+    poll_job : returns True if a job id has completed
+    wait_job : waits for a job to complete, and returns the exit status
+
+Note also the command() and escape() functions imported from runcmd.py can
+be useful in constructing the commands.
+
+See the documentation in runcmd.py for how commands are specified to run_job(),
+because the are the same.
+"""
+
+
+def run_job( *args, **kwargs ):
     """
-    Runs a job, waits for it to finish, then returns the Job object.
+    Starts a job in the background and returns the job id.
 
     The shell command is formed from 'args', which must be length one or
     more.
 
     The keyword arguments are passed to the underlying Job object.
     """
-    return RunJobs.inst.run_job( False, False, jobname, *args, **kwargs )
-
-
-def run_shell_job( jobname, *args, **kwargs ):
-    """
-    Same as run_job() except that the shell is used to execute the command.
-    
-    If a single argument is given, it is passed to the shell directly.  If
-    more than one argument is given, then each argument is treated as a
-    separate argument in a combined command string.  So
-
-        run_shell_job( 'job', 'ls -a "file name"' )
-
-    would execute
-
-        $ ls -a "file name"
-
-    The following would execute the same thing:
-
-        run_shell_job( 'job', 'ls', '-a', 'file name' )
-    """
-    return RunJobs.inst.run_job( True, False, jobname, *args, **kwargs )
-
-
-def run_job_bg( jobname, *args, **kwargs ):
-    """
-    Runs a job in the background and returns the job id.
-    """
-    return RunJobs.inst.run_job( False, True, jobname, *args, **kwargs )
-
-
-def run_shell_job_bg( jobname, *args, **kwargs ):
-    """
-    Same as run_job_bg() except the arguments are interpreted as they are
-    in run_shell_job().
-    """
-    return RunJobs.inst.run_job( True, True, jobname, *args, **kwargs )
+    return RunJobs.inst.run_job( *args, **kwargs )
 
 
 def poll_job( jobid ):
@@ -162,7 +150,8 @@ class Job:
         assert attr_name and attr_name == attr_name.strip()
 
         if attr_name in ["name","machine"]:
-            assert attr_value and attr_value == attr_value.strip()
+            assert attr_value and attr_value == attr_value.strip(), \
+                'invalid "'+attr_name+'" value: "'+str(attr_value)+'"'
         elif attr_name == 'timeout':
             attr_value = int( attr_value )
         elif attr_name == 'poll_interval':
@@ -266,9 +255,16 @@ class Job:
         x = None
         try:
             if wrkd: os.chdir( wrkd )
-            x = runcmd( cmd, outfd=logfp.fileno(),
-                             timeout=timeout,
-                             poll_interval=ipoll )
+            if timeout == None:
+                x = runcmd.run_command( cmd, echo=False,
+                                             raise_on_failure=False,
+                                             redirect=logfp.fileno() )
+            else:
+                x = runcmd.run_timeout( cmd, timeout=timeout,
+                                             echo=False,
+                                             raise_on_failure=False,
+                                             redirect=logfp.fileno(),
+                                             poll_interval=ipoll )
         finally:
             logfp.close()
             os.chdir( cwd )
@@ -288,7 +284,7 @@ class Job:
         logf = self.logpath()
 
         mydir = os.path.dirname( os.path.abspath( __file__ ) )
-        rfile = os.path.join( mydir, 'runjobs_remote.py' )
+        rfile = os.path.join( mydir, 'runjob_remote.py' )
 
         from remotepython import RemotePython
 
@@ -560,17 +556,6 @@ class RunJobs:
         """
         self.db[ job.jobid() ] = ( job, thr )
 
-    def execute(self, job):
-        """
-        Add the given job in the database, run the job, and wait for it to
-        finish.  Print a "done" message when finished.
-        """
-        self.insert( job )
-        job.execute()
-        tprint( 'JobDone:', 'jobid='+str(job.jobid()),
-                'exit='+str(job.get('exit','')).strip(),
-                'exc='+str(job.get('exc','')).strip() )
-
     def start(self, job):
         """
         Add the given job in the database and start the job execution in a
@@ -635,22 +620,16 @@ class RunJobs:
                     'exc='+str(job.get('exc','')).strip() )
         return job
 
-    def run_job(self, sh, bg, jobname, *args, **kwargs ):
+    def run_job(self, *args, **kwargs ):
         """
-        A helper function that executes a job command.  If 'sh' is True,
-        then the args are treated as a shell command.  If 'bg' is True, then
-        the command is run in a separate thread.
-
-        For non-background jobs, an uncaught exception from Job.execute() will
-        be caught here, recorded and printed to stderr.  This function returns
-        normally.
+        A helper function that executes a job command.
 
         For background jobs, the Job.execute() is run in a separate thread and
         this function immediately returns with the job id.  Uncaught exceptions
         will be written to stderr by the normal threading behavior, and the
         thread will finish.
         """
-        tprint( 'RunJob:', jobname, args, kwargs )
+        tprint( 'RunJob:', args, kwargs )
         print3( ''.join( traceback.format_list(
                             traceback.extract_stack()[:-1] ) ).rstrip() )
 
@@ -659,20 +638,15 @@ class RunJobs:
         try:
             assert len(args) > 0, "empty or no command given"
 
-            jb.set( 'name', jobname )
+            cmd,scmd = runcmd._assemble_command( *args )
 
-            if sh:
-                # treat the arguments as a shell command
-                if len(args) > 1:
-                    # shell quote each argument (escape wildcards, for example)
-                    cmd = ' '.join( [ pipes.quote(arg) for arg in args ] )
-                    jb.set( 'command', cmd )
-                else:
-                    # send command through unmodified (no escaping is done)
-                    jb.set( 'command', args[0] )
+            if type(cmd) == type(''):
+                jobname = os.path.basename( cmd.strip().split()[0] )
             else:
-                # treat arguments as raw positional arguments to a subprocess
-                jb.set( 'command', args )
+                jobname = os.path.basename( cmd[0] )
+
+            jb.set( 'name', jobname )
+            jb.set( 'command', cmd )
             
             for n,v in kwargs.items():
                 jb.set( n, v )
@@ -680,12 +654,8 @@ class RunJobs:
             jb.finalize()
             tprint( 'RunJob: jobid='+str(jb.jobid()) )
 
-            if bg:
-                # run in a thread and return without waiting
-                self.start( jb )
-            else:
-                # run and wait on the job
-                self.execute( jb )
+            # run in a thread and return without waiting
+            self.start( jb )
         
         except:
             # catch all exceptions to avoid crashing the calling script;
@@ -700,9 +670,7 @@ class RunJobs:
         # this just ensures that the next job will have a unique date stamp
         time.sleep(1)
 
-        if bg:
-            return jb.jobid()
-        return jb
+        return jb.jobid()
 
 # construct the RunJobs singleton instance
 RunJobs.inst = RunJobs()
@@ -721,76 +689,6 @@ def capture_traceback( excinfo ):
                         traceback.extract_stack()[:-2] +
                         traceback.extract_tb( xtb ) ) ) + xs
     return xs,tb
-
-
-def runcmd( cmd, outfd=None, timeout=None, poll_interval=15 ):
-    """
-    Run the given command in a subprocess then wait for it to finish.  An
-    exception is raised if the command fails to launch.  Returns the command's
-    exit status, or None if the command times out.
-    """
-    import signal
-
-    argD = {}
-
-    if type(cmd) == type(''):
-        argD['shell'] = True
-
-    if outfd != None:
-        argD['stdout'] = outfd
-        argD['stderr'] = subprocess.STDOUT
-
-    if sys.platform.lower().startswith('win'):
-        def kill_process( po ):
-            po.terminate()
-
-    else:
-        # use preexec_fn to put the child into its own process group
-        # (to more easily kill it and all its children)
-        argD['preexec_fn'] = lambda: os.setpgid( os.getpid(), os.getpid() )
-
-        def kill_process( po ):
-            # send all processes in the process group a SIGTERM
-            os.kill( -po.pid, signal.SIGTERM )
-            # wait for child process to complete
-            for i in range(10):
-                x = po.poll()
-                if x != None:
-                      break
-                time.sleep(1)
-            if x == None:
-                # child did not die - try to force it
-                os.kill( po.pid, signal.SIGKILL )
-                time.sleep(1)
-                po.poll()
-
-    t0 = time.time()
-
-    p = subprocess.Popen( cmd, **argD )
-
-    x = None
-    try:
-        if timeout != None:
-            ipoll = min( poll_interval, int( 0.45*timeout ) )
-            pause = 2
-            while True:
-                time.sleep( pause )
-                pause = min( 2*pause, ipoll )
-                x = p.poll()
-                if x != None:
-                    break
-                if time.time() - t0 > timeout:
-                    kill_process(p)
-                    x = None  # mark as timed out
-                    break
-        else:
-            x = p.wait()
-
-    except:
-        kill_process(p)
-        raise
-
-    return x
 
 
 def print3( *args ):

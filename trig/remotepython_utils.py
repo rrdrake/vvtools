@@ -355,7 +355,6 @@ else:
         sys.stdout.buffer.write( b )
 
 
-# magic
 def DEBUG( *args ):
     dbgfp = open( 'debug.log', 'ab' )
     dbgfp.write( _BYTES_( repr(args) + os.linesep ) )
