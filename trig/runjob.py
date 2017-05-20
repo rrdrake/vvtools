@@ -26,6 +26,7 @@ The key functions are:
     run_job  : start a command in the background, and return a Job object
     poll_job : returns True if a job id has completed
     wait_job : waits for a job to complete, and returns the exit status
+    wait_all : waits for multiple job ids
 
 Note also the command() and escape() functions imported from runcmd.py can
 be useful in constructing the commands.
@@ -61,6 +62,15 @@ def wait_job( jobid ):
     must exist otherwise an exception is raised.
     """
     return RunJobs.inst.wait( jobid )
+
+def wait_all( *jobids, **kwargs ):
+    """
+    Waits for each job to complete and returns the list of completed Job
+    objects.  If no 'jobids' are given, all background jobs are waited upon.
+    The optional keyword argument 'poll_interval' can be used to specify the
+    sleep time in seconds between polls.
+    """
+    return RunJobs.inst.wait_all( *jobids, **kwargs )
 
 
 ###########################################################################
@@ -619,6 +629,31 @@ class RunJobs:
                     'exit='+str(job.get('exit','')).strip(),
                     'exc='+str(job.get('exc','')).strip() )
         return job
+
+    def wait_all(self, *jobids, **kwargs):
+        """
+        Repeated poll of each job id, until all complete.  Returns the list
+        of Jobs.
+        """
+        ipoll = kwargs.get( 'poll_interval',
+                            RunJobs.getDefault( 'poll_interval' ) )
+
+        if len(jobids) == 0:
+            jobids = []
+            for jid,T in self.db.items():
+                if T[1] != None:
+                    jobids.append( jid )
+
+        jobD = {}
+        while len(jobD) < len(jobids):
+            for jid in jobids:
+                if jid not in jobD:
+                    if self.poll(jid):
+                        jobD[jid] = self.wait(jid)
+            if len(jobD) < len(jobids):
+                time.sleep( ipoll )
+
+        return [ jobD[jid] for jid in jobids ]
 
     def run_job(self, *args, **kwargs ):
         """

@@ -57,6 +57,7 @@ def runtests( cwd, argL ):
     if len(argL) == 0:
         argL = """runjob1 runjob1b runjob1c runjob1d runjob1e
                   runjob2 runjob3
+                  waitall1 waitall2 waitall3 waitall4 waitall5 waitall6
                   jobfail1 jobfail2 jobfail3 jobfail4 jobfail5
                   multijob1
                   workdir1
@@ -321,6 +322,211 @@ def runjob3():
     
     assert os.path.exists( 'hello' )
     assert os.path.exists( 'goodbye' )
+
+
+def waitall1():
+    """
+    wait_all giving job ids
+    """
+    writefile( 'job.py', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        jid1 = run_job( 'echo hello ; sleep 6',
+                        poll_interval=2 )
+        print3( 'jobid1 =', jid1 )
+        jid2 = run_job( 'sleep 2',
+                        poll_interval=2 )
+        print3( 'jobid2 =', jid2 )
+
+        jL = wait_all( jid2, jid1, poll_interval=3 )
+
+        assert len(jL) == 2
+        assert jL[0] and jL[0].get( 'name' ) == 'sleep'
+        assert jL[1] and jL[1].get( 'name' ) == 'echo'
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+    #os.system( localpy+' job.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def waitall2():
+    """
+    wait_all without job ids
+    """
+    writefile( 'job.py', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        jid1 = run_job( 'echo hello ; sleep 6',
+                        poll_interval=2 )
+        print3( 'jobid1 =', jid1 )
+        jid2 = run_job( 'sleep 2',
+                        poll_interval=2 )
+        print3( 'jobid2 =', jid2 )
+
+        jL = wait_all( poll_interval=3 )
+
+        assert len(jL) == 2
+        assert jL[0] and jL[1]
+        assert ( jL[0].get( 'name' ) == 'sleep' and \
+                 jL[1].get( 'name' ) == 'echo' ) or \
+               ( jL[0].get( 'name' ) == 'echo' and \
+                 jL[1].get( 'name' ) == 'sleep' )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+    #os.system( localpy+' job.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def waitall3():
+    """
+    use wait_all to wait for one of two jobs
+    """
+    writefile( 'job.py', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        jid1 = run_job( 'echo hello ; sleep 6',
+                        poll_interval=2 )
+        print3( 'jobid1 =', jid1 )
+        jid2 = run_job( 'sleep 2',
+                        poll_interval=2 )
+        print3( 'jobid2 =', jid2 )
+
+        jL = wait_all( jid1, poll_interval=3 )
+
+        assert len(jL) == 1
+        assert jL[0] and jL[0].get( 'name' ) == 'echo'
+        assert wait_job( jid2 )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+    #os.system( localpy+' job.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def waitall4():
+    """
+    same as previous but switch jids
+    """
+    writefile( 'job.py', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        jid1 = run_job( 'echo hello ; sleep 6',
+                        poll_interval=2 )
+        print3( 'jobid1 =', jid1 )
+        jid2 = run_job( 'sleep 2',
+                        poll_interval=2 )
+        print3( 'jobid2 =', jid2 )
+
+        jL = wait_all( jid2, poll_interval=3 )
+
+        assert len(jL) == 1
+        assert jL[0] and jL[0].get( 'name' ) == 'sleep'
+        assert wait_job( jid1 )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+    #os.system( localpy+' job.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def waitall5():
+    """
+    wait_all when one of two jobs are not done
+    """
+    writefile( 'job.py', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        jid1 = run_job( 'echo hello ; sleep 6',
+                        poll_interval=2 )
+        print3( 'jobid1 =', jid1 )
+        jid2 = run_job( 'sleep 2',
+                        poll_interval=2 )
+        print3( 'jobid2 =', jid2 )
+        j = wait_job( jid2 )
+        assert j
+
+        jL = wait_all( poll_interval=3 )
+
+        assert len(jL) == 1
+        assert jL[0] and jL[0].get( 'name' ) == 'echo'
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+    #os.system( localpy+' job.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def waitall6():
+    """
+    wait_all with two jobids given but one job is already done
+    """
+    writefile( 'job.py', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        jid1 = run_job( 'echo hello ; sleep 6',
+                        poll_interval=2 )
+        print3( 'jobid1 =', jid1 )
+        jid2 = run_job( 'sleep 2',
+                        poll_interval=2 )
+        print3( 'jobid2 =', jid2 )
+        j = wait_job( jid2 )
+        assert j
+
+        jL = wait_all( jid2, jid1, poll_interval=3 )
+
+        assert len(jL) == 2
+        assert jL[0] and jL[1]
+        assert jL[0].get( 'name' ) == 'sleep'
+        assert jL[1].get( 'name' ) == 'echo'
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+    #os.system( localpy+' job.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
 
 
 def jobfail1():
