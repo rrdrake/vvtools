@@ -85,7 +85,7 @@ class Job:
     Optional attributes are:
 
         machine
-        workdir
+        chdir
         logdir
         timeout
         poll_interval
@@ -201,8 +201,8 @@ class Job:
         """
         if not self.get( 'logpath', None ):
             logn = self.logname()
-            wd = self.get( 'workdir', RunJobs.getDefault( 'workdir', None ) )
-            logd = self.get( 'logdir', RunJobs.getDefault( 'logdir', wd ) )
+            cd = self.get( 'chdir', RunJobs.getDefault( 'chdir', None ) )
+            logd = self.get( 'logdir', RunJobs.getDefault( 'logdir', cd ) )
             if logd: logf = os.path.join( logd, logn )
             else:    logf = logn
             self.set( 'logpath', logf )
@@ -256,7 +256,7 @@ class Job:
         timeout = self.get( 'timeout', RunJobs.getDefault( 'timeout' ) )
 
         cmd = self.get( 'command' )
-        wrkd = self.get( 'workdir', RunJobs.getDefault( 'workdir' ) )
+        chd = self.get( 'chdir', RunJobs.getDefault( 'chdir' ) )
         logn = self.logname()
 
         cwd = os.getcwd()
@@ -264,20 +264,20 @@ class Job:
         
         x = None
         try:
-            if wrkd: os.chdir( wrkd )
             if timeout == None:
                 x = runcmd.run_command( cmd, echo=False,
                                              raise_on_failure=False,
-                                             redirect=logfp.fileno() )
+                                             redirect=logfp.fileno(),
+                                             chdir=chd )
             else:
                 x = runcmd.run_timeout( cmd, timeout=timeout,
                                              echo=False,
                                              raise_on_failure=False,
                                              redirect=logfp.fileno(),
-                                             poll_interval=ipoll )
+                                             poll_interval=ipoll,
+                                             chdir=chd )
         finally:
             logfp.close()
-            os.chdir( cwd )
         
         self.set( 'exit', x )
 
@@ -286,7 +286,7 @@ class Job:
         """
         timeout = self.get( 'timeout', RunJobs.getDefault( 'timeout' ) )
         cmd = self.get( 'command' )
-        wrkd = self.get( 'workdir', RunJobs.getDefault( 'workdir' ) )
+        chd = self.get( 'chdir', RunJobs.getDefault( 'chdir' ) )
         sshexe = self.get( 'sshexe', RunJobs.getDefault( 'sshexe' ) )
         numconn = self.get( 'connection_attempts',
                             RunJobs.getDefault( 'connection_attempts' ) )
@@ -302,8 +302,8 @@ class Job:
 
         tprint( 'Connect machine:', mach )
         tprint( 'Remote command:', cmd )
-        if wrkd:
-            tprint( 'Remote workdir:', wrkd )
+        if chd:
+            tprint( 'Remote dir:', chd )
         if timeout != None:
             tprint( 'Remote timeout:', timeout )
 
@@ -320,7 +320,7 @@ class Job:
 
             rmt.startTimeout( 30 )
             rpid = rmt.x_background_command( cmd, logf,
-                                             workdir=wrkd,
+                                             chdir=chd,
                                              timeout=timeout )
 
             time.sleep(2)
@@ -534,7 +534,7 @@ class RunJobs:
                             'remote_poll_interval': 5*60,
                             'exception_print_interval': 15*60,
                             'timeout': None,
-                            'workdir': None,
+                            'chdir': None,
                             'sshexe': None,
                             'connection_attempts': 10,
                             'getlog_small_file_size': 5*1024,

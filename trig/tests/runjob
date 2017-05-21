@@ -60,7 +60,7 @@ def runtests( cwd, argL ):
                   waitall1 waitall2 waitall3 waitall4 waitall5 waitall6
                   jobfail1 jobfail2 jobfail3 jobfail4 jobfail5
                   multijob1
-                  workdir1
+                  chdir1
                   jobcast1 jobcast2
                   remote1 remote2 remote3
                   timeout1 timeout2
@@ -771,7 +771,7 @@ def multijob1():
     assert len(fL) == 2
 
 
-def workdir1():
+def chdir1():
     """
     specify the run directory
     """
@@ -784,7 +784,7 @@ def workdir1():
 
         print3( 'starting' )
         jid = run_job( 'echo hello > afile.txt',
-                       workdir='"""+d+"""',
+                       chdir='"""+d+"""',
                        poll_interval=2 )
         jb = wait_job( jid )
         print3( 'exit =', jb.get( 'exit' ) )
@@ -796,6 +796,7 @@ def workdir1():
     #print3( out )
 
     assert len( grep( out, 'starting' ) ) == 1
+    assert grep( out, 'chdir' )[0].find( d ) >= 0
     assert len( grep( out, 'exit = 0' ) ) == 1
     assert len( grep( out, 'ending' ) ) == 1
 
@@ -896,7 +897,7 @@ def remote1():
         jid = run_job( 'echo hello',
                        machine='"""+sshmach+"""',
                        sshexe='"""+sshprog+"""',
-                       workdir='"""+rd+"""',
+                       chdir='"""+rd+"""',
                        poll_interval=2 )
         jb = wait_job( jid )
         tprint( 'exit =', jb.get( 'exit' ) )
@@ -950,7 +951,7 @@ def remote2():
         jid = run_job( '/bad/program',
                        machine='"""+sshmach+"""',
                        sshexe='"""+sshprog+"""',
-                       workdir='"""+rd+"""',
+                       chdir='"""+rd+"""',
                        poll_interval=2 )
         jb = wait_job( jid )
         tprint( 'exit =', jb.get( 'exit' ) )
@@ -1003,12 +1004,12 @@ def remote3():
         jid1 = run_job( 'sleep 1; echo hello',
                         machine='"""+sshmach+"""',
                         sshexe='"""+sshprog+"""',
-                        workdir='"""+rd+"""',
+                        chdir='"""+rd+"""',
                         poll_interval=2 )
         jid2 = run_job( 'sleep 4; echo world',
                         machine='"""+sshmach+"""',
                         sshexe='"""+sshprog+"""',
-                        workdir='"""+rd+"""',
+                        chdir='"""+rd+"""',
                         poll_interval=2 )
         jb = wait_job( jid1 )
         tprint( 'exit1 =', jb.get( 'exit' ) )
@@ -1110,7 +1111,7 @@ def timeout2():
         jid = run_job( 'echo hello ; sleep 60 ; echo world',
                        machine='"""+sshmach+"""',
                        sshexe='"""+sshprog+"""',
-                       workdir='"""+rd+"""',
+                       chdir='"""+rd+"""',
                        timeout=5, poll_interval=2 )
         jb = wait_job( jid )
         print3( 'exit =', jb.get( 'exit', 'unset' ), time.time() )
@@ -1179,7 +1180,7 @@ def remotefail1():
                        machine='"""+sshmach+"""',
                        sshexe='"""+sshprog+"""',
                        connection_attempts=2,
-                       workdir='"""+rd+"""',
+                       chdir='"""+rd+"""',
                        poll_interval=2 )
         jb = wait_job( jid )
         tprint( 'exit =', jb.get( 'exit', 'unset' ) )
@@ -1224,7 +1225,7 @@ def remotefail2a():
         jid = run_job( 'echo hello ; sleep 2 ; echo world',
                        machine='"""+sshmach+"""',
                        sshexe='"""+sshprog+"""',
-                       workdir='"""+rd+"""',
+                       chdir='"""+rd+"""',
                        poll_interval=2 )
         jb = wait_job( jid )
         tprint( 'exit =', jb.get( 'exit', 'unset' ) )
@@ -1284,7 +1285,7 @@ def remotefail2b():
         jid = run_job( 'echo hello ; sleep 10 ; echo world',
                        machine='"""+sshmach+"""',
                        sshexe='"""+sshprog+"""',
-                       workdir='"""+rd+"""',
+                       chdir='"""+rd+"""',
                        poll_interval=2,
                        exception_print_interval=3 )
         jb = wait_job( jid )
@@ -1359,7 +1360,7 @@ def update1():
         jid = run_job( '"""+scr+"""',
                        machine='"""+sshmach+"""',
                        sshexe='"""+sshprog+"""',
-                       workdir='"""+rd+"""',
+                       chdir='"""+rd+"""',
                        poll_interval=2,
                        getlog_small_file_size=1,  # force updates
                        getlog_chunk_size=23 )

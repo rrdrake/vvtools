@@ -132,7 +132,8 @@ nl=os.linesep
 ofp=sys.stdout
 ofp.write( "Start Date: " + time.ctime() + nl )
 ofp.write( "Parent PID: " + str(os.getpid()) + nl )
-ofp.write( "Subcommand: " + str(cmd) + nl+nl )
+ofp.write( "Subcommand: " + str(cmd) + nl )
+ofp.write( "Directory : " + os.getcwd() + nl+nl )
 ofp.flush()
 
 argD = {}
@@ -192,7 +193,7 @@ ofp.flush()
 '''.lstrip()
 
 
-def background_command( cmd, redirect, timeout=None, workdir=None ):
+def background_command( cmd, redirect, timeout=None, chdir=None ):
     "Run command (list or string) in the background and redirect to a file."
     pycode = _background_template.replace( 'COMMAND', repr(cmd) )
     pycode = pycode.replace( 'TIMEOUT_VALUE', repr(timeout) )
@@ -204,36 +205,38 @@ def background_command( cmd, redirect, timeout=None, workdir=None ):
     #        'eval( compile( binascii.a2b_hex(s), "<string>", "exec" ) )'
     #cmdL = [ sys.executable, '-c', pycmd ]
 
-    if workdir != None:
+    if chdir != None:
         cwd = os.getcwd()
-        os.chdir( workdir )
-
-    fpout = open( redirect, 'w' )
-    try:
-        fpin = open( os.devnull, 'r' )
-    except:
-        fpout.close()
-        raise
+        os.chdir( chdir )
 
     try:
-        argD = { 'stdin':  fpin.fileno(),
-                 'stdout': fpout.fileno(),
-                 'stderr': subprocess.STDOUT }
-        if not sys.platform.lower().startswith('win'):
-            # place child in its own process group to help avoid getting
-            # killed when the parent process exits
-            argD['preexec_fn'] = lambda: os.setpgid( os.getpid(), os.getpid() )
-        p = subprocess.Popen( cmdL, **argD )
-    except:
-        fpout.close()
-        fpin.close()
-        raise
+        fpout = open( redirect, 'w' )
+        try:
+            fpin = open( os.devnull, 'r' )
+        except:
+            fpout.close()
+            raise
+
+        try:
+            argD = { 'stdin':  fpin.fileno(),
+                     'stdout': fpout.fileno(),
+                     'stderr': subprocess.STDOUT }
+            if not sys.platform.lower().startswith('win'):
+                # place child in its own process group to help avoid getting
+                # killed when the parent process exits
+                argD['preexec_fn'] = lambda: os.setpgid( os.getpid(), os.getpid() )
+            p = subprocess.Popen( cmdL, **argD )
+        except:
+            fpout.close()
+            fpin.close()
+            raise
+
+    finally:
+        if chdir != None:
+            os.chdir( cwd )
 
     fpout.close()
     fpin.close()
-
-    if workdir != None:
-        os.chdir( cwd )
 
     return p.pid
 
