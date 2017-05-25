@@ -79,11 +79,11 @@ class Job:
     """
     Required attributes are:
 
-        name
         command
 
     Optional attributes are:
 
+        name
         machine
         chdir
         logdir
@@ -675,10 +675,13 @@ class RunJobs:
 
             cmd,scmd = runcmd._assemble_command( *args )
 
-            if type(cmd) == type(''):
-                jobname = os.path.basename( cmd.strip().split()[0] )
+            if 'name' in kwargs:
+                jobname = kwargs['name']
             else:
-                jobname = os.path.basename( cmd[0] )
+                if type(cmd) == type(''):
+                    jobname = os.path.basename( cmd.strip().split()[0] )
+                else:
+                    jobname = os.path.basename( cmd[0] )
 
             jb.set( 'name', jobname )
             jb.set( 'command', cmd )

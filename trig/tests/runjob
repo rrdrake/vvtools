@@ -56,7 +56,7 @@ def runtests( cwd, argL ):
     """
     if len(argL) == 0:
         argL = """runjob1 runjob1b runjob1c runjob1d runjob1e
-                  runjob2 runjob3
+                  runjob2 runjob3 runjob4
                   waitall1 waitall2 waitall3 waitall4 waitall5 waitall6
                   jobfail1 jobfail2 jobfail3 jobfail4 jobfail5
                   multijob1
@@ -322,6 +322,38 @@ def runjob3():
     
     assert os.path.exists( 'hello' )
     assert os.path.exists( 'goodbye' )
+
+
+def runjob4():
+    """
+    give job a name
+    """
+    writefile( 'job.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        jid = run_job( ['touch', 'file.txt'], name="makefile",
+                       poll_interval=2 )
+        jb = wait_job( jid )
+        print3( 'exit =', jb.get( 'exit' ) )
+        assert jb.get( 'exit' ) == 0
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+    assert len( grep( out, 'exit = 0' ) ) == 1
+
+    fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
+    assert len(fL) == 0
+    fL = fnmatch.filter( os.listdir( '.' ), 'makefile-*.log' )
+    assert len(fL) == 1
+    assert os.path.exists( 'file.txt' )
 
 
 def waitall1():
