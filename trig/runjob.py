@@ -23,7 +23,7 @@ Functions in this file run commands in a subprocess, such that
 
 The key functions are:
 
-    run_job  : start a command in the background, and return a Job object
+    run_job  : start a command in the background, and return a Job id
     poll_job : returns True if a job id has completed
     wait_job : waits for a job to complete, and returns the exit status
     wait_all : waits for multiple job ids
@@ -695,10 +695,10 @@ class RunJobs:
         """
         A helper function that executes a job command.
 
-        For background jobs, the Job.execute() is run in a separate thread and
-        this function immediately returns with the job id.  Uncaught exceptions
-        will be written to stderr by the normal threading behavior, and the
-        thread will finish.
+        The Job.execute() is run in a separate thread and this function
+        returns immediately with the job id.  Uncaught exceptions will be
+        written to stderr by the normal threading behavior, and the thread
+        will finish.
         """
         tprint( 'RunJob:', args, kwargs )
         print3( ''.join( traceback.format_list(
