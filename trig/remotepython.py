@@ -23,7 +23,8 @@ Supoose the local code is contained in a file called local.py with contents
     import os, sys
     from remotepython import RemotePython, RemoteException, LocalException
     from remotepython import print3
-    rpy = RemotePython( "machinename", "remote.py" )
+    rpy = RemotePython( "machinename" )
+    rpy.addRemoteContent( filename="remote.py" )
     rpy.connect()
     print3( 'call one:', rpy.xcall( "myfunc" ) )
     print3( 'call two:', rpy.xcall( "myfunc", '-a' ) )
@@ -103,8 +104,7 @@ class LocalException(Exception):
 
 class RemotePython:
 
-    def __init__(self, machine, remote_filename,
-                       sshexe=None, remotepy='/usr/bin/python' ):
+    def __init__(self, machine, sshexe=None, remotepy='/usr/bin/python' ):
         """
         If 'sshexe' is given, it should be the path to an ssh executable.
         If it is not given, the current PATH is searched.
@@ -114,13 +114,24 @@ class RemotePython:
         """
         assert machine and machine.strip() == machine
         self.mach = machine
-        self.rfname = remote_filename
+        self.content = _BYTES_( 'import os, sys, time' )
         self.sshexe = sshexe
         self.remotepy = remotepy
         self.pssh = None
         self.pid = None  # process id of ssh command
         self.timer = None
         self.tlock = threading.Lock()
+
+    def addRemoteContent(self, content=None, filename=None ):
+        """
+        Add to the content sent to the remote side.  Must be python code.
+        """
+        if filename != None:
+            fp = open( filename, 'rb' )
+            self.content += _BYTES_('\n\n') + fp.read()
+            fp.close() ; fp = None
+        if content != None:
+            self.content += _BYTES_('\n\n') + _BYTES_( content )
 
     def startTimeout(self, numseconds):
         """
@@ -158,9 +169,7 @@ class RemotePython:
             fp = None
 
             # the remote script is the user's script plus utility coding
-            fp = open( self.rfname, 'rb' )
-            scr = fp.read()
-            fp.close() ; fp = None
+            scr = self.content + _BYTES_( '\n\n' )
             scr += _BYTES_( remote_utils )
 
             # create pipe to send commands to python (to ssh stdin)

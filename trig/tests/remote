@@ -61,7 +61,7 @@ def runtests( cwd, argL ):
     """
     """
     if len(argL) == 0:
-        argL = """func1
+        argL = """func1 func2
                   err1 err2 err3 err4 err5
                   return1
                   persist1
@@ -105,8 +105,48 @@ def func1():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
+        lnk.connect()
+        rtn = lnk.r_myfunc( 'myarg', 1 )
+        lnk.shutdown()
+        print3( 'return =', rtn )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'return = my return value' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def func2():
+    """
+    basic connection and function call, using string content
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( '''
+        import os, sys, time
+
+        def myfunc( myarg, arg2 ):
+            time.sleep( 1 )
+            return "my return value"
+        ''' )
         lnk.connect()
         rtn = lnk.r_myfunc( 'myarg', 1 )
         lnk.shutdown()
@@ -144,8 +184,9 @@ def err1():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made' )
         rtn = lnk.x_myfunc( 'myarg', 1 )
@@ -184,8 +225,9 @@ def err2():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made' )
         rtn = lnk.r_badfunc( 'myarg', 1 )
@@ -226,8 +268,9 @@ def err3():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made' )
         try:
@@ -271,8 +314,9 @@ def err4():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made' )
         rtn = lnk.x_myfunc( 'myarg' )
@@ -313,8 +357,9 @@ def err5():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made' )
         rtn = lnk.x_myfunc( 'myarg', 1 )
@@ -356,8 +401,9 @@ def return1():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made' )
         rtn = lnk.x_myfunc( 'myarg', -1 )
@@ -407,8 +453,9 @@ def persist1():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made' )
         rtn = lnk.x_makeobj()
@@ -442,10 +489,6 @@ def file1():
         Line Two.
         """ )
 
-    writefile( 'rmt.py', """
-        pass
-        """ )
-
     writefile( 'lcl.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
@@ -454,7 +497,7 @@ def file1():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
         lnk.connect()
         print3( 'connection made' )
@@ -489,10 +532,6 @@ def file2():
         Line Two.
         """ )
 
-    writefile( 'rmt.py', """
-        pass
-        """ )
-
     writefile( 'lcl.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
@@ -501,7 +540,7 @@ def file2():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
         lnk.connect()
         print3( 'connection made' )
@@ -536,10 +575,6 @@ def file3():
         Line Two.
         """ )
 
-    writefile( 'rmt.py', """
-        pass
-        """ )
-
     writefile( 'lcl.py', """
         import os, sys, traceback
         sys.path.insert( 0, '"""+srcdir+"""' )
@@ -549,7 +584,7 @@ def file3():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
         lnk.connect()
         print3( 'connection made' )
@@ -600,10 +635,6 @@ def file4():
         Line Two.
         """ )
 
-    writefile( 'rmt.py', """
-        pass
-        """ )
-
     writefile( 'lcl.py', """
         import os, sys, traceback
         sys.path.insert( 0, '"""+srcdir+"""' )
@@ -613,7 +644,7 @@ def file4():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
         lnk.connect()
         print3( 'connection made' )
@@ -661,10 +692,6 @@ def file5():
         Line Two.
         """ )
 
-    writefile( 'rmt.py', """
-        pass
-        """ )
-
     writefile( 'lcl.py', """
         import os, sys, traceback
         sys.path.insert( 0, '"""+srcdir+"""' )
@@ -674,7 +701,7 @@ def file5():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
         lnk.connect()
         print3( 'connection made' )
@@ -721,10 +748,6 @@ def file6():
         Line Two.
         """ )
 
-    writefile( 'rmt.py', """
-        pass
-        """ )
-
     writefile( 'lcl.py', """
         import os, sys, traceback
         sys.path.insert( 0, '"""+srcdir+"""' )
@@ -734,7 +757,7 @@ def file6():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
         lnk.connect()
         print3( 'connection made' )
@@ -782,10 +805,6 @@ def file7():
     fp.close() ; fp = None
     os.utime( 'rmtfile.txt', (t,t) )
 
-    writefile( 'rmt.py', """
-        pass
-        """ )
-
     writefile( 'lcl.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
@@ -794,7 +813,7 @@ def file7():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
         lnk.connect()
         print3( 'connection made' )
@@ -836,10 +855,6 @@ def file8():
     fp.close() ; fp = None
     os.utime( 'lclfile.txt', (t,t) )
 
-    writefile( 'rmt.py', """
-        pass
-        """ )
-
     writefile( 'lcl.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
@@ -848,7 +863,7 @@ def file8():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
         lnk.connect()
         print3( 'connection made' )
@@ -902,10 +917,6 @@ def binary1():
     fp.write( buf )
     fp.close()
 
-    writefile( 'rmt.py', """
-        pass
-        """ )
-
     writefile( 'lcl.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
@@ -914,7 +925,7 @@ def binary1():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
         lnk.connect()
         print3( 'connection made' )
@@ -950,10 +961,6 @@ def binary2():
     fp.write( buf )
     fp.close()
 
-    writefile( 'rmt.py', """
-        pass
-        """ )
-
     writefile( 'lcl.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
@@ -962,7 +969,7 @@ def binary2():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
         lnk.connect()
         print3( 'connection made' )
@@ -996,10 +1003,6 @@ def chunk1():
         fp.write( ('abcdefghijklmnopqrstuvwxyz'[i%26])*100 )
     fp.close()
 
-    writefile( 'rmt.py', """
-        pass
-        """ )
-
     writefile( 'lcl.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
@@ -1008,7 +1011,7 @@ def chunk1():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
         lnk.connect()
         print3( 'connection made' )
@@ -1043,10 +1046,6 @@ def chunk2():
         fp.write( ('abcdefghijklmnopqrstuvwxyz'[i%26])*100 )
     fp.close()
 
-    writefile( 'rmt.py', """
-        pass
-        """ )
-
     writefile( 'lcl.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
@@ -1055,7 +1054,7 @@ def chunk2():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
         lnk.connect()
         print3( 'connection made' )
@@ -1097,10 +1096,6 @@ def preserve1():
         """ )
     os.utime( 'script', (t,t) )
 
-    writefile( 'rmt.py', """
-        pass
-        """ )
-
     writefile( 'lcl.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
@@ -1109,7 +1104,7 @@ def preserve1():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
         lnk.connect()
         print3( 'connection made' )
@@ -1167,10 +1162,6 @@ def preserve2():
         """ )
     os.utime( 'script', (t,t) )
 
-    writefile( 'rmt.py', """
-        pass
-        """ )
-
     writefile( 'lcl.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
@@ -1179,7 +1170,7 @@ def preserve2():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
         lnk.connect()
         print3( 'connection made' )
@@ -1241,8 +1232,9 @@ def timeout1():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made', time.time() )
         lnk.startTimeout( 3 )
@@ -1294,8 +1286,9 @@ def timeout2():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         print3( 'connection start', time.time() )
         lnk.startTimeout( 4 )
         try:
@@ -1347,8 +1340,9 @@ def timeout3():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made', time.time() )
         lnk.startTimeout( 3 )
@@ -1401,8 +1395,9 @@ def timeout4():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made', time.time() )
         lnk.startTimeout( 5 )
@@ -1476,8 +1471,9 @@ def timeout5():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made', time.time() )
         lnk.startTimeout( 5 )
@@ -1551,8 +1547,9 @@ def background1():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made', time.time() )
         cmd = 'echo foo; sleep 5; echo bar'
@@ -1613,8 +1610,9 @@ def background2():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made', time.time() )
         cmd = 'echo AA; sleep 1; echo BB; sleep 1; echo CC; sleep 1; '
@@ -1682,8 +1680,9 @@ def background3():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made', time.time() )
         cmdL = [ 'python', '-c',
@@ -1746,8 +1745,9 @@ def background4():
         rpy = '"""+remotepy+"""'
 
         print3( 'starting' )
-        lnk = RemotePython( '"""+sshmach+"""', 'rmt.py',
+        lnk = RemotePython( '"""+sshmach+"""',
                             sshexe=sshprog, remotepy=rpy )
+        lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made', time.time() )
         cmd = 'echo content > afile.txt'

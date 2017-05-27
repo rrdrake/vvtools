@@ -321,6 +321,9 @@ def get_user_name():
     import getpass
     return getpass.getuser()
 
+def expr( funcname, *args, **kwargs ):
+    return eval( funcname+'( *args, **kwargs )' )
+
 
 if sys.version_info[0] < 3:
     # with python 2.x, files, pipes, and sockets work naturally
