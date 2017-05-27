@@ -69,6 +69,9 @@ can be strings or lists.  The final command is treated as a list.  For example,
 The previous example would be the same as
 
         run_command( 'ls', '-l', 'foo.log', '*', '../subdir/file.txt' )
+
+Note: Look at the documentation below in the function "def _is_dryrun" for use
+of the envronment variable COMMAND_DRYRUN for noop execution.
 """
 
 
@@ -149,9 +152,11 @@ def run_command( *args, **kwargs ):
 
     cmd,scmd = _assemble_command( *args )
 
+    dryrun = _is_dryrun( cmd )
+
     outfp = None
     fdout = None
-    if redirect != None:
+    if not dryrun and redirect != None:
         if type(redirect) == type(2):
             fdout = redirect
         elif type(redirect) == type(''):
@@ -188,8 +193,11 @@ def run_command( *args, **kwargs ):
         os.chdir( cd )
 
     try:
-        p = subprocess.Popen( cmd, **argD )
-        x = p.wait()
+        if dryrun:
+            x = 0
+        else:
+            p = subprocess.Popen( cmd, **argD )
+            x = p.wait()
     finally:
         if cd:
             os.chdir( cwd )
@@ -239,6 +247,8 @@ def run_output( *args, **kwargs ):
 
     cmd,scmd = _assemble_command( *args )
 
+    dryrun = _is_dryrun( cmd )
+
     if echo:
         scd = ''
         if cd: scd = 'cd '+str(cd)+' && '
@@ -262,13 +272,18 @@ def run_output( *args, **kwargs ):
         os.chdir( cd )
 
     try:
-        p = subprocess.Popen( cmd, **argD )
-        sout,serr = p.communicate()
+        if not dryrun:
+            p = subprocess.Popen( cmd, **argD )
+            sout,serr = p.communicate()
     finally:
         if cd:
             os.chdir( cwd )
 
-    x = p.returncode
+    if dryrun:
+        x = 0
+        sout = ''
+    else:
+        x = p.returncode
 
     if type(sout) != type(''):
         # in python 3, the output is a bytes object .. convert to a string
@@ -341,9 +356,11 @@ def run_timeout( *args, **kwargs ):
 
     cmd,scmd = _assemble_command( *args )
 
+    dryrun = _is_dryrun( cmd )
+
     outfp = None
     fdout = None
-    if redirect != None:
+    if not dryrun and redirect != None:
         if type(redirect) == type(2):
             fdout = redirect
         elif type(redirect) == type(''):
@@ -410,25 +427,28 @@ def run_timeout( *args, **kwargs ):
         os.chdir( cd )
 
     try:
-        p = subprocess.Popen( cmd, **argD )
+        if dryrun:
+            x = 0
+        else:
+            p = subprocess.Popen( cmd, **argD )
 
-        x = None
-        try:
-            ipoll = min( poll_interval, int( 0.45*timeout ) )
-            pause = 2
-            while True:
-                time.sleep( pause )
-                pause = min( 2*pause, ipoll )
-                x = p.poll()
-                if x != None:
-                    break
-                if time.time() - tstart > timeout:
-                    kill_process(p)
-                    x = None  # mark as timed out
-                    break
-        except:
-            kill_process(p)
-            raise  # should not happen
+            x = None
+            try:
+                ipoll = min( poll_interval, int( 0.45*timeout ) )
+                pause = 2
+                while True:
+                    time.sleep( pause )
+                    pause = min( 2*pause, ipoll )
+                    x = p.poll()
+                    if x != None:
+                        break
+                    if time.time() - tstart > timeout:
+                        kill_process(p)
+                        x = None  # mark as timed out
+                        break
+            except:
+                kill_process(p)
+                raise  # should not happen
     finally:
         if cd:
             os.chdir( cwd )
@@ -478,3 +498,37 @@ def _assemble_command( *args ):
                 L += list( arg )
         return L,' '.join( [ pipes.quote(s) for s in L ] )
 
+
+def _is_dryrun( cmd ):
+    """
+    If the environment defines COMMAND_DRYRUN to an empty string or to the
+    value "1", then this function returns True, which means this is a dry
+    run and the command should not be executed.
+
+    If COMMAND_DRYRUN is set to a nonempty string, it should be a list of
+    program basenames, where the list separator is a vertical bar, "|".
+    If the basename of the given command program is in the list, then it is
+    allowed to run (False is returned).  Otherwise True is returned and the
+    command is not run.  For example,
+
+        COMMAND_DRYRUN="scriptname.py|runstuff"
+    """
+    v = os.environ.get( 'COMMAND_DRYRUN', None )
+    if v != None:
+        if v and v != "1":
+            try:
+                # extract the basename of the program being run
+                if type(cmd) == type(''):
+                    import shlex
+                    n = os.path.basename( shlex.split( cmd )[0] )
+                else:
+                    n = os.path.basename( cmd[0] )
+            except:
+                return True  # a failure is treated as a dry run
+
+            L = v.split('|')
+            if n in L:
+                return False
+        return True
+
+    return False

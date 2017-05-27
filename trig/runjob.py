@@ -32,7 +32,10 @@ Note also the command() and escape() functions imported from runcmd.py can
 be useful in constructing the commands.
 
 See the documentation in runcmd.py for how commands are specified to run_job(),
-because the are the same.
+because they are the same.
+
+Note: Look at the documentation below in the function "def _is_dryrun" for use
+of the envronment variable COMMAND_DRYRUN for noop execution.
 """
 
 
@@ -248,6 +251,32 @@ class Job:
         else:
             self._run_remote( mach )
 
+    def _is_dryrun(self):
+        """
+        If the environment defines COMMAND_DRYRUN to an empty string or to the
+        value "1", then this function returns True, which means this is a dry
+        run and the job command should not be executed.
+
+        If COMMAND_DRYRUN is set to a nonempty string, it should be a list of
+        program basenames, where the list separator is a vertical bar, "|".
+        If the basename of the job command program is in the list, then it is
+        allowed to run (False is returned).  Otherwise True is returned and the
+        command is not run.  For example,
+
+            COMMAND_DRYRUN="scriptname.py|jobname"
+        """
+        v = os.environ.get( 'COMMAND_DRYRUN', None )
+        if v != None:
+            if v and v != "1":
+                # use the job name, which is 'jobname' or basename of program
+                n = self.get( 'name' )
+                L = v.split('|')
+                if n in L:
+                    return False
+            return True
+
+        return False
+
     def _run_wait(self):
         """
         """
@@ -307,28 +336,35 @@ class Job:
         if timeout != None:
             tprint( 'Remote timeout:', timeout )
 
-        T = self._connect( rmt, numconn )
-        if T != None:
-            sys.stderr.write( '[' + time.ctime() + '] ' + \
-                'Connect exception for jobid '+str(self.jobid())+'\n' + T[1] )
-            sys.stderr.flush()
-            raise Exception( "Could not connect to "+mach )
+        if self._is_dryrun():
+            # touch the local log file but do not execute the command
+            fp = open( self.logname(), 'a' )
+            fp.close()
+            self.set( 'exit', 0 )
 
-        try:
-            rmt.startTimeout( 30 )
-            rusr = rmt.x_get_user_id()
+        else:
+            T = self._connect( rmt, numconn )
+            if T != None:
+                sys.stderr.write( '[' + time.ctime() + '] ' + \
+                    'Connect exception for jobid '+str(self.jobid())+'\n' + T[1] )
+                sys.stderr.flush()
+                raise Exception( "Could not connect to "+mach )
 
-            rmt.startTimeout( 30 )
-            rpid = rmt.x_background_command( cmd, logf,
-                                             chdir=chd,
-                                             timeout=timeout )
+            try:
+                rmt.startTimeout( 30 )
+                rusr = rmt.x_get_user_id()
 
-            time.sleep(2)
+                rmt.startTimeout( 30 )
+                rpid = rmt.x_background_command( cmd, logf,
+                                                 chdir=chd,
+                                                 timeout=timeout )
 
-            self._monitor( rmt, rusr, rpid )
+                time.sleep(2)
 
-        finally:
-            rmt.shutdown()
+                self._monitor( rmt, rusr, rpid )
+
+            finally:
+                rmt.shutdown()
 
     def _connect(self, rmtpy, limit=10):
         """
@@ -690,7 +726,7 @@ class RunJobs:
                 jb.set( n, v )
 
             jb.finalize()
-            tprint( 'RunJob: jobid='+str(jb.jobid()) )
+            tprint( 'JobID: '+str(jb.jobid()) )
 
             # run in a thread and return without waiting
             self.start( jb )

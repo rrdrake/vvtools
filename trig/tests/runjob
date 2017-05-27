@@ -66,6 +66,7 @@ def runtests( cwd, argL ):
                   timeout1 timeout2
                   remotefail1 remotefail2a remotefail2b
                   update1
+                  dryrun1
                """.split()
     
     cwd = os.getcwd()
@@ -792,7 +793,7 @@ def multijob1():
     assert len( grep( out, 'starting' ) ) == 1
     assert len( grep( out, 'Traceback' ) ) == 0
     assert grep( out, 'RunJob: ' )[0].find( 'sleep 8' ) >= 0
-    assert grep( out, 'RunJob: ' )[2].find( 'sleep 1' ) >= 0
+    assert grep( out, 'RunJob: ' )[1].find( 'sleep 1' ) >= 0
     L = grep( out, 'JobDone:' )
     assert len( L ) == 2
     assert L[0].count( 'JobDone:' ) == 1 and L[1].count( 'JobDone:' ) == 1
@@ -1427,6 +1428,290 @@ def update1():
     m1 = stat.S_IMODE( os.stat(lf)[stat.ST_MODE] )
     m2 = stat.S_IMODE( os.stat(rf)[stat.ST_MODE] )
     assert m1 == m2
+
+
+def dryrun1():
+    """
+    defining COMMAND_DRYRUN prevents job execution, local
+    """
+    writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file1.txt', 'w' ) ; fp.close()
+        """ )
+    cmd1 = os.path.abspath( 'cmd1.py' )
+
+    writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file2.txt', 'w' ) ; fp.close()
+        """ )
+    cmd2 = os.path.abspath( 'cmd2.py' )
+
+    writefile( 'job.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        jid = run_job( '"""+cmd1+"""', poll_interval=2 )
+        jb = wait_job( jid )
+        os.environ['COMMAND_DRYRUN'] = ''
+        jid = run_job( '"""+cmd2+"""', poll_interval=2 )
+        jb = wait_job( jid )
+        assert jb.get( 'exit' ) == 0
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+    time.sleep(1)
+    assert os.path.exists( 'file1.txt' )
+    assert not os.path.exists( 'file2.txt' )
+
+    assert cmd1 in grep( out, 'RunJob: ' )[0]
+    assert cmd2 in grep( out, 'RunJob: ' )[1]
+
+
+def dryrun2():
+    """
+    defining COMMAND_DRYRUN prevents job execution, remote
+    """
+    writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file1.txt', 'w' ) ; fp.close()
+        """ )
+    cmd1 = os.path.abspath( 'cmd1.py' )
+
+    writefile( 'job.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        os.environ['COMMAND_DRYRUN'] = ''
+        jid = run_job( '"""+cmd1+"""', machine='sparky', poll_interval=2 )
+        jb = wait_job( jid )
+        assert jb.get( 'exit' ) == 0
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+    #os.system( localpy+' job.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+    time.sleep(1)
+    assert not os.path.exists( 'file1.txt' )
+
+    assert cmd1 in grep( out, 'RunJob: ' )[0]
+
+
+def dryrun3():
+    """
+    define COMMAND_DRYRUN to "1", local
+    """
+    writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file1.txt', 'w' ) ; fp.close()
+        """ )
+    cmd1 = os.path.abspath( 'cmd1.py' )
+
+    writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file2.txt', 'w' ) ; fp.close()
+        """ )
+    cmd2 = os.path.abspath( 'cmd2.py' )
+
+    writefile( 'job.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        jid = run_job( '"""+cmd1+"""', poll_interval=2 )
+        jb = wait_job( jid )
+        os.environ['COMMAND_DRYRUN'] = '1'
+        jid = run_job( '"""+cmd2+"""', poll_interval=2 )
+        jb = wait_job( jid )
+        assert jb.get( 'exit' ) == 0
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+    time.sleep(1)
+    assert os.path.exists( 'file1.txt' )
+    assert not os.path.exists( 'file2.txt' )
+
+    assert cmd1 in grep( out, 'RunJob: ' )[0]
+    assert cmd2 in grep( out, 'RunJob: ' )[1]
+
+
+def dryrun4():
+    """
+    define COMMAND_DRYRUN to "1", remote
+    """
+    writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file1.txt', 'w' ) ; fp.close()
+        """ )
+    cmd1 = os.path.abspath( 'cmd1.py' )
+
+    writefile( 'job.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        os.environ['COMMAND_DRYRUN'] = '1'
+        jid = run_job( '"""+cmd1+"""', machine='sparky', poll_interval=2 )
+        jb = wait_job( jid )
+        assert jb.get( 'exit' ) == 0
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+    #os.system( localpy+' job.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+    time.sleep(1)
+    assert not os.path.exists( 'file1.txt' )
+
+    assert cmd1 in grep( out, 'RunJob: ' )[0]
+
+
+def dryrun5():
+    """
+    define COMMAND_DRYRUN to a list of names, local
+    """
+    writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file1.txt', 'w' ) ; fp.close()
+        """ )
+    cmd1 = os.path.abspath( 'cmd1.py' )
+
+    writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file2.txt', 'w' ) ; fp.close()
+        """ )
+    cmd2 = os.path.abspath( 'cmd2.py' )
+
+    writefile( 'job.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        os.environ['COMMAND_DRYRUN'] = 'junk|cmd2.py|cmd1'
+        jid = run_job( '"""+cmd1+"""', poll_interval=2 )
+        jb = wait_job( jid )
+        jid = run_job( '"""+cmd2+"""', poll_interval=2 )
+        jb = wait_job( jid )
+        assert jb.get( 'exit' ) == 0
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+    time.sleep(1)
+    assert not os.path.exists( 'file1.txt' )
+    assert os.path.exists( 'file2.txt' )
+
+    assert cmd1 in grep( out, 'RunJob: ' )[0]
+    assert cmd2 in grep( out, 'RunJob: ' )[1]
+
+
+def dryrun6():
+    """
+    define COMMAND_DRYRUN to a list of names, remote
+    """
+    writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file1.txt', 'w' ) ; fp.close()
+        """ )
+    cmd1 = os.path.abspath( 'cmd1.py' )
+
+    writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file2.txt', 'w' ) ; fp.close()
+        """ )
+    cmd2 = os.path.abspath( 'cmd2.py' )
+
+    writescript( 'cmd3.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file3.txt', 'w' ) ; fp.close()
+        """ )
+    cmd3 = os.path.abspath( 'cmd3.py' )
+
+    os.mkdir( 'rdir' )
+    os.mkdir( 'ldir' )
+    rd = os.path.abspath( 'rdir' )  # remote run directory
+    ld = os.path.abspath( 'ldir' )  # local run and log directory
+
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'job.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        tprint( 'starting in', os.getcwd() )
+        jid = run_job( '"""+cmd1+""" -h arg',
+                       machine='"""+sshmach+"""',
+                       sshexe='"""+sshprog+"""',
+                       chdir='"""+rd+"""',
+                       poll_interval=2 )
+        jb = wait_job( jid )
+        os.environ['COMMAND_DRYRUN'] = 'junk|cmd3.py|cmd2'
+        jid = run_job( '"""+cmd2+""" -h arg',
+                       machine='"""+sshmach+"""',
+                       sshexe='"""+sshprog+"""',
+                       chdir='"""+rd+"""',
+                       poll_interval=2 )
+        jb = wait_job( jid )
+        jid = run_job( '"""+cmd3+""" -h arg',
+                       machine='"""+sshmach+"""',
+                       sshexe='"""+sshprog+"""',
+                       chdir='"""+rd+"""',
+                       poll_interval=2 )
+        jb = wait_job( jid )
+        tprint( 'ending' )
+        """ )
+
+    jf = os.path.abspath( 'job.py' )
+    os.chdir( ld )
+
+    out = runout( localpy+' '+jf )
+    #print3( out )
+    #os.system( localpy+' '+jf )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+    time.sleep(1)
+    assert os.path.exists( rd+'/file1.txt' )
+    assert not os.path.exists( rd+'/file2.txt' )
+    assert os.path.exists( rd+'/file3.txt' )
+
+    assert cmd1 in grep( out, 'RunJob: ' )[0]
+    assert cmd2 in grep( out, 'RunJob: ' )[1]
+    assert cmd3 in grep( out, 'RunJob: ' )[2]
 
 
 #######################################################################

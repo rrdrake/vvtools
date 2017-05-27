@@ -53,12 +53,15 @@ def runtests( cwd, argL ):
                   redirect1 redirect2
                   outerr1
                   timeout1 timeout2
+                  dryrun1 dryrun2 dryrun3 dryrun4 dryrun5
                """.split()
     
     cwd = os.getcwd()
     for func in argL:
         os.chdir( cwd )
         rmallfiles()
+        if 'COMMAND_DRYRUN' in os.environ:
+            os.environ.pop( 'COMMAND_DRYRUN' )
         time.sleep(1)
         print3( '====> ', func )
         eval( func+'()' )
@@ -236,7 +239,6 @@ def chdir1():
     assert os.path.exists( 'subdir/file8.txt' )
     assert os.path.exists( 'file9.txt' )
 
-#TODO: check run_timeout where it times out (it should cd back to original)
 
 def chdir2():
     """
@@ -639,6 +641,124 @@ def timeout2():
 
 
 # TODO: test poll_interval in run_timeout()
+
+
+def dryrun1():
+    """
+    defining COMMAND_DRYRUN prevents command execution, with run_command
+    """
+    writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file1.txt', 'w' ) ; fp.close()
+        """ )
+
+    writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file2.txt', 'w' ) ; fp.close()
+        """ )
+
+    assert runcmd.run_command( 'cmd1.py' ) == 0
+    os.environ['COMMAND_DRYRUN'] = ''
+    assert runcmd.run_command( 'cmd2.py' ) == 0
+
+    time.sleep(1)
+    assert os.path.exists( 'file1.txt' )
+    assert not os.path.exists( 'file2.txt' )
+
+
+def dryrun2():
+    """
+    dry run with run_output
+    """
+    s = runcmd.run_output( 'echo hello' )
+    assert s.strip() == 'hello'
+    os.environ['COMMAND_DRYRUN'] = ''
+    s = runcmd.run_output( 'echo goodbye' )
+    assert not s.strip()
+
+
+def dryrun3():
+    """
+    dry run with run_timeout
+    """
+    writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file1.txt', 'w' ) ; fp.close()
+        """ )
+
+    writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file2.txt', 'w' ) ; fp.close()
+        """ )
+
+    assert runcmd.run_timeout( 'cmd1.py', timeout=10 ) == 0
+    os.environ['COMMAND_DRYRUN'] = ''
+    assert runcmd.run_timeout( 'cmd2.py', timeout=10 ) == 0
+
+    time.sleep(1)
+    assert os.path.exists( 'file1.txt' )
+    assert not os.path.exists( 'file2.txt' )
+
+
+def dryrun4():
+    """
+    define COMMAND_DRYRUN with a "1"
+    """
+    writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file1.txt', 'w' ) ; fp.close()
+        """ )
+
+    writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file2.txt', 'w' ) ; fp.close()
+        """ )
+
+    assert runcmd.run_command( os.path.abspath('cmd1.py') ) == 0
+    os.environ['COMMAND_DRYRUN'] = '1'
+    assert runcmd.run_command( os.path.abspath('cmd2.py') ) == 0
+
+    time.sleep(1)
+    assert os.path.exists( 'file1.txt' )
+    assert not os.path.exists( 'file2.txt' )
+
+
+def dryrun5():
+    """
+    define COMMAND_DRYRUN with a list of program names that DO get run
+    """
+    writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file1.txt', 'w' ) ; fp.close()
+        """ )
+
+    writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file2.txt', 'w' ) ; fp.close()
+        """ )
+
+    writescript( 'cmd3', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file3.txt', 'w' ) ; fp.close()
+        """ )
+
+    writescript( 'cmd4', "#!"+localpy+" -E", """
+        import os, sys
+        fp = open( 'file4.txt', 'w' ) ; fp.close()
+        """ )
+
+    os.environ['COMMAND_DRYRUN'] = 'cmd3|cmd2.py|cmd4'
+    assert runcmd.run_command( os.path.abspath('cmd1.py') ) == 0
+    assert runcmd.run_command( os.path.abspath('cmd2.py') ) == 0
+    assert runcmd.run_command( os.path.abspath('cmd3')+' -h arg' ) == 0
+    assert runcmd.run_command( [os.path.abspath('cmd4'), '-h', 'arg'] ) == 0
+
+    time.sleep(1)
+    assert not os.path.exists( 'file1.txt' )
+    assert os.path.exists( 'file2.txt' )
+    assert os.path.exists( 'file3.txt' )
+    assert os.path.exists( 'file4.txt' )
+
 
 #######################################################################
 
