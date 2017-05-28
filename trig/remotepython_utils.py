@@ -9,8 +9,20 @@ import binascii
 import subprocess
 
 
-# this code is sent to the remote side along with the users remote script;
-# it receives then carries out requests from the local side
+# This code is sent to the remote side along with the users remote script.
+# It receives then carries out requests from the local side.
+#
+# It also defines utility functions:
+#
+#   print3             : a Python 2.x and 3.x compatible print function
+#   background_command : run a shell command in the background
+#   runout             : run a shell command and return its output
+#   processes          : gather process information
+#   evaluate           : execute a list of python statements
+#   save_object,
+#   get_object,
+#   pop_object         : object persistence mechanism
+#   _BYTES_, _STRING_  : convert to bytes or strings (Python 2 vs. 3)
 
 
 try:
@@ -20,6 +32,7 @@ except:
   import io
   class_StringIO = io.StringIO
 
+#############################################################################
 
 def _ping():
     return 'pong'
@@ -120,6 +133,7 @@ def _listener():
         elif sw == 'XIT':
             break
 
+#############################################################################
 
 _background_template = '''
 
@@ -240,6 +254,7 @@ def background_command( cmd, redirect, timeout=None, chdir=None ):
 
     return p.pid
 
+#############################################################################
 
 def runout( cmd, include_stderr=False ):
     "Run a command and return the exit status & output as a pair."
@@ -313,6 +328,7 @@ def processes( pid=None, user=None, showall=False, fields=None, noheader=True ):
 
     return out
 
+#############################################################################
 
 def evaluate( *statements ):
     "Issue a list of python statements.  Cannot have embedded newlines."
@@ -324,6 +340,30 @@ def evaluate( *statements ):
         eval( cobj, globals() )
         return _evaluate_function_()
 
+#############################################################################
+
+_objmap_ = {}
+
+def save_object( obj ):
+    "Saves the given object in a global map and returns the object id."
+    global _objmap_
+    _objmap_[ id(obj) ] = obj
+    return id(obj)
+
+def get_object( obj_id ):
+    "Retrieves an object given its id.  Unknown ids raise an Exception."
+    global _objmap_
+    if obj_id in _objmap_:
+        return _objmap_[obj_id]
+    raise Exception( 'Object id "'+str(obj_id)+'" not saved in object map' )
+
+def pop_object( obj_id ):
+    "Gets an object given its id, removes it from the map, and returns it."
+    global _objmap_
+    obj = _objmap_.pop( obj_id )
+    return obj
+
+#############################################################################
 
 if sys.version_info[0] < 3:
     # with python 2.x, files, pipes, and sockets work naturally

@@ -495,21 +495,22 @@ class Job:
                 # to be the same between local and remote)
                 off = lcl_sz
                 fp = open( logname, 'ab' )
+                rfp = None
                 try:
                     # open the remote file
                     rmtpy.timeout(30)
-                    mt, at, fm = rmtpy.x_open_file_read( logfile, off )
+                    mt, at, fm, rfp = rmtpy.x_open_file_read( logfile, off )
 
                     # get the tail of the file in chunks
                     while off < rmt_sz:
                         off2 = min( off + chunksize, rmt_sz )
-                        buf = rmtpy.timeout(30).x_file_read( off2-off )
+                        buf = rmtpy.timeout(30).x_file_read( rfp, off2-off )
                         fp.write( _BYTES_( buf ) )
                         off = off2
                 
                 finally:
                     fp.close()
-                    rmtpy.timeout(30).x_close_file()
+                    rmtpy.timeout(30).x_close_file( rfp )
                 
                 # match the date stamp and file mode
                 os.utime( logname, (at,mt) )

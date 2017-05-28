@@ -33,30 +33,36 @@ def file_size( filename ):
         return os.path.getsize( filename )
     return -1
 
-# only one file at a time can be opened, read from, and closed
-fileptr = None
 
 def open_file_read( filename, offset=None ):
     """
-    Opens the given file name and saves the open file pointer in a global
-    variable.  If 'offset' is not None, a seek(offset) is done immediately
+    Opens the given file name and saves the open file pointer in the object
+    map.  If 'offset' is not None, a seek(offset) is done immediately
     after the file is opened.  Returns the file modification time, the access
-    time, and the file mode for the file.
+    time, the file mode for the file, and the remote file pointer id.
     """
-    global fileptr
     mt = os.path.getmtime( filename )
     at = os.path.getatime( filename )
     fm = stat.S_IMODE( os.stat(filename)[stat.ST_MODE] )
-    fileptr = open( filename, 'rb' )
+    fp = open( filename, 'rb' )
     if offset != None:
-        fileptr.seek( offset )
-    return mt, at, fm
+        fp.seek( offset )
+    return mt, at, fm, save_object( fp )
 
-def file_read( num_bytes ):
-    buf = _STRING_( fileptr.read( num_bytes ) )
+def file_read( fp_id, num_bytes ):
+    """
+    Reads and returns 'num_bytes' bytes from the file pointer specified by
+    the 'fp_id' object id.
+    """
+    fp = get_object( fp_id )
+    buf = _STRING_( fp.read( num_bytes ) )
     return buf
 
-def close_file():
-    global fileptr
-    fileptr.close()
-    fileptr = None
+def close_file( fp_id ):
+    """
+    Close the file pointer specified by the 'fp_id' object id, and remove it
+    from the remote object id map.
+    """
+    if fp_id != None:
+        fp = pop_object( fp_id )
+        fp.close()
