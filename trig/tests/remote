@@ -71,6 +71,7 @@ def runtests( cwd, argL ):
                   preserve1 preserve2
                   timeout1 timeout2 timeout3 timeout4 timeout5
                   background1 background2 background3 background4
+                  eval1 eval2 eval3 eval4
                """.split()
     
     for func in argL:
@@ -1237,7 +1238,7 @@ def timeout1():
         lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made', time.time() )
-        lnk.startTimeout( 3 )
+        lnk.timeout( 3 )
         try:
             rtn = lnk.x_func()
         except LocalException:
@@ -1290,9 +1291,8 @@ def timeout2():
                             sshexe=sshprog, remotepy=rpy )
         lnk.addRemoteContent( filename='rmt.py' )
         print3( 'connection start', time.time() )
-        lnk.startTimeout( 4 )
         try:
-            lnk.connect()
+            lnk.timeout(4).connect()
         except LocalException:
             traceback.print_exc()
             print3( "caught LocalException" )
@@ -1345,9 +1345,8 @@ def timeout3():
         lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made', time.time() )
-        lnk.startTimeout( 3 )
         try:
-            rtn = lnk.r_func()
+            rtn = lnk.timeout(3).r_func()
         except LocalException:
             traceback.print_exc()
             print3( "caught LocalException" )
@@ -1400,16 +1399,14 @@ def timeout4():
         lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made', time.time() )
-        lnk.startTimeout( 5 )
-        rtn = lnk.r_func( 2 )
+        rtn = lnk.timeout(5).r_func( 2 )
         print3( "short finished with", rtn, time.time() )
         time.sleep( 5 )  # make sure the timer does not trigger
         print3( 'no timeout start', time.time() )
         rtn = lnk.r_func( 2 )
         print3( "no timeout finished with", rtn, time.time() )
-        lnk.startTimeout( 5 )
         try:
-            rtn = lnk.r_func( 20 )
+            rtn = lnk.timeout(5).r_func( 20 )
         except LocalException:
             traceback.print_exc()
             print3( "caught LocalException" )
@@ -1476,16 +1473,14 @@ def timeout5():
         lnk.addRemoteContent( filename='rmt.py' )
         lnk.connect()
         print3( 'connection made', time.time() )
-        lnk.startTimeout( 5 )
-        rtn = lnk.x_func( 2 )
+        rtn = lnk.timeout(5).x_func( 2 )
         print3( "short finished with", rtn, time.time() )
         time.sleep( 5 )  # make sure the timer does not trigger
         print3( 'no timeout start', time.time() )
         rtn = lnk.x_func( 2 )
         print3( "no timeout finished with", rtn, time.time() )
-        lnk.startTimeout( 5 )
         try:
-            rtn = lnk.x_func( 20 )
+            rtn = lnk.timeout(5).x_func( 20 )
         except LocalException:
             traceback.print_exc()
             print3( "caught LocalException" )
@@ -1784,6 +1779,140 @@ def background4():
 
     L = filegrep( os.path.join( 'wdir', 'afile.txt' ), 'content' )
     assert len(L) == 1 and L[0].strip() == "content"
+
+
+def eval1():
+    """
+    remote utility evaluate()
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        rtn = lnk.r_evaluate( 'return time.strftime("%Y")' )
+        lnk.shutdown()
+        print3( 'return =', rtn )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'return = '+time.strftime("%Y") ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def eval2():
+    """
+    remote utility evaluate(), multiple and with an import
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        rtn = lnk.r_evaluate( 'import time',
+                              'return time.strftime("%Y")' )
+        lnk.shutdown()
+        print3( 'return =', rtn )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'return = '+time.strftime("%Y") ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def eval3():
+    """
+    remote utility evaluate(), arguments must be embedded in the statements
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        rtn = lnk.r_evaluate( 'arg1 = '+repr(10),
+                              'arg2 = '+repr('a'),
+                              'if arg1 > 5:',
+                              '    return arg2*arg1',
+                              'return arg2' )
+        lnk.shutdown()
+        print3( 'return =', rtn )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'return = aaaaaaaaaa' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+
+def eval4():
+    """
+    remote utility evaluate(), no statements
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'lcl.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from remotepython import RemotePython, print3
+        sshprog = '"""+sshprog+"""'
+        rpy = '"""+remotepy+"""'
+
+        print3( 'starting' )
+        lnk = RemotePython( '"""+sshmach+"""',
+                            sshexe=sshprog, remotepy=rpy )
+        lnk.connect()
+        rtn = lnk.r_evaluate()
+        lnk.shutdown()
+        print3( 'return =', rtn )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' lcl.py' )
+    #print3( out )
+    #os.system( localpy+' lcl.py' )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'return = None' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
 
 
 #######################################################################

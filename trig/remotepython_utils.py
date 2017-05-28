@@ -314,15 +314,15 @@ def processes( pid=None, user=None, showall=False, fields=None, noheader=True ):
     return out
 
 
-def get_user_id():
-    return os.getuid()
-
-def get_user_name():
-    import getpass
-    return getpass.getuser()
-
-def expr( funcname, *args, **kwargs ):
-    return eval( funcname+'( *args, **kwargs )' )
+def evaluate( *statements ):
+    "Issue a list of python statements.  Cannot have embedded newlines."
+    if len(statements) > 0:
+        global _evaluate_function_
+        cs = 'def _evaluate_function_():\n'
+        cs += '\n'.join( [ '  '+s for s in statements ] ) + '\n'
+        cobj = compile( cs, '<remote evaluate>', 'exec' )
+        eval( cobj, globals() )
+        return _evaluate_function_()
 
 
 if sys.version_info[0] < 3:

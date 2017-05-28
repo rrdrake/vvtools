@@ -326,8 +326,8 @@ class Job:
         rfile = os.path.join( mydir, 'runjob_remote.py' )
 
         from remotepython import RemotePython
-
-        rmt = RemotePython( mach, rfile, sshexe=sshexe )
+        rmt = RemotePython( mach, sshexe=sshexe )
+        rmt.addRemoteContent( filename=rfile )
 
         tprint( 'Connect machine:', mach )
         tprint( 'Remote command:', cmd )
@@ -351,10 +351,9 @@ class Job:
                 raise Exception( "Could not connect to "+mach )
 
             try:
-                rmt.startTimeout( 30 )
-                rusr = rmt.x_get_user_id()
+                rusr = rmt.timeout(30).x_evaluate( 'return os.getuid()' )
 
-                rmt.startTimeout( 30 )
+                rmt.timeout(30)
                 rpid = rmt.x_background_command( cmd, logf,
                                                  chdir=chd,
                                                  timeout=timeout )
@@ -380,8 +379,7 @@ class Job:
                 time.sleep( 2**i )
             rtn = None
             try:
-                rmtpy.startTimeout( 30 )
-                rmtpy.connect()
+                rmtpy.timeout(30).connect()
             except:
                 #raise  # uncomment this when debugging connections
                 rtn = capture_traceback( sys.exc_info() )
@@ -430,9 +428,8 @@ class Job:
 
                     self.updateFile( rmtpy, logf, logn )
 
-                    rmtpy.startTimeout( 30 )
-                    s = rmtpy.x_processes( pid=rpid, user=rusr,
-                                           fields='etime' )
+                    s = rmtpy.timeout(30).x_processes( pid=rpid, user=rusr,
+                                                       fields='etime' )
                     elapsed = s.strip()
 
                     # TODO: add a check that the elapsed time agrees
@@ -483,16 +480,14 @@ class Job:
         if os.path.exists( logname ):
             lcl_sz = os.path.getsize( logname )
 
-        rmtpy.startTimeout( 30 )
-        rmt_sz = rmtpy.x_file_size( logfile )
+        rmt_sz = rmtpy.timeout(30).x_file_size( logfile )
 
         if lcl_sz != rmt_sz and rmt_sz >= 0:
             if rmt_sz < small or lcl_sz > rmt_sz or lcl_sz < 0.2*rmt_sz:
                 # for small files, or if somehow the local file is larger than
                 # the remote, or if not much of the file has been transferred
                 # yet, just do a complete file transfer
-                rmtpy.startTimeout( 10*60 )
-                rmtpy.getFile( logfile, logname, preserve=True )
+                rmtpy.timeout(10*60).getFile( logfile, logname, preserve=True )
 
             else:
                 # only transfer the end of the remote file that has not
@@ -502,21 +497,19 @@ class Job:
                 fp = open( logname, 'ab' )
                 try:
                     # open the remote file
-                    rmtpy.startTimeout( 30 )
+                    rmtpy.timeout(30)
                     mt, at, fm = rmtpy.x_open_file_read( logfile, off )
 
                     # get the tail of the file in chunks
                     while off < rmt_sz:
                         off2 = min( off + chunksize, rmt_sz )
-                        rmtpy.startTimeout( 30 )
-                        buf = rmtpy.x_file_read( off2-off )
+                        buf = rmtpy.timeout(30).x_file_read( off2-off )
                         fp.write( _BYTES_( buf ) )
                         off = off2
                 
                 finally:
                     fp.close()
-                    rmtpy.startTimeout( 30 )
-                    rmtpy.x_close_file()
+                    rmtpy.timeout(30).x_close_file()
                 
                 # match the date stamp and file mode
                 os.utime( logname, (at,mt) )

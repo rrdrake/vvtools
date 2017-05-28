@@ -133,12 +133,24 @@ class RemotePython:
         if content != None:
             self.content += _BYTES_('\n\n') + _BYTES_( content )
 
-    def startTimeout(self, numseconds):
+    def timeout(self, numseconds):
         """
         Call this right before calling a function of this class to impose a
         time limit on the duration of the function.  If the call times out,
-        the ssh subprocess is killed, and the function will (usually) raise
-        a LocalException.
+        the ssh subprocess is killed, and the function will raise a
+        LocalException.
+
+        For convenience, timeout() returns 'self', so you can chain the call.
+        For example,
+
+            rpy.timeout(60).r_func( 'arg' )
+
+        where "rpy" is a RemotePython object.  This would timeout the remote
+        function "func" after 60 seconds.
+
+        Note that timeout() can be used for any function in this class, such as
+
+            rpy.timeout(60).connect()
         """
         assert numseconds > 0
         self.tlock.acquire()
@@ -153,6 +165,8 @@ class RemotePython:
             raise
         self.timer = t
         self.tlock.release()
+
+        return self
 
     def connect(self):
         """
