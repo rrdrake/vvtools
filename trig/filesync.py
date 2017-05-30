@@ -17,16 +17,19 @@ helpstr = \
 USAGE:
     filesync.py [OPTIONS] [machine:]source [machine:]target
 
-    Copy or overwrite files from the source directory into the target.  At
-    most one directory can be prefixed with a machine name.
-
 SYNOPSIS:
-    TODO.
+    Copy or overwrite files from the source directory into the target
+    directory.  At most one directory can be prefixed with a machine name.
+
+    File operations are performed using the remotepython module, so the only
+    requirement on the remote machine is that a python (of any version) be
+    in PATH.
 
 OPTIONS:
-    -h, --help : this help
-    --age <seconds old> : only files newer than this age are copied
-    -p <pattern> : glob pattern of files to copy; may be repeated
+    -h, --help             : this help
+    -p <pattern>           : glob pattern of files to copy; may be repeated
+    --age <seconds old>    : only files newer than this age are copied
+    -T <seconds>           : apply timeout to each remotepython command
     --sshexe <path to ssh> : use this ssh
 """
 
@@ -35,7 +38,7 @@ OPTIONS:
 def main():
 
     import getopt
-    optL,argL = getopt.getopt( sys.argv[1:], 'hp:',
+    optL,argL = getopt.getopt( sys.argv[1:], 'hp:T:',
                                longopts=['help','age=','sshexe='] )
 
     optD ={}
@@ -52,9 +55,18 @@ def main():
         print3( '*** filesync.py: expected exactly two arguments' )
         sys.exit(1)
 
+    age = optD.get( '--age', None )
+    if age != None:
+        age = float( age )
+
+    tmout = optD.get( '-T', None )
+    if tmout != None:
+        tmout = float( tmout )
+
     sync_directories( argL[0], argL[1],
-                      glob=optD.get( '-n', '*' ),
-                      age=optD.get( '--age', None ),
+                      glob=optD.get( '-p', '*' ),
+                      age=age,
+                      timeout=tmout,
                       sshexe=optD.get( '--sshexe', None ) )
 
 
@@ -72,6 +84,9 @@ def sync_directories( read_dir, write_dir, glob='*', age=None,
     "sparky:/some/directory" means the directory /some/directory on machine
     sparky.  A machine specification can only be given to one directory,
     not both.
+
+    The 'glob' argument can be a shell glob pattern or a python list of
+    patterns.
 
     If 'echo' is True, the actions are printed to stdout as they occur.
 

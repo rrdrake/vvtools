@@ -63,6 +63,7 @@ def runtests( cwd, argL ):
                   byage1 byage2 byage3
                   over1 over2 over3 over4 over5 over6
                   err1 err2 err3
+                  cmdline1 cmdline2 cmdline3 cmdline4 cmdline5 cmdline6
                """.split()
     
     for func in argL:
@@ -1153,6 +1154,107 @@ def cmdline3():
                 os.path.getmtime('targetdir/file.txt') ) < 2
     assert abs( os.path.getmtime('subdir/file2.txt') -
                 os.path.getmtime('targetdir/file2.txt') ) < 2
+
+
+def cmdline4():
+    """
+    cmd line sync with age
+    """
+    os.mkdir( 'targetdir' )
+    tgt = os.path.abspath( 'targetdir' )
+
+    writefile( 'subdir/file.txt', "my file\n" )
+    writefile( 'subdir/file2.txt', "my file2\n" )
+    sdir = os.path.abspath( 'subdir' )
+    t = time.time() - 600  # make modification & access time 10 minutes ago
+    os.utime( 'subdir/file2.txt', (t,t) )
+
+    sshprog,sshmach = get_ssh_pair()
+
+    out = runout( localpy+' '+srcdir+'/filesync.py --sshexe '+sshprog + \
+                  ' --age 300' + \
+                  ' ' + sshmach+':'+sdir + ' ' + tgt )
+    #print3( out )
+
+    time.sleep(1)
+
+    assert os.path.isfile( 'targetdir/file.txt' )
+    assert not os.path.isfile( 'targetdir/file2.txt' )
+    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+    assert abs( os.path.getmtime('subdir/file.txt') -
+                os.path.getmtime('targetdir/file.txt') ) < 2
+
+
+def cmdline5():
+    """
+    cmd line sync with glob
+    """
+    os.mkdir( 'targetdir' )
+    tgt = os.path.abspath( 'targetdir' )
+
+    writefile( 'subdir/file.txt', "my file\n" )
+    writefile( 'subdir/file.csv', "my,csv\n" )
+    writefile( 'subdir/file2.txt', "my file2\n" )
+    sdir = os.path.abspath( 'subdir' )
+    t = time.time() - 600  # make modification & access time 10 minutes ago
+    os.utime( 'subdir/file2.txt', (t,t) )
+
+    sshprog,sshmach = get_ssh_pair()
+
+    out = runout( localpy+' '+srcdir+'/filesync.py --sshexe '+sshprog + \
+                  ' -p "*.csv" -p "*2.*"' + \
+                  ' ' + sshmach+':'+sdir + ' ' + tgt )
+    #print3( out )
+
+    time.sleep(1)
+
+    assert not os.path.isfile( 'targetdir/file.txt' )
+    assert os.path.isfile( 'targetdir/file.csv' )
+    assert os.path.isfile( 'targetdir/file2.txt' )
+    assert filecmp.cmp( 'subdir/file.csv', 'targetdir/file.csv', shallow=False )
+    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+    assert abs( os.path.getmtime('subdir/file.csv') -
+                os.path.getmtime('targetdir/file.csv') ) < 2
+    assert abs( os.path.getmtime('subdir/file2.txt') -
+                os.path.getmtime('targetdir/file2.txt') ) < 2
+
+
+def cmdline6():
+    """
+    cmd line sync, add timeout (only exercises the handling)
+    """
+    os.mkdir( 'targetdir' )
+    tgt = os.path.abspath( 'targetdir' )
+
+    writefile( 'subdir/file.txt', "my file\n" )
+    writefile( 'subdir/file.csv', "my,csv\n" )
+    writefile( 'subdir/file2.txt', "my file2\n" )
+    sdir = os.path.abspath( 'subdir' )
+    t = time.time() - 600  # make modification & access time 10 minutes ago
+    os.utime( 'subdir/file2.txt', (t,t) )
+
+    sshprog,sshmach = get_ssh_pair()
+
+    out = runout( localpy+' '+srcdir+'/filesync.py --sshexe '+sshprog + \
+                  ' -T 60' + \
+                  ' ' + sshmach+':'+sdir + ' ' + tgt )
+    #print3( out )
+
+    time.sleep(1)
+
+    assert os.path.isfile( 'targetdir/file.txt' )
+    assert os.path.isfile( 'targetdir/file.csv' )
+    assert os.path.isfile( 'targetdir/file2.txt' )
+    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+    assert filecmp.cmp( 'subdir/file.csv', 'targetdir/file.csv', shallow=False )
+    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+    assert abs( os.path.getmtime('subdir/file.txt') -
+                os.path.getmtime('targetdir/file.txt') ) < 2
+    assert abs( os.path.getmtime('subdir/file.csv') -
+                os.path.getmtime('targetdir/file.csv') ) < 2
+    assert abs( os.path.getmtime('subdir/file2.txt') -
+                os.path.getmtime('targetdir/file2.txt') ) < 2
+
 
 #######################################################################
 
