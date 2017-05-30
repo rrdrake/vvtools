@@ -286,8 +286,7 @@ class RemotePython:
         """
         This is called when an unknown class attribute is requested.  If
         'attr_name' is "r_<name>" then rcall() is returned for <name>.  If
-        it is "x_<name>" then xcall() is returned for <name>.  Otherwise an
-        exception is raised.
+        it is "x_<name>" then xcall() is returned for <name>.
         """
         if len( attr_name ) > 2 and attr_name.startswith( 'r_' ):
             return lambda *args, **kwargs: self.rcall(
@@ -295,7 +294,7 @@ class RemotePython:
         elif len( attr_name ) > 2 and attr_name.startswith( 'x_' ):
             return lambda *args, **kwargs: self.xcall(
                                             attr_name[2:], *args, **kwargs )
-        raise LocalException( 'Unknown attribute "'+attr_name+'"' )
+        raise AttributeError( 'Unknown attribute "'+str(attr_name)+'"' )
 
     def putFile(self, local_name, remote_name, bufsize=1024, preserve=False):
         """
