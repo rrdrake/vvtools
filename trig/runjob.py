@@ -706,6 +706,7 @@ class RunJobs:
         written to stderr by the normal threading behavior, and the thread
         will finish.
         """
+        print3( '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' )
         tprint( 'RunJob:', args, kwargs )
         print3( ''.join( traceback.format_list(
                             traceback.extract_stack()[:-1] ) ).rstrip() )
