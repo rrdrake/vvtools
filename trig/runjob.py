@@ -27,6 +27,7 @@ The key functions are:
     poll_job : returns True if a job id has completed
     wait_job : waits for a job to complete, and returns the exit status
     wait_all : waits for multiple job ids
+    run_wait : convenience function for run_job() plus wait_job()
 
 Note also the command() and escape() functions imported from runcmd.py can
 be useful in constructing the commands.
@@ -74,6 +75,17 @@ def wait_all( *jobids, **kwargs ):
     sleep time in seconds between polls.
     """
     return RunJobs.inst.wait_all( *jobids, **kwargs )
+
+
+def run_wait( *args, **kwargs ):
+    """
+    Starts a job in the background, waits on the job, and returns the exit
+    status.  The arguments are the same as for run_job().
+    """
+    jid = RunJobs.inst.run_job( *args, **kwargs )
+    jb = wait_job( jid )
+    x = jb.get( 'exit', None )
+    return x
 
 
 ###########################################################################

@@ -56,7 +56,7 @@ def runtests( cwd, argL ):
     """
     if len(argL) == 0:
         argL = """runjob1 runjob1b runjob1c runjob1d runjob1e
-                  runjob2 runjob3 runjob4
+                  runjob2 runjob3 runjob4 runjob5a runjob5b
                   waitall1 waitall2 waitall3 waitall4 waitall5 waitall6
                   jobfail1 jobfail2 jobfail3 jobfail4 jobfail5
                   multijob1
@@ -357,6 +357,63 @@ def runjob4():
     fL = fnmatch.filter( os.listdir( '.' ), 'makefile-*.log' )
     assert len(fL) == 1
     assert os.path.exists( 'file.txt' )
+
+
+def runjob5a():
+    """
+    using run_wait()
+    """
+    writefile( 'job.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        x = run_wait( 'echo "hello" ; ls -l job.py ; sleep 2',
+                       poll_interval=2 )
+        print3( 'exit =', x )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'exit = 0' ) ) == 1
+    assert len( grep( out, 'ending' ) ) == 1
+
+    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
+    assert len(fL) == 1
+    assert len( filegrep( fL[0], 'hello' ) ) == 1
+    assert len( filegrep( fL[0], 'job.py' ) ) == 1
+
+
+def runjob5b():
+    """
+    using run_wait()
+    """
+    writefile( 'job.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runjob import *
+
+        print3( 'starting' )
+        x = run_wait( '/noexist/program || exit 1',
+                       poll_interval=2 )
+        print3( 'exit =', x )
+        print3( 'ending' )
+        """ )
+
+    out = runout( localpy+' job.py' )
+    #print3( out )
+
+    assert len( grep( out, 'starting' ) ) == 1
+    assert len( grep( out, 'exit = ' ) ) == 1
+    assert len( grep( out, 'exit = 0' ) ) == 0
+    assert len( grep( out, 'ending' ) ) == 1
+
+    fL = fnmatch.filter( os.listdir( '.' ), 'program-*.log' )
+    assert len(fL) == 1
 
 
 def waitall1():
