@@ -653,6 +653,7 @@ class RunJobs:
                 t.join()
                 self.db[ jobid ] = ( job, None )
                 t = None
+                print3( '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<' )
                 tprint( 'JobDone:', 'jobid='+str(job.jobid()),
                         'exit='+str(job.get('exit','')).strip(),
                         'exc='+str(job.get('exc','')).strip() )
@@ -667,6 +668,7 @@ class RunJobs:
         if t != None:
             t.join()
             self.db[ jobid ] = ( job, None )
+            print3( '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<' )
             tprint( 'JobDone:', 'jobid='+str(job.jobid()),
                     'exit='+str(job.get('exit','')).strip(),
                     'exc='+str(job.get('exc','')).strip() )
@@ -706,7 +708,7 @@ class RunJobs:
         written to stderr by the normal threading behavior, and the thread
         will finish.
         """
-        print3( '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' )
+        print3( '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>' )
         tprint( 'RunJob:', args, kwargs )
         print3( ''.join( traceback.format_list(
                             traceback.extract_stack()[:-1] ) ).rstrip() )
