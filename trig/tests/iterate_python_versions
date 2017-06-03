@@ -1,0 +1,67 @@
+#!/usr/bin/env python
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import getopt
+import subprocess
+
+"""
+This script just executes the given arguments with different python versions.
+Used for testing version compatibility with the unit test scripts.
+
+For example,
+
+  $ iterate_python_versions /scratch/rrdrake/scidev/trig/tests/runcmd
+
+"""
+
+# list of pythons to iterate over
+pyL = [ '/home/rrdrake/bin/Linux/py244/bin/python',
+        '/home/rrdrake/bin/Linux/py255/bin/python',
+        '/home/rrdrake/bin/Linux/py266/bin/python',
+        '/home/rrdrake/bin/Linux/py273/bin/python',
+        '/home/rrdrake/bin/Linux/py301/bin/python',
+        '/home/rrdrake/bin/Linux/py313/bin/python',
+        '/home/rrdrake/bin/Linux/py325/bin/python',
+        '/home/rrdrake/bin/Linux/py335/bin/python',
+        '/home/rrdrake/bin/Linux/py343/bin/python',
+        '/home/rrdrake/bin/Linux/py353/bin/python' ]
+
+
+def main():
+    """
+    """
+    optL,argL = getopt.getopt( sys.argv[1:], 'r' )
+    cwd = os.getcwd()
+
+    if len(argL) == 0:
+        print3( '*** specify the script you want to test as an argument' )
+        return
+
+    if ('-r','') not in optL:
+        for py in pyL:
+            cmd = [py]+argL
+            print3( 'CMD:', cmd )
+            subprocess.check_call( cmd )
+    else:
+        for lclpy in pyL:
+            for gblpy in pyL:
+                cmd = [lclpy,argL[0],'-r',gblpy]+argL[1:]
+                print3( 'CMD:', cmd )
+                subprocess.check_call( cmd )
+
+
+def print3( *args ):
+    """
+    Python 2 & 3 compatible print function.
+    """
+    s = ' '.join( [ str(x) for x in args ] )
+    sys.stdout.write( s + '\n' )
+    sys.stdout.flush()
+
+
+#######################################################################
+
+main()

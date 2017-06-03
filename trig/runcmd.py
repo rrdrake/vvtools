@@ -17,7 +17,7 @@ Functions in this file are conveniences for running subprocesses:
     run_output  : run a command and capture & return the output as a string
     run_timeout : run a command with a timeout
 
-Helper functions to help compose commands are:
+Helper functions for composing commands are:
 
     command : joins command arguments into a string
     escape  : joings arguments and escapes shell special characters
@@ -128,6 +128,8 @@ def run_command( *args, **kwargs ):
         raise_on_failure = True
         redirect = None
         append = False
+        machine = None
+        sshexe = None
     
     If 'echo' is True, the command to be executed is written to stdout.
 
@@ -143,14 +145,25 @@ def run_command( *args, **kwargs ):
 
     If 'raise_on_failure' is True and the command exit status is not zero,
     then a CommandException is raised.
+
+    If 'machine' is not None, then the command is run on a remote machine
+    using ssh.  In this case, the 'sshexe' keyword argument can be used to
+    specify the ssh program to use.
     """
     echo = kwargs.get( 'echo', True )
     cd = kwargs.get( 'chdir', None )
     raise_on_failure = kwargs.get( 'raise_on_failure', True )
     redirect = kwargs.get( 'redirect', None )
     append = kwargs.get( 'append', False )
+    mach = kwargs.get( 'machine', None )
+    sshexe = kwargs.get( 'sshexe', None )
 
     cmd,scmd = _assemble_command( *args )
+    if mach:
+        ss = 'ssh'
+        if sshexe:
+            ss = sshexe
+        cmd,scmd = _assemble_command( ss, mach, scmd )
 
     dryrun = _is_dryrun( cmd )
 
@@ -227,6 +240,8 @@ def run_output( *args, **kwargs ):
         chdir = None
         include_stderr = True
         raise_on_failure = True
+        machine = None
+        sshexe = None
 
     If 'echo' is True, the command to be executed is written to stdout.
 
@@ -239,13 +254,24 @@ def run_output( *args, **kwargs ):
 
     If 'raise_on_failure' is True and the command exit status is not zero,
     then a CommandException is raised.
+
+    If 'machine' is not None, then the command is run on a remote machine
+    using ssh.  In this case, the 'sshexe' keyword argument can be used to
+    specify the ssh program to use.
     """
     echo = kwargs.get( 'echo', True )
     cd = kwargs.get( 'chdir', None )
     raise_on_failure = kwargs.get( 'raise_on_failure', True )
     include_stderr = kwargs.get( 'include_stderr', True )
+    mach = kwargs.get( 'machine', None )
+    sshexe = kwargs.get( 'sshexe', None )
 
     cmd,scmd = _assemble_command( *args )
+    if mach:
+        ss = 'ssh'
+        if sshexe:
+            ss = sshexe
+        cmd,scmd = _assemble_command( ss, mach, scmd )
 
     dryrun = _is_dryrun( cmd )
 
@@ -318,6 +344,8 @@ def run_timeout( *args, **kwargs ):
         append = False
         raise_on_failure = True
         poll_interval = 15
+        machine = None
+        sshexe = None
 
     The 'timeout' is the number of seconds before the child process will be
     killed.  If the child times out, a None is returned for the exit status.
@@ -340,6 +368,10 @@ def run_timeout( *args, **kwargs ):
     The 'poll_interval' is the number of seconds between polling the subprocess
     to see if it has completed.
 
+    If 'machine' is not None, then the command is run on a remote machine
+    using ssh.  In this case, the 'sshexe' keyword argument can be used to
+    specify the ssh program to use.
+
     TODO: - if this process receives a signal (like Control-C), then what
             happens to the child process ?  Need to understand that and add
             handling for receiving signals
@@ -350,11 +382,18 @@ def run_timeout( *args, **kwargs ):
     redirect = kwargs.get( 'redirect', None )
     append = kwargs.get( 'append', False )
     poll_interval = kwargs.get( 'poll_interval', 15 )
+    mach = kwargs.get( 'machine', None )
+    sshexe = kwargs.get( 'sshexe', None )
 
     assert 'timeout' in kwargs and kwargs['timeout'] != None
     timeout = float( kwargs['timeout'] )
 
     cmd,scmd = _assemble_command( *args )
+    if mach:
+        ss = 'ssh'
+        if sshexe:
+            ss = sshexe
+        cmd,scmd = _assemble_command( ss, mach, scmd )
 
     dryrun = _is_dryrun( cmd )
 

@@ -101,6 +101,7 @@ def runout( cmd, raise_on_failure=False ):
 
     x = p.returncode
     if raise_on_failure and x != 0:
+        print3(out)
         raise Exception( 'command failed: ' + str(cmd) )
 
     return out

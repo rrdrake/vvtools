@@ -11,17 +11,10 @@ from testutils import *
 # this is the module we are testing
 import runcmd
 
-# list of pythons to test with the -p option
-pyL = [ '/home/rrdrake/bin/Linux/py244/bin/python',
-        '/home/rrdrake/bin/Linux/py255/bin/python',
-        '/home/rrdrake/bin/Linux/py266/bin/python',
-        '/home/rrdrake/bin/Linux/py273/bin/python',
-        '/home/rrdrake/bin/Linux/py301/bin/python',
-        '/home/rrdrake/bin/Linux/py313/bin/python',
-        '/home/rrdrake/bin/Linux/py325/bin/python',
-        '/home/rrdrake/bin/Linux/py335/bin/python',
-        '/home/rrdrake/bin/Linux/py343/bin/python',
-        '/home/rrdrake/bin/Linux/py353/bin/python' ]
+# For the tests that use ssh, a "fake" ssh script is used that acts like ssh.
+# To use an actual ssh, add the -s option to the unit test command line.  In
+# this case, make sure you can ssh to the current machine without a password.
+use_real_ssh = False
 
 localpy = sys.executable
 
@@ -29,22 +22,12 @@ localpy = sys.executable
 def main():
     """
     """
-    optL,argL = getopt.getopt( sys.argv[1:], 'p' )
-    cwd = os.getcwd()
+    optL,argL = getopt.getopt( sys.argv[1:], 's' )
 
-    if ('-p','') not in optL:
-        runtests( cwd, argL )
-    else:
-        # run each python version separately
-        for py in pyL:
-            global localpy
-            localpy = py
-            print3( 'local python:', localpy )
-            runtests( cwd, argL )
+    if ('-s','') in optL:
+        global use_real_ssh
+        use_real_ssh = True
 
-def runtests( cwd, argL ):
-    """
-    """
     if len(argL) == 0:
         argL = """cmd1 esc1
                   echo1 echo2 echo3
@@ -54,14 +37,15 @@ def runtests( cwd, argL ):
                   outerr1
                   timeout1 timeout2
                   dryrun1 dryrun2 dryrun3 dryrun4 dryrun5
+                  ssh1 ssh2 ssh3
                """.split()
-    
+
     cwd = os.getcwd()
     for func in argL:
         os.chdir( cwd )
         rmallfiles()
         if 'COMMAND_DRYRUN' in os.environ:
-            os.environ.pop( 'COMMAND_DRYRUN' )
+            del os.environ['COMMAND_DRYRUN']
         time.sleep(1)
         print3( '====> ', func )
         eval( func+'()' )
@@ -415,12 +399,12 @@ def outerr1():
     py = 'import os,sys;'
     py += ' sys.stdout.write( "hello"+os.linesep );'
     py += ' sys.stderr.write( "world"+os.linesep )'
-    out = runcmd.run_output( 'python', '-c', py )
+    out = runcmd.run_output( localpy, '-c', py )
     #print3( out )
     assert len( grep( out, "hello" ) ) == 1
     assert len( grep( out, "world" ) ) == 1
 
-    out = runcmd.run_output( 'python', '-c', py,
+    out = runcmd.run_output( localpy, '-c', py,
                              include_stderr=False )
     #print3( out )
     assert len( grep( out, "hello" ) ) == 1
@@ -431,14 +415,15 @@ def outerr1():
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
         from runcmd import *
-        out = run_output( 'python', '-c', """+repr(py)+""", echo=False )
+        out = run_output( '"""+localpy+"""', '-c', """+repr(py)+""",
+                          echo=False )
         """ )
 
     writefile( 'cmd2.py', """
         import os, sys
         sys.path.insert( 0, '"""+srcdir+"""' )
         from runcmd import *
-        out = run_output( 'python', '-c', """+repr(py)+""",
+        out = run_output( '"""+localpy+"""', '-c', """+repr(py)+""",
                           include_stderr=False, echo=False )
         """ )
 
@@ -493,7 +478,7 @@ def timeout1():
         """ )
 
     t0 = time.time()
-    x = runcmd.run_timeout( 'python', 'ok.py', timeout=10 )
+    x = runcmd.run_timeout( localpy, 'ok.py', timeout=10 )
     t1 = time.time()
     assert x != None and x == 0
     assert t1 - t0 < 8
@@ -505,7 +490,7 @@ def timeout1():
     assert t3 - t2 < 8
 
     t0 = time.time()
-    x = runcmd.run_timeout( 'python', 'fail.py',
+    x = runcmd.run_timeout( localpy, 'fail.py',
                             timeout=10, raise_on_failure=False )
     t1 = time.time()
     assert x != None and type(x) == type(2) and x != 0
@@ -519,7 +504,7 @@ def timeout1():
     assert len( filegrep( 'fail.txt', 'DONE' ) ) == 0
 
     t0 = time.time()
-    x = runcmd.run_timeout( 'python', 'tout.py',
+    x = runcmd.run_timeout( localpy, 'tout.py',
                             timeout=5, raise_on_failure=False )
     t1 = time.time()
     assert x == None
@@ -532,7 +517,7 @@ def timeout1():
     os.remove( 'tout.txt' )
     try:
         t0 = time.time()
-        runcmd.run_timeout( 'python', 'tout.py', timeout=5 )
+        runcmd.run_timeout( localpy, 'tout.py', timeout=5 )
     except runcmd.CommandException:
         t1 = time.time()
         msg = str( sys.exc_info()[1] )
@@ -558,7 +543,8 @@ def timeout2():
             fp.close()
         log( 'PID', os.getpid(), time.asctime() )
         import subprocess
-        subprocess.call( 'python """+os.getcwd()+"""/tout2.py', shell=True )
+        subprocess.call( sys.executable+' """+os.getcwd()+"""/tout2.py',
+                         shell=True )
         time.sleep(2)
         log( 'DONE', time.asctime() )
         """ )
@@ -576,7 +562,7 @@ def timeout2():
         """ )
 
     t0 = time.time()
-    x = runcmd.run_timeout( 'python', 'tout1.py',
+    x = runcmd.run_timeout( localpy, 'tout1.py',
                             timeout=10, raise_on_failure=False )
     t1 = time.time()
     assert x != None and x == 0
@@ -603,7 +589,8 @@ def timeout2():
             fp.write( ' '.join( [ str(x) for x in args ] ) + os.linesep )
             fp.close()
         log( 'PID', os.getpid(), time.asctime() )
-        subprocess.call( 'python """+os.getcwd()+"""/tout4.py', shell=True )
+        subprocess.call( sys.executable+' """+os.getcwd()+"""/tout4.py',
+                         shell=True )
         time.sleep(20)
         log( 'DONE', time.asctime() )
         """ )
@@ -622,7 +609,7 @@ def timeout2():
 
     # this time, the subprocess should timeout
     t0 = time.time()
-    x = runcmd.run_timeout( 'python', 'tout3.py',
+    x = runcmd.run_timeout( localpy, 'tout3.py',
                             timeout=5, raise_on_failure=False )
     t1 = time.time()
     assert x == None
@@ -760,6 +747,271 @@ def dryrun5():
     assert os.path.exists( 'file4.txt' )
 
 
+def ssh1():
+    """
+    run_command with machine attr
+    """
+    writefile( 'subdir/file.txt', 'a file' )
+    writefile( 'subdir/file2.txt', 'another file' )
+    writefile( 'subdir/a b.txt', 'file with a space' )
+    sdir = os.path.abspath( 'subdir' )
+    time.sleep(1)
+
+    sshprog,sshmach = get_ssh_pair()
+
+    # a simple command with no spaces or arguments
+    writefile( 'cmd1.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        run_command( 'date', machine='"""+sshmach+"""',
+                     sshexe='"""+sshprog+"""', raise_on_error=True )
+        """ )
+
+    out = runout( localpy+' cmd1.py', raise_on_failure=True )
+    #print3( out )
+    #os.system( localpy+' cmd1.py' )
+
+    dow,mo,yr = time.strftime( "%a %b %Y" ).split()
+    L = grep( out, yr )
+    assert len( L )  > 0
+    assert dow in L[-1] and mo in L[-1]
+
+    # more complex command
+    writefile( 'cmd2.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        sshprog = '"""+sshprog+"""'
+        cmd = 'cd """+sdir+""" && ls file2.txt'
+        run_command( cmd, echo=False,
+                     machine='"""+sshmach+"""', sshexe=sshprog )
+        """ )
+
+    out = runout( localpy+' cmd2.py', raise_on_failure=True )
+    print3( out )
+
+    assert len( grep( out, 'file.txt' ) ) == 0
+    assert len( grep( out, 'file2.txt' ) ) == 1
+    assert len( grep( out, 'a b.txt' ) ) == 0
+
+    # a command with a quoted argument
+    writefile( 'cmd3.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        sshprog = '"""+sshprog+"""'
+        cmd = 'cd """+sdir+""" && ls "a b.txt"'
+        run_command( cmd, echo=False,
+                     machine='"""+sshmach+"""', sshexe=sshprog )
+        """ )
+
+    out = runout( localpy+' cmd3.py', raise_on_failure=True )
+    #print3( out )
+
+    # use a list of arguments
+    assert len( grep( out, 'file.txt' ) ) == 0
+    assert len( grep( out, 'file2.txt' ) ) == 0
+    assert len( grep( out, 'a b.txt' ) ) == 1
+
+    writefile( 'cmd4.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        sshprog = '"""+sshprog+"""'
+        run_command( 'ls', '"""+sdir+"""/a b.txt', echo=False,
+                     machine='"""+sshmach+"""', sshexe=sshprog,
+                     raise_on_error=True )
+        """ )
+
+    out = runout( localpy+' cmd4.py', raise_on_failure=True )
+    #print3( out )
+    #os.system( localpy+' cmd4.py' )
+
+    assert len( grep( out, 'file.txt' ) ) == 0
+    assert len( grep( out, 'file2.txt' ) ) == 0
+    assert len( grep( out, 'a b.txt' ) ) == 1
+
+    # use a wildcard
+    writefile( 'cmd5.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        sshprog = '"""+sshprog+"""'
+        cmd = 'cd """+sdir+""" && ls *'
+        run_command( cmd, machine='"""+sshmach+"""', sshexe=sshprog )
+        """ )
+
+    out = runout( localpy+' cmd5.py', raise_on_failure=True )
+    #print3( out )
+
+    assert len( grep( out, 'file.txt' ) ) == 1
+    assert len( grep( out, 'file2.txt' ) ) == 1
+    assert len( grep( out, 'a b.txt' ) ) == 1
+
+
+def ssh2():
+    """
+    run_output with machine attr
+    """
+    writefile( 'subdir/file.txt', 'a file' )
+    writefile( 'subdir/file2.txt', 'another file' )
+    writefile( 'subdir/a b.txt', 'file with a space' )
+    sdir = os.path.abspath( 'subdir' )
+    time.sleep(1)
+
+    sshprog,sshmach = get_ssh_pair()
+
+    out = runcmd.run_output( 'date', machine=sshmach,
+                             sshexe=sshprog, raise_on_error=True )
+    #print3( out )
+    #os.system( localpy+' cmd1.py' )
+
+    dow,mo,yr = time.strftime( "%a %b %Y" ).split()
+    L = grep( out, yr )
+    assert len( L )  > 0
+    assert dow in L[-1] and mo in L[-1]
+
+    cmd = 'cd "'+sdir+'" && ls file2.txt'
+    out = runcmd.run_output( cmd, machine=sshmach,
+                             sshexe=sshprog, raise_on_error=True )
+    #print3( out )
+
+    assert len( grep( out, 'file.txt' ) ) == 0
+    assert len( grep( out, 'file2.txt' ) ) == 1
+    assert len( grep( out, 'a b.txt' ) ) == 0
+
+    cmd = 'cd '+sdir+' && ls "a b.txt"'
+    out = runcmd.run_output( cmd, machine=sshmach,
+                             sshexe=sshprog, raise_on_error=True )
+    #print3( out )
+
+    assert len( grep( out, 'file.txt' ) ) == 0
+    assert len( grep( out, 'file2.txt' ) ) == 0
+    assert len( grep( out, 'a b.txt' ) ) == 1
+
+    out = runcmd.run_output( 'ls', sdir+'/a b.txt', machine=sshmach,
+                             sshexe=sshprog, raise_on_error=True )
+    #print3( out )
+
+    assert len( grep( out, 'file.txt' ) ) == 0
+    assert len( grep( out, 'file2.txt' ) ) == 0
+    assert len( grep( out, 'a b.txt' ) ) == 1
+
+    cmd = 'cd '+sdir+' && ls *'
+    out = runcmd.run_output( cmd, machine=sshmach,
+                             sshexe=sshprog, raise_on_error=True )
+    #print3( out )
+
+    assert len( grep( out, 'file.txt' ) ) == 1
+    assert len( grep( out, 'file2.txt' ) ) == 1
+    assert len( grep( out, 'a b.txt' ) ) == 1
+
+
+def ssh3():
+    """
+    run_timeout with machine attr
+    """
+    writefile( 'subdir/file.txt', 'a file' )
+    writefile( 'subdir/file2.txt', 'another file' )
+    writefile( 'subdir/a b.txt', 'file with a space' )
+    sdir = os.path.abspath( 'subdir' )
+    time.sleep(1)
+
+    sshprog,sshmach = get_ssh_pair()
+
+    # a simple command with no spaces or arguments
+    writefile( 'cmd1.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        run_timeout( 'date', machine='"""+sshmach+"""', timeout=10,
+                     sshexe='"""+sshprog+"""', raise_on_error=True )
+        """ )
+
+    out = runout( localpy+' cmd1.py', raise_on_failure=True )
+    #print3( out )
+    #os.system( localpy+' cmd1.py' )
+
+    dow,mo,yr = time.strftime( "%a %b %Y" ).split()
+    L = grep( out, yr )
+    assert len( L )  > 0
+    assert dow in L[-1] and mo in L[-1]
+
+    # more complex command
+    writefile( 'cmd2.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        sshprog = '"""+sshprog+"""'
+        cmd = 'cd """+sdir+""" && ls file2.txt'
+        run_timeout( cmd, echo=False, timeout=10,
+                     machine='"""+sshmach+"""', sshexe=sshprog )
+        """ )
+
+    out = runout( localpy+' cmd2.py', raise_on_failure=True )
+    print3( out )
+
+    assert len( grep( out, 'file.txt' ) ) == 0
+    assert len( grep( out, 'file2.txt' ) ) == 1
+    assert len( grep( out, 'a b.txt' ) ) == 0
+
+    # a command with a quoted argument
+    writefile( 'cmd3.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        sshprog = '"""+sshprog+"""'
+        cmd = 'cd """+sdir+""" && ls "a b.txt"'
+        run_timeout( cmd, echo=False, timeout=10,
+                     machine='"""+sshmach+"""', sshexe=sshprog )
+        """ )
+
+    out = runout( localpy+' cmd3.py', raise_on_failure=True )
+    #print3( out )
+
+    # use a list of arguments
+    assert len( grep( out, 'file.txt' ) ) == 0
+    assert len( grep( out, 'file2.txt' ) ) == 0
+    assert len( grep( out, 'a b.txt' ) ) == 1
+
+    writefile( 'cmd4.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        sshprog = '"""+sshprog+"""'
+        run_timeout( 'ls', '"""+sdir+"""/a b.txt', echo=False, timeout=10,
+                     machine='"""+sshmach+"""', sshexe=sshprog,
+                     raise_on_error=True )
+        """ )
+
+    out = runout( localpy+' cmd4.py', raise_on_failure=True )
+    #print3( out )
+    #os.system( localpy+' cmd4.py' )
+
+    assert len( grep( out, 'file.txt' ) ) == 0
+    assert len( grep( out, 'file2.txt' ) ) == 0
+    assert len( grep( out, 'a b.txt' ) ) == 1
+
+    # use a wildcard
+    writefile( 'cmd5.py', """
+        import os, sys
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        from runcmd import *
+        sshprog = '"""+sshprog+"""'
+        cmd = 'cd """+sdir+""" && ls *'
+        run_timeout( cmd, timeout=10,
+                     machine='"""+sshmach+"""', sshexe=sshprog )
+        """ )
+
+    out = runout( localpy+' cmd5.py', raise_on_failure=True )
+    #print3( out )
+
+    assert len( grep( out, 'file.txt' ) ) == 1
+    assert len( grep( out, 'file2.txt' ) ) == 1
+    assert len( grep( out, 'a b.txt' ) ) == 1
+
+
 #######################################################################
 
 def processes():
@@ -794,6 +1046,33 @@ def processes():
         out += os.linesep
 
     return out
+
+
+def get_ssh_pair( fake_ssh_pause=None ):
+    """
+    Returns a pair ( ssh program, ssh machine ).
+    """
+    if use_real_ssh and fake_ssh_pause == None:
+        sshprog = which( 'ssh' )
+        import socket
+        sshmach = socket.gethostname()
+    
+    else:
+        st = str(1)
+        if fake_ssh_pause != None:
+            st = str(fake_ssh_pause)
+        writescript( 'fakessh', "#!"+localpy+" -E", """
+            import os, sys, getopt, time
+            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
+            argL.pop(0)  # remove the machine name
+            time.sleep( """+st+""" )
+            os.execl( '/bin/bash', '/bin/bash', '-c', ' '.join( argL ) )
+            """ )
+        sshprog = os.path.abspath( 'fakessh' )
+        sshmach = 'sparky'
+
+    return sshprog, sshmach
+
 
 #######################################################################
 
