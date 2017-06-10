@@ -182,8 +182,12 @@ class RemotePython:
         try:
             fp = None
 
+            # explicitly set name in the remote code so it is not __main__
+            scr = _BYTES_( 'global __name__\n' + \
+                           '__name__ = "__remotepython__"\n' )
+
             # the remote script is the user's script plus utility coding
-            scr = self.content + _BYTES_( '\n\n' )
+            scr += self.content + _BYTES_( '\n\n' )
             scr += _BYTES_( remote_utils )
 
             # create pipe to send commands to python (to ssh stdin)

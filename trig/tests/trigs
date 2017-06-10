@@ -13,40 +13,15 @@ import trigger
 
 trigfile = os.path.join( trigger.mydir, 'trigger.py' )
 
-# list of pythons to test with the -p option
-pyL = [ '/home/rrdrake/bin/Linux/py244/bin/python',
-        '/home/rrdrake/bin/Linux/py255/bin/python',
-        '/home/rrdrake/bin/Linux/py266/bin/python',
-        '/home/rrdrake/bin/Linux/py273/bin/python',
-        '/home/rrdrake/bin/Linux/py301/bin/python',
-        '/home/rrdrake/bin/Linux/py313/bin/python',
-        '/home/rrdrake/bin/Linux/py325/bin/python',
-        '/home/rrdrake/bin/Linux/py335/bin/python',
-        '/home/rrdrake/bin/Linux/py343/bin/python',
-        '/home/rrdrake/bin/Linux/py353/bin/python' ]
-
 localpy = sys.executable
 
 
 def main():
     """
     """
-    optL,argL = getopt.getopt( sys.argv[1:], 'p' )
+    optL,argL = getopt.getopt( sys.argv[1:], '' )
     cwd = os.getcwd()
 
-    if ('-p','') not in optL:
-        runtests( cwd, argL )
-    else:
-        # run each python version separately
-        for py in pyL:
-            global localpy
-            localpy = py
-            print3( 'local python:', localpy )
-            runtests( cwd, argL )
-
-def runtests( cwd, argL ):
-    """
-    """
     if len(argL) == 0:
         argL = """timeparse1
                   dow1 trigtime1 trigtime2 trigtime3 trigtime4 trigtime5
@@ -57,8 +32,7 @@ def runtests( cwd, argL ):
                   launch1 launch2 launch3
                   hang1
                """.split()
-    
-    cwd = os.getcwd()
+
     for func in argL:
         os.chdir( cwd )
         rmallfiles()

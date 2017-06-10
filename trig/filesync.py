@@ -11,6 +11,8 @@ import shutil
 import remotepython as rpy
 print3 = rpy.print3
 
+import perms
+
 
 helpstr = \
 """
@@ -31,6 +33,15 @@ OPTIONS:
     --age <seconds old>    : only files newer than this age are copied
     -T <seconds>           : apply timeout to each remotepython command
     --sshexe <path to ssh> : use this ssh
+    --perms <spec>         : set or adjust file permissions on files placed
+                             into the target location; may be repeated;
+                             examples:
+                                groupname : set the file group name
+                                o=-     : set world permissions to none
+                                g=r-x   : set group to read, no write, execute
+                                g+rx    : add read & execute to group
+                                o-w     : remove write to world
+                                u+x     : add execute to owner
 """
 
 ############################################################################
@@ -39,14 +50,14 @@ def main():
 
     import getopt
     optL,argL = getopt.getopt( sys.argv[1:], 'hp:T:',
-                               longopts=['help','age=','sshexe='] )
+                               longopts=['help','age=','sshexe=','perms='] )
 
     optD ={}
     for n,v in optL:
         if n == '-h' or n == '--help':
             print3( helpstr )
             return 0
-        elif n in ['-p']:
+        elif n in ['-p','--perms']:
             optD[n] = optD.get(n,[]) + [v]
         else:
             optD[n] = v
@@ -67,13 +78,14 @@ def main():
                       glob=optD.get( '-p', '*' ),
                       age=age,
                       timeout=tmout,
-                      sshexe=optD.get( '--sshexe', None ) )
+                      sshexe=optD.get( '--sshexe', None ),
+                      permissions=optD.get( '--perms', [] ) )
 
 
 ############################################################################
 
 def sync_directories( read_dir, write_dir, glob='*', age=None,
-                      echo=True, timeout=None, sshexe=None ):
+                      echo=True, timeout=None, sshexe=None, permissions=[] ):
     """
     Copy or overwrite files from 'read_dir' into 'write_dir'.  Only files
     that match the 'glob' pattern and are no older than 'age' seconds are
@@ -119,6 +131,10 @@ def sync_directories( read_dir, write_dir, glob='*', age=None,
     else:
         rmt = rpy.RemotePython( wm, sshexe=sshexe )
         rmt.addRemoteContent( remote_functions )
+        if permissions:
+            # include the permissions module in the remote content
+            assert perms.get_filename() != None, "file perms.py not found"
+            rmt.addRemoteContent( filename=perms.get_filename() )
         if echo: print3( 'Connect to "'+wm+'"' )
         if timeout: rmt.timeout(timeout)
         rmt.connect()
@@ -144,6 +160,8 @@ def sync_directories( read_dir, write_dir, glob='*', age=None,
             for f,rf,wf in cpL:
                 if echo: print3( 'copy -p '+rf+' '+wf )
                 shutil.copy2( rf, wf )
+                if permissions:
+                    file_perms( wf, permissions )
 
         elif rm != None:
             # copy files from remote machine to local
@@ -151,6 +169,8 @@ def sync_directories( read_dir, write_dir, glob='*', age=None,
                 if echo: print3( 'copy -p '+read_dir+'/'+f+' '+wf )
                 if timeout: rmt.timeout(timeout)
                 rmt.getFile( rf, wf, preserve=True )
+                if permissions:
+                    file_perms( wf, permissions )
 
         else:
             assert wm != None
@@ -159,6 +179,8 @@ def sync_directories( read_dir, write_dir, glob='*', age=None,
                 if echo: print3( 'copy -p '+rf+' '+write_dir+'/'+f )
                 if timeout: rmt.timeout(timeout)
                 rmt.putFile( rf, wf, preserve=True )
+                if permissions:
+                    file_perms( wf, permissions, remote=rmt )
 
     finally:
         if rmt != None:
@@ -166,6 +188,30 @@ def sync_directories( read_dir, write_dir, glob='*', age=None,
             rmt.shutdown()
 
     return [ T[0] for T in cpL ]
+
+
+def file_perms( fname, permissions, remote=None ):
+    """
+    Sets file permissions on file 'fname' given a python list of (string)
+    specifications. If 'remote' is not None, it must be a connected
+    RemotePython instance, which is used to perform the operations on the
+    remote machine.  The permissions are only changed if the user of this
+    process and the user of the file are the same.
+    """
+    if remote == None:
+        if perms.i_own( fname ):
+            if type(permissions) == type(''):
+                perms.apply_spec( fname, permissions )
+            else:
+                # assume 'permissions' is a tuple or list
+                perms.apply_spec( fname, *permissions )
+    else:
+        if remote.x_i_own( fname ):
+            if type(permissions) == type(''):
+                remote.x_apply_spec( fname, permissions )
+            else:
+                # assume 'permissions' is a tuple or list
+                remote.x_apply_spec( fname, *permissions )
 
 
 _machine_prefix_pat = re.compile( '[0-9a-zA-Z_.-]+?:' )
