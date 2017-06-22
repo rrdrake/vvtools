@@ -515,7 +515,9 @@ def generateTestList( dirs, plat, ufilter ):
             ': error: directory does not exist: ' + d + '\n')
         sys.exit(1);
       tlist.scanDirectory( d, optdict.get('-S',None) )
-    
+
+    loadRunTimes( tlist, plat )
+
     tlist.loadAndFilter( plat.getMaxProcs() )
     
     test_dir = None
@@ -558,7 +560,9 @@ def extractTestFiles( dirs, plat, target_dir, ufilter ):
             ': error: directory does not exist: ' + d + '\n')
         sys.exit(1);
       tlist.scanDirectory( d, optdict.get('-S',None) )
-    
+
+    loadRunTimes( tlist, plat )
+
     tlist.loadAndFilter( plat.getMaxProcs() )
     
     if not os.path.isabs(target_dir):
@@ -959,6 +963,8 @@ def runTests( dirs, plat, ufilter ):
     if os.path.exists( tfile ):
         tlist.readFile( tfile )  # merge in existing test results
     
+    loadRunTimes( tlist, plat )
+
     pruneL,cntmax = tlist.loadAndFilter( plat.getMaxProcs(),
                                          analyze_only=optdict.has_key('-a'),
                                          prune=True )
@@ -973,11 +979,8 @@ def runTests( dirs, plat, ufilter ):
     if cntmax > 0:
         print3()
         print3( 'Note: there were', cntmax, 'tests that exceeded the',
-                'maximum number of processors on this machine - they',
-                'will not be run' )
+                'maximum number of processors - they will not be run' )
 
-    loadExecutionTimes( tlist, plat )
-    
     # save the test list in the TestResults directory
     tlist.stringFileWrite( tfile )
 
@@ -1402,7 +1405,7 @@ def unit_test_hook( loop, numrun, numdone ):
                 sys.exit(1)
 
 
-def loadExecutionTimes( tlist, plat ):
+def loadRunTimes( tlist, plat ):
     """
     For each test, a 'runtimes' file will be read (if it exists) and the
     run time for this platform extracted.  This run time is saved in the
@@ -1411,19 +1414,21 @@ def loadExecutionTimes( tlist, plat ):
     """
     pname = plat.getName()
     cplr = plat.getCompiler()
-    
+
     cache = results.LookupCache( plat.testingDirectory() )
-    
-    for t in tlist.getActiveTests():
-      
+
+    for t in tlist.getTests():
+
         # grab explicit timeout value, if the test specifies it
         tout = t.getTimeout()
-        
+
         # look for a previous runtime value
         tlen,tresult = results.get_execution_time( t, pname, cplr, cache )
-        
+
         if tlen != None:
-            
+
+            t.setAttr( 'runtime', int(tlen) )
+
             if tout == None:
                 if tresult == "timeout":
                     # for tests that timed out, make timeout much larger
@@ -1435,7 +1440,7 @@ def loadExecutionTimes( tlist, plat ):
                             tout = 4*tlen
                     else:
                         tout = 60*60
-            
+
                 else:
                     # pick timeout to allow for some runtime variability
                     if tlen < 120:
@@ -1446,7 +1451,7 @@ def loadExecutionTimes( tlist, plat ):
                         tout = int( float(tlen)*1.5 )
                     else:
                         tout = int( float(tlen)*1.3 )
-      
+
         else:  # no previous result
 
             if tout != None:
@@ -1459,13 +1464,11 @@ def loadExecutionTimes( tlist, plat ):
                 else:
                     tlen = 60*60  # one hour
                 tout = tlen
-      
-        t.setAttr( 'runtime', int(tlen) )
-        
+
         tout = int( optdict.get( '-T', tout ) )
         tout = int( float(tout) * optdict.get('--timeout-multiplier',1.0) )
         t.setAttr( 'timeout', tout )
-    
+
     cache = None
 
 
@@ -1995,7 +1998,10 @@ def restartTests( test_dir, plat, ufilter ):
         print '*** error: tests are currently running in another process'
         print '    (or a previous run crashed); use --force to run anyway'
         sys.exit(1)
-    
+
+    if qid == None:
+      loadRunTimes( tlist, plat )
+
     reld = computeRelativePath( os.path.abspath(test_dir), os.getcwd() )
     
     pruneL,cntmax = tlist.loadAndFilter( plat.getMaxProcs(),
@@ -2013,12 +2019,8 @@ def restartTests( test_dir, plat, ufilter ):
     if cntmax > 0:
         print3()
         print3( 'Note: there were', cntmax, 'tests that exceeded the',
-                'maximum number of processors on this machine - they',
-                'will not be run' )
-    
-    if qid == None:
-      loadExecutionTimes( tlist, plat )
-    
+                'maximum number of processors - they will not be run' )
+
     perms = None
     if '--perms' in optdict:
         perms = PermissionSetter( test_dir, optdict['--perms'] )

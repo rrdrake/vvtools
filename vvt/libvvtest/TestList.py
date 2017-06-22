@@ -246,7 +246,13 @@ class TestList:
         fp.close()
         
         return vers, lineL
-    
+
+    def getTests(self):
+        """
+        Returns, in a list, all tests either scanned or read from a file.
+        """
+        return self.scantests.values() + self.filetests.values()
+
     def loadAndFilter(self, maxprocs, filter_dir=None,
                             analyze_only=0, prune=False ):
         """
@@ -305,18 +311,22 @@ class TestList:
             # For execute/analyze, if an execute test exceeds the resources
             # then the entire test set is removed.
             rmD = {}
-            for t in self.active.values():
+            cntmax = 0
+            for xdir,t in self.active.items():
                 np = int( t.getParameters().get( 'np', 1 ) )
                 assert maxprocs != None
                 if np > maxprocs:
-                    k = ( t.getFilepath(), t.getName() )
-                    rmD[k] = t
-            cntmax = len(rmD)
+                    rmD[xdir] = t
+                    cntmax += 1
+                    pxdir = t.getParent()
+                    if pxdir != None:
+                        rmD[pxdir] = None
             xdL = []
             if cntmax > 0:
                 for xdir,t in self.active.items():
-                    k = ( t.getFilepath(), t.getName() )
-                    if k in rmD:
+                    pxdir = t.getParent()
+                    if ( xdir in rmD ) or  \
+                       ( pxdir != None and pxdir in rmD ):
                         xdL.append( xdir )
             for xdir in xdL:
                 self.active.pop( xdir )
@@ -351,7 +361,7 @@ class TestList:
             return False
         
         return True
-    
+
     def getActiveTests(self, sorting=''):
         """
         Get a list of the active tests (after filtering).  If 'sorting' is
