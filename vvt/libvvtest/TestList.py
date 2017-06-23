@@ -14,7 +14,7 @@ class TestList:
     file and to read from a test XML file.
     """
     
-    version = '29'
+    version = '30'
     
     def __init__(self, ufilter=None):
         
@@ -22,11 +22,9 @@ class TestList:
         self.datestamp = None
         self.finish = None
 
-        self.filetests = {}  # TestSpec xdir -> TestSpec object
-        self.scantests = {}  # TestSpec xdir -> TestSpec object
-        
+        self.tspecs = {}  # TestSpec xdir -> TestSpec object
         self.active = {}  # TestSpec xdir -> TestSpec object
-        
+
         self.xtlist = {}  # np -> list of TestExec objects
         self.started = {}  # TestSpec xdir -> TestExec object
         self.stopped = {}  # TestSpec xdir -> TestExec object
@@ -59,12 +57,9 @@ class TestList:
           datestamp = time.time()
         self.datestamp = datestamp
         fp.write( "#VVT: Date = " + time.ctime( datestamp ) + "\n\n" )
-        
-        for t in self.filetests.values():
-          fp.write( TestSpecCreator.toString(t) + os.linesep )
-        
-        for t in self.scantests.values():
-          fp.write( TestSpecCreator.toString(t) + os.linesep )
+
+        for t in self.tspecs.values():
+            fp.write( TestSpecCreator.toString(t) + os.linesep )
         
         fp.close()
     
@@ -138,15 +133,15 @@ class TestList:
             if count_entries != None:
               if xdir in count_entries: count_entries[xdir] += 1
               else:                     count_entries[xdir] = 1
-            t2 = self.scantests.get( xdir, None )
-            if t2 != None:
-              # test has been generated/refreshed from the test source;
-              # overwrite its attributes from the file read test
-              for k,v in t.getAttrs().items():
-                t2.setAttr(k,v)
+
+            t2 = self.tspecs.get( xdir, None )
+            if t2 == None:
+                self.tspecs[xdir] = t
             else:
-              # this test created from a test list, not from the test source
-              self.filetests[xdir] = t
+                # just overwrite the attributes of the previous test object
+                for k,v in t.getAttrs().items():
+                    t2.setAttr(k,v)
+                t2.addOrigin( t.getOrigin()[-1] )
 
     def getDateStamp(self, default=None):
         """
@@ -251,7 +246,7 @@ class TestList:
         """
         Returns, in a list, all tests either scanned or read from a file.
         """
-        return self.scantests.values() + self.filetests.values()
+        return self.tspecs.values()
 
     def loadAndFilter(self, maxprocs, filter_dir=None,
                             analyze_only=0, prune=False ):
@@ -273,21 +268,19 @@ class TestList:
           subdir = os.path.normpath( filter_dir )
           if subdir == '' or subdir == '.':
             subdir = None
-        
-        # tests created from the test source do not need to be refreshed
-        for xdir,t in self.scantests.items():
-          if self._apply_filters( xdir, t, subdir, analyze_only ):
-            self.active[ xdir ] = t
-        
-        # tests read from a test list file may need to be refreshed
-        for xdir,t in self.filetests.items():
-          if self._apply_filters( xdir, t, subdir, analyze_only ):
-            keep = TestSpecCreator.refreshTest( t, self.ufilter )
-            
-            del self.filetests[xdir]
-            self.scantests[xdir] = t
-            if keep:
-              self.active[ xdir ] = t
+
+        # TODO: is it possible that the filter apply before refresh could
+        #       miss a test that changed since last time and now should
+        #       be included !!
+        for xdir,t in self.tspecs.items():
+            if self._apply_filters( xdir, t, subdir, analyze_only ):
+                if 'file' in t.getOrigin():
+                    self.active[ xdir ] = t
+                else:
+                    # read from test source, which double checks filtering
+                    keep = TestSpecCreator.refreshTest( t, self.ufilter )
+                    if keep:
+                        self.active[ xdir ] = t
 
         pruneL = []
         cntmax = 0
@@ -295,7 +288,7 @@ class TestList:
             
             # remove analyze tests from the active set if they have inactive
             # children that have a bad result
-            for xdir,t in self.scantests.items()+self.filetests.items():
+            for xdir,t in self.tspecs.items():
                 pxdir = t.getParent()
                 # does this test have a parent and is this test inactive
                 if pxdir != None and xdir not in self.active:
@@ -434,10 +427,10 @@ class TestList:
         else:
           assert basedir+os.sep == d[:len(basedir)+1]
           reldir = d[len(basedir)+1:]
-        
-        # scan all files with extension "xml"; soft links to directories seem
-        # to be skipped by os.path.walk so special handling is done for them
-        
+
+        # scan files with extension "xml" or "vvt"; soft links to directories
+        # seem to be skipped by os.path.walk so special handling is performed
+
         linkdirs = []
         skipL = []
         for f in files:
@@ -497,28 +490,29 @@ class TestList:
           testL = []
         
         for t in testL:
-          # this new test is ignored if it was already read from source
-          # (or a different test source but the same relative path from root)
-          xdir = t.getExecuteDirectory()
-          t2 = self.scantests.get( xdir, None )
-          if t2 == None:
-            t3 = self.filetests.get( xdir, None )
-            if t3 != None:
-              # this test was read from a test list file; use the new test
-              # instance but take on the attributes from the test list
-              for n,v in tmp.getAttrs().items():
-                t.setAttr(n,v)
-              del self.filetests[xdir]
-            self.scantests[xdir] = t
+            # this new test is ignored if it was already read from source
+            # (or a different test source but the same relative path from root)
+            xdir = t.getExecuteDirectory()
+
+            t2 = self.tspecs.get( xdir, None )
+            if t2 == None:
+                self.tspecs[xdir] = t
+            elif 'file' in t2.getOrigin():
+                # this new test is ignored because there is a previous test
+                # (generated from a file) with the same execute directory
+                pass
+            else:
+                # existing test was read from a test list file; use the new
+                # test instance but take on the attributes from the previous
+                for n,v in t2.getAttrs().items():
+                    t.setAttr(n,v)
+                self.tspecs[xdir] = t
 
     def addTest(self, t):
         """
-        Add a test to the list.  Will overwrite an existing test.
+        Add a test to the test spec list.  Will overwrite an existing test.
         """
-        xdir = t.getExecuteDirectory()
-        self.scantests[xdir] = t
-        if self.filetests.has_key(xdir):
-          del self.filetests[xdir]
+        self.tspecs[ t.getExecuteDirectory() ] = t
     
     def createTestExecs(self, test_dir, platform, config, perms):
         """
@@ -540,9 +534,9 @@ class TestList:
         
         xtD = {}
         for t in self.active.values():
-          
-          assert self.scantests.has_key( t.getExecuteDirectory() )
-          
+
+          assert 'file' in t.getOrigin()
+
           xt = TestExec.TestExec( t, perms )
           
           np = int( t.getParameters().get('np', 0) )

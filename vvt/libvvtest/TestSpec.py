@@ -73,6 +73,16 @@ class TestSpec:
             return self.form.get( key, default[0] )
         return self.form[ key ]
 
+    def getOrigin(self):
+        """
+        Returns a list of origin strings.  If the list is empty, only the
+        constructor was called.  Origin strings:
+            "file"   : this object was constructed or refreshed from test source
+            "string" : this object was constructed using a string
+            "copy"   : this object is a copy of another object
+        """
+        return []+self.origin
+
     def getKeywords(self, result_attrs=0):
         """
         Returns the list of keyword strings.  If 'result_attrs' is true, the
@@ -256,7 +266,7 @@ class TestSpec:
     
     ##########################################################
     
-    def __init__(self, name, rootpath, filepath):
+    def __init__(self, name, rootpath, filepath, origin=None):
         """
         A test object always needs a root path and file path, where the file
         path must be a relative path name.
@@ -264,6 +274,10 @@ class TestSpec:
         assert not os.path.isabs(filepath)
         
         self.form = {}
+
+        self.origin = []  # strings, such as "file", "string", "copy"
+        if origin:
+            self.origin.append( origin )
 
         self.name = name
         self.rootpath = rootpath
@@ -331,6 +345,13 @@ class TestSpec:
                     self.form.pop( key )
             else:
                 self.form[ key ] = value
+
+    def addOrigin(self, origin):
+        """
+        Appends an origin string to the orgin list for this object.
+        """
+        assert origin
+        self.origin.append( origin )
 
     def setParent(self, parent_xdir):
         """
@@ -518,6 +539,7 @@ class TestSpec:
         except the parameters.  The new test instance is returned.
         """
         ts = TestSpec( self.name, self.rootpath, self.filepath )
+        ts.origin = self.origin + ["copy"]
         ts.form = self.__copy_dictionary( self.form )
         ts.keywords = self.__copy_list(self.keywords)
         ts.setParameters({})  # skip ts.params

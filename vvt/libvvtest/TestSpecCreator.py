@@ -119,7 +119,7 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
 
     if len(paramD) == 0:
       if ufilter.evaluate_parameters( {} ):
-        t = TestSpec.TestSpec( tname, rootpath, relpath )
+        t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
         t.setKeywords( keywords )
         testL.append(t)
     
@@ -129,7 +129,7 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
       instanceL = cartesian_product_and_filter( paramD, ufilter )
       for pdict in instanceL:
         # create the test and add to test list
-        t = TestSpec.TestSpec( tname, rootpath, relpath )
+        t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
         t.setParameters( pdict )
         t.setKeywords( keywords )
         testL.append(t)
@@ -191,7 +191,7 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
 
     if len(paramD) == 0:
         if ufilter.evaluate_parameters( {} ):
-            t = TestSpec.TestSpec( tname, rootpath, relpath )
+            t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
             t.setKeywords( keywords )
             testL.append(t)
 
@@ -201,7 +201,7 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
         instanceL = cartesian_product_and_filter( paramD, ufilter )
         for pdict in instanceL:
             # create the test and add to test list
-            t = TestSpec.TestSpec( tname, rootpath, relpath )
+            t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
             t.setParameters( pdict )
             t.setKeywords( keywords )
             testL.append(t)
@@ -409,7 +409,9 @@ def refreshTest( testobj, ufilter=None ):
 
     else:
         raise Exception( "invalid file extension: "+ext )
-    
+
+    testobj.addOrigin( 'file' )  # mark test as refreshed
+
     return keep
 
 
@@ -481,7 +483,7 @@ def fromString( strid ):
     root = qtoks.pop(0)
     path = qtoks.pop(0)
     
-    tspec = TestSpec.TestSpec( name, root, path )
+    tspec = TestSpec.TestSpec( name, root, path, "string" )
     
     if len(toks) > 0:
       params = {}
