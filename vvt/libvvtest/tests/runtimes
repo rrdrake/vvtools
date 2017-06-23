@@ -1,12 +1,16 @@
 #!/usr/bin/env python
 
-import os, sys
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
 import string, re
 import time
 import filecmp
 import shutil
 import glob
 
+# this will os.chdir() to a subdirectory
 from testutils import *
 
 import results
@@ -19,6 +23,99 @@ multifname = results.multiruntimes_filename
 
 xreader = xmlwrapper.XmlDocReader()
 
+def main():
+    """
+    """
+    argL = get_arg_list()
+
+    if len(argL) == 0:
+        argL = """test01 
+               """.split()
+
+    # set these for the pipeline tests
+    os.environ['VVTEST_BATCH_READ_DELAY'] = '5'
+    os.environ['VVTEST_BATCH_READ_DELAY_MAX'] = '15'
+    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+    
+    savedir = os.getcwd()
+    for func in argL:
+        os.chdir( savedir )
+        rmallfiles()
+        time.sleep(1)
+        print3( '====> ', func )
+        eval( func+'()' )
+
+
+#######################################################################
+
+def test01():
+    """
+    """
+    writefile( "tests/dir1/one.xml", """
+    <rtest name="one">
+      <execute>
+    sleep 1
+      </execute>
+    </rtest>""")
+    writefile( "tests/dir1/two.xml", """
+    <rtest name="two">
+      <execute>
+    sleep 2
+      </execute>
+    </rtest>""")
+    writefile( "tests/dir2/three.xml", """
+    <rtest name="three">
+      <execute>
+    sleep 3
+      </execute>
+    </rtest>""")
+
+    out,np,nd,nf,nn = run_vvtest('tests')
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+    tdir = os.path.join( os.getcwd(), results_dir() )
+    platname = platform_name(out)
+
+    # create a test source tree runtimes file but without any test results
+    tr = results.TestResults()
+    tr.writeRuntimes( 'tests', None )
+
+    # even though a rootrel directory could be determined, no runtime is available
+    tst = TestSpecCreator.createTestObjects( os.getcwd()+'/tests', 'dir1/one.xml' )[0]
+    cache = results.LookupCache( platname, 'cplr' )
+    tm,tv = cache.getRunTime( tst )
+    print "time", tm
+    assert tm == None
+
+    # re-save the testing results (this time the test rootrels can be determined)
+    # and create a multiplatform results file
+    os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
+    os.mkdir('testing')
+    run_vvtest( '-i --save-results' )
+    resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+    plat,cplr = get_platform_compiler( resultsfname )
+    ok,out = run_cmd( resultspy + ' merge '+resultsfname, directory='testing' )
+    assert ok
+
+    # leave the source tree runtimes file empty and use the multiplatform results
+    cache = results.LookupCache( plat, cplr, os.path.abspath('testing') )
+    tm,tv = cache.getRunTime( tst )
+    print "time", tm
+    assert tm != None and tm > 0 and tm < 10
+
+    # populate the test source tree runtimes file
+    tr.readResults( resultsfname )
+    tr.writeRuntimes( 'tests', None )
+
+    # a time for the test should be found from the source tree runtimes file
+    cache = results.LookupCache( platname, 'cplr' )
+    tm,tv = cache.getRunTime( tst )
+    print "time", tm
+    assert tm != None and tm > 0 and tm < 10
+
+
+############################################################################
+
 def get_platform_compiler( resultsfname ):
     """
     """
@@ -28,66 +125,6 @@ def get_platform_compiler( resultsfname ):
     return pn,cp
 
 
-#######################################################################
+########################################################################
 
-rmallfiles()
-
-writefile( "tests/dir1/one.xml", """
-<rtest name="one">
-  <execute>
-sleep 1
-  </execute>
-</rtest>""")
-writefile( "tests/dir1/two.xml", """
-<rtest name="two">
-  <execute>
-sleep 2
-  </execute>
-</rtest>""")
-writefile( "tests/dir2/three.xml", """
-<rtest name="three">
-  <execute>
-sleep 3
-  </execute>
-</rtest>""")
-
-out,np,nd,nf,nn = run_vvtest('tests')
-assert np == 3 and nd == 0 and nf == 0 and nn == 0
-
-tdir = os.path.join( os.getcwd(), results_dir() )
-platname = platform_name(out)
-
-# create a test source tree runtimes file but without any test results
-tr = results.TestResults()
-tr.writeRuntimes( 'tests', None )
-
-# even though a rootrel directory could be determined, no runtime is available
-tst = TestSpecCreator.createTestObjects( os.getcwd()+'/tests', 'dir1/one.xml' )[0]
-tm,tv = results.get_execution_time( tst, platname, 'cplr', results.LookupCache() )
-print "time", tm
-assert tm == None
-
-# re-save the testing results (this time the test rootrels can be determined)
-# and create a multiplatform results file
-os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
-os.mkdir('testing')
-run_vvtest( '-i --save-results' )
-resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
-plat,cplr = get_platform_compiler( resultsfname )
-ok,out = run_cmd( resultspy + ' merge '+resultsfname, directory='testing' )
-assert ok
-
-# leave the source tree runtimes file empty and use the multiplatform results
-tm,tv = results.get_execution_time( tst, plat, cplr,
-                                 results.LookupCache(os.getcwd()+'/testing') )
-print "time", tm
-assert tm != None and tm > 0 and tm < 10
-
-# populate the test source tree runtimes file
-tr.readResults( resultsfname )
-tr.writeRuntimes( 'tests', None )
-
-# a time for the test should be found from the source tree runtimes file
-tm,tv = results.get_execution_time( tst, platname, 'cplr', results.LookupCache() )
-print "time", tm
-assert tm != None and tm > 0 and tm < 10
+main()

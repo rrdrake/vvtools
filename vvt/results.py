@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
-import os, sys
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
 import string
 import time
 import types
@@ -3058,92 +3061,94 @@ def result_color( result ):
 
 class LookupCache:
     
-    def __init__(self, resultsdir=None):
-        
+    def __init__(self, platname, cplrname, resultsdir=None):
+        """
+        """
+        self.platname = platname
+        self.cplrname = cplrname
+
         self.multiDB = None
         if resultsdir != None:
             f = os.path.join( resultsdir, multiruntimes_filename )
             self.multiDB = MultiResults()
             if os.path.exists(f):
                 self.multiDB.readFile(f)
-        
+
         self.testDB = TestResults()
         self.srcdirs = {}  # set of directories scanned for TestResults
-        
         self.rootrelD = {}  # maps absolute path to root rel directory
 
-
-def get_execution_time(testspec, pname, cplr, cache):
-    """
-    Looks in the testing directory and the test source tree for files that
-    contain a runtime for the given test.  If an entry is not found then
-    None,None is returned.
-    
-    The 'cache' must be a LookupCache instance and should be the same instance
-    for a set of tests (which helps performance).  Also, this same cache
-    should be given/used by any approximate execution time algorithms if this
-    function fails to find a runtime for the test.
-    
-    The algorithm looks for the test in this order:
-    
-      1. The TESTING_DIRECTORY directory multiplatform results file
-      2. A test source tree runtimes file
-    """
-    
-    platid = pname+'/'+cplr
-    
-    testkey = os.path.basename( testspec.getExecuteDirectory() )
-    tdir = testspec.getDirectory()
-    
-    # the most reliable runtime will be in the testing directory, but for
-    # that we need the test root relative directory
-    
-    rootrel = cache.rootrelD.get( tdir, None )
-    
-    if rootrel == None:
-      rootrel = _file_rootrel( tdir )
-      if rootrel == None:
-        rootrel = _svn_rootrel( tdir )
-        if rootrel == None:
-          if cache.multiDB != None:
-            rootrel = cache.multiDB.getRootRelative( testkey )
-          if rootrel == None:
-            rootrel = ''  # mark this directory so we don't try again
-      cache.rootrelD[tdir] = rootrel
-    
-    tlen = None
-    result = None
-    
-    if rootrel and cache.multiDB != None:
-      tlen,result = cache.multiDB.getTime( rootrel, testkey, platid )
-    
-    if tlen == None and rootrel:
-      
-      # look for runtimes in the test source tree
-      
-      d = testspec.getDirectory()
-      if not cache.srcdirs.has_key(d):
+    def getRunTime(self, testspec):
+        """
+        Looks in the testing directory and the test source tree for files that
+        contain a runtime for the given test.  If an entry is not found then
+        None,None is returned.
         
-        while tlen == None:
-          f = os.path.join( d, runtimes_filename )
-          cache.srcdirs[d] = None
-          if os.path.exists(f):
-            try:
-              fmt,vers,hdr,nskip = read_file_header( f )
-            except:
-              fmt = None
-            if fmt and fmt == 'results':
-              cache.testDB.mergeRuntimes( f )
-              break
+        The 'cache' must be a LookupCache instance and should be the same instance
+        for a set of tests (which helps performance).  Also, this same cache
+        should be given/used by any approximate execution time algorithms if this
+        function fails to find a runtime for the test.
+        
+        The algorithm looks for the test in this order:
+        
+          1. The TESTING_DIRECTORY directory multiplatform results file
+          2. A test source tree runtimes file
+        """
+        
+        platid = self.platname+'/'+self.cplrname
+        
+        testkey = os.path.basename( testspec.getExecuteDirectory() )
+        tdir = testspec.getDirectory()
+        
+        # the most reliable runtime will be in the testing directory, but for
+        # that we need the test root relative directory
+        
+        rootrel = self.rootrelD.get( tdir, None )
+        
+        if rootrel == None:
+          rootrel = _file_rootrel( tdir )
+          if rootrel == None:
+            rootrel = _svn_rootrel( tdir )
+            if rootrel == None:
+              if self.multiDB != None:
+                rootrel = self.multiDB.getRootRelative( testkey )
+              if rootrel == None:
+                rootrel = ''  # mark this directory so we don't try again
+          self.rootrelD[tdir] = rootrel
+        
+        tlen = None
+        result = None
+        
+        if rootrel and self.multiDB != None:
+          tlen,result = self.multiDB.getTime( rootrel, testkey, platid )
+        
+        if tlen == None and rootrel:
           
-          nd = os.path.dirname(d)
-          if d == nd or not nd or nd == '/' or cache.srcdirs.has_key(nd):
-            break
-          d = nd
-      
-      tlen = cache.testDB.getTime( rootrel, testkey )
-    
-    return tlen, result
+          # look for runtimes in the test source tree
+          
+          d = testspec.getDirectory()
+          if not self.srcdirs.has_key(d):
+            
+            while tlen == None:
+              f = os.path.join( d, runtimes_filename )
+              self.srcdirs[d] = None
+              if os.path.exists(f):
+                try:
+                  fmt,vers,hdr,nskip = read_file_header( f )
+                except:
+                  fmt = None
+                if fmt and fmt == 'results':
+                  self.testDB.mergeRuntimes( f )
+                  break
+              
+              nd = os.path.dirname(d)
+              if d == nd or not nd or nd == '/' or self.srcdirs.has_key(nd):
+                break
+              d = nd
+          
+          tlen = self.testDB.getTime( rootrel, testkey )
+        
+        return tlen, result
 
 
 ########################################################################
