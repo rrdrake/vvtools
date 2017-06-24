@@ -29,7 +29,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02 test03
+        argL = """test01 test02 test03 test04 test05 test06
                """.split()
 
     # set these for the pipeline tests
@@ -201,6 +201,184 @@ def test03():
     assert len(L) == 2
     assert L[0][0] == 'AA'
     assert L[1][0] == 'BB'
+
+
+def test04():
+    """
+    runtime min/max selected tests in TestResults.*
+    """
+    writescript( "tests/AA.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(1)
+        """ )
+    writescript( "tests/BB.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(3)
+        """ )
+    writescript( "tests/CC.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(7)
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest( 'tests' )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+    tdir = os.path.abspath( results_dir() )
+    platname = platform_name(out)
+
+    # create a timings file
+    run_cmd( resultspy + ' save', directory='tests' )
+    run_vvtest( '-i --save-results', directory=tdir )
+    resultsfname = glob.glob('results.*')[0]
+    ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
+    assert ok
+
+    # select tests based on the timings file
+    remove_results()
+    out,np,nd,nf,nn = run_vvtest( '--tmax 6 tests' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    L = testlist( out )
+    assert len(L) == 2
+    assert L[0][0] == 'AA'
+    assert L[1][0] == 'BB'
+
+    # when run inside the TestResults.* directory, the test list should
+    # reflect the previous test selection;  if vvtest is run within the
+    # TestResults.* directory (and without arguments) and the test list is
+    # incorrect, then additional tests will get run;  we check that does
+    # not happen
+    os.chdir( results_dir() )
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+    # and if we force tests to rerun, only 2 should be run
+    out,np,nd,nf,nn = run_vvtest( '-R' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    L = testlist( out )
+    assert len(L) == 2
+    assert L[0][0] == 'AA'
+    assert L[1][0] == 'BB'
+
+
+def test05():
+    """
+    runtime min/max with execute/analyze tests
+    """
+    writescript( "tests/AA.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(1)
+        """ )
+    writescript( "tests/BB.vvt", """
+        #!/usr/bin/env python
+        #VVT: parameterize : planet=mercury mars venus
+        #VVT: analyze : --analyze
+        import os, sys, time
+        import script_util as vvt
+        if '--analyze' not in sys.argv:
+            if vvt.planet == 'mercury':
+                time.sleep(1)
+            elif vvt.planet == 'mars':
+                time.sleep(3)
+            elif vvt.planet == 'venus':
+                time.sleep(7)
+        else:
+            time.sleep(2)
+        """ )
+    writescript( "tests/CC.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(7)
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest( 'tests' )
+    assert np == 6 and nd == 0 and nf == 0 and nn == 0
+
+    tdir = os.path.abspath( results_dir() )
+    platname = platform_name(out)
+
+    # create a timings file
+    run_cmd( resultspy + ' save', directory='tests' )
+    run_vvtest( '-i --save-results', directory=tdir )
+    resultsfname = glob.glob('results.*')[0]
+    ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
+    assert ok
+
+    # none of the execute/analyze tests should have been selected
+    remove_results()
+    out,np,nd,nf,nn = run_vvtest( '--tmax 6 tests' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    L = testlist( out )
+    assert len(L) == 1
+    assert L[0][-1].endswith( os.sep+'AA' )
+
+    os.chdir( results_dir() )
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-R' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    L = testlist( out )
+    assert len(L) == 1
+    assert L[0][-1] == 'AA'
+
+
+def test06():
+    """
+    runtime min/max with excluding previously run tests
+    """
+    writescript( "tests/AA.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(1)
+        """ )
+    writescript( "tests/BB.vvt", """
+        #!/usr/bin/env python
+        #VVT: parameterize : planet=mercury mars venus
+        #VVT: analyze : --analyze
+        import os, sys, time
+        import script_util as vvt
+        if '--analyze' not in sys.argv:
+            if vvt.planet == 'mercury':
+                time.sleep(1)
+            elif vvt.planet == 'mars':
+                time.sleep(3)
+            elif vvt.planet == 'venus':
+                time.sleep(7)
+        else:
+            pass  # the analyze test
+        """ )
+    writescript( "tests/CC.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(7)
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest( 'tests' )
+    assert np == 6 and nd == 0 and nf == 0 and nn == 0
+
+    tdir = os.path.abspath( results_dir() )
+    platname = platform_name(out)
+
+    out,np,nd,nf,nn = run_vvtest( '--tmin 3 tests' )
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+    # check that the test list in TestResults.* directory is intact
+    out,np,nd,nf,nn = run_vvtest( '-i', directory=tdir )
+    assert np == 6 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-R --tmin 3 tests' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    L = testlist( out )
+    assert len(L) == 1
+    assert L[0][-1].endswith( os.sep+'CC' )
+
+    # check that the test list in TestResults.* directory is has old results
+    out,np,nd,nf,nn = run_vvtest( '-i', directory=tdir )
+    assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
 
 ############################################################################

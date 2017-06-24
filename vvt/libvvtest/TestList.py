@@ -269,11 +269,27 @@ class TestList:
           if subdir == '' or subdir == '.':
             subdir = None
 
-        # TODO: is it possible that the filter apply before refresh could
-        #       miss a test that changed since last time and now should
-        #       be included !!
+        rmD = {}
         for xdir,t in self.tspecs.items():
-            if self._apply_filters( xdir, t, subdir, analyze_only ):
+
+            # TODO: is it possible that the filter apply before refresh could
+            #       miss a test that changed since last time and now should
+            #       be included !!
+            keep = self._apply_filters( xdir, t, subdir, analyze_only )
+
+            if keep:
+                # apply runtime filtering
+                tm = t.getAttr( 'xtime', None )
+                if tm != None and tm < 0:
+                    tm = t.getAttr( 'runtime', None )
+                if tm != None and not self.ufilter.evaluate_runtime( tm ):
+                    keep = False
+                    rmD[ xdir ] = t
+                    pxdir = t.getParent()
+                    if pxdir != None:
+                        rmD[pxdir] = t
+
+            if keep:
                 if 'file' in t.getOrigin():
                     self.active[ xdir ] = t
                 else:
@@ -281,6 +297,20 @@ class TestList:
                     keep = TestSpecCreator.refreshTest( t, self.ufilter )
                     if keep:
                         self.active[ xdir ] = t
+
+        # remove tests that do not meet runtime requirements
+        if len(rmD) > 0:
+            for xdir,t in self.tspecs.items():
+                pxdir = t.getParent()
+                if pxdir != None and pxdir in rmD:
+                    rmD[xdir] = t
+        for xdir,t in rmD.items():
+            if xdir in self.active:
+                self.active.pop( xdir )
+            # only remove from tspecs if test was not previously selected
+            if 'string' not in t.getOrigin():
+                self.tspecs.pop( xdir )
+        rmD = None
 
         pruneL = []
         cntmax = 0
@@ -351,12 +381,6 @@ class TestList:
 
         if not self.ufilter.getAttr( 'include_tdd', False ) and \
            tspec.hasAttr( 'TDD' ):
-            return False
-
-        tm = tspec.getAttr( 'xtime', None )
-        if tm != None and tm < 0:
-            tm = tspec.getAttr( 'runtime', None )
-        if tm != None and not self.ufilter.evaluate_runtime( tm ):
             return False
 
         return True
