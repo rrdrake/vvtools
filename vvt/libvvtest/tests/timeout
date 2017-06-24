@@ -271,7 +271,7 @@ def test04():
 
 def test05():
     """
-    excercise --timeout-max option
+    excercise --max-timeout option
     """
     writescript( 'atest.vvt', """
         #!/usr/bin/env python
@@ -293,12 +293,12 @@ def test05():
     tdir = results_dir()
 
     remove_results()
-    out,np,nd,nf,nn = run_vvtest( '--timeout-max 6' )
+    out,np,nd,nf,nn = run_vvtest( '--max-timeout 6' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     assert numtimeout(out) == 1
 
     remove_results()
-    out,np,nd,nf,nn = run_vvtest( '-T 30 --timeout-max 6' )
+    out,np,nd,nf,nn = run_vvtest( '-T 30 --max-timeout 6' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     assert numtimeout(out) == 1
 
@@ -309,12 +309,12 @@ def test05():
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--pipeline --timeout-max 6' )
+        out,np,nd,nf,nn = run_vvtest( '--pipeline --max-timeout 6' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert numtimeout(out) == 1
 
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -T 30 --timeout-max 6' )
+        out,np,nd,nf,nn = run_vvtest( '--pipeline -T 30 --max-timeout 6' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert numtimeout(out) == 1
 
