@@ -287,7 +287,7 @@ class TestList:
                     rmD[ xdir ] = t
                     pxdir = t.getParent()
                     if pxdir != None:
-                        rmD[pxdir] = t
+                        rmD[pxdir] = self.tspecs.get( pxdir, None )
 
             if keep:
                 if 'file' in t.getOrigin():
@@ -299,17 +299,7 @@ class TestList:
                         self.active[ xdir ] = t
 
         # remove tests that do not meet runtime requirements
-        if len(rmD) > 0:
-            for xdir,t in self.tspecs.items():
-                pxdir = t.getParent()
-                if pxdir != None and pxdir in rmD:
-                    rmD[xdir] = t
-        for xdir,t in rmD.items():
-            if xdir in self.active:
-                self.active.pop( xdir )
-            # only remove from tspecs if test was not previously selected
-            if 'string' not in t.getOrigin():
-                self.tspecs.pop( xdir )
+        self._remove_tests( rmD )
         rmD = None
 
         pruneL = []
@@ -343,17 +333,8 @@ class TestList:
                     cntmax += 1
                     pxdir = t.getParent()
                     if pxdir != None:
-                        rmD[pxdir] = None
-            xdL = []
-            if cntmax > 0:
-                for xdir,t in self.active.items():
-                    pxdir = t.getParent()
-                    if ( xdir in rmD ) or  \
-                       ( pxdir != None and pxdir in rmD ):
-                        xdL.append( xdir )
-            for xdir in xdL:
-                self.active.pop( xdir )
-            xdL = None
+                        rmD[pxdir] = self.tspecs.get( pxdir, None )
+            self._remove_tests( rmD )
             rmD = None
 
         return pruneL, cntmax
@@ -384,6 +365,31 @@ class TestList:
             return False
 
         return True
+
+    def _remove_tests(self, removeD, popactive=True, poplist=True):
+        """
+        The 'removeD' should be a dict mapping xdir to TestSpec.  Those tests
+        will be removed from self.tspecs and self.active sets.  Also, all
+        children tests of parents who are in 'removeD' will be removed.
+        """
+        if len(removeD) > 0:
+
+            # add child tests whose parent is to be removed
+            for xdir,t in self.tspecs.items():
+                pxdir = t.getParent()
+                if pxdir != None and pxdir in removeD:
+                    removeD[xdir] = t
+
+            # perform the removal
+            for xdir,t in removeD.items():
+                if popactive:
+                    if xdir in self.active:
+                        self.active.pop( xdir )
+                if poplist:
+                    if xdir in self.tspecs:
+                        # don't remove if test was previously selected
+                        if t == None or 'string' not in t.getOrigin():
+                            self.tspecs.pop( xdir )
 
     def getActiveTests(self, sorting=''):
         """

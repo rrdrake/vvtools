@@ -90,10 +90,9 @@ def test01():
     tst = TestSpecCreator.createTestObjects( os.getcwd()+'/tests', 'dir1/one.xml' )[0]
     cache = results.LookupCache( platname, 'cplr' )
     tm,tv = cache.getRunTime( tst )
-    print "time", tm
     assert tm == None
 
-    # re-save the testing results (this time the test rootrels can be determined)
+    # re-save the testing results (this time the test rootrel can be determined)
     # and create a multiplatform results file
     os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
     os.mkdir('testing')
@@ -106,7 +105,6 @@ def test01():
     # leave the source tree runtimes file empty and use the multiplatform results
     cache = results.LookupCache( plat, cplr, os.path.abspath('testing') )
     tm,tv = cache.getRunTime( tst )
-    print "time", tm
     assert tm != None and tm > 0 and tm < 10
 
     # populate the test source tree runtimes file
@@ -116,7 +114,6 @@ def test01():
     # a time for the test should be found from the source tree runtimes file
     cache = results.LookupCache( platname, 'cplr' )
     tm,tv = cache.getRunTime( tst )
-    print "time", tm
     assert tm != None and tm > 0 and tm < 10
 
 
@@ -202,6 +199,30 @@ def test03():
     assert L[0][0] == 'AA'
     assert L[1][0] == 'BB'
 
+    if platname in batchplatforms:
+        remove_results()
+        os.remove( 'timings' )
+
+        # without a runtimes available, all tests should run
+        out,np,nd,nf,nn = run_vvtest( '--pipeline --tmax 6 tests' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+        # create a timings file
+        run_cmd( resultspy + ' save', directory='tests' )
+        run_vvtest( '-i --save-results', directory=tdir )
+        resultsfname = glob.glob('results.*')[0]
+        ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
+        assert ok
+
+        # select tests based on the timings file
+        remove_results()
+        out,np,nd,nf,nn = run_vvtest( '--pipeline --tmax 6 tests' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        L = testlist( out )
+        assert len(L) == 2
+        assert L[0][0] == 'AA'
+        assert L[1][0] == 'BB'
+
 
 def test04():
     """
@@ -250,17 +271,50 @@ def test04():
     # TestResults.* directory (and without arguments) and the test list is
     # incorrect, then additional tests will get run;  we check that does
     # not happen
-    os.chdir( results_dir() )
-    out,np,nd,nf,nn = run_vvtest()
+    out,np,nd,nf,nn = run_vvtest( directory=tdir )
     assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
     # and if we force tests to rerun, only 2 should be run
-    out,np,nd,nf,nn = run_vvtest( '-R' )
+    out,np,nd,nf,nn = run_vvtest( '-R', directory=tdir )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     L = testlist( out )
     assert len(L) == 2
     assert L[0][0] == 'AA'
     assert L[1][0] == 'BB'
+
+    if platname in batchplatforms:
+        remove_results()
+        os.remove( 'timings' )
+
+        out,np,nd,nf,nn = run_vvtest( '--pipeline tests' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+        # create a timings file
+        run_cmd( resultspy + ' save', directory='tests' )
+        run_vvtest( '-i --save-results', directory=tdir )
+        resultsfname = glob.glob('results.*')[0]
+        ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
+        assert ok
+
+        # select tests based on the timings file
+        remove_results()
+        out,np,nd,nf,nn = run_vvtest( '--pipeline --tmax 6 tests' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        L = testlist( out )
+        assert len(L) == 2
+        assert L[0][0] == 'AA'
+        assert L[1][0] == 'BB'
+
+        out,np,nd,nf,nn = run_vvtest( '--pipeline', directory=tdir )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        # and if we force tests to rerun, only 2 should be run
+        out,np,nd,nf,nn = run_vvtest( '--pipeline -R', directory=tdir )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        L = testlist( out )
+        assert len(L) == 2
+        assert L[0][0] == 'AA'
+        assert L[1][0] == 'BB'
 
 
 def test05():
@@ -315,15 +369,45 @@ def test05():
     assert len(L) == 1
     assert L[0][-1].endswith( os.sep+'AA' )
 
-    os.chdir( results_dir() )
-    out,np,nd,nf,nn = run_vvtest()
+    out,np,nd,nf,nn = run_vvtest( directory=tdir )
     assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-R' )
+    out,np,nd,nf,nn = run_vvtest( '-R', directory=tdir )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     L = testlist( out )
     assert len(L) == 1
     assert L[0][-1] == 'AA'
+
+    if platname in batchplatforms:
+        remove_results()
+        os.remove( 'timings' )
+
+        out,np,nd,nf,nn = run_vvtest( '--pipeline tests' )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+
+        # create a timings file
+        run_cmd( resultspy + ' save', directory='tests' )
+        run_vvtest( '-i --save-results', directory=tdir )
+        resultsfname = glob.glob('results.*')[0]
+        ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
+        assert ok
+
+        # none of the execute/analyze tests should have been selected
+        remove_results()
+        out,np,nd,nf,nn = run_vvtest( '--pipeline --tmax 6 tests' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        L = testlist( out )
+        assert len(L) == 1
+        assert L[0][-1].endswith( os.sep+'AA' )
+
+        out,np,nd,nf,nn = run_vvtest( '--pipeline', directory=tdir )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = run_vvtest( '--pipeline -R', directory=tdir )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        L = testlist( out )
+        assert len(L) == 1
+        assert L[0][-1] == 'AA'
 
 
 def test06():
@@ -379,6 +463,29 @@ def test06():
     # check that the test list in TestResults.* directory has old results
     out,np,nd,nf,nn = run_vvtest( '-i', directory=tdir )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
+
+    if platname in batchplatforms:
+        remove_results()
+
+        out,np,nd,nf,nn = run_vvtest( '--pipeline tests' )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = run_vvtest( '--pipeline --tmin 3 tests' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        # check that the test list in TestResults.* directory is intact
+        out,np,nd,nf,nn = run_vvtest( '-i', directory=tdir )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = run_vvtest( '--pipeline -R --tmin 3 tests' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        L = testlist( out )
+        assert len(L) == 1
+        assert L[0][-1].endswith( os.sep+'CC' )
+
+        # check that the test list in TestResults.* directory has old results
+        out,np,nd,nf,nn = run_vvtest( '-i', directory=tdir )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
 
 def test07():
