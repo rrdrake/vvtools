@@ -410,7 +410,11 @@ class TestList:
                     elif c == 'x':
                         L.append( t.getExecuteDirectory() )
                     elif c == 't':
-                        tm = t.getAttr( 'xtime', t.getAttr( 'runtime', 0 ) )
+                        tm = t.getAttr( 'xtime', None )
+                        if tm != None and tm < 0:
+                            tm = t.getAttr( 'runtime', None )
+                        if tm == None:
+                            tm = 0
                         L.append( tm )
                     elif c == 'd':
                         L.append( t.getAttr( 'xdate', 0 ) )
@@ -577,9 +581,7 @@ class TestList:
           
           xtD[ t.getExecuteDirectory() ] = xt
         
-        # put tests with the "fast" keyword first in each list; this is to try
-        # to avoid launching long running tests at the end of the sequence
-        # which can add significantly to the total run time
+        # sort tests longest running first; 
         self.sortTestExecList()
         
         # add children tests to parent tests
@@ -593,17 +595,25 @@ class TestList:
     
     def sortTestExecList(self):
         """
-        put tests with the "fast" keyword first in each TestExec list
+        Sort the TestExec objects by runtime, descending order.  This is so
+        popNext() will try to avoid launching long running tests at the end
+        of the testing sequence, which can add significantly to the total wall
+        time.
         """
         for np,L in self.xtlist.items():
-          newL = []
-          longL = []
-          for tx in L:
-            if tx.atest.hasKeyword('fast'): newL.append(tx)
-            else:                           longL.append(tx)
-          newL.extend(longL)
-          self.xtlist[np] = newL
-    
+            sortL = []
+            for tx in L:
+                t = tx.atest
+                tm = t.getAttr( 'xtime', None )
+                if tm != None and tm < 0:
+                    tm = t.getAttr( 'runtime', None )
+                if tm == None:
+                    tm = 0
+                sortL.append( (tm,tx) )
+            sortL.sort()
+            sortL.reverse()
+            L[:] = [ tx for tm,tx in sortL ]
+
     def getTestExecProcList(self):
         """
         Returns a list of integers; each integer is the number of processors
@@ -640,14 +650,11 @@ class TestList:
         npL.sort()
         npL.reverse()
 
-        # look for non-fast tests of highest num procs first
-        tx = self._pop_next_test( npL, platform, 'fast' )
-        if tx == None:
-            # same search but fast is ok
-            tx = self._pop_next_test( npL, platform )
-            if tx == None and len(self.started) == 0:
-                # search for tests that need more processors than platform has
-                tx = self._pop_next_test( npL )
+        # find longest runtime test such that the num procs is available
+        tx = self._pop_next_test( npL, platform )
+        if tx == None and len(self.started) == 0:
+            # search for tests that need more processors than platform has
+            tx = self._pop_next_test( npL )
 
         if tx != None:
             self.started[ tx.atest.getExecuteDirectory() ] = tx
@@ -697,7 +704,7 @@ class TestList:
         """
         return len(self.started)
 
-    def _pop_next_test(self, npL, platform=None, notkey=None):
+    def _pop_next_test(self, npL, platform=None):
         """
         """
         for np in npL:
@@ -707,10 +714,9 @@ class TestList:
                 i = 0
                 while i < N:
                     tx = tL[i]
-                    if notkey == None or not tx.atest.hasKeyword(notkey):
-                        if self._children_ok( tx ):
-                            self._pop_test_exec( np, i )
-                            return tx
+                    if self._children_ok( tx ):
+                        self._pop_test_exec( np, i )
+                        return tx
                     i += 1
         return None
 

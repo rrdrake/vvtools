@@ -29,7 +29,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02 test03 test04 test05 test06
+        argL = """test01 test02 test03 test04 test05 test06 test07
                """.split()
 
     # set these for the pipeline tests
@@ -376,9 +376,61 @@ def test06():
     assert len(L) == 1
     assert L[0][-1].endswith( os.sep+'CC' )
 
-    # check that the test list in TestResults.* directory is has old results
+    # check that the test list in TestResults.* directory has old results
     out,np,nd,nf,nn = run_vvtest( '-i', directory=tdir )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
+
+
+def test07():
+    """
+    test should be run by longest runtime first
+    """
+    writescript( "tests/AA.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(5)
+        """ )
+    writescript( "tests/BB.vvt", """
+        #!/usr/bin/env python
+        #VVT: parameterize : planet=mercury mars venus
+        #VVT: analyze : --analyze
+        import os, sys, time
+        import script_util as vvt
+        if '--analyze' not in sys.argv:
+            if vvt.planet == 'mercury':
+                time.sleep(1)
+            elif vvt.planet == 'mars':
+                time.sleep(3)
+            elif vvt.planet == 'venus':
+                time.sleep(7)
+        else:
+            pass  # the analyze test
+        """ )
+    writescript( "tests/CC.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(10)
+        """ )
+
+    # run first to get the timings
+    out,np,nd,nf,nn = run_vvtest( 'tests' )
+    assert np == 6 and nd == 0 and nf == 0 and nn == 0
+
+    tdir = os.path.abspath( results_dir() )
+    platname = platform_name(out)
+
+    # run again one at a time and check the execution order
+    out,np,nd,nf,nn = run_vvtest( '-n 1 -R tests' )
+    assert np == 6 and nd == 0 and nf == 0 and nn == 0
+
+    L = grep( out, 'Starting: ' )
+    assert len(L) == 6
+    assert L[0].split()[1].endswith( os.sep+'CC' )
+    assert L[1].split()[1].endswith( os.sep+'BB.planet=venus' )
+    assert L[2].split()[1].endswith( os.sep+'AA' )
+    assert L[3].split()[1].endswith( os.sep+'BB.planet=mars' )
+    assert L[4].split()[1].endswith( os.sep+'BB.planet=mercury' )
+    assert L[5].split()[1].endswith( os.sep+'BB' )
 
 
 ############################################################################
