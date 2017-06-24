@@ -352,7 +352,13 @@ class TestList:
         if not self.ufilter.getAttr( 'include_tdd', False ) and \
            tspec.hasAttr( 'TDD' ):
             return False
-        
+
+        tm = tspec.getAttr( 'xtime', None )
+        if tm != None and tm < 0:
+            tm = tspec.getAttr( 'runtime', None )
+        if tm != None and not self.ufilter.evaluate_runtime( tm ):
+            return False
+
         return True
 
     def getActiveTests(self, sorting=''):

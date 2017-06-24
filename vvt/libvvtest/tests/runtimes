@@ -29,7 +29,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 
+        argL = """test01 test02 test03
                """.split()
 
     # set these for the pipeline tests
@@ -40,6 +40,11 @@ def main():
     savedir = os.getcwd()
     for func in argL:
         os.chdir( savedir )
+
+        # force the results files to be written locally for testing here;
+        # it is used in vvtest when handling the --save-results option
+        os.environ['TESTING_DIRECTORY'] = os.getcwd()
+
         rmallfiles()
         time.sleep(1)
         print3( '====> ', func )
@@ -50,25 +55,26 @@ def main():
 
 def test01():
     """
+    create and use a runtimes file
     """
     writefile( "tests/dir1/one.xml", """
-    <rtest name="one">
-      <execute>
-    sleep 1
-      </execute>
-    </rtest>""")
+        <rtest name="one">
+          <execute>
+            sleep 1
+          </execute>
+        </rtest>""")
     writefile( "tests/dir1/two.xml", """
-    <rtest name="two">
-      <execute>
-    sleep 2
-      </execute>
-    </rtest>""")
+        <rtest name="two">
+          <execute>
+            sleep 2
+          </execute>
+        </rtest>""")
     writefile( "tests/dir2/three.xml", """
-    <rtest name="three">
-      <execute>
-    sleep 3
-      </execute>
-    </rtest>""")
+        <rtest name="three">
+          <execute>
+            sleep 3
+          </execute>
+        </rtest>""")
 
     out,np,nd,nf,nn = run_vvtest('tests')
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
@@ -112,6 +118,89 @@ def test01():
     tm,tv = cache.getRunTime( tst )
     print "time", tm
     assert tm != None and tm > 0 and tm < 10
+
+
+def test02():
+    """
+    exercise runtime min/max with TestResults.* timings
+    """
+    writescript( "AA.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(1)
+        """ )
+    writescript( "BB.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(3)
+        """ )
+    writescript( "CC.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(7)
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-i' )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-i --tmax 6' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    assert len( grep( out, 'AA' ) ) == 1
+    assert len( grep( out, 'BB' ) ) == 1
+    assert len( grep( out, 'CC' ) ) == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-i --tmin 3' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    assert len( grep( out, 'AA' ) ) == 0
+    assert len( grep( out, 'BB' ) ) == 1
+    assert len( grep( out, 'CC' ) ) == 1
+
+
+def test03():
+    """
+    exercise runtime min/max using a timings file
+    """
+    writescript( "tests/AA.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(1)
+        """ )
+    writescript( "tests/BB.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(3)
+        """ )
+    writescript( "tests/CC.vvt", """
+        #!/usr/bin/env python
+        import os, sys, time
+        time.sleep(7)
+        """ )
+
+    # without a runtimes available, all tests should run
+    out,np,nd,nf,nn = run_vvtest( '--tmax 6 tests' )
+    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+    tdir = os.path.abspath( results_dir() )
+    platname = platform_name(out)
+
+    # create a timings file
+    run_cmd( resultspy + ' save', directory='tests' )
+    run_vvtest( '-i --save-results', directory=tdir )
+    resultsfname = glob.glob('results.*')[0]
+    ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
+    assert ok
+
+    # select tests based on the timings file
+    remove_results()
+    out,np,nd,nf,nn = run_vvtest( '--tmax 6 tests' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    L = testlist( out )
+    assert len(L) == 2
+    assert L[0][0] == 'AA'
+    assert L[1][0] == 'BB'
 
 
 ############################################################################

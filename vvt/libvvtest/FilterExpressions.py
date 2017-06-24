@@ -23,6 +23,7 @@ class ExpressionSet:
        'search_patterns',  # list of regex patterns for seaching within files
        'include_tdd',      # if True, tests marked TDD are not excluded
        'include_all',      # boolean to turn off test inclusion filtering
+       'runtime_range',    # [ minimum runtime, maximum runtime ]
     ]
     
     def __init__(self, **kwargs ):
@@ -202,6 +203,20 @@ class ExpressionSet:
                   pass
         
         return 0
+
+    def evaluate_runtime(self, test_runtime):
+        """
+        If a runtime range is specified in this object, the given runtime is
+        evaluated against that range.  False is returned only if the given
+        runtime is outside the specified range.
+        """
+        mn,mx = self.attrs.get( 'runtime_range', [None,None] )
+        if mn != None and test_runtime < mn:
+            return False
+        if mx != None and test_runtime > mx:
+            return False
+
+        return True
     
     def _equals_platform(self, platname):
         n = self.attrs.get('platform_name',None)

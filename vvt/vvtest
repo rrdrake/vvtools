@@ -2003,7 +2003,7 @@ def restartTests( test_dir, plat, ufilter ):
         sys.exit(1)
 
     if qid == None:
-      loadRunTimes( tlist, plat )
+        loadRunTimes( tlist, plat )
 
     reld = computeRelativePath( os.path.abspath(test_dir), os.getcwd() )
     
@@ -2270,6 +2270,7 @@ def parseOptionsAndGenerateOptionDictionary():
                 'timeout-multiplier=', 'postclean',
                 'vg', 'config=', 'perms=', 'sort=', 'force',
                 'save-results', 'results-tag=','results-date=',
+                'tmin=', 'tmax=',
               ]
     import getopt
     try: opts, dirs = getopt.getopt( argL, singles, longopts=doubles )
@@ -2560,13 +2561,30 @@ def parseOptionsAndGenerateOptionDictionary():
           sys.stderr.write('*** ' + exeName + \
                ': error: the --timeout-multiplier option must be ' + \
                'followd by a number\n')
-          sys.exit(1);
+          sys.exit(1)
       if val <= 0.0:
         sys.stderr.write('*** ' + exeName + \
              ': error: the --timeout-multiplier option must be ' + \
              'followd by a positive number\n')
-        sys.exit(1);
+        sys.exit(1)
       optdict['--timeout-multiplier'] = val
+
+    if '--tmin' in optdict:
+        try:
+            mn = float( optdict['--tmin'][-1] )
+        except:
+            sys.stderr.write('*** ' + exeName + \
+                ': error: the --tmin option must be a number\n' )
+            sys.exit(1)
+        optdict['--tmin'] = mn
+    if '--tmax' in optdict:
+        try:
+            mx = float( optdict['--tmax'][-1] )
+        except:
+            sys.stderr.write('*** ' + exeName + \
+                ': error: the --tmax option must be a number\n' )
+            sys.exit(1)
+        optdict['--tmax'] = mx
      
     # collapse the list of length one for single argument options
     
@@ -2688,7 +2706,9 @@ if __name__ == '__main__':
                 platform_expr_list=optdict.get('-x', None),
                 search_file_globs=search_fnmatch,
                 search_patterns=optdict.get('-s',None),
-                include_tdd='--include-tdd' in optdict )
+                include_tdd='--include-tdd' in optdict,
+                runtime_range=[optdict.get('--tmin',None),
+                               optdict.get('--tmax',None)] )
   if optdict.has_key('--qsub-id'):
     ufilter.setAttr( 'include_all', True )
   
