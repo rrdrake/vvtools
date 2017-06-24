@@ -2269,7 +2269,7 @@ def parseOptionsAndGenerateOptionDictionary():
                 'timeout-multiplier=', 'postclean',
                 'vg', 'config=', 'perms=', 'sort=', 'force',
                 'save-results', 'results-tag=','results-date=',
-                'tmin=', 'tmax=',
+                'tmin=', 'tmax=', 'tsum=',
               ]
     import getopt
     try: opts, dirs = getopt.getopt( argL, singles, longopts=doubles )
@@ -2584,6 +2584,14 @@ def parseOptionsAndGenerateOptionDictionary():
                 ': error: the --tmax option must be a number\n' )
             sys.exit(1)
         optdict['--tmax'] = mx
+    if '--tsum' in optdict:
+        try:
+            sm = float( optdict['--tsum'][-1] )
+        except:
+            sys.stderr.write('*** ' + exeName + \
+                ': error: the --tsum option must be a number\n' )
+            sys.exit(1)
+        optdict['--tsum'] = sm
      
     # collapse the list of length one for single argument options
     
@@ -2707,7 +2715,8 @@ if __name__ == '__main__':
                 search_patterns=optdict.get('-s',None),
                 include_tdd='--include-tdd' in optdict,
                 runtime_range=[optdict.get('--tmin',None),
-                               optdict.get('--tmax',None)] )
+                               optdict.get('--tmax',None)],
+                runtime_sum=optdict.get( '--tsum', None ) )
   if optdict.has_key('--qsub-id'):
     ufilter.setAttr( 'include_all', True )
   

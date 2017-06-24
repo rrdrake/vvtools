@@ -24,6 +24,7 @@ class ExpressionSet:
        'include_tdd',      # if True, tests marked TDD are not excluded
        'include_all',      # boolean to turn off test inclusion filtering
        'runtime_range',    # [ minimum runtime, maximum runtime ]
+       'runtime_sum',      # maximum accumulated runtime
     ]
     
     def __init__(self, **kwargs ):

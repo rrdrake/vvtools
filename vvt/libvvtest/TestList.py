@@ -279,9 +279,7 @@ class TestList:
 
             if keep:
                 # apply runtime filtering
-                tm = t.getAttr( 'xtime', None )
-                if tm != None and tm < 0:
-                    tm = t.getAttr( 'runtime', None )
+                tm = testruntime(t)
                 if tm != None and not self.ufilter.evaluate_runtime( tm ):
                     keep = False
                     rmD[ xdir ] = t
@@ -300,6 +298,36 @@ class TestList:
 
         # remove tests that do not meet runtime requirements
         self._remove_tests( rmD )
+
+        rtsum = self.ufilter.getAttr( 'runtime_sum', None )
+        if rtsum != None:
+            # filter by cummulative runtime; first, generate list with times
+            rmD.clear()
+            tL = []
+            for xdir,t in self.active.items():
+                tm = testruntime(t)
+                if tm == None: tm = 0
+                tL.append( (tm,xdir,t) )
+            tL.sort()
+            # accumulate tests until allowed runtime is exceeded
+            tsum = 0.
+            i = 0 ; n = len(tL)
+            while i < n:
+                tm,xdir,t = tL[i]
+                tsum += tm
+                if tsum > rtsum:
+                    break
+                i += 1
+            # put the rest of the tests in the remove dict
+            while i < n:
+                tm,xdir,t = tL[i]
+                rmD[xdir] = t
+                pxdir = t.getParent()
+                if pxdir != None:
+                    rmD[pxdir] = self.tspecs.get( pxdir, None )
+                i += 1
+            tL = None
+            self._remove_tests( rmD )
         rmD = None
 
         pruneL = []
@@ -416,11 +444,8 @@ class TestList:
                     elif c == 'x':
                         L.append( t.getExecuteDirectory() )
                     elif c == 't':
-                        tm = t.getAttr( 'xtime', None )
-                        if tm != None and tm < 0:
-                            tm = t.getAttr( 'runtime', None )
-                        if tm == None:
-                            tm = 0
+                        tm = testruntime(t)
+                        if tm == None: tm = 0
                         L.append( tm )
                     elif c == 'd':
                         L.append( t.getAttr( 'xdate', 0 ) )
@@ -610,11 +635,8 @@ class TestList:
             sortL = []
             for tx in L:
                 t = tx.atest
-                tm = t.getAttr( 'xtime', None )
-                if tm != None and tm < 0:
-                    tm = t.getAttr( 'runtime', None )
-                if tm == None:
-                    tm = 0
+                tm = testruntime(t)
+                if tm == None: tm = 0
                 sortL.append( (tm,tx) )
             sortL.sort()
             sortL.reverse()
@@ -758,3 +780,13 @@ def is_subdir(parent_dir, subdir):
     if ls > lp and parent_dir + '/' == subdir[0:lp+1]:
       return subdir[lp+1:]
     return None
+
+def testruntime( testobj ):
+    """
+    Get and return the test 'xtime'.  If that was not set, then get the
+    'runtime'.  If neither are set, then return None.
+    """
+    tm = testobj.getAttr( 'xtime', None )
+    if tm == None or tm < 0:
+        tm = testobj.getAttr( 'runtime', None )
+    return tm
