@@ -1470,6 +1470,11 @@ def loadRunTimes( tlist, plat ):
 
         tout = int( optdict.get( '-T', tout ) )
         tout = int( float(tout) * optdict.get('--timeout-multiplier',1.0) )
+
+        mx =optdict.get( '--timeout-max', 0 )
+        if mx > 0:
+            tout = min( tout, mx )
+
         t.setAttr( 'timeout', tout )
 
     cache = None
@@ -1628,6 +1633,10 @@ class Pipelines:
             qtime *= 2
           else:
             qtime = int( float(qtime) * 1.3 )
+
+        mx =optdict.get( '--timeout-max', 0 )
+        if mx > 0:
+            qtime = min( qtime, mx )
         
         npD[qnumber] = maxnp
         pout = self.filename( 'pipe-out', qnumber )
@@ -2266,7 +2275,7 @@ def parseOptionsAndGenerateOptionDictionary():
                 'qsub-id=', 'qsub-limit=', 'qsub-length=',
                 'html', 'junit=', 'check=', 'analyze', 'cdir=',
                 'search=', 'extract=', 'include-tdd',
-                'timeout-multiplier=', 'postclean',
+                'timeout-multiplier=', 'timeout-max=', 'postclean',
                 'vg', 'config=', 'perms=', 'sort=', 'force',
                 'save-results', 'results-tag=','results-date=',
                 'tmin=', 'tmax=', 'tsum=',
@@ -2567,6 +2576,16 @@ def parseOptionsAndGenerateOptionDictionary():
              'followd by a positive number\n')
         sys.exit(1)
       optdict['--timeout-multiplier'] = val
+
+    if '--timeout-max' in optdict:
+        try:
+            val = float( optdict['--timeout-max'][-1] )
+            assert val > 0
+        except:
+            sys.stderr.write('*** ' + exeName + \
+               ': error: the --timeout-max option must be a positive number\n' )
+            sys.exit(1)
+        optdict['--timeout-max'] = val
 
     if '--tmin' in optdict:
         try:
