@@ -45,7 +45,7 @@ def main():
                   over1 over2 over3 over4 over5 over6
                   err1 err2 err3
                   cmdline1 cmdline2 cmdline3 cmdline4 cmdline5 cmdline6
-                    cmdline7
+                    cmdline7 cmdline8
                """.split()
 
     for func in argL:
@@ -990,7 +990,7 @@ def cmdline5():
     sshprog,sshmach = get_ssh_pair()
 
     out = runout( localpy+' '+srcdir+'/filesync.py --sshexe '+sshprog + \
-                  ' -p "*.csv" -p "*2.*"' + \
+                  ' -g "*.csv" -g "*2.*"' + \
                   ' ' + sshmach+':'+sdir + ' ' + tgt )
     #print3( out )
 
@@ -1064,6 +1064,49 @@ def cmdline7():
 
     out = runout( localpy+' '+srcdir+'/filesync.py --sshexe '+sshprog + \
                   ' --perms g+w --perms o+r' + \
+                  ' ' + sshmach+':'+sdir + ' ' + tgt )
+    #print3( out )
+    time.sleep(1)
+
+    assert os.path.isfile( 'targetdir/file.txt' )
+    assert os.path.isfile( 'targetdir/file2.txt' )
+    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+    assert abs( os.path.getmtime('subdir/file.txt') -
+                os.path.getmtime('targetdir/file.txt') ) < 2
+    assert abs( os.path.getmtime('subdir/file2.txt') -
+                os.path.getmtime('targetdir/file2.txt') ) < 2
+
+    assert     has_fmode( 'targetdir/file.txt', stat.S_IRGRP )
+    assert     has_fmode( 'targetdir/file.txt', stat.S_IWGRP )
+    assert not has_fmode( 'targetdir/file2.txt', stat.S_IRGRP )
+    assert     has_fmode( 'targetdir/file2.txt', stat.S_IWGRP )
+    assert     has_fmode( 'targetdir/file.txt', stat.S_IROTH )
+    assert not has_fmode( 'targetdir/file.txt', stat.S_IWOTH )
+    assert     has_fmode( 'targetdir/file2.txt', stat.S_IROTH )
+    assert not has_fmode( 'targetdir/file2.txt', stat.S_IWOTH )
+
+
+def cmdline8():
+    """
+    local to remote, using command line, with whitespace separated perms
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    os.mkdir( 'targetdir' )
+    tgt = os.path.abspath( 'targetdir' )
+
+    writefile( 'subdir/file.txt', "my file\n" )
+    writefile( 'subdir/file2.txt', "my file2\n" )
+    sdir = os.path.abspath( 'subdir' )
+    t = time.time() - 600  # make modification & access time 10 minutes ago
+    os.utime( 'subdir/file2.txt', (t,t) )
+    assert sp.call( 'chmod 0644 subdir/file.txt', shell=True ) == 0
+    assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
+    time.sleep(1)
+
+    out = runout( localpy+' '+srcdir+'/filesync.py --sshexe '+sshprog + \
+                  ' --perms "g+w o+r"' + \
                   ' ' + sshmach+':'+sdir + ' ' + tgt )
     #print3( out )
     time.sleep(1)

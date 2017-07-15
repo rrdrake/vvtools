@@ -226,7 +226,7 @@ def my_user_name():
     return pwd.getpwuid( uid )[0]
 
 
-def apply_spec( path, *spec ):
+def apply_chmod( path, *spec ):
     """
     Change the group and/or the file mode permissions of the given file 'path'.
     The 'spec' argument(s) must be one or more string specifications.  If a
@@ -250,6 +250,35 @@ def apply_spec( path, *spec ):
 
         if len(mL) > 0:
             os.chmod( path, change_filemode( filemode( path ), *mL ) )
+
+
+def chmod_recurse( path, filespecs=[], dirspecs=[], setgroup=None):
+    """
+    Applies 'filespecs' to files and 'dirspecs' to directories.  Each spec
+    is the same as for change_filemode(), such as
+
+        u+x   : add execute for owner
+        g-w   : remove write for group
+        o=--- : set other to no read, no write, no execute
+
+    Recurses into directories.  Sets the file group if 'setgroup' is given.
+    Ignores soft links.
+    """
+    if os.path.islink( path ):
+        pass
+    elif os.path.isdir( path ):
+        if setgroup:
+            change_group( path, setgroup )
+        if dirspecs:
+            os.chmod( path, change_filemode( filemode( path ), *dirspecs ) )
+        for f in os.listdir( path ):
+            fp = os.path.join( path, f )
+            chmod_recurse( fp, filespecs, dirspecs, setgroup )
+    else:
+        if filespecs:
+            os.chmod( path, change_filemode( filemode( path ), *filespecs ) )
+        if setgroup:
+            change_group( path, setgroup )
 
 
 ##############################################################################

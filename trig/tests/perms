@@ -30,6 +30,7 @@ def main():
                   own1 group1
                   apply1 apply2
                   fname1
+                  recurse1 recurse2 recurse3 recurse4
                """.split()
 
     for func in argL:
@@ -287,58 +288,55 @@ def fmode3():
 
 def apply1():
     """
-    apply_spec() with single spec
+    apply_chmod() with single spec
     """
     # determine a group name to test with
     writefile( 'afile', 'contents' )
     time.sleep(1)
     grp = perms.filegroup( 'afile' )
     assert grp != None, "cannot determine a group name to test with"
-
-    writefile( 'afile', 'contents' )
     time.sleep(1)
+
     assert perms.permission( 'afile', 'group x' ) == False
 
-    perms.apply_spec( 'afile', 'g+x' )
+    perms.apply_chmod( 'afile', 'g+x' )
     time.sleep(1)
     assert perms.permission( 'afile', 'group x' ) == True
 
-    perms.apply_spec( 'afile', 'g-x' )
+    perms.apply_chmod( 'afile', 'g-x' )
     time.sleep(1)
     assert perms.permission( 'afile', 'group x' ) == False
 
-    perms.apply_spec( 'afile', 'g=r-x' )
+    perms.apply_chmod( 'afile', 'g=r-x' )
     time.sleep(1)
     assert perms.permission( 'afile', 'group r-x' ) == True
 
-    perms.apply_spec( 'afile', 'g=rw-' )
+    perms.apply_chmod( 'afile', 'g=rw-' )
     time.sleep(1)
     assert perms.permission( 'afile', 'group rw-' ) == True
 
-    perms.apply_spec( 'afile', grp )
+    perms.apply_chmod( 'afile', grp )
     time.sleep(1)
     assert grp == perms.filegroup( 'afile' )
 
 
 def apply2():
     """
-    apply_spec() with multiple specs
+    apply_chmod() with multiple specs
     """
     # determine a group name to test with
     writefile( 'afile', 'contents' )
     time.sleep(1)
     grp = perms.filegroup( 'afile' )
     assert grp != None, "cannot determine a group name to test with"
-
-    writefile( 'afile', 'contents' )
     time.sleep(1)
 
-    perms.apply_spec( 'afile', 'u=r--', grp, 'o=---' )
+    perms.apply_chmod( 'afile', 'u=r--', grp, 'o=---' )
     time.sleep(1)
     assert perms.permission( 'afile', 'owner r--' ) == True
     assert perms.permission( 'afile', 'world ---' ) == True
 
-    perms.apply_spec( 'afile', 'u+w', grp, 'o+r' )
+    perms.apply_chmod( 'afile', 'u+w', grp, 'o+r' )
     time.sleep(1)
     assert perms.permission( 'afile', 'owner rw-' ) == True
     assert perms.permission( 'afile', 'world r--' ) == True
@@ -384,6 +382,129 @@ def fname1():
     #os.system( localpy+' lcl.py' )
 
     assert len( grep( out, 'success' ) ) == 1
+
+
+def recurse1():
+    """
+    chmod_recurse() with a subdir and some files
+    """
+    writefile( 'subdir/afile', 'contents' )
+    writefile( 'subdir/bfile', 'contents' )
+    time.sleep(1)
+
+    perms.apply_chmod( 'subdir',       'g=r-x', 'o=---' )
+    perms.apply_chmod( 'subdir/afile', 'g=r--', 'o=---' )
+    perms.apply_chmod( 'subdir/bfile', 'g=rw-', 'o=r--' )
+    time.sleep(1)
+    assert perms.permission( 'subdir', 'group r-x' ) == True
+    assert perms.permission( 'subdir', 'world ---' ) == True
+    assert perms.permission( 'subdir/afile', 'group r--' ) == True
+    assert perms.permission( 'subdir/afile', 'world ---' ) == True
+    assert perms.permission( 'subdir/bfile', 'group rw-' ) == True
+    assert perms.permission( 'subdir/bfile', 'world r--' ) == True
+
+    perms.chmod_recurse( 'subdir', ['g+w','o+r'], ['g=rwx','o+rx'] )
+    time.sleep(1)
+    assert perms.permission( 'subdir', 'group rwx' ) == True
+    assert perms.permission( 'subdir', 'world r-x' ) == True
+    assert perms.permission( 'subdir/afile', 'group rw-' ) == True
+    assert perms.permission( 'subdir/afile', 'world r--' ) == True
+    assert perms.permission( 'subdir/bfile', 'group rw-' ) == True
+    assert perms.permission( 'subdir/bfile', 'world r--' ) == True
+
+
+def recurse2():
+    """
+    chmod_recurse() with a soft link
+    """
+    writefile( 'subdir/afile', 'contents' )
+    writefile( 'bfile', 'contents' )
+    os.symlink( '../bfile', 'subdir/cfile' )
+    time.sleep(1)
+
+    perms.apply_chmod( 'subdir/afile', 'g=rw-', 'o=rw-' )
+    perms.apply_chmod( 'bfile', 'g=rw-', 'o=rw-' )
+    time.sleep(1)
+    assert perms.permission( 'subdir/afile', 'group rw-' ) == True
+    assert perms.permission( 'subdir/afile', 'world rw-' ) == True
+    assert perms.permission( 'bfile',        'group rw-' ) == True
+    assert perms.permission( 'bfile',        'world rw-' ) == True
+
+    perms.chmod_recurse( 'subdir', ['g-w','o-rw'] )
+    time.sleep(1)
+    assert perms.permission( 'subdir/afile', 'group r--' ) == True
+    assert perms.permission( 'subdir/afile', 'world ---' ) == True
+    assert perms.permission( 'bfile',        'group rw-' ) == True
+    assert perms.permission( 'bfile',        'world rw-' ) == True
+
+
+def recurse3():
+    """
+    chmod_recurse() with a second subdirectory
+    """
+    writefile( 'subdir/afile', 'contents' )
+    writefile( 'subdir/bdir/bfile', 'contents' )
+    time.sleep(1)
+
+    perms.apply_chmod( 'subdir',       'g=r-x', 'o=---' )
+    perms.apply_chmod( 'subdir/bdir',  'g=r-x', 'o=---' )
+    perms.apply_chmod( 'subdir/afile', 'g=r--', 'o=---' )
+    perms.apply_chmod( 'subdir/bdir/bfile', 'g=rw-', 'o=r--' )
+    time.sleep(1)
+    assert perms.permission( 'subdir', 'group r-x' ) == True
+    assert perms.permission( 'subdir', 'world ---' ) == True
+    assert perms.permission( 'subdir/bdir', 'group r-x' ) == True
+    assert perms.permission( 'subdir/bdir', 'world ---' ) == True
+    assert perms.permission( 'subdir/afile', 'group r--' ) == True
+    assert perms.permission( 'subdir/afile', 'world ---' ) == True
+    assert perms.permission( 'subdir/bdir/bfile', 'group rw-' ) == True
+    assert perms.permission( 'subdir/bdir/bfile', 'world r--' ) == True
+
+    perms.chmod_recurse( 'subdir', ['g+w','o+r'], ['g=rwx','o+rx'] )
+    time.sleep(1)
+    assert perms.permission( 'subdir', 'group rwx' ) == True
+    assert perms.permission( 'subdir', 'world r-x' ) == True
+    assert perms.permission( 'subdir/bdir', 'group rwx' ) == True
+    assert perms.permission( 'subdir/bdir', 'world r-x' ) == True
+    assert perms.permission( 'subdir/afile', 'group rw-' ) == True
+    assert perms.permission( 'subdir/afile', 'world r--' ) == True
+    assert perms.permission( 'subdir/bdir/bfile', 'group rw-' ) == True
+    assert perms.permission( 'subdir/bdir/bfile', 'world r--' ) == True
+
+
+def recurse4():
+    """
+    chmod_recurse() with a group name
+    """
+    writefile( 'subdir/afile', 'contents' )
+    writefile( 'subdir/bfile', 'contents' )
+    time.sleep(1)
+    grp = perms.filegroup( 'subdir/afile' )
+    assert grp != None, "cannot determine a group name to test with"
+
+    perms.apply_chmod( 'subdir',       'g=r-x', 'o=---' )
+    perms.apply_chmod( 'subdir/afile', 'g=r--', 'o=---' )
+    perms.apply_chmod( 'subdir/bfile', 'g=rw-', 'o=r--' )
+    time.sleep(1)
+    assert perms.permission( 'subdir', 'group r-x' ) == True
+    assert perms.permission( 'subdir', 'world ---' ) == True
+    assert perms.permission( 'subdir/afile', 'group r--' ) == True
+    assert perms.permission( 'subdir/afile', 'world ---' ) == True
+    assert perms.permission( 'subdir/bfile', 'group rw-' ) == True
+    assert perms.permission( 'subdir/bfile', 'world r--' ) == True
+
+    perms.chmod_recurse( 'subdir', ['g+w','o+r'], ['g=rwx','o+rx'], grp )
+    time.sleep(1)
+    assert perms.permission( 'subdir', 'group rwx' ) == True
+    assert perms.permission( 'subdir', 'world r-x' ) == True
+    assert perms.permission( 'subdir/afile', 'group rw-' ) == True
+    assert perms.permission( 'subdir/afile', 'world r--' ) == True
+    assert perms.permission( 'subdir/bfile', 'group rw-' ) == True
+    assert perms.permission( 'subdir/bfile', 'world r--' ) == True
+
+    assert grp == perms.filegroup( 'subdir/afile' )
+    assert grp == perms.filegroup( 'subdir' )
+    assert grp == perms.filegroup( 'subdir/bfile' )
 
 
 #######################################################################

@@ -17,24 +17,26 @@ import perms
 helpstr = \
 """
 USAGE:
-    filesync.py [OPTIONS] [machine:]source [machine:]target
+    filesync.py [OPTIONS] [machine:]from_dir [machine:]to_dir
 
 SYNOPSIS:
-    Copy or overwrite files from the source directory into the target
+    Copy or overwrite files in the 'from_dir' directory to the 'to_dir'
     directory.  At most one directory can be prefixed with a machine name.
+    All files in 'from_dir' are copied by default.
 
-    File operations are performed using the remotepython module, so the only
-    requirement on the remote machine is that a python (of any version) be
-    in PATH.
+    File operations are performed using the remotepython module (over ssh),
+    so the only requirement on the remote machine is that a python (of any
+    version) be in PATH.
 
 OPTIONS:
     -h, --help             : this help
-    -p <pattern>           : glob pattern of files to copy; may be repeated
+    -g <pattern>           : glob pattern of files to copy; may be repeated
     --age <seconds old>    : only files newer than this age are copied
     -T <seconds>           : apply timeout to each remotepython command
     --sshexe <path to ssh> : use this ssh
     --perms <spec>         : set or adjust file permissions on files placed
-                             into the target location; may be repeated;
+                             into the target location; may be repeated, and
+                             separate multiple specs with whitespace;
                              examples:
                                 groupname : set the file group name
                                 o=-     : set world permissions to none
@@ -49,7 +51,7 @@ OPTIONS:
 def main():
 
     import getopt
-    optL,argL = getopt.getopt( sys.argv[1:], 'hp:T:',
+    optL,argL = getopt.getopt( sys.argv[1:], 'hg:T:',
                                longopts=['help','age=','sshexe=','perms='] )
 
     optD ={}
@@ -57,8 +59,10 @@ def main():
         if n == '-h' or n == '--help':
             print3( helpstr )
             return 0
-        elif n in ['-p','--perms']:
+        elif n in ['-g']:
             optD[n] = optD.get(n,[]) + [v]
+        elif n == '--perms':
+            optD[n] = optD.get(n,[]) + v.split()
         else:
             optD[n] = v
 
@@ -75,7 +79,7 @@ def main():
         tmout = float( tmout )
 
     sync_directories( argL[0], argL[1],
-                      glob=optD.get( '-p', '*' ),
+                      glob=optD.get( '-g', '*' ),
                       age=age,
                       timeout=tmout,
                       sshexe=optD.get( '--sshexe', None ),

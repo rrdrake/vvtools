@@ -1,0 +1,1144 @@
+#!/usr/bin/env python
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import struct
+import getopt
+import filecmp
+import stat
+import subprocess as sp
+import pipes
+
+# this will os.chdir() to a subdirectory
+from testutils import *
+
+# this is the module we are testing
+import filecopy
+
+
+# By default, a "fake" ssh script is used that acts like ssh.  To use
+# an actual ssh, add the -s option to the unit test command line.  In this
+# case, make sure you can ssh to the current machine without a password.
+use_real_ssh = False
+
+
+# default the local and remote python to the current running python
+localpy = sys.executable
+
+
+def main():
+    """
+    """
+    optL,argL = getopt.getopt( sys.argv[1:], 's' )
+    cwd = os.getcwd()
+
+    for n,v in optL:
+        if n == '-s':
+            global use_real_ssh
+            use_real_ssh = True
+
+    if len(argL) == 0:
+        argL = """check1 follow1
+                  glob1 glob2 glob3
+                  mktemp1
+                  swap1
+                  local1 local2 local3 local4 local5 local6 local7
+                  get1 get2 get3 get4 get5 get6
+                  put1 put2 put3 put4 put5 put6
+                  dup1
+               """.split()
+
+    for func in argL:
+        os.chdir( cwd )
+        rmallfiles()
+        time.sleep(1)
+        print3( '====> ', func )
+        eval( func+'()' )
+
+
+#######################################################################
+
+def check1():
+    """
+    test the check_dir() function
+    """
+    L = filecopy.check_dir( '/a/path/noexist' )
+    assert L[0] == False
+    L = filecopy.check_dir( 'pathnoexist' )
+    assert L[0] == False
+
+    writefile( 'subdir/file.txt', 'content' )
+    fn = os.path.abspath( 'file.txt' )
+    time.sleep(1)
+
+    L = filecopy.check_dir( 'subdir/blah' )
+    assert L[0] == False
+    L = filecopy.check_dir( 'subdir/file.txt' )
+    assert L[0] == True
+    assert L[1] == False
+
+    # the new directory has to be read,write,exe to owner
+    assert os.access( 'subdir', os.X_OK )
+    assert os.access( 'subdir', os.R_OK )
+    assert os.access( 'subdir', os.W_OK )
+
+    L = filecopy.check_dir( 'subdir' )
+    assert L[0] == True
+    assert L[1] == True
+    assert L[2] == True
+
+    fm = filemode( 'subdir' )
+    mask = ~( stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH )
+    os.chmod( 'subdir', fm & mask )
+    time.sleep(1)
+    try:
+        assert not os.access( 'subdir', os.W_OK )
+
+        L = filecopy.check_dir( 'subdir' )
+        assert L[0] == True
+        assert L[1] == True
+        assert L[2] == False
+    finally:
+        # so it can be deleted later
+        os.chmod( 'subdir', fm | stat.S_IWUSR )
+
+
+def follow1():
+    """
+    test the follow_link() function
+    """
+    p = filecopy.follow_link( os.getcwd() )
+    assert p == os.getcwd()
+
+    p = filecopy.follow_link( 'junk' )
+    assert p == os.path.abspath( 'junk' )
+
+    writefile( 'path2', 'content' )
+    os.symlink( 'path2', 'path1' )
+    time.sleep(1)
+    p = filecopy.follow_link( 'path1' )
+    assert p == os.path.abspath( 'path2' )
+
+    writefile( 'path2', 'content' )
+    os.symlink( os.path.abspath('path2'), 'path3' )
+    time.sleep(1)
+    p = filecopy.follow_link( 'path3' )
+    assert p == os.path.abspath( 'path2' )
+
+    os.mkdir( 'subdir' )
+    os.symlink( '../path2', 'subdir/lnk' )
+    time.sleep(1)
+    p = filecopy.follow_link( 'subdir/lnk' )
+    assert p == os.path.abspath( 'path2' )
+
+    os.mkdir( 'subdir2' )
+    os.symlink( '../subdir2/path2', 'subdir/lnk2' )
+    time.sleep(1)
+    p = filecopy.follow_link( 'subdir/lnk2' )
+    assert p == os.path.abspath( 'subdir2/path2' )
+
+
+def glob1():
+    """
+    main features of glob_paths() function
+    """
+    fL,xL = filecopy.glob_paths( ['/foo/bar/noexist'] )
+    assert len(xL) == 1 and xL[0] == '/foo/bar/noexist'
+    fL,xL = filecopy.glob_paths( ['/foo/bar/*'] )
+    assert len(xL) == 1 and xL[0] == '/foo/bar/*'
+    fL,xL = filecopy.glob_paths( ['noexist'] )
+    assert len(xL) == 1 and xL[0] == 'noexist'
+    fL,xL = filecopy.glob_paths( ['foo*'] )
+    assert len(xL) == 1 and xL[0] == 'foo*'
+    fL,xL = filecopy.glob_paths( ['foo*','bar*'] )
+    assert len(xL) == 2 and xL[0] == 'foo*' and xL[1] == 'bar*'
+
+    writefile( 'subdir/foo.txt', 'content' )
+    writefile( 'subdir/bar.txt', 'content' )
+    writefile( 'subdir/foobar.txt', 'content' )
+    sd = os.path.abspath( 'subdir' )
+    time.sleep(1)
+
+    fL,xL = filecopy.glob_paths( ['subdir/foo.txt'] )
+    assert len(fL) == 1 and len(xL) == 0
+    assert fL[0] == [ os.path.abspath( 'subdir' ), 'foo.txt', 'foo.txt' ]
+
+    fL,xL = filecopy.glob_paths( ['subdir/foo.txt','subdir/bar.txt'] )
+    assert len(fL) == 2 and len(xL) == 0
+    fL.sort()
+    assert fL[0] == [ sd, 'bar.txt', 'bar.txt' ]
+    assert fL[1] == [ sd, 'foo.txt', 'foo.txt' ]
+
+    L = [ 'subdir/foo*' ]
+    fL,xL = filecopy.glob_paths( L )
+    assert len(fL) == 2 and len(xL) == 0
+    fL.sort()
+    assert fL[0] == [ sd, 'foo.txt', 'foo.txt' ]
+    assert fL[1] == [ sd, 'foobar.txt', 'foobar.txt' ]
+
+    L = [ os.path.join( sd, 'foo*' ) ]
+    fL,xL = filecopy.glob_paths( L )
+    assert len(fL) == 2 and len(xL) == 0
+    fL.sort()
+    assert fL[0] == [ sd, 'foo.txt', 'foo.txt' ]
+    assert fL[1] == [ sd, 'foobar.txt', 'foobar.txt' ]
+
+    L = [ 'subdir/foo*', 'subdir/nope*' ]
+    fL,xL = filecopy.glob_paths( L )
+    assert len(fL) == 2 and len(xL) == 1
+    assert xL[0] == 'subdir/nope*'
+    fL.sort()
+    assert fL[0] == [ sd, 'foo.txt', 'foo.txt' ]
+    assert fL[1] == [ sd, 'foobar.txt', 'foobar.txt' ]
+
+    writefile( 'subdir2/bar2.txt', 'content' )
+    sd2 = os.path.abspath( 'subdir2' )
+    time.sleep(1)
+
+    L = [ 'sub*/bar*' ]
+    fL,xL = filecopy.glob_paths( L )
+    assert len(fL) == 2 and len(xL) == 0
+    fL.sort()
+    assert fL[0] == [ sd, 'bar.txt', 'bar.txt' ]
+    assert fL[1] == [ sd2, 'bar2.txt', 'bar2.txt' ]
+
+    L = [ 'subdir/*bar*', 'subdir2/*' ]
+    fL,xL = filecopy.glob_paths( L )
+    assert len(fL) == 3 and len(xL) == 0
+    fL.sort()
+    assert fL[0] == [ sd, 'bar.txt', 'bar.txt' ]
+    assert fL[1] == [ sd, 'foobar.txt', 'foobar.txt' ]
+    assert fL[2] == [ sd2, 'bar2.txt', 'bar2.txt' ]
+
+
+def glob2():
+    """
+    glob_paths() with wildcards in actual filename
+    """
+    writefile( 'subdir/foo*', 'content' )
+    writefile( 'subdir/foobar.txt', 'content' )
+    sd = os.path.abspath( 'subdir' )
+    time.sleep(1)
+
+    L = [ 'subdir/foo*' ]
+    fL,xL = filecopy.glob_paths( L )
+    assert len(fL) == 1 and len(xL) == 0
+    fL.sort()
+    assert fL[0] == [ sd, 'foo*', 'foo*' ]
+
+    L = [ 'subdir/foo*.txt' ]
+    fL,xL = filecopy.glob_paths( L )
+    assert len(fL) == 1 and len(xL) == 0
+    fL.sort()
+    assert fL[0] == [ sd, 'foobar.txt', 'foobar.txt' ]
+
+
+def glob3():
+    """
+    glob_paths() with soft links
+    """
+    writefile( 'subdir1/foo.txt', 'content' )
+    writefile( 'subdir2/bar.txt', 'content' )
+    os.symlink( '../subdir2/bar.txt', 'subdir1/bar.lnk' )
+    sd1 = os.path.abspath( 'subdir1' )
+    sd2 = os.path.abspath( 'subdir2' )
+    time.sleep(1)
+
+    L = [ 'subdir1/*' ]
+    fL,xL = filecopy.glob_paths( L )
+    assert len(fL) == 2 and len(xL) == 0
+    fL.sort()
+    assert fL[0] == [ sd1, 'foo.txt', 'foo.txt' ]
+    assert fL[1] == [ sd2, 'bar.txt', 'bar.lnk' ]
+
+
+def mktemp1():
+    """
+    test the make_temp_dir() function
+    """
+    os.mkdir( 'subdir' )
+    time.sleep(1)
+
+    t1 = time.time()
+    td1 = filecopy.make_temp_dir( 'subdir', t1 )
+    assert os.path.isdir( td1 )
+    assert os.path.dirname( td1 ) == 'subdir'
+
+    time.sleep(1)
+    t2 = time.time()
+    td2 = filecopy.make_temp_dir( 'subdir', t2 )
+    assert os.path.isdir( td2 )
+    assert os.path.dirname( td2 ) == 'subdir'
+    assert td1 != td2
+
+    # should be writable
+    tf = os.path.join( td2, 'file.txt' )
+    fp = open( tf, 'w' )
+    fp.write( 'content\n' )
+    fp.close()
+
+    # by default, group and other have no permissions to the temp dir
+    m = filemode( td1 )
+    um = stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
+    assert ( m & um ) != 0
+    gm = stat.S_IRGRP | stat.S_IWGRP | stat.S_IXGRP
+    assert ( m & gm ) == 0
+    om = stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH
+    assert ( m & om ) == 0
+
+
+def swap1():
+    """
+    test of the swap_paths() function
+    """
+    writefile( 'dir/file1.txt', 'old file 1 content\n' )
+    writefile( 'dir/sub/file2.txt', 'old file 2 content\n' )
+    writefile( 'tmp/file1.txt', 'new file 1 content\n' )
+    writefile( 'tmp/sub/file2.txt', 'new file 2 content\n' )
+    # add a soft link with different values
+    os.symlink( 'sub/file2.txt', 'dir/bar.lnk' )
+    os.symlink( 'file1.txt', 'tmp/foo.lnk' )
+    time.sleep(1)
+
+    rL = [ ['junk','file1.txt','file1.txt'],
+           ['junk','sub','sub'],
+           ['junk','foo.lnk','bar.lnk'] ]
+    filecopy.swap_paths( rL, 'tmp', 'dir' )
+    time.sleep(1)
+
+    s = readfile( 'dir/file1.txt' )
+    assert s.strip() == 'new file 1 content'
+    s = readfile( 'dir/sub/file2.txt' )
+    assert s.strip() == 'new file 2 content'
+
+
+def local1():
+    """
+    local_copy() with files and directories
+    """
+    writefile( 'dir/file1.txt', 'file 1 content\n' )
+    writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
+    os.symlink( 'file2.txt', 'dir/sub/bar.lnk' )
+    os.mkdir( 'cpy' )
+    time.sleep(1)
+
+    rL,xL = filecopy.glob_paths( ['dir/*'] )
+
+    filecopy.local_copy( rL, 'cpy' )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    # change the link value
+    os.remove( 'dir/sub/bar.lnk' )
+    os.symlink( '../file1.txt', 'dir/sub/bar.lnk' )
+    time.sleep(1)
+
+    # check validity of the compare_dirs() function
+    try:
+        compare_dirs( 'dir', 'cpy' )
+    except:
+        print3( sys.exc_info()[1] )
+
+    # copy again with the changed soft link
+    filecopy.local_copy( rL, 'cpy' )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+
+def local2():
+    """
+    local_copy() with soft link
+    """
+    writefile( 'dir1/file1.txt', 'file 1 content\n' )
+    os.mkdir( 'dir2' )
+    os.symlink( '../dir1/file1.txt', 'dir2/link.txt' )
+    os.mkdir( 'cpy' )
+    d1 = os.path.abspath( 'dir1' )
+    time.sleep(1)
+
+    rL,xL = filecopy.glob_paths( ['dir2/*'] )
+    filecopy.local_copy( rL, 'cpy' )
+    time.sleep(1)
+
+    assert filecmp.cmp( d1+'/file1.txt', 'cpy/link.txt' )
+
+    # make a double soft link chain
+    writefile( 'dir1/file2.txt', 'file 2 content\n' )
+    os.remove( 'dir1/file1.txt' )
+    os.symlink( 'file2.txt', 'dir1/file1.txt' )
+    time.sleep(1)
+
+    rL,xL = filecopy.glob_paths( ['dir2/*'] )
+    filecopy.local_copy( rL, 'cpy' )
+    time.sleep(1)
+
+    assert os.path.islink( 'cpy/link.txt' )
+    assert os.readlink( 'cpy/link.txt' ) == 'file2.txt'
+
+
+def local3():
+    """
+    local_copy() with directory soft link
+    """
+    writefile( 'dir1/file1.txt', 'file 1 content\n' )
+    os.mkdir( 'dir2' )
+    os.symlink( '../dir1', 'dir2/dirlink' )
+    os.mkdir( 'cpy' )
+    d1 = os.path.abspath( 'dir1' )
+    time.sleep(1)
+
+    rL,xL = filecopy.glob_paths( ['dir2/*'] )
+    filecopy.local_copy( rL, 'cpy' )
+    time.sleep(1)
+
+    # a top level directory soft link is followed
+    assert os.path.exists( 'cpy/dirlink' )
+    assert not os.path.islink( 'cpy/dirlink' )
+    compare_dirs( 'dir1', 'cpy/dirlink' )
+
+    # but a second soft link is not
+    os.symlink( 'dir1', 'dir3' )
+    os.remove( 'dir2/dirlink' )
+    os.symlink( '../dir3', 'dir2/dirlink' )
+    os.mkdir( 'cpy2' )
+    time.sleep(1)
+
+    rL,xL = filecopy.glob_paths( ['dir2/*'] )
+    filecopy.local_copy( rL, 'cpy2' )
+    time.sleep(1)
+
+    assert os.path.islink( 'cpy2/dirlink' )
+    assert os.readlink( 'cpy2/dirlink' ) == 'dir1'
+
+
+def local4():
+    """
+    local to local using copy_files()
+    """
+    writefile( 'dir/file1.txt', 'file 1 content\n' )
+    writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
+    os.symlink( 'file2.txt', 'dir/sub/bar.lnk' )
+    os.mkdir( 'cpy' )
+    time.sleep(1)
+
+    filecopy.copy_files( ['dir/*'], 'cpy' )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    m = filemode( 'cpy/sub/file2.txt' )
+    oth = stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH
+    # set original and copy to have rwx for world
+    os.chmod( 'dir/sub/file2.txt', m | oth )
+    os.chmod( 'cpy/sub/file2.txt', m | oth )
+    time.sleep(1)
+
+    filecopy.copy_files( ['dir/*'], 'cpy', fperms=['o-rwx'] )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    # original should still have rwx, but the copy should not
+    m1 = filemode( 'dir/sub/file2.txt' ) & oth
+    assert m1 != 0
+    m2 = filemode( 'cpy/sub/file2.txt' ) & oth
+    assert m2 == 0
+
+
+def local5():
+    """
+    local to local using copy_files() with more than one source
+    """
+    writefile( 'dir1/file1.txt', 'file 1 content\n' )
+    writefile( 'dir2/sub/file2.txt', 'file 2 content\n' )
+    os.mkdir( 'cpy' )
+    time.sleep(1)
+
+    filecopy.copy_files( ['dir1/*', 'dir2/sub'], 'cpy' )
+    time.sleep(1)
+
+    L = os.listdir( 'cpy' )
+    L.sort()
+    assert L == ['file1.txt', 'sub']
+
+    filecmp.cmp( 'dir1/file1.txt', 'cpy/file1.txt' )
+    compare_dirs( 'dir2/sub', 'cpy/sub' )
+
+
+def local6():
+    """
+    local to local using copy_files() with source file errors
+    """
+    writefile( 'dir1/file1.txt', 'file 1 content\n' )
+    writefile( 'dir2/sub/file2.txt', 'file 2 content\n' )
+    os.mkdir( 'cpy' )
+    writefile( 'afile', 'afile content' )
+    os.mkdir( 'badperm' )
+    time.sleep(1)
+
+    # set a directory with no write permissions
+    m = filemode( 'badperm' )
+    wm = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
+    os.chmod( 'badperm', m & (~wm) )
+    time.sleep(1)
+
+    try:
+        filecopy.copy_files( ['dir2/sub', 'dir1/junk.txt'], 'cpy' )
+    except:
+        print3( sys.exc_info()[1] )
+    else:
+        raise Exception( 'expected an exception' )
+
+    try:
+        filecopy.copy_files( ['dir2/sub'], 'wrong' )
+    except:
+        print3( sys.exc_info()[1] )
+    else:
+        raise Exception( 'expected an exception' )
+
+    try:
+        filecopy.copy_files( ['dir2/sub'], 'afile' )
+    except:
+        print3( sys.exc_info()[1] )
+    else:
+        raise Exception( 'expected an exception' )
+
+    try:
+        filecopy.copy_files( ['dir2/sub'], 'badperm' )
+    except:
+        print3( sys.exc_info()[1] )
+    else:
+        raise Exception( 'expected an exception' )
+
+
+def local7():
+    """
+    local to local using command line
+    """
+    writefile( 'dir/file1.txt', 'file 1 content\n' )
+    writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
+    os.symlink( 'file2.txt', 'dir/sub/bar.lnk' )
+    os.mkdir( 'cpy' )
+    time.sleep(1)
+
+    out = runout( localpy+' '+srcdir+'/filecopy.py "dir/*" cpy' )
+    #print3( out )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    m = filemode( 'cpy/sub/file2.txt' )
+    oth = stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH
+    # set original and copy to have rwx for world
+    os.chmod( 'dir/sub/file2.txt', m | oth )
+    os.chmod( 'cpy/sub/file2.txt', m | oth )
+    time.sleep(1)
+
+    cmd = localpy+' '+srcdir+'/filecopy.py'
+    cmd += ' --fperms o-rwx'
+    cmd += ' "dir/*" cpy'
+    out = runout( cmd )
+    print3( out )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    # original should still have rwx, but the copy should not
+    m1 = filemode( 'dir/sub/file2.txt' ) & oth
+    assert m1 != 0
+    m2 = filemode( 'cpy/sub/file2.txt' ) & oth
+    assert m2 == 0
+
+
+def get1():
+    """
+    remote to local, remote_to_local_copy()
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'dir/file1.txt', 'file 1 content\n' )
+    writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
+    os.symlink( 'file2.txt', 'dir/sub/bar.lnk' )
+    os.mkdir( 'cpy' )
+    cpd = os.path.abspath( 'cpy' )
+    time.sleep(1)
+
+    rL,xL = filecopy.glob_paths( ['dir/*'] )
+
+    filecopy.remote_to_local_copy( sshmach, rL, cpd, sshexe=sshprog )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    # change the link value
+    os.remove( 'dir/sub/bar.lnk' )
+    os.symlink( '../file1.txt', 'dir/sub/bar.lnk' )
+    time.sleep(1)
+
+    # check validity of the compare_dirs() function
+    try:
+        compare_dirs( 'dir', 'cpy' )
+    except:
+        print3( sys.exc_info()[1] )
+
+    # copy again with the changed soft link
+    filecopy.remote_to_local_copy( sshmach, rL, cpd, sshexe=sshprog )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+
+def get2():
+    """
+    remote to local, with soft link
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'dir1/file1.txt', 'file 1 content\n' )
+    os.mkdir( 'dir2' )
+    os.symlink( '../dir1/file1.txt', 'dir2/link.txt' )
+    os.mkdir( 'cpy' )
+    cpd = os.path.abspath( 'cpy' )
+    d1 = os.path.abspath( 'dir1' )
+    time.sleep(1)
+
+    rL,xL = filecopy.glob_paths( ['dir2/*'] )
+    filecopy.remote_to_local_copy( sshmach, rL, cpd, sshexe=sshprog )
+    time.sleep(1)
+
+    assert not os.path.islink( 'cpy/link.txt' )
+    assert filecmp.cmp( d1+'/file1.txt', 'cpy/link.txt' )
+
+    # make a double soft link chain
+    writefile( 'dir1/file2.txt', 'file 2 content\n' )
+    os.remove( 'dir1/file1.txt' )
+    os.symlink( 'file2.txt', 'dir1/file1.txt' )
+    time.sleep(1)
+
+    rL,xL = filecopy.glob_paths( ['dir2/*'] )
+    filecopy.remote_to_local_copy( sshmach, rL, cpd, sshexe=sshprog )
+    time.sleep(1)
+
+    assert os.path.islink( 'cpy/link.txt' )
+    assert os.readlink( 'cpy/link.txt' ) == 'file2.txt'
+
+
+def get3():
+    """
+    remote to local using copy_files()
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'dir/file1.txt', 'file 1 content\n' )
+    writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
+    os.symlink( 'file2.txt', 'dir/sub/bar.lnk' )
+    srcd = os.path.abspath( 'dir' )
+    os.mkdir( 'cpy' )
+    time.sleep(1)
+
+    filecopy.copy_files( [sshmach+':'+srcd+'/*'], 'cpy', sshexe=sshprog )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    m = filemode( 'cpy/sub/file2.txt' )
+    oth = stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH
+    # set original and copy to have rwx for world
+    os.chmod( 'dir/sub/file2.txt', m | oth )
+    os.chmod( 'cpy/sub/file2.txt', m | oth )
+    time.sleep(1)
+
+    filecopy.copy_files( [sshmach+':'+srcd+'/*'], 'cpy', fperms=['o-rwx'],
+                         sshexe=sshprog )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    # original should still have rwx, but the copy should not
+    m1 = filemode( 'dir/sub/file2.txt' ) & oth
+    assert m1 != 0
+    m2 = filemode( 'cpy/sub/file2.txt' ) & oth
+    assert m2 == 0
+
+
+def get4():
+    """
+    remote to local using copy_files() with more than one source
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'dir1/file1.txt', 'file 1 content\n' )
+    srcd1 = os.path.abspath( 'dir1' )
+    writefile( 'dir2/sub/file2.txt', 'file 2 content\n' )
+    srcd2 = os.path.abspath( 'dir2' )
+    os.mkdir( 'cpy' )
+    time.sleep(1)
+
+    filecopy.copy_files( [sshmach+':'+srcd1+'/*',
+                          sshmach+':'+srcd2+'/sub'], 'cpy',
+                         sshexe=sshprog )
+    time.sleep(1)
+
+    L = os.listdir( 'cpy' )
+    L.sort()
+    assert L == ['file1.txt', 'sub']
+
+    filecmp.cmp( 'dir1/file1.txt', 'cpy/file1.txt' )
+    compare_dirs( 'dir2/sub', 'cpy/sub' )
+
+
+def get5():
+    """
+    remote to local using copy_files() with source file errors
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'dir1/file1.txt', 'file 1 content\n' )
+    srcd1 = os.path.abspath( 'dir1' )
+    writefile( 'dir2/sub/file2.txt', 'file 2 content\n' )
+    srcd2 = os.path.abspath( 'dir2' )
+    os.mkdir( 'cpy' )
+    writefile( 'afile', 'afile content' )
+    os.mkdir( 'badperm' )
+    time.sleep(1)
+
+    # set a directory with no write permissions
+    m = filemode( 'badperm' )
+    wm = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
+    os.chmod( 'badperm', m & (~wm) )
+    badd = os.path.abspath( 'badperm' )
+    time.sleep(1)
+
+    try:
+        filecopy.copy_files( [sshmach+':'+srcd2+'/sub',
+                              sshmach+':'+srcd1+'/junk.txt'], 'cpy',
+                             sshexe=sshprog )
+    except:
+        print3( sys.exc_info()[1] )
+    else:
+        raise Exception( 'expected an exception' )
+
+    try:
+        filecopy.copy_files( [sshmach+':'+srcd2+'/sub'], 'wrong',
+                             sshexe=sshprog )
+    except:
+        print3( sys.exc_info()[1] )
+    else:
+        raise Exception( 'expected an exception' )
+
+    try:
+        filecopy.copy_files( [sshmach+':'+srcd2+'/sub'], 'afile',
+                             sshexe=sshprog )
+    except:
+        print3( sys.exc_info()[1] )
+    else:
+        raise Exception( 'expected an exception' )
+
+    try:
+        filecopy.copy_files( [sshmach+':'+srcd2+'/sub'], 'badperm',
+                             sshexe=sshprog )
+    except:
+        print3( sys.exc_info()[1] )
+    else:
+        raise Exception( 'expected an exception' )
+
+
+def get6():
+    """
+    remote to local using command line
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'dir/file1.txt', 'file 1 content\n' )
+    writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
+    os.symlink( 'file2.txt', 'dir/sub/bar.lnk' )
+    srcd = os.path.abspath( 'dir' )
+    os.mkdir( 'cpy' )
+    time.sleep(1)
+
+    out = runout( localpy+' '+srcdir+'/filecopy.py --sshexe '+sshprog+ \
+                    ' "'+sshmach+':'+srcd+'/*" cpy' )
+    print3( out )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    m = filemode( 'cpy/sub/file2.txt' )
+    oth = stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH
+    # set original and copy to have rwx for world
+    os.chmod( 'dir/sub/file2.txt', m | oth )
+    os.chmod( 'cpy/sub/file2.txt', m | oth )
+    time.sleep(1)
+
+    cmd = localpy+' '+srcdir+'/filecopy.py --sshexe '+sshprog
+    cmd += ' --fperms o-rwx'
+    cmd += ' "'+sshmach+':'+srcd+'/*" cpy'
+    out = runout( cmd )
+    print3( out )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    # original should still have rwx, but the copy should not
+    m1 = filemode( 'dir/sub/file2.txt' ) & oth
+    assert m1 != 0
+    m2 = filemode( 'cpy/sub/file2.txt' ) & oth
+    assert m2 == 0
+
+
+def put1():
+    """
+    local to remote, using copy_files()
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'dir/file1.txt', 'file 1 content\n' )
+    writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
+    os.symlink( 'file2.txt', 'dir/sub/bar.lnk' )
+    os.mkdir( 'cpy' )
+    cpd = os.path.abspath( 'cpy' )
+    time.sleep(1)
+
+    filecopy.copy_files( ['dir/*'], sshmach+':'+cpd,
+                         sshexe=sshprog )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    # change the link value
+    os.remove( 'dir/sub/bar.lnk' )
+    os.symlink( '../file1.txt', 'dir/sub/bar.lnk' )
+    time.sleep(1)
+
+    # check validity of the compare_dirs() function
+    try:
+        compare_dirs( 'dir', 'cpy' )
+    except:
+        print3( sys.exc_info()[1] )
+
+    # copy again with the changed soft link
+    filecopy.copy_files( ['dir/*'], sshmach+':'+cpd,
+                         sshexe=sshprog )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+
+def put2():
+    """
+    local to remote, with soft link
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'dir1/file1.txt', 'file 1 content\n' )
+    os.mkdir( 'dir2' )
+    os.symlink( '../dir1/file1.txt', 'dir2/link.txt' )
+    os.mkdir( 'cpy' )
+    cpd = os.path.abspath( 'cpy' )
+    time.sleep(1)
+
+    filecopy.copy_files( ['dir2/*'], sshmach+':'+cpd,
+                         sshexe=sshprog )
+    time.sleep(1)
+
+    assert not os.path.islink( 'cpy/link.txt' )
+    assert filecmp.cmp( 'dir1/file1.txt', 'cpy/link.txt' )
+
+    # make a double soft link chain
+    writefile( 'dir1/file2.txt', 'file 2 content\n' )
+    os.remove( 'dir1/file1.txt' )
+    os.symlink( 'file2.txt', 'dir1/file1.txt' )
+    time.sleep(1)
+
+    filecopy.copy_files( ['dir2/*'], sshmach+':'+cpd,
+                         sshexe=sshprog )
+    time.sleep(1)
+
+    assert os.path.islink( 'cpy/link.txt' )
+    assert os.readlink( 'cpy/link.txt' ) == 'file2.txt'
+
+
+def put3():
+    """
+    local to remote with perms
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'dir/file1.txt', 'file 1 content\n' )
+    writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
+    os.symlink( 'file2.txt', 'dir/sub/bar.lnk' )
+    cpd = os.path.abspath( 'cpy' )
+    os.mkdir( 'cpy' )
+    time.sleep(1)
+
+    filecopy.copy_files( ['dir/*'], sshmach+':'+cpd,
+                         sshexe=sshprog )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    m = filemode( 'cpy/sub/file2.txt' )
+    oth = stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH
+    # set original and copy to have rwx for world
+    os.chmod( 'dir/sub/file2.txt', m | oth )
+    os.chmod( 'cpy/sub/file2.txt', m | oth )
+    time.sleep(1)
+
+    filecopy.copy_files( ['dir/*'], sshmach+':'+cpd, fperms=['o-rwx'],
+                         sshexe=sshprog )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    # original should still have rwx, but the copy should not
+    m1 = filemode( 'dir/sub/file2.txt' ) & oth
+    assert m1 != 0
+    m2 = filemode( 'cpy/sub/file2.txt' ) & oth
+    assert m2 == 0
+
+
+def put4():
+    """
+    local to remote with more than one source
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'dir1/file1.txt', 'file 1 content\n' )
+    writefile( 'dir2/sub/file2.txt', 'file 2 content\n' )
+    os.mkdir( 'cpy' )
+    cpd = os.path.abspath( 'cpy' )
+    time.sleep(1)
+
+    filecopy.copy_files( ['dir1/*','dir2/sub'], sshmach+':'+cpd,
+                         sshexe=sshprog )
+    time.sleep(1)
+
+    L = os.listdir( 'cpy' )
+    L.sort()
+    assert L == ['file1.txt', 'sub']
+
+    filecmp.cmp( 'dir1/file1.txt', 'cpy/file1.txt' )
+    compare_dirs( 'dir2/sub', 'cpy/sub' )
+
+
+def put5():
+    """
+    local to remote with source file errors
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'dir1/file1.txt', 'file 1 content\n' )
+    writefile( 'dir2/sub/file2.txt', 'file 2 content\n' )
+    os.mkdir( 'cpy' )
+    cpd = os.path.abspath( 'cpy' )
+    writefile( 'afile', 'afile content' )
+    os.mkdir( 'badperm' )
+    badp = os.path.abspath( 'badperm' )
+    time.sleep(1)
+
+    # set a directory with no write permissions
+    m = filemode( 'badperm' )
+    wm = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
+    os.chmod( 'badperm', m & (~wm) )
+    badd = os.path.abspath( 'badperm' )
+    time.sleep(1)
+
+    try:
+        filecopy.copy_files( ['dir2/sub','dir1/junk.txt'], sshmach+':'+cpd,
+                             sshexe=sshprog )
+    except:
+        print3( sys.exc_info()[1] )
+    else:
+        raise Exception( 'expected an exception' )
+
+    try:
+        filecopy.copy_files( ['dir2/sub'], sshmach+':wrong',
+                             sshexe=sshprog )
+    except:
+        print3( sys.exc_info()[1] )
+    else:
+        raise Exception( 'expected an exception' )
+
+    try:
+        filecopy.copy_files( ['dir2/sub'],
+                             sshmach+':'+os.path.abspath('afile'),
+                             sshexe=sshprog )
+    except:
+        print3( sys.exc_info()[1] )
+    else:
+        raise Exception( 'expected an exception' )
+
+    try:
+        filecopy.copy_files( ['dir2/sub'],
+                             sshmach+':'+os.path.abspath('badperm'),
+                             sshexe=sshprog )
+    except:
+        print3( sys.exc_info()[1] )
+    else:
+        raise Exception( 'expected an exception' )
+
+
+def put6():
+    """
+    local to remote using command line
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'dir/file1.txt', 'file 1 content\n' )
+    writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
+    os.symlink( 'file2.txt', 'dir/sub/bar.lnk' )
+    os.mkdir( 'cpy' )
+    cpd = os.path.abspath( 'cpy' )
+    time.sleep(1)
+
+    out = runout( localpy+' '+srcdir+'/filecopy.py --sshexe '+sshprog+ \
+                    ' dir/* '+sshmach+':'+cpd )
+    print3( out )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    m = filemode( 'cpy/sub/file2.txt' )
+    oth = stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH
+    # set original and copy to have rwx for world
+    os.chmod( 'dir/sub/file2.txt', m | oth )
+    os.chmod( 'cpy/sub/file2.txt', m | oth )
+    time.sleep(1)
+
+    cmd = localpy+' '+srcdir+'/filecopy.py --sshexe '+sshprog
+    cmd += ' --fperms o-rwx'
+    cmd += ' dir/* '+sshmach+':'+cpd
+    out = runout( cmd )
+    print3( out )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+
+    # original should still have rwx, but the copy should not
+    m1 = filemode( 'dir/sub/file2.txt' ) & oth
+    assert m1 != 0
+    m2 = filemode( 'cpy/sub/file2.txt' ) & oth
+    assert m2 == 0
+
+
+def dup1():
+    """
+    duplicate basename or destination names should be errors
+    """
+    writefile( 'dir1/file1.txt', 'file 1 content\n' )
+    writefile( 'dir1/sub/file2.txt', 'file 2 content\n' )
+    writefile( 'dir2/file3.txt', 'file 3 content\n' )
+    writefile( 'dir2/sub/file2.txt', 'file 2b content\n' )
+    os.mkdir( 'dir3' )
+    os.mkdir( 'cpy' )
+    time.sleep(1)
+
+    # the 'sub' directory appears in two source locations
+    try:
+        filecopy.copy_files( ['dir1/*','dir2/*'], 'cpy' )
+    except:
+        print3( sys.exc_info()[1] )
+
+    os.symlink( '../dir2/file3.txt', 'dir3/file1.txt' )
+    time.sleep(1)
+
+    # the destination file 'file1.txt' appears in two source locations
+    try:
+        filecopy.copy_files( ['dir1/*', 'dir3/*'], 'cpy' )
+    except:
+        print3( sys.exc_info()[1] )
+
+
+#######################################################################
+
+def get_ssh_pair( fake_ssh_pause=None ):
+    """
+    Returns a pair ( ssh program, ssh machine ).
+    """
+    if use_real_ssh and fake_ssh_pause == None:
+        sshprog = filecopy.rpy.which( 'ssh' )
+        import socket
+        sshmach = socket.gethostname()
+
+    else:
+        st = str(1)
+        if fake_ssh_pause != None:
+            st = str(fake_ssh_pause)
+        writescript( 'fakessh', "#!"+localpy+" -E", """
+            import os, sys, getopt, time, pipes
+            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
+            argL.pop(0)  # remove the machine name
+            time.sleep( """+st+""" )
+            os.execl( '/bin/bash', '/bin/bash', '-c', ' '.join( argL ) )
+            """ )
+        sshprog = os.path.abspath( 'fakessh' )
+        sshmach = 'sparky'
+
+    return sshprog, sshmach
+
+
+def filemode( path ):
+    """
+    Returns the permissions file mode for the given path (an integer).
+    """
+    return stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+
+
+def has_fmode( path, fmode ):
+    """
+    Returns True if the given file path has the given file mode (an integer
+    composed with stat.S_IRGRP and stat.S_IWUSR etc).
+    """
+    m = filemode( path )
+    if (m & fmode) == fmode:
+        return True
+    return False
+
+
+def recurse_listdir( directory ):
+    """
+    Returns a list of all files in 'directory', recursively.  The 'directory'
+    is not included in the paths of each file in the final list.
+    """
+    def gather( arg, dirname, fnames ):
+        topdir,pathL = arg
+        n = len(topdir)+1
+        for p in fnames:
+            dp = os.path.join( dirname, p )
+            assert dp.startswith( topdir+os.sep )
+            pathL.append( dp[n:] )
+    pL = []
+    os.path.walk( directory, gather, (directory,pL) )
+    return pL
+
+def compare_dirs( dir1, dir2 ):
+    """
+    """
+    fL1 = recurse_listdir( dir1 )
+    fL2 = recurse_listdir( dir2 )
+    fL1.sort()
+    fL2.sort()
+    assert fL1 == fL2
+    for i in range(len(fL1)):
+        p1 = os.path.join( dir1, fL1[i] )
+        p2 = os.path.join( dir2, fL2[i] )
+        if os.path.islink( p1 ) or os.path.islink( p2 ):
+            assert os.path.islink( p1 ) and os.path.islink( p2 )
+            rl1 = os.readlink( p1 )
+            rl2 = os.readlink( p2 )
+            assert rl1 == rl2, 'link files are not the same: ' + \
+                               p1+' -> '+rl1+' not equal to ' + rl2
+        elif os.path.isdir(p1) or os.path.isdir(p2):
+            assert os.path.isdir(p1) and os.path.isdir(p2)
+        else:
+            assert filecmp.cmp( p1, p2, shallow=0 )
+
+
+
+
+#######################################################################
+
+main()
