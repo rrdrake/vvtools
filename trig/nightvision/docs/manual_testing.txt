@@ -1,0 +1,151 @@
+
+=======================================
+
+   Night Vision Manual Testing Guide
+
+=======================================
+Last updated: July 31, 2017
+
+
+Why do manual testing for the GUI?
+
+    Making a unit test for a GUI requires knowing exactly how Tkinter (the module used for making
+    the GUI) processes user input and viewing the screen to make sure the GUI displays the items.
+
+    Since this would be overkill for just a test, manual testing must be done to ensure visual
+    functionality.
+
+
+To test the application, follow the guidelines bellow. When the application is updated, update this
+file to make sure future manual tests are thorough.
+
+Anatomy of GUI:
+    - Most of the window is the "timechart canvas". Once loaded, there should be a title with two
+      dates seperated by a hyphen (ex. "Jul 12, 2017 - Jul 13, 2017"). In the middle there is a
+      graph with only vertical lines. On the left there is label for the y-axis with the text
+      "Tasks." On the bottom, under the x-axis there are labels for each vertical gridline, marking
+      the time that each gridline represents(in military time). At the top left-hand corner is the
+      current version of the application.
+
+    - On the right, there is a control panel, with two buttons at the top, containing the text
+      "Help" and "Edit Log Sources". Bellow them, under a seperation, there are three buttons
+      reading "24 Hours", "24 Hours", and "Update". Directly bellow that there are two buttons
+      containing the text "<< Prev," and " Next >>." Directly bellow that there are three text
+      boxes, containing the viewed date, and a button labeled "Go".
+
+    - After that, there is a window labeled "Details", that should contain information about what
+      is being loaded/viewed in the graph. Bellow that is a search bar, followed by two buttons
+      labeled "Search" and "Search by name". Bellow those there is a button labeled "Return to Main
+      View". Bellow that is a button(without an outline or background) labeled "Toggle Debug Mode".
+
+Expected features:
+    - The main window:
+        > The window should be resizable. However, it currently only updates the inside contents
+          when restarted.
+
+    - The tasks:
+        > Tasks are colored bars that are displayed on the graph.
+        > When hovering over one of these tasks, there should be a popup window with basic
+          information about the task. This should happen when hovering over the task name, the
+          markers, or the task itself.
+        > When clicking on a task, the task should be highlighted by a dashed, black outline.
+        > The name of the task should be displayed over task. If the task is too short to show the
+          contain the full name of the task, the name should be displayed directly to the right of
+          the task.
+        > The tasks should also have red marks to represent errors, and grey marks to represent
+          the start of a child task.
+        > When double cliking on a task, the task should expand into all it's child tasks. Each
+          level of depth should have a color consistent with resources/palet.txt. The hover help
+          window should go away when double clicking on a task as to not block the view of the child
+          tasks.
+        > Tasks that have not finished yet extend to the end of the graph and show the text
+          "In Progress" for the end time and duration values.
+
+    - The graph:
+        > The graph should scroll vertically when using the mouse wheel.
+
+    - The "Details" panel:
+        > Should scroll vertically when using the mouse wheel.
+        > Should display "LOADING..." when first starting the GUI
+        > When no tasks are selected, it should display "Tasks displayed: <# of tasks displayed>"
+          and all task names and their durations.
+        > When a task is clicked, it should display information about the task. When in debug mode,
+          more information that is usually hidden should now be visible.
+
+    - The top two buttons:
+        > When clicking on the "Help" button, a small window should appear right under the button
+          with some explanatory text. When the cursor leaves the button, the window should
+          disappear.
+        > When clicking on the "Edit Log Sources" button, another window should appear. This time,
+          the window should:
+            = Be resizable
+            = Contain three buttons at the top saying "Add Another File", "Close", and "Save &
+              Close". The first button should open a file selection window that allows you to choose
+              a log file. The second button should close the window, and the third shold also close
+              the window, but saving the text entered into the "resources/log_sources.txt" file
+              first.
+            = Contain a text box that has the contents of the "resources/log_sources.txt" file.
+
+    - The other top buttons:
+        > When clicking on any of these buttons, the text boxes bellow them should be temporarily
+          disabled (clearly visible) while the graph updates.
+        > The "24 Hours" button should change the graph(if not already in 24h mode) to display
+          tasks over a course of 24 hours.
+        > The "Update" button should open a window warning of task deletion and asking confirmation
+          of continuation. If the "yes" button is clicked, the window should start loading tasks
+          from log files, replacing the tasks that were previously there.
+        > Similarly, the "48 Hours" button should show the tasks over a course of 48 hours.
+        > The "Update" button should open a window confirming the update procedure. If "yes" is
+          clicked, the application should start to update graph.
+        > Similarly, the "Next >>" button should shift the graph forward one day.
+        > Check that these features work for both 24h and 48h modes.
+
+    - The text boxes:
+        > The text boxes at the top should be automatically be populated by the first day displayed
+          on the graph.
+        > The "Go" button should start the loading process for the specified date.
+
+    - The "Toggle Debug Mode" button:
+        > Should allow for more information in the "Details" panel.
+        > Should add new search terms to the search system.
+        > Should reverse the above two when clicked again.
+
+    - The search system:
+        > The search bar should remove the text "Search" and change the font to black when the text
+          box is clicked.
+        > The "Search by name" button should bring up a list of terms to search and a button. Once
+          a new term is selected, the button should change.
+        > The search button should start a search when clicked on. This can also be done by
+          pressing the 'enter' key.
+        > When the search is complete, the "Display" panel should:
+            = The number of search results, unless the search returned only one result.
+            = Show information about a task if that task is the only search result.
+            = Show search results if there are either 0 or 2 or more search results. The format
+              of the results should be the term searched for followed by identifying information.
+              (ex. if searching for duration, the format should be something like
+              "8:23:01 - ID: 07132017234795234")
+
+    - The "Return to Main View" button:
+        > Should deselect any task already selected.
+        > Change the "Display" panel to show the number of tasks shown, all the task names, and
+          their durations.
+
+    - The scrollbars:
+        > Obviously, should scroll their respective windows/panels.
+
+Known/Previous bugs:
+    [Known] If resizing is enabled, the display sometimes opens in significantly different sizes
+      depending on the last size it was set to.
+
+    [Known] Graph displays 0 - 2 tasks when supposed to show more when an error is generated during
+      task drawing.
+
+    [Previous] Search system stops working when a term with two words is selected.
+
+    [Previous] Navigation buttons modify the viewed date and/or mode inconsistently when mode is
+      not set correctly within code.
+
+    [Previous] Tasks do not respond visually to clicking when task and hover window code generates
+      error.
+
+    

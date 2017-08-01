@@ -1,0 +1,14 @@
+#!/bin/bash
+
+startmode="${1:--r}"
+
+if [ $startmode = "-h" ] || [ $startmode = "--help" ]; then
+    echo
+    echo "Night Vision Program -- v 1.0.0"
+    cat "resources/helpstr.txt"
+    echo
+elif [ $startmode = "-r" ] || [ $startmode = "--run" ]; then
+    module unload sntools && module load sntools/local
+    module load sierra-git sierra-python
+    gui.py
+fi
