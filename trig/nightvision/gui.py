@@ -719,7 +719,7 @@ class View(object):
             self.details_frame,
             orient=tk.HORIZONTAL)
         self.seperator = tk.Label(self.details_frame,
-                                  text="\n{}\n\nDetails:".format("_" * 42),
+                                  text="\n______________________________________\n\nDetails:",
                                   font=FONT, width=self.widget_width, bg=DETAILS_BG_COLOR)
         self.main_view_mode_button = tk.Button(self.details_frame, text="Return to Main View",
                                                font=FONT, width=self.widget_width,
