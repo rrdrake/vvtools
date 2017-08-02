@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""this is the model/databse side of the gui in gui.py"""
+"""this is the model/database side of the gui in gui.py"""
 
 import json
 import random

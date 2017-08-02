@@ -16,6 +16,8 @@ If you are editing this application, you should be aware that this GUI:
 3. Uses the Tkinter module
 4. Uses the unittest module for testing
 5. Obtains process information from the "triglog.py" file
+6. If you change the format of jobs in triglog.py, you should change the load_task method in
+   model.py to accomodate for the changes as the format is hard-coded.
 
 And are encouraged to:
 
