@@ -23,15 +23,12 @@ VERSION = "1.0.0"
 # -- Constants --
 
 PALETTE_FILE = os.path.join("resources", "palette.txt")
-WINDOW_INFORMATION_FILE = os.path.join("resources", "window_information.json")
 HELPSTR_FILE = os.path.join("resources", "helpstr.txt")
 LOG_SOURCES_FILE = os.path.join("resources", "log_sources.txt")
 
-with open(WINDOW_INFORMATION_FILE) as jfile:
-    win_info = json.load(jfile)  # pylint: disable=invalid-name
-    WINDOW_SIZE = win_info["size"]
 with open(HELPSTR_FILE) as f:
     HELPSTR = f.read()
+WINDOW_SIZE = (1800, 1200)
 VIEW_FRAME_WIDTH = WINDOW_SIZE[0] - 280
 FONT = ("Courier New", 11)
 TASK_FONT = (FONT[0], 12 if WINDOW_SIZE[1] >= 1200 else 11)
