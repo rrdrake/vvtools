@@ -20,7 +20,7 @@ Functions in this file are conveniences for running subprocesses:
 Helper functions for composing commands are:
 
     command : joins command arguments into a string
-    escape  : joings arguments and escapes shell special characters
+    escape  : joins arguments and escapes shell special characters
 
 A command can be specified in a few ways - the main difference being whether
 shell expansion is performed or not.
@@ -71,14 +71,14 @@ The previous example would be the same as
         run_command( 'ls', '-l', 'foo.log', '*', '../subdir/file.txt' )
 
 Note: Look at the documentation below in the function "def _is_dryrun" for use
-of the envronment variable COMMAND_DRYRUN for noop execution.
+of the environment variable COMMAND_DRYRUN for noop execution.
 """
 
 
 class CommandException(Exception):
     """
-    This exception raised in the run_* functions when 'raise_on_failure' is
-    True and the command returns with a non-zero exit status.
+    This exception is raised in the run_* functions when 'raise_on_failure'
+    is True and the command returns with a non-zero exit status.
     """
     pass
 
@@ -181,12 +181,16 @@ def run_command( *args, **kwargs ):
             fdout = outfp.fileno()
 
     if echo:
-        scd = ''
-        if cd: scd = 'cd '+str(cd)+' && '
-        if outfp == None:
-            sys.stdout.write( scd + scmd + '\n' )
-        else:
-            sys.stdout.write( scd + scmd + ' > ' + redirect + '\n' )
+        tm = time.time()
+        L = []
+        if cd: L.append( 'dir='+cd )
+        else:  L.append( 'dir='+os.getcwd() )
+        if outfp != None:
+            L.append( 'logfile='+redirect )
+        startid = 'start='+str(tm)
+        L.append( startid )
+        L.append( 'cmd='+scmd )
+        sys.stdout.write( '['+time.ctime(tm)+'] runcmd: '+repr(L)+'\n' )
         sys.stdout.flush()
 
     # build the arguments for subprocess.Popen()
@@ -219,6 +223,11 @@ def run_command( *args, **kwargs ):
       outfp.close()
     outfp = None
     fdout = None
+
+    if echo:
+        L = [ 'exit='+str(x), startid, 'cmd='+scmd ]
+        sys.stdout.write( '['+time.ctime()+'] return: '+repr(L)+'\n' )
+        sys.stdout.flush()
 
     if raise_on_failure and x != 0:
         raise CommandException( '\nCommand failed: '+scmd )
@@ -276,9 +285,14 @@ def run_output( *args, **kwargs ):
     dryrun = _is_dryrun( cmd )
 
     if echo:
-        scd = ''
-        if cd: scd = 'cd '+str(cd)+' && '
-        sys.stdout.write( scd + scmd + '\n' )
+        tm = time.time()
+        L = []
+        if cd: L.append( 'dir='+cd )
+        else:  L.append( 'dir='+os.getcwd() )
+        startid = 'start='+str(tm)
+        L.append( startid )
+        L.append( 'cmd='+scmd )
+        sys.stdout.write( '['+time.ctime(tm)+'] runcmd: '+repr(L)+'\n' )
         sys.stdout.flush()
 
     # build the arguments for subprocess.Popen()
@@ -314,6 +328,11 @@ def run_output( *args, **kwargs ):
     if type(sout) != type(''):
         # in python 3, the output is a bytes object .. convert to a string
         sout = sout.decode()
+
+    if echo:
+        L = [ 'exit='+str(x), startid, 'cmd='+scmd ]
+        sys.stdout.write( '['+time.ctime()+'] return: '+repr(L)+'\n' )
+        sys.stdout.flush()
 
     if raise_on_failure and x != 0:
         if len(sout) < 1024:
@@ -411,12 +430,17 @@ def run_timeout( *args, **kwargs ):
             fdout = outfp.fileno()
 
     if echo:
-        scd = ''
-        if cd: scd = 'cd '+str(cd)+' && '
-        if outfp == None:
-            sys.stdout.write( scd + scmd + '\n' )
-        else:
-            sys.stdout.write( scd + scmd + ' > ' + redirect + '\n' )
+        tm = time.time()
+        L = []
+        if cd: L.append( 'dir='+cd )
+        else:  L.append( 'dir='+os.getcwd() )
+        if outfp != None:
+            L.append( 'logfile='+redirect )
+        L.append( 'timeout='+str(timeout) )
+        startid = 'start='+str(tm)
+        L.append( startid )
+        L.append( 'cmd='+scmd )
+        sys.stdout.write( '['+time.ctime(tm)+'] runcmd: '+repr(L)+'\n' )
         sys.stdout.flush()
 
     # build the arguments for subprocess.Popen()
@@ -497,6 +521,11 @@ def run_timeout( *args, **kwargs ):
     outfp = None
     fdout = None
 
+    if echo:
+        L = [ 'exit='+str(x), startid, 'cmd='+scmd ]
+        sys.stdout.write( '['+time.ctime()+'] return: '+repr(L)+'\n' )
+        sys.stdout.flush()
+
     if raise_on_failure and x != 0:
         if x == None:
             raise CommandException( '\nCommand timed out (' + \
@@ -545,12 +574,12 @@ def _is_dryrun( cmd ):
     run and the command should not be executed.
 
     If COMMAND_DRYRUN is set to a nonempty string, it should be a list of
-    program basenames, where the list separator is a vertical bar, "|".
+    program basenames, where the list separator is a forward slash, "/".
     If the basename of the given command program is in the list, then it is
     allowed to run (False is returned).  Otherwise True is returned and the
     command is not run.  For example,
 
-        COMMAND_DRYRUN="scriptname.py|runstuff"
+        COMMAND_DRYRUN="scriptname.py/runstuff"
     """
     v = os.environ.get( 'COMMAND_DRYRUN', None )
     if v != None:
@@ -565,7 +594,7 @@ def _is_dryrun( cmd ):
             except:
                 return True  # a failure is treated as a dry run
 
-            L = v.split('|')
+            L = v.split('/')
             if n in L:
                 return False
         return True

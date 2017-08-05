@@ -1,0 +1,583 @@
+#!/usr/bin/env python
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import getopt
+
+# this will os.chdir() to a subdirectory
+from testutils import *
+
+# the triglog module is the focus of testing, but others produce
+# the logging output
+import triglog
+import trigger, runjob, runcmd
+
+trigfile = os.path.join( trigger.mydir, 'trigger.py' )
+
+
+localpy = sys.executable
+
+# By default, a "fake" ssh script is used that acts like ssh.  To use
+# an actual ssh, add the -s option to the unit test command line.  In this
+# case, make sure you can ssh to the current machine without a password.
+use_real_ssh = False
+
+
+def main():
+    """
+    """
+    optL,argL = getopt.getopt( sys.argv[1:], 's' )
+    cwd = os.getcwd()
+
+    for n,v in optL:
+        if n == '-s':
+            global use_real_ssh
+            use_real_ssh = True
+
+    if len(argL) == 0:
+        argL = """trig1 trig2
+                  cmd1 cmd2 cmd3
+                  job1 job2 job3
+                  tree1 tree2
+                  age1
+               """.split()
+
+    for func in argL:
+        os.chdir( cwd )
+        rmallfiles()
+        if 'COMMAND_DRYRUN' in os.environ:
+            del os.environ['COMMAND_DRYRUN']
+        time.sleep(1)
+        print3( '====> ', func )
+        eval( func+'()' )
+
+
+#######################################################################
+
+def trig1():
+    """
+    read a trigger.py log file
+    """
+    curtm = time.time()
+
+    writefile( 'job_foo.py', """
+        # JOB TRIGGER: """+string_time( curtm+3 )+"""
+        import os, sys, time
+        time.sleep(2)
+        sys.stdout.write( 'date '+ time.ctime() + os.linesep )
+        sys.stdout.flush()
+        """ )
+
+    os.mkdir( 'logs' )
+    loc = os.path.abspath( 'logs' )
+    
+    cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
+    out = runout( cmd )
+    #print3( out )
+    #os.system( cmd )
+    assert not out.strip()
+    
+    jobs = triglog.read_trigger_log( 'logs/trigger.log' )
+    assert len(jobs) == 1
+    jb = jobs[0]
+    assert jb.get( 'exit' ) == 0
+    assert jb.get( 'start' ) < jb.get( 'finish' )
+    assert os.path.exists( jb.get( 'logfile' ) )
+
+
+def trig2():
+    """
+    read two trigger.py log files
+    """
+    curtm = time.time()
+
+    writefile( 'job_foo.py', """
+        # JOB TRIGGER: """+string_time( curtm+3 )+"""
+        import os, sys, time
+        time.sleep(2)
+        sys.stdout.write( 'date '+ time.ctime() + os.linesep )
+        sys.stdout.flush()
+        """ )
+    os.mkdir( 'logs' )
+    loc = os.path.abspath( 'logs' )
+    time.sleep(1)
+    
+    cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
+    out = runout( cmd )
+    #print3( out )
+    #os.system( cmd )
+    assert not out.strip()
+
+    os.rename( 'logs/trigger.log', 'logs/old.log' )
+    curtm = time.time()
+    writefile( 'job_bar.py', """
+        # JOB TRIGGER: """+string_time( curtm+3 )+"""
+        import os, sys, time
+        time.sleep(2)
+        sys.stdout.write( 'date '+ time.ctime() + os.linesep )
+        sys.stdout.flush()
+        """ )
+    time.sleep(1)
+    
+    cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
+    out = runout( cmd )
+    #print3( out )
+    #os.system( cmd )
+    assert not out.strip()
+    
+    root = triglog.JobLog()
+    jobs1 = triglog.read_trigger_log( 'logs/old.log', root )
+    jobs2 = triglog.read_trigger_log( 'logs/trigger.log', root )
+
+    jL = root.getSubJobs()
+    assert len(jL) == 2
+    assert len(jobs1) == 1 and id(jobs1[0]) == id(jL[0])
+    assert len(jobs2) == 1 and id(jobs2[0]) == id(jL[1])
+
+
+def cmd1():
+    """
+    runcmd.py log read
+    """
+    writescript( 'scr', '#!/usr/bin/env python', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runcmd
+        x = runcmd.run_command( 'echo hello ; sleep 1' )
+        assert x == 0
+        """ )
+    time.sleep(1)
+
+    ok = run_redirect( './scr', 'log' )
+    assert ok
+
+    jL = triglog.readlogfile( 'log' )
+    assert len(jL) == 1
+    jb = jL[0]
+    assert jb.get( 'name' ) == 'echo'
+    assert jb.get( 'exit' ) == 0
+    assert jb.get( 'start' ) <= jb.get( 'finish' )
+    assert jb.get( 'directory' ) == os.getcwd()
+    assert jb.get( 'command' ) == 'echo hello ; sleep 1'
+
+
+def cmd2():
+    """
+    runcmd.py log read, more than one command
+    """
+    writescript( 'scr', '#!/usr/bin/env python', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runcmd
+        x = runcmd.run_command( 'echo hello ; sleep 1' )
+        time.sleep(2)
+        assert x == 0
+        x = runcmd.run_timeout( 'touch junk ; sleep 10', timeout=4,
+                                raise_on_failure=False )
+        assert x == None
+        """ )
+    time.sleep(1)
+
+    ok = run_redirect( './scr', 'log' )
+    assert ok
+
+    jL = triglog.readlogfile( 'log' )
+    assert len(jL) == 2
+    jb = jL[0]
+    assert jb.get( 'name' ) == 'echo'
+    assert jb.get( 'exit' ) == 0
+    t1 = jb.get( 'finish' )
+    jb = jL[1]
+    assert jb.get( 'name' ) == 'touch'
+    assert jb.get( 'exit' ) == None
+    t2 = jb.get( 'start' )
+    assert t1 < t2
+
+
+def cmd3():
+    """
+    runcmd.py log read, command that calls command
+    """
+    writescript( 'scr2', '#!/usr/bin/env python', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runcmd
+        out = runcmd.run_output( 'echo hello ; sleep 1' )
+        time.sleep(2)
+        """ )
+    writescript( 'scr1', '#!/usr/bin/env python', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runcmd
+        x = runcmd.run_command( './scr2' )
+        time.sleep(2)
+        assert x == 0
+        x = runcmd.run_timeout( 'touch junk ; sleep 10', timeout=4,
+                                raise_on_failure=False )
+        assert x == None
+        """ )
+    time.sleep(1)
+
+    ok = run_redirect( './scr1', 'log' )
+    assert ok
+
+    jL = triglog.readlogfile( 'log' )
+    assert len(jL) == 3
+    jb = jL[0]
+    assert jb.get( 'name' ) == 'scr2'
+    assert jb.get( 'exit' ) == 0
+    t0 = jb.get( 'finish' )
+    jb = jL[1]
+    assert jb.get( 'name' ) == 'echo'
+    assert jb.get( 'exit' ) == 0
+    t1 = jb.get( 'finish' )
+    jb = jL[2]
+    assert jb.get( 'name' ) == 'touch'
+    assert jb.get( 'exit' ) == None
+    t2 = jb.get( 'finish' )
+
+    assert t1 <= t0 and t0 <= t2
+
+
+def job1():
+    """
+    runjob.py log read
+    """
+    writescript( 'scr', '#!/usr/bin/env python', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runjob
+        x = runjob.run_wait( 'echo hello ; sleep 1' )
+        assert x == 0
+        """ )
+    time.sleep(1)
+
+    ok = run_redirect( './scr', 'log' )
+    assert ok
+
+    jL = triglog.readlogfile( 'log' )
+    assert len(jL) == 1
+    jb = jL[0]
+    assert jb.get( 'name' ) == 'echo'
+    assert jb.get( 'exit' ) == 0
+    assert jb.get( 'start' ) <= jb.get( 'finish' )
+    assert 'echo hello ; sleep 1' in jb.get( 'command' )
+
+
+def job2():
+    """
+    runjob.py log read, with directory
+    """
+    os.mkdir( 'rdir' )
+    rdir = os.path.abspath( 'rdir' )
+    writescript( 'scr', '#!/usr/bin/env python', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runjob
+        x = runjob.run_wait( 'echo hello ; sleep 1',
+                             chdir='"""+rdir+"""' )
+        assert x == 0
+        """ )
+    time.sleep(1)
+
+    ok = run_redirect( './scr', 'log' )
+    assert ok
+
+    jL = triglog.readlogfile( 'log' )
+    assert len(jL) == 1
+    jb = jL[0]
+    assert jb.get( 'name' ) == 'echo'
+    assert jb.get( 'exit' ) == 0
+    assert jb.get( 'start' ) <= jb.get( 'finish' )
+    assert 'echo hello ; sleep 1' in jb.get( 'command' )
+    assert jb.get( 'directory' ) == rdir
+
+
+def job3():
+    """
+    runjob.py log read, with machine
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    os.mkdir( 'rdir' )
+    os.mkdir( 'ldir' )
+    rdir = os.path.abspath( 'rdir' )  # remote run directory
+    ldir = os.path.abspath( 'ldir' )  # local run and log directory
+    writescript( 'scr', '#!/usr/bin/env python', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runjob
+        x = runjob.run_wait( 'echo hello ; sleep 1',
+                        machine='"""+sshmach+"""', sshexe='"""+sshprog+"""',
+                        chdir='"""+rdir+"""', poll_interval=2 )
+        assert x == 0
+        """ )
+    time.sleep(1)
+
+    os.chdir( ldir )
+
+    ok = run_redirect( '../scr', 'log' )
+    assert ok
+
+    jL = triglog.readlogfile( 'log' )
+    assert len(jL) == 1
+    jb = jL[0]
+    assert jb.get( 'name' ) == 'echo'
+    assert jb.get( 'exit' ) == 0
+    assert jb.get( 'start' ) <= jb.get( 'finish' )
+    assert 'echo hello ; sleep 1' in jb.get( 'command' )
+    assert jb.get( 'machine' ) == sshmach
+    assert jb.get( 'directory' ) == rdir
+
+
+def tree1():
+    """
+    read nested trigger, runjob, runcmd
+    """
+    curtm = time.time()
+
+    writescript( 'scr', '#!/usr/bin/env python', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runcmd
+        x = runcmd.run_command( 'echo hello', redirect='hello.log' )
+        assert x == 0
+        """ )
+    scr = os.path.abspath( 'scr' )
+
+    writefile( 'job_foo.py', """
+        # JOB TRIGGER: """+string_time( curtm+3 )+"""
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runjob
+        x = runjob.run_wait( '"""+scr+"""' )
+        assert x == 0
+        """ )
+    os.mkdir( 'logs' )
+    loc = os.path.abspath( 'logs' )
+    time.sleep(1)
+
+    cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
+    out = runout( cmd )
+    #print3( out )
+    #os.system( cmd )
+    assert not out.strip()
+
+    jobs = triglog.read_trigger_log( 'logs/trigger.log' )
+    assert len(jobs) == 1
+    jb = jobs[0]
+    assert jb.get( 'name' ) == 'job_foo.py'
+    assert jb.get( 'exit' ) == 0
+    s1 = jb.get( 'start' )
+    assert type(s1) == type(3) or type(s1) == type(3.3)
+    f1 = jb.get( 'finish' )
+    assert type(f1) == type(3) or type(f1) == type(3.3)
+
+    triglog.readlogfile_recurse( jb.get( 'logfile' ), jb )
+    jL = jb.getSubJobs()
+    assert len(jL) == 1
+    jb = jL[0]
+    assert jb.get( 'name' ) == 'scr'
+    assert jb.get( 'exit' ) == 0
+    s2 = jb.get( 'start' )
+    assert type(s2) == type(3) or type(s2) == type(3.3)
+    f2 = jb.get( 'finish' )
+    assert type(f2) == type(3) or type(f2) == type(3.3)
+
+    jL = jb.getSubJobs()
+    assert len(jL) == 1
+    jb = jL[0]
+    assert jb.get( 'name' ) == 'echo'
+    assert jb.get( 'exit' ) == 0
+    s3 = jb.get( 'start' )
+    assert type(s3) == type(3) or type(s3) == type(3.3)
+    f3 = jb.get( 'finish' )
+    assert type(f3) == type(3) or type(f3) == type(3.3)
+
+    assert f1 >= f2 and f2 >= f3
+    assert s1 <= s2 and s2 <= s3
+
+
+def tree2():
+    """
+    read nested trigger, runjob, runcmd using recurse_trigger_logs
+    """
+    curtm = time.time()
+
+    writescript( 'scr', '#!/usr/bin/env python', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runcmd
+        x = runcmd.run_command( 'echo hello', redirect='hello.log' )
+        assert x == 0
+        """ )
+    scr = os.path.abspath( 'scr' )
+
+    writefile( 'job_foo.py', """
+        # JOB TRIGGER: """+string_time( curtm+3 )+"""
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runjob
+        x = runjob.run_wait( '"""+scr+"""' )
+        assert x == 0
+        """ )
+    os.mkdir( 'logs' )
+    loc = os.path.abspath( 'logs' )
+    time.sleep(1)
+
+    cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
+    out = runout( cmd )
+    #print3( out )
+    #os.system( cmd )
+    assert not out.strip()
+
+    jobs = triglog.recurse_trigger_logs( ['logs/trigger.log'] )
+    assert len(jobs) == 1
+    jb = jobs[0]
+    assert jb.get( 'name' ) == 'job_foo.py'
+    assert jb.get( 'exit' ) == 0
+    s1 = jb.get( 'start' )
+    assert type(s1) == type(3) or type(s1) == type(3.3)
+    f1 = jb.get( 'finish' )
+    assert type(f1) == type(3) or type(f1) == type(3.3)
+
+    jL = jb.getSubJobs()
+    assert len(jL) == 1
+    jb = jL[0]
+    assert jb.get( 'name' ) == 'scr'
+    assert jb.get( 'exit' ) == 0
+    s2 = jb.get( 'start' )
+    assert type(s2) == type(3) or type(s2) == type(3.3)
+    f2 = jb.get( 'finish' )
+    assert type(f2) == type(3) or type(f2) == type(3.3)
+
+    jL = jb.getSubJobs()
+    assert len(jL) == 1
+    jb = jL[0]
+    assert jb.get( 'name' ) == 'echo'
+    assert jb.get( 'exit' ) == 0
+    s3 = jb.get( 'start' )
+    assert type(s3) == type(3) or type(s3) == type(3.3)
+    f3 = jb.get( 'finish' )
+    assert type(f3) == type(3) or type(f3) == type(3.3)
+
+    assert f1 >= f2 and f2 >= f3
+    assert s1 <= s2 and s2 <= s3
+
+
+def age1():
+    """
+    using recurse_trigger_logs with an age
+    """
+    curtm = time.time()
+
+    writefile( 'job_foo.py', """
+        # JOB TRIGGER: """+string_time( curtm+3 )+"""
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runjob
+        x = runjob.run_wait( 'echo "job foo"' )
+        assert x == 0
+        """ )
+
+    writefile( 'job_bar.py', """
+        # JOB TRIGGER: """+string_time( curtm+13 )+"""
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        time.sleep(1)
+        """ )
+
+    os.mkdir( 'logs' )
+    loc = os.path.abspath( 'logs' )
+    time.sleep(1)
+
+    cmd = localpy+' '+trigfile + ' -g 2 -Q 15 -r '+loc
+    out = runout( cmd )
+    #print3( out )
+    #os.system( cmd )
+    assert not out.strip()
+
+    jobs = triglog.recurse_trigger_logs( ['logs/trigger.log'] )
+    assert len(jobs) == 2
+    assert jobs[0].get( 'name' ) == 'job_foo.py'
+    assert len( jobs[0].getSubJobs() ) == 1
+    assert jobs[1].get( 'name' ) == 'job_bar.py'
+    assert len( jobs[1].getSubJobs() ) == 0
+
+    # this could be a fragile test; I am trying to pick an "age" so that
+    # it is somewhere in the middle of when the two jobs ran (so the newer
+    # one is picked up but not the older one)
+    age = 10.0/(24*60*60)
+    jobs = triglog.recurse_trigger_logs( ['logs/trigger.log'], age )
+    assert len(jobs) == 1
+    assert jobs[0].get( 'name' ) == 'job_bar.py'
+    assert len( jobs[0].getSubJobs() ) == 0
+
+
+#######################################################################
+
+def get_ssh_pair( connect_failure=False, uptime=None ):
+    """
+    Returns a pair ( ssh program, ssh machine ).
+    """
+    if use_real_ssh and connect_failure == False and uptime == None:
+        sshprog = which( 'ssh' )
+        import socket
+        sshmach = socket.gethostname()
+    
+    elif uptime != None:
+        # make the fake ssh session to die after 'uptime' seconds
+        writescript( 'fakessh', "#!"+localpy+" -E", """
+            import os, sys, getopt, time, subprocess, signal
+            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
+            mach = argL.pop(0)  # remove the machine name
+            time.sleep( 1 )
+            p = subprocess.Popen( ['/bin/bash', '-c', ' '.join( argL )] )
+            t0 = time.time()
+            while time.time() - t0 < """+str(uptime)+""":
+                x = p.poll()
+                if x != None:
+                    break
+                time.sleep(1)
+            if x == None:
+                if hasattr( p, 'terminate' ):
+                    p.terminate()
+                else:
+                    os.kill( p.pid, signal.SIGTERM )
+                    x = p.wait()
+                x = 1
+            sys.exit( x )
+            """ )
+        sshprog = os.path.abspath( 'fakessh' )
+        sshmach = 'sparky'
+
+    else:
+        writescript( 'fakessh', "#!"+localpy+" -E", """
+            import os, sys, getopt, time
+            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
+            mach = argL.pop(0)  # remove the machine name
+            time.sleep( 1 )
+            if """+repr(connect_failure)+""":
+                sys.stderr.write( "Fake connection falure to "+mach+os.linesep )
+                sys.exit(1)
+            os.execl( '/bin/bash', '/bin/bash', '-c', ' '.join( argL ) )
+            """ )
+        sshprog = os.path.abspath( 'fakessh' )
+        sshmach = 'sparky'
+
+    return sshprog, sshmach
+
+
+def string_time( seconds ):
+    """
+    For the given time in seconds since epoch, returns a string with the
+    time-of-day in format hour:minute:second am/pm.
+    """
+    tup = time.localtime( seconds )
+    return time.strftime( "%I:%M:%S %p", tup ).lower()
+
+
+#######################################################################
+
+main()

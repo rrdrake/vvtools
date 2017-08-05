@@ -119,7 +119,19 @@ def echo1():
     out2 = runout( localpy+' cmd2.py', raise_on_failure=True )
     #print3( out2 )
 
-    assert len( grep( out1, 'ls cmd1.py' ) ) == 1
+    L = grep( out1, 'runcmd:' )
+    assert len(L) == 1 and 'ls cmd1.py' in L[0]
+    st = None
+    for s in L[0].split():
+        if s.startswith( 'start=' ):
+            st = s
+            break
+    assert st
+
+    L = grep( out1, 'return:' )
+    assert len(L) == 1 and 'ls cmd1.py' in L[0]
+    assert st in L[0]
+
     assert len( grep( out1, '^cmd1.py' ) ) == 1
     assert len( grep( out2, 'ls cmd2.py' ) ) == 0
     assert len( grep( out2, '^cmd2.py' ) ) == 1
@@ -152,7 +164,19 @@ def echo2():
     out2 = runout( localpy+' cmd2.py', raise_on_failure=True )
     #print3( out2 )
 
-    assert len( grep( out1, 'ls cmd1.py' ) ) == 1
+    L = grep( out1, 'runcmd:' )
+    assert len(L) == 1 and 'ls cmd1.py' in L[0]
+    st = None
+    for s in L[0].split():
+        if s.startswith( 'start=' ):
+            st = s
+            break
+    assert st
+
+    L = grep( out1, 'return:' )
+    assert len(L) == 1 and 'ls cmd1.py' in L[0]
+    assert st in L[0]
+
     assert len( grep( out1, '^cmd1.py' ) ) == 0
     assert len( grep( out2, 'ls cmd2.py' ) ) == 0
     assert len( grep( out2, '^cmd2.py' ) ) == 0
@@ -181,7 +205,19 @@ def echo3():
     out2 = runout( localpy+' cmd2.py', raise_on_failure=True )
     #print3( out2 )
 
-    assert len( grep( out1, 'ls cmd1.py' ) ) == 1
+    L = grep( out1, 'runcmd:' )
+    assert len(L) == 1 and 'ls cmd1.py' in L[0]
+    st = None
+    for s in L[0].split():
+        if s.startswith( 'start=' ):
+            st = s
+            break
+    assert st
+
+    L = grep( out1, 'return:' )
+    assert len(L) == 1 and 'ls cmd1.py' in L[0]
+    assert st in L[0]
+
     assert len( grep( out1, '^cmd1.py' ) ) == 1
     assert len( grep( out2, 'ls cmd2.py' ) ) == 0
     assert len( grep( out2, '^cmd2.py' ) ) == 1
@@ -734,7 +770,7 @@ def dryrun5():
         fp = open( 'file4.txt', 'w' ) ; fp.close()
         """ )
 
-    os.environ['COMMAND_DRYRUN'] = 'cmd3|cmd2.py|cmd4'
+    os.environ['COMMAND_DRYRUN'] = 'cmd3/cmd2.py/cmd4'
     assert runcmd.run_command( os.path.abspath('cmd1.py') ) == 0
     assert runcmd.run_command( os.path.abspath('cmd2.py') ) == 0
     assert runcmd.run_command( os.path.abspath('cmd3')+' -h arg' ) == 0

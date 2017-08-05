@@ -216,12 +216,22 @@ class Job:
         """
         if not self.get( 'logpath', None ):
             logn = self.logname()
-            cd = self.get( 'chdir', RunJobs.getDefault( 'chdir', None ) )
+            cd = self.rundir()
             logd = self.get( 'logdir', RunJobs.getDefault( 'logdir', cd ) )
             if logd: logf = os.path.join( logd, logn )
             else:    logf = logn
             self.set( 'logpath', logf )
         return self.get( 'logpath' )
+
+    def rundir(self):
+        """
+        Returns the directory in which the job will run, or None if it is not
+        specified.
+        """
+        cd = self.get( 'chdir', None )
+        if cd == None:
+            cd = RunJobs.getDefault( 'chdir', None )
+        return cd
 
     def jobid(self):
         """
@@ -230,7 +240,7 @@ class Job:
         return ( self.get( 'name', None ),
                  self.get( 'machine', None ),
                  self.date() )
-    
+
     def finalize(self):
         """
         Create the launch command.  An exception is raised if the job is not
@@ -270,19 +280,19 @@ class Job:
         run and the job command should not be executed.
 
         If COMMAND_DRYRUN is set to a nonempty string, it should be a list of
-        program basenames, where the list separator is a vertical bar, "|".
+        program basenames, where the list separator is a forward slash, "/".
         If the basename of the job command program is in the list, then it is
         allowed to run (False is returned).  Otherwise True is returned and the
         command is not run.  For example,
 
-            COMMAND_DRYRUN="scriptname.py|jobname"
+            COMMAND_DRYRUN="scriptname.py/jobname"
         """
         v = os.environ.get( 'COMMAND_DRYRUN', None )
         if v != None:
             if v and v != "1":
                 # use the job name, which is 'jobname' or basename of program
                 n = self.get( 'name' )
-                L = v.split('|')
+                L = v.split('/')
                 if n in L:
                     return False
             return True
@@ -297,7 +307,7 @@ class Job:
         timeout = self.get( 'timeout', RunJobs.getDefault( 'timeout' ) )
 
         cmd = self.get( 'command' )
-        chd = self.get( 'chdir', RunJobs.getDefault( 'chdir' ) )
+        chd = self.rundir()
         logn = self.logname()
 
         cwd = os.getcwd()
@@ -327,7 +337,7 @@ class Job:
         """
         timeout = self.get( 'timeout', RunJobs.getDefault( 'timeout' ) )
         cmd = self.get( 'command' )
-        chd = self.get( 'chdir', RunJobs.getDefault( 'chdir' ) )
+        chd = self.rundir()
         sshexe = self.get( 'sshexe', RunJobs.getDefault( 'sshexe' ) )
         numconn = self.get( 'connection_attempts',
                             RunJobs.getDefault( 'connection_attempts' ) )
@@ -735,11 +745,16 @@ class RunJobs:
                 jb.set( n, v )
 
             jb.finalize()
-            tprint( 'JobID: '+str(jb.jobid()) )
+            tprint( 'JobID:', jb.jobid() )
+            tprint( 'LogFile:', os.path.abspath(jb.logname()) )
+            m = jb.get( 'machine', None )
+            if m: tprint( 'Machine:', m )
+            cd = jb.rundir()
+            if cd: tprint( 'Directory:', cd )
 
             # run in a thread and return without waiting
             self.start( jb )
-        
+
         except:
             # catch all exceptions to avoid crashing the calling script;
             # instead, treat any issue as a job failure

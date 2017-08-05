@@ -36,7 +36,7 @@ def main():
                   waitall1 waitall2 waitall3 waitall4 waitall5 waitall6
                   jobfail1 jobfail2 jobfail3 jobfail4 jobfail5
                   multijob1
-                  chdir1
+                  echo1 chdir1
                   jobcast1 jobcast2
                   remote1 remote2 remote3
                   timeout1 timeout2
@@ -420,6 +420,56 @@ def multijob1():
 
     fL = fnmatch.filter( os.listdir( '.' ), 'sleep-*.log' )
     assert len(fL) == 2
+
+
+def echo1():
+    """
+    check the log output markers
+    """
+    writescript( 'scr', '#!/usr/bin/env python', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runjob
+        x = runjob.run_wait( 'echo hello' )
+        assert x == 0
+        """ )
+    time.sleep(1)
+
+    out = runout( './scr', raise_on_failure=True )
+    print3( out )
+
+    pat = re.compile(
+        r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? RunJob: ' )
+    L = grep( out, 'RunJob:' )
+    assert len(L) == 1 and pat.match( L[0] ) != None
+
+    pat = re.compile(
+        r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? JobID: ' )
+    L = grep( out, 'JobID:' )
+    assert len(L) == 1
+    m = pat.match( L[0] )
+    assert m != None
+    jid = L[0][m.end():].strip()
+
+    pat = re.compile(
+        r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? LogFile: ' )
+    L = grep( out, 'LogFile:' )
+    assert len(L) == 1
+    m = pat.match( L[0] )
+    assert m != None
+    logf = L[0][m.end():].strip()
+    assert os.path.exists( logf )
+
+    pat = re.compile(
+        r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? JobDone: ' )
+    L = grep( out, 'JobDone:' )
+    assert len(L) == 1
+    m = pat.match( L[0] )
+    assert m != None
+    s = L[0][m.end():].strip()
+    s1,s2 = s.split('exit=0')
+    assert s1.strip() == 'jobid='+jid
+    assert s2.strip() == 'exc='
 
 
 def chdir1():
@@ -925,7 +975,7 @@ def dryrun5():
         """ )
     cmd2 = os.path.abspath( 'cmd2.py' )
 
-    os.environ['COMMAND_DRYRUN'] = 'junk|cmd2.py|cmd1'
+    os.environ['COMMAND_DRYRUN'] = 'junk/cmd2.py/cmd1'
     jid = runjob.run_job( cmd1, poll_interval=2 )
     jb = runjob.wait_job( jid )
     jid = runjob.run_job( cmd2, poll_interval=2 )
@@ -973,7 +1023,7 @@ def dryrun6():
                           machine=sshmach, sshexe=sshprog,
                           chdir=rd, poll_interval=2 )
     jb = runjob.wait_job( jid )
-    os.environ['COMMAND_DRYRUN'] = 'junk|cmd3.py|cmd2'
+    os.environ['COMMAND_DRYRUN'] = 'junk/cmd3.py/cmd2'
     jid = runjob.run_job( cmd2+' -h arg',
                           machine=sshmach, sshexe=sshprog,
                           chdir=rd, poll_interval=2 )

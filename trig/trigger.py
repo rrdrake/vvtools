@@ -751,66 +751,6 @@ def printlog( *args ):
     sys.stdout.flush()
 
 
-readpat = re.compile( r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+?' )
-
-def logreadline( fp ):
-    """
-    Given an open file pointer, this will read one printlog() line (which may
-    contain multiple newlines).  Returns a list
-
-        [ seconds since epoch, arg1, arg2, ... ]
-
-    or None if there are no more lines in the file.
-    """
-    val = None
-
-    try:
-        line = None
-        while True:
-
-            if line == None:
-                line = fp.readline()
-            if not line:
-                break
-
-            val = None
-            try:
-                line = line.rstrip()
-                m = readpat.match( line )
-                if m != None:
-                    L = line[m.end():].strip().split( ' ', 1 )
-                    n = int( L.pop(0) )
-                    assert n < 1000  # if large, probably corruption
-                    ts = line[:m.end()].strip().strip('[').strip(']')
-                    tm = time.mktime( time.strptime( ts ) )
-                    val = [ tm ]
-                    if n > 0:
-                        aL = L[0].split( ':', 1 )
-                        val.append( aL[0].strip() )
-                        if n > 1:
-                            val.append( aL[1].strip() )
-            except:
-                val = None
-            line = None
-
-            if val != None:
-                if n > 2:
-                    for i in range(n-2):
-                        line = fp.readline()
-                        assert line
-                        if line.startswith( '    ' ):
-                            val.append( line[4:].rstrip() )
-                        else:
-                            val = None
-                            break
-                if val != None:
-                    break
-    except:
-        val = None
-
-    return val
-
-
 class Redirect:
     """
     A convenience class to redirect the current process's stdout & stderr
