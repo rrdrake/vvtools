@@ -9,6 +9,7 @@ import re
 import shutil
 import pipes
 import subprocess
+import traceback
 
 import remotepython as rpy
 print3 = rpy.print3
@@ -82,9 +83,10 @@ def main():
                     dperms=optD.get( '--dperms', [] ),
                     group=optD.get( '--group', None ),
                     timeout=tmout,
-                    sshexe=optD.get( '--sshexe', None ),
+                    sshexe=optD.get( '--sshexe', 'ssh' ),
                      )
     except:
+        traceback.print_exc()
         print3( '*** filecopy.py: '+str( sys.exc_info()[1] ) )
         sys.exit(1)
 
@@ -93,7 +95,7 @@ def main():
 
 def copy_files( files, to_dir,
                 fperms=[], dperms=[], group=None,
-                echo=True, timeout=None, sshexe=None ):
+                echo=True, timeout=None, sshexe='ssh' ):
     """
     Copy or replace paths in the 'files' list into the 'to_dir' directory.
 
@@ -285,7 +287,7 @@ def make_temp_dir( parent_dir, itime ):
     pid = str( os.getpid() )
     dt = '_'.join( time.ctime( itime ).split() )
     sd = os.path.join( parent_dir, 'filecopy_'+dt+'_p'+pid )
-    print3( 'mkdir '+sd )
+    print3( 'mkdir '+os.uname()[1]+':'+sd )
     os.mkdir( sd )
     apply_chmod( sd, 'u=rwx', 'g=---', 'o=---' )
     return sd
@@ -300,13 +302,13 @@ def swap_paths( readL, tempdir, writedir ):
         wf = os.path.join( writedir, base2 )
         if os.path.islink( wf ) or os.path.exists( wf ):
             old = os.path.join( tempdir, base2+'.old' )
-            print3( 'mv '+wf+' '+old )
+            print3( os.uname()[1]+':', 'mv '+wf+' '+old )
             os.rename( wf, old )
 
     for dirn,base1,base2 in readL:
         rf = os.path.join( tempdir, base1 )
         wf = os.path.join( writedir, base2 )
-        print3( 'mv '+rf+' '+wf )
+        print3( os.uname()[1]+':', 'mv '+rf+' '+wf )
         os.rename( rf, wf )
 
 def apply_permissions( directory, fileL, fperms, dperms, group ):

@@ -83,7 +83,7 @@ be military time, such as "1:00" or "18:30" or "22:00".
 
 To run on a particular day of the week, use:
 
-    <DOW> [, <DOW> [, ...] ] [ <time> [, <time> ;, ...] ]
+    <DOW> [, <DOW> [, ...] ] [ <time> [, <time> , ...] ]
 
 where <DOW> is a day of the week, such as "Monday", "monday", "Mon", "mon".
 A time of day specification is optional, and if not given, 5 seconds past
@@ -196,6 +196,8 @@ def activate( optD, argL ):
 
             ps = None
             if mach == os.uname()[1]:
+                # look for the process on this machine; if not found, an
+                # empty string is returned
                 ps = processes( pid=pid ).strip()
 
             if ps == None or ps:
@@ -207,8 +209,8 @@ def activate( optD, argL ):
                 tspan = max( 3*tgrain, 3*tactive )
                 if time.time() - tm < tspan:
                     # the only return of False from this function; it means
-                    # the last active message in the log file is too long ago
-                    # (the assumption is that it is hung somehow)
+                    # the last active message in the log file is too recent
+                    # (another trigger process is still running)
                     return False
 
     return True

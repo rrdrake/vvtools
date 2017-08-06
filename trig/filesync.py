@@ -205,17 +205,17 @@ def file_perms( fname, permissions, remote=None ):
     if remote == None:
         if perms.i_own( fname ):
             if type(permissions) == type(''):
-                perms.apply_spec( fname, permissions )
+                perms.apply_chmod( fname, permissions )
             else:
                 # assume 'permissions' is a tuple or list
-                perms.apply_spec( fname, *permissions )
+                perms.apply_chmod( fname, *permissions )
     else:
         if remote.x_i_own( fname ):
             if type(permissions) == type(''):
-                remote.x_apply_spec( fname, permissions )
+                remote.x_apply_chmod( fname, permissions )
             else:
                 # assume 'permissions' is a tuple or list
-                remote.x_apply_spec( fname, *permissions )
+                remote.x_apply_chmod( fname, *permissions )
 
 
 _machine_prefix_pat = re.compile( '[0-9a-zA-Z_.-]+?:' )
