@@ -43,9 +43,9 @@ def main():
                   glob1 glob2 glob3
                   mktemp1
                   swap1
-                  local1 local2 local3 local4 local5 local6 local7
-                  get1 get2 get3 get4 get5 get6
-                  put1 put2 put3 put4 put5 put6
+                  local1 local2 local3 local4 local5 local6 local7 local8
+                  get1 get2 get3 get4 get5 get6 get7
+                  put1 put2 put3 put4 put5 put6 put7
                   dup1
                """.split()
 
@@ -553,6 +553,38 @@ def local7():
     assert m2 == 0
 
 
+def local8():
+    """
+    local to local, check time stamps are preserved
+    """
+    writefile( 'dir/file1.txt', 'file 1 content\n' )
+    writefile( 'dir/sub1/file2.txt', 'file 2 content\n' )
+    writefile( 'dir/sub2/file3.txt', 'file 3 content\n' )
+    os.mkdir( 'cpy' )
+    time.sleep(1)
+    t1 = time.time() - 600
+    os.utime( 'dir/file1.txt', (t1,t1) )
+    t2 = t1 - 600
+    os.utime( 'dir/sub1/file2.txt', (t2,t2) )
+    t3 = t2 - 600
+    os.utime( 'dir/sub2', (t3,t3) )
+    time.sleep(1)
+
+    filecopy.copy_files( ['dir/*'], 'cpy' )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+    t = os.path.getmtime( 'dir/file1.txt' )
+    assert t < time.time() - 300
+    assert abs( t - os.path.getmtime( 'cpy/file1.txt' ) ) < 3
+    t = os.path.getmtime( 'dir/sub1/file2.txt' )
+    assert t < time.time() - 300
+    assert abs( t - os.path.getmtime( 'cpy/sub1/file2.txt' ) ) < 3
+    t = os.path.getmtime( 'dir/sub2' )
+    assert t < time.time() - 300
+    assert abs( t - os.path.getmtime( 'cpy/sub2' ) ) < 3
+
+
 def get1():
     """
     remote to local, remote_to_local_copy()
@@ -789,6 +821,42 @@ def get6():
     assert m2 == 0
 
 
+def get7():
+    """
+    remote to local, check time stamps are preserved
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'dir/file1.txt', 'file 1 content\n' )
+    writefile( 'dir/sub1/file2.txt', 'file 2 content\n' )
+    writefile( 'dir/sub2/file3.txt', 'file 3 content\n' )
+    srcd = os.path.abspath( 'dir' )
+    os.mkdir( 'cpy' )
+    time.sleep(1)
+    t1 = time.time() - 600
+    os.utime( 'dir/file1.txt', (t1,t1) )
+    t2 = t1 - 600
+    os.utime( 'dir/sub1/file2.txt', (t2,t2) )
+    t3 = t2 - 600
+    os.utime( 'dir/sub2', (t3,t3) )
+    time.sleep(1)
+
+    filecopy.copy_files( [sshmach+':'+srcd+'/*'], 'cpy',
+                         sshexe=sshprog )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+    t = os.path.getmtime( 'dir/file1.txt' )
+    assert t < time.time() - 300
+    assert abs( t - os.path.getmtime( 'cpy/file1.txt' ) ) < 3
+    t = os.path.getmtime( 'dir/sub1/file2.txt' )
+    assert t < time.time() - 300
+    assert abs( t - os.path.getmtime( 'cpy/sub1/file2.txt' ) ) < 3
+    t = os.path.getmtime( 'dir/sub2' )
+    assert t < time.time() - 300
+    assert abs( t - os.path.getmtime( 'cpy/sub2' ) ) < 3
+
+
 def put1():
     """
     local to remote, using copy_files()
@@ -1022,6 +1090,42 @@ def put6():
     assert m1 != 0
     m2 = filemode( 'cpy/sub/file2.txt' ) & oth
     assert m2 == 0
+
+
+def put7():
+    """
+    local to remote, check time stamps are preserved
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    writefile( 'dir/file1.txt', 'file 1 content\n' )
+    writefile( 'dir/sub1/file2.txt', 'file 2 content\n' )
+    writefile( 'dir/sub2/file3.txt', 'file 3 content\n' )
+    os.mkdir( 'cpy' )
+    cpyd = os.path.abspath( 'cpy' )
+    time.sleep(1)
+    t1 = time.time() - 600
+    os.utime( 'dir/file1.txt', (t1,t1) )
+    t2 = t1 - 600
+    os.utime( 'dir/sub1/file2.txt', (t2,t2) )
+    t3 = t2 - 600
+    os.utime( 'dir/sub2', (t3,t3) )
+    time.sleep(1)
+
+    filecopy.copy_files( ['dir/*'], sshmach+':'+cpyd,
+                         sshexe=sshprog )
+    time.sleep(1)
+
+    compare_dirs( 'dir', 'cpy' )
+    t = os.path.getmtime( 'dir/file1.txt' )
+    assert t < time.time() - 300
+    assert abs( t - os.path.getmtime( 'cpy/file1.txt' ) ) < 3
+    t = os.path.getmtime( 'dir/sub1/file2.txt' )
+    assert t < time.time() - 300
+    assert abs( t - os.path.getmtime( 'cpy/sub1/file2.txt' ) ) < 3
+    t = os.path.getmtime( 'dir/sub2' )
+    assert t < time.time() - 300
+    assert abs( t - os.path.getmtime( 'cpy/sub2' ) ) < 3
 
 
 def dup1():

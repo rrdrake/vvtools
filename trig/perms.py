@@ -9,7 +9,6 @@ import pwd
 import grp
 
 
-# magic:
 help_string = """
 USAGE:
     perms.py [OPTIONS] file1 [ file2 ... ]

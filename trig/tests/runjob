@@ -43,6 +43,7 @@ def main():
                   remotefail1 remotefail2a remotefail2b
                   update1
                   dryrun1 dryrun2 dryrun3 dryrun4 dryrun5 dryrun6
+                  waitfor1 waitfor2 waitfor3 waitfor4 waitfor5 waitfor6
                """.split()
 
     for func in argL:
@@ -63,7 +64,7 @@ def runjob1():
     """
     jid = runjob.run_job( 'echo "hello" ; ls -l job.py ; sleep 2',
                           poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
@@ -79,7 +80,7 @@ def runjob1b():
     jid = runjob.run_job( '/bin/bash', '-c',
                           'echo "hello" ; ls -l job.py ; sleep 2',
                           poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     fL = fnmatch.filter( os.listdir( '.' ), 'bash-*.log' )
@@ -93,7 +94,7 @@ def runjob1c():
     run a command as a python list
     """
     jid = runjob.run_job( ['touch', 'file name'], poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
@@ -106,7 +107,7 @@ def runjob1d():
     run a command as a python list plus a string
     """
     jid = runjob.run_job( ['touch'], 'file name', poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
@@ -120,7 +121,7 @@ def runjob1e():
     """
     jid = runjob.run_job( runjob.command( 'touch', 'file name' ),
                           poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
@@ -137,7 +138,7 @@ def runjob2():
     time.sleep(1)
     assert not os.path.exists( 'goodbye' )
     # the wait returns the job object
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
@@ -174,7 +175,7 @@ def runjob3():
     assert os.path.exists( 'goodbye' )
 
     # the wait returns the job object
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
@@ -190,7 +191,7 @@ def runjob4():
     """
     jid = runjob.run_job( ['touch', 'file.txt'], name="makefile",
                           poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
@@ -267,7 +268,7 @@ def waitall3():
 
     assert len(jL) == 1
     assert jL[0] and jL[0].get( 'name' ) == 'echo'
-    assert runjob.wait_job( jid2 )
+    assert runjob.wait_job( jid2, poll_interval=2 )
 
 
 def waitall4():
@@ -281,7 +282,7 @@ def waitall4():
 
     assert len(jL) == 1
     assert jL[0] and jL[0].get( 'name' ) == 'sleep'
-    assert runjob.wait_job( jid1 )
+    assert runjob.wait_job( jid1, poll_interval=2 )
 
 
 def waitall5():
@@ -290,7 +291,7 @@ def waitall5():
     """
     jid1 = runjob.run_job( 'echo hello ; sleep 6', poll_interval=2 )
     jid2 = runjob.run_job( 'sleep 2', poll_interval=2 )
-    j = runjob.wait_job( jid2 )
+    j = runjob.wait_job( jid2, poll_interval=2 )
     assert j
 
     jL = runjob.wait_all( poll_interval=3 )
@@ -305,7 +306,7 @@ def waitall6():
     """
     jid1 = runjob.run_job( 'echo hello ; sleep 6', poll_interval=2 )
     jid2 = runjob.run_job( 'sleep 2', poll_interval=2 )
-    j = runjob.wait_job( jid2 )
+    j = runjob.wait_job( jid2, poll_interval=2 )
     assert j
 
     jL = runjob.wait_all( jid2, jid1, poll_interval=3 )
@@ -321,7 +322,7 @@ def jobfail1():
     a job that fails
     """
     jid = runjob.run_job( 'echo "fake failure" ; exit 1', poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 1
 
     fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
@@ -335,7 +336,7 @@ def jobfail2():
     """
     jid = runjob.run_job( '/an/arbitrary/path/badprogram', '-h',
                           poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert not jb.has( 'exit' )
     assert jb.get( 'exc' ).startswith('[')
 
@@ -348,7 +349,7 @@ def jobfail3():
     a shell job that fails to launch
     """
     jid = runjob.run_job( '/an/arbitrary/path/badprogram', poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) != None and jb.get( 'exit' ) != 0
     assert not jb.has( 'exc' )
 
@@ -361,11 +362,11 @@ def jobfail4():
     an ill formed job
     """
     jid = runjob.run_job(  )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert not jb.has( 'exit' )
     assert jb.has( 'exc' )
     jid = runjob.run_job( 'ls', ['-l','uhoh'], poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert not jb.has( 'exit' )
     assert jb.has( 'exc' )
 
@@ -378,11 +379,11 @@ def jobfail5():
     bad attributes to job specification
     """
     jid = runjob.run_job( 'ls', machine=' sparky.gov' )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert not jb.has( 'exit' )
     assert jb.has( 'exc' )
     jid = runjob.run_job( '' )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert not jb.has( 'exit' )
     assert jb.has( 'exc' )
 
@@ -409,10 +410,10 @@ def multijob1():
     assert not runjob.poll_job( jid1 )
     assert runjob.poll_job( jid2 )
 
-    jb2 = runjob.wait_job( jid2 )
+    jb2 = runjob.wait_job( jid2, poll_interval=2 )
     assert jb2.get( 'exit' ) == 0
 
-    jb1 = runjob.wait_job( jid1 )
+    jb1 = runjob.wait_job( jid1, poll_interval=2 )
     assert jb1.get( 'exit' ) == 0
 
     assert os.path.exists( 'file1' )
@@ -430,7 +431,7 @@ def echo1():
         import os, sys, time
         sys.path.insert( 0, '"""+srcdir+"""' )
         import runjob
-        x = runjob.run_wait( 'echo hello' )
+        x = runjob.run_wait( 'echo hello', poll_interval=2 )
         assert x == 0
         """ )
     time.sleep(1)
@@ -482,7 +483,7 @@ def chdir1():
 
     jid = runjob.run_job( 'echo hello > afile.txt',
                           chdir=cd, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
@@ -497,7 +498,7 @@ def jobcast1():
     cast a Job instance to True/False
     """
     jid = runjob.run_job( 'echo hello > afile.txt', poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
     if jb:
         pass
@@ -516,7 +517,7 @@ def jobcast2():
     """
     jid = runjob.run_job( 'echo hello > afile.txt ; exit 1',
                           poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.has( 'exit' )
     if jb:
         raise Exception( "cast should be False" )
@@ -546,7 +547,7 @@ def remote1():
     jid = runjob.run_job( 'echo hello',
                           machine=sshmach, sshexe=sshprog,
                           chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
@@ -582,7 +583,7 @@ def remote2():
     jid = runjob.run_job( '/bad/program',
                           machine=sshmach, sshexe=sshprog,
                           chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) != 0
     time.sleep(2)
 
@@ -618,9 +619,9 @@ def remote3():
     jid2 = runjob.run_job( 'sleep 4; echo world',
                            machine=sshmach, sshexe=sshprog,
                            chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid1 )
+    jb = runjob.wait_job( jid1, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
-    jb = runjob.wait_job( jid2 )
+    jb = runjob.wait_job( jid2, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
  
     fL = fnmatch.filter( os.listdir( ld ), 'sleep-*.log' )
@@ -653,7 +654,7 @@ def timeout1():
     t0 = time.time()
     jid = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
                           timeout=5, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     t1 = time.time()
     assert jb.get( 'exit' ) == None
     assert not jb.has( 'exc' )
@@ -683,7 +684,7 @@ def timeout2():
     jid = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
                           machine=sshmach, sshexe=sshprog,
                           chdir=rd, timeout=5, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     t1 = time.time()
     assert jb.get( 'exit' ) == None
 
@@ -726,7 +727,7 @@ def remotefail1():
                           machine=sshmach, sshexe=sshprog,
                           chdir=rd,
                           connection_attempts=2, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert not jb.has( 'exit' )
     assert jb.has( 'exc' )
 
@@ -748,7 +749,7 @@ def remotefail2a():
     jid = runjob.run_job( 'echo hello ; sleep 2 ; echo world',
                           machine=sshmach, sshexe=sshprog,
                           chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
     assert not jb.has( 'exc' )
     
@@ -788,7 +789,7 @@ def remotefail2b():
                           machine=sshmach, sshexe=sshprog,
                           chdir=rd,
                           poll_interval=2, exception_print_interval=3 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
     assert not jb.has( 'exc' )
 
@@ -844,7 +845,7 @@ def update1():
                           poll_interval=2,
                           getlog_small_file_size=1,  # force updates
                           getlog_chunk_size=23 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
     assert not jb.has( 'exc' )
 
@@ -882,10 +883,10 @@ def dryrun1():
     cmd2 = os.path.abspath( 'cmd2.py' )
 
     jid = runjob.run_job( cmd1, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     os.environ['COMMAND_DRYRUN'] = ''
     jid = runjob.run_job( cmd2, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     time.sleep(1)
@@ -905,7 +906,7 @@ def dryrun2():
 
     os.environ['COMMAND_DRYRUN'] = ''
     jid = runjob.run_job( cmd1, machine='sparky', poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     time.sleep(1)
@@ -929,10 +930,10 @@ def dryrun3():
     cmd2 = os.path.abspath( 'cmd2.py' )
 
     jid = runjob.run_job( cmd1, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     os.environ['COMMAND_DRYRUN'] = '1'
     jid = runjob.run_job( cmd2, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     time.sleep(1)
@@ -952,7 +953,7 @@ def dryrun4():
 
     os.environ['COMMAND_DRYRUN'] = '1'
     jid = runjob.run_job( cmd1, machine='sparky', poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     time.sleep(1)
@@ -977,9 +978,9 @@ def dryrun5():
 
     os.environ['COMMAND_DRYRUN'] = 'junk/cmd2.py/cmd1'
     jid = runjob.run_job( cmd1, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     jid = runjob.run_job( cmd2, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
     time.sleep(1)
@@ -1022,16 +1023,16 @@ def dryrun6():
     jid = runjob.run_job( cmd1+' -h arg',
                           machine=sshmach, sshexe=sshprog,
                           chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     os.environ['COMMAND_DRYRUN'] = 'junk/cmd3.py/cmd2'
     jid = runjob.run_job( cmd2+' -h arg',
                           machine=sshmach, sshexe=sshprog,
                           chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
     jid = runjob.run_job( cmd3+' -h arg',
                           machine=sshmach, sshexe=sshprog,
                           chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid )
+    jb = runjob.wait_job( jid, poll_interval=2 )
 
     time.sleep(1)
     assert os.path.exists( rd+'/file1.txt' )
@@ -1039,7 +1040,159 @@ def dryrun6():
     assert os.path.exists( rd+'/file3.txt' )
 
 
+def waitfor1():
+    """
+    using waitforjobid
+    """
+    jid1 = runjob.run_job( 'echo hello ; sleep 8', poll_interval=2 )
+    jid2 = runjob.run_job( 'sleep 1', waitforjobid=jid1, poll_interval=2 )
+    time.sleep(3)
+    assert not runjob.poll_job( jid1 )
+    assert not runjob.poll_job( jid2 )
+    j2 = runjob.wait_job( jid2, poll_interval=2 )
+    assert j2
+    assert runjob.poll_job( jid1 )
+    j1 = runjob.wait_job( jid1, poll_interval=2 )
+    assert j1
+
+    assert j1.get( 'name' ) == 'echo'
+    assert j2.get( 'name' ) == 'sleep'
+
+
+def waitfor2():
+    """
+    using waitforjobid, check ordering in logging output
+    """
+    writescript( 'scr', '#!/usr/bin/env python', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runjob
+        jid1 = runjob.run_job( 'echo hello ; sleep 8', poll_interval=2 )
+        runjob.run_job( 'sleep 1', waitforjobid=jid1, poll_interval=2 )
+        jbL = runjob.wait_all( poll_interval=2 )
+        assert len(jbL) == 2
+        """ )
+    time.sleep(1)
+
+    out = runout( './scr', raise_on_failure=True )
+    print3( out )
+    #os.system( './scr' )
+
+    L = greplog( '(Submit|RunJob|JobDone)', out )
+    assert len(L) == 6
+    assert 'Submit:' in L[0]
+    assert 'echo hello' in L[0] and 'sleep 1' not in L[0]
+    assert 'RunJob:' in L[1]
+    assert 'echo hello' in L[1] and 'sleep 1' not in L[1]
+    assert 'Submit:' in L[2]
+    assert 'sleep 1' in L[2] and 'echo hello' not in L[2]
+    assert 'JobDone:' in L[3]
+    assert 'echo' in L[3] and 'sleep' not in L[3]
+    assert 'RunJob:' in L[4]
+    assert 'sleep 1' in L[4] and 'echo 8' not in L[4]
+    assert 'JobDone:' in L[5]
+    assert 'sleep' in L[5] and 'echo' not in L[5]
+
+
+def waitfor3():
+    """
+    using waitforjobid, check ordering but wait with wait_job()
+    """
+    writescript( 'scr', '#!/usr/bin/env python', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runjob
+        jid1 = runjob.run_job( 'echo hello ; sleep 8', poll_interval=2 )
+        jid2 = runjob.run_job( 'sleep 1', waitforjobid=jid1, poll_interval=2 )
+        jb = runjob.wait_job( jid2, poll_interval=2 )
+        assert jb.get( 'name' ) == 'sleep'
+        """ )
+    time.sleep(1)
+
+    out = runout( './scr', raise_on_failure=True )
+    print3( out )
+    #os.system( './scr' )
+
+    L = greplog( '(Submit|RunJob|JobDone)', out )
+    assert len(L) == 6
+    assert 'Submit:' in L[0]
+    assert 'echo hello' in L[0] and 'sleep 1' not in L[0]
+    assert 'RunJob:' in L[1]
+    assert 'echo hello' in L[1] and 'sleep 1' not in L[1]
+    assert 'Submit:' in L[2]
+    assert 'sleep 1' in L[2] and 'echo hello' not in L[2]
+    assert 'JobDone:' in L[3]
+    assert 'echo' in L[3] and 'sleep' not in L[3]
+    assert 'RunJob:' in L[4]
+    assert 'sleep 1' in L[4] and 'echo 8' not in L[4]
+    assert 'JobDone:' in L[5]
+    assert 'sleep' in L[5] and 'echo' not in L[5]
+
+
+def waitfor4():
+    """
+    waitforjobid with invalid job id
+    """
+    jid1 = runjob.run_job( 'echo "hello" ; sleep 1',
+                           waitforjobid=None, poll_interval=2 )
+    # second job waiting on the (failed) first should still run
+    jid2 = runjob.run_job( 'sleep 1',
+                           waitforjobid=jid1, poll_interval=2 )
+    jb1,jb2 = runjob.wait_all( jid1, jid2, poll_interval=2 )
+    assert not jb1
+    assert jb1.get('name') == 'echo' and jb1.get( 'exc' )
+    assert jb2 and jb2.get('name') == 'sleep'
+
+
+def waitfor5():
+    """
+    waitforjobid where the wait job has already completed
+    """
+    jid1 = runjob.run_job( 'echo hello', poll_interval=2 )
+    runjob.wait_job( jid1, poll_interval=2 )
+    jid2 = runjob.run_job( 'sleep 1',
+                           waitforjobid=jid1, poll_interval=2 )
+    jb = runjob.wait_job( jid2, poll_interval=2 )
+    assert jb and jb.get('name') == 'sleep'
+
+
+def waitfor6():
+    """
+    waitforjobid, chain up more than one level deep
+    """
+    jid1 = runjob.run_job( 'sleep 5', poll_interval=2 )
+    jid2 = runjob.run_job( 'echo hello ; sleep 5',
+                           waitforjobid=jid1, poll_interval=2 )
+    jid3 = runjob.run_job( 'touch junk ; sleep 5',
+                           waitforjobid=jid2, poll_interval=2 )
+    jid4 = runjob.run_job( 'echo world ; sleep 5',
+                           waitforjobid=jid2, poll_interval=2 )
+    jb3 = runjob.wait_job( jid3, poll_interval=2 )
+    assert jb3 and jb3.get('name') == 'touch'
+    runjob.wait_all( poll_interval=2 )
+    jb = runjob.wait_job( jid1 )
+    assert jb and jb.get('name') == 'sleep'
+    jb = runjob.wait_job( jid2 )
+    assert jb and jb.get('name') == 'echo'
+    jb = runjob.wait_job( jid4 )
+    assert jb and jb.get('name') == 'echo'
+
+
 #######################################################################
+
+def greplog( msg, logoutput ):
+    """
+    Greps runjob.py log output for "[<date>] msg:" lines.  Returns list of
+    lines.
+    """
+    pat = re.compile(
+        r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? '+msg+': ' )
+    L = []
+    for line in grep( logoutput, msg ):
+        if pat.match( line ):
+            L.append( line.rstrip() )
+    return L
+
 
 def get_ssh_pair( connect_failure=False, uptime=None ):
     """

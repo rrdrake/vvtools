@@ -26,14 +26,12 @@ The key functions are:
     run_job  : start a command in the background, and return a Job id
     poll_job : returns True if a job id has completed
     wait_job : waits for a job to complete, and returns the exit status
-    wait_all : waits for multiple job ids
+    wait_all : waits for all jobs to complete or a list of job ids
     run_wait : convenience function for run_job() plus wait_job()
 
-Note also the command() and escape() functions imported from runcmd.py can
-be useful in constructing the commands.
-
-See the documentation in runcmd.py for how commands are specified to run_job(),
-because they are the same.
+See the documentation in runcmd.py for how commands are specified to run_job().
+For example, the command() and escape() functions imported from runcmd.py can
+be useful for command constructions
 
 Note: Look at the documentation below in the function "def _is_dryrun" for use
 of the envronment variable COMMAND_DRYRUN for noop execution.
@@ -42,14 +40,30 @@ of the envronment variable COMMAND_DRYRUN for noop execution.
 
 def run_job( *args, **kwargs ):
     """
-    Starts a job in the background and returns the job id.
+    Starts a job in the background and returns the job id.  See runcmd.py
+    for ways to construct a command.  The optional keyword attributes are
 
-    The shell command is formed from 'args', which must be length one or
-    more.
+        name    : give the job a name, which is used in the log file anme
+        chdir   : change to this directory before running the command
+        timeout : apply a timeout to the command
+        machine : run the command on a remote machine
+        logdir  : for remote commands, place the remote log file here
+
+        waitforjobid : only run this new job after the given jobid completes
+
+        sshexe : for remote commands, use this as the ssh program
+        connection_attempts : for remote commands, limit the number of attempts
+                              to connect to the remote machine
+
+        poll_interval : For local jobs with a timeout, this is the sleep time
+                        in seconds between checks for subprocess completion.
+                        For jobs run on remote machines, this is the time in
+                        seconds between log file pulls and the job completion
+                        check
 
     The keyword arguments are passed to the underlying Job object.
     """
-    return RunJobs.inst.run_job( *args, **kwargs )
+    return JobRunner.inst.submit_job( *args, **kwargs )
 
 
 def poll_job( jobid ):
@@ -57,33 +71,45 @@ def poll_job( jobid ):
     Returns True if the 'jobid' completed.  If the 'jobid' is unknown, an
     exception is raised.
     """
-    return RunJobs.inst.poll( jobid )
+    return JobRunner.inst.isDone( jobid )
 
 
-def wait_job( jobid ):
+def wait_job( jobid, **kwargs ):
     """
-    Waits for the job to complete and returns the Job object.  The 'jobid'
-    must exist otherwise an exception is raised.
+    Waits for the job to complete and returns a Job object.  If the 'jobid'
+    does not exist, an exception is raised.
+
+    If the job is already complete, this function just returns the underlying
+    Job object.  Thus, this function can be used to obtain the Job object
+    for any given job id.
+
+    The optional keyword argument 'poll_interval' can be used to specify the
+    sleep time in seconds between polls.
     """
-    return RunJobs.inst.wait( jobid )
+    return JobRunner.inst.complete( jobid, **kwargs )
+
 
 def wait_all( *jobids, **kwargs ):
     """
     Waits for each job to complete and returns the list of completed Job
     objects.  If no 'jobids' are given, all background jobs are waited upon.
+
     The optional keyword argument 'poll_interval' can be used to specify the
     sleep time in seconds between polls.
     """
-    return RunJobs.inst.wait_all( *jobids, **kwargs )
+    return JobRunner.inst.complete_all( *jobids, **kwargs )
 
 
 def run_wait( *args, **kwargs ):
     """
     Starts a job in the background, waits on the job, and returns the exit
     status.  The arguments are the same as for run_job().
+
+    The optional keyword argument 'poll_interval' can be used to specify the
+    sleep time in seconds between polls.
     """
-    jid = RunJobs.inst.run_job( *args, **kwargs )
-    jb = wait_job( jid )
+    jid = JobRunner.inst.submit_job( *args, **kwargs )
+    jb = wait_job( jid, **kwargs )
     x = jb.get( 'exit', None )
     return x
 
@@ -91,20 +117,6 @@ def run_wait( *args, **kwargs ):
 ###########################################################################
 
 class Job:
-    """
-    Required attributes are:
-
-        command
-
-    Optional attributes are:
-
-        name
-        machine
-        chdir
-        logdir
-        timeout
-        poll_interval
-    """
 
     def __init__(self, **kwargs):
         """
@@ -114,7 +126,23 @@ class Job:
         self.attrD = {}
         for n,v in kwargs.items():
             self.set( n, v )
-    
+
+        # when the job is running, this is a threading.Thread() instance
+        self.runthread = None
+
+        self.state = 'setup'
+
+    def getState(self):
+        """
+        Returns the state of the Job as a string, one of
+
+            setup : job setup/construction
+            ready : ready to be run (finalize was called)
+            run   : thread has been started
+            done  : thread was run and now finished
+        """
+        return self.state
+
     def __bool__(self):
         """
         This allows a Job class instance to be cast (coerced) to True/False.
@@ -156,6 +184,7 @@ class Job:
 
     def clear(self, attr_name):
         """
+        Removes the attribute from the Job dict.
         """
         assert attr_name and attr_name == attr_name.strip()
         self.lock.acquire()
@@ -217,7 +246,7 @@ class Job:
         if not self.get( 'logpath', None ):
             logn = self.logname()
             cd = self.rundir()
-            logd = self.get( 'logdir', RunJobs.getDefault( 'logdir', cd ) )
+            logd = self.get( 'logdir', JobRunner.getDefault( 'logdir', cd ) )
             if logd: logf = os.path.join( logd, logn )
             else:    logf = logn
             self.set( 'logpath', logf )
@@ -230,7 +259,7 @@ class Job:
         """
         cd = self.get( 'chdir', None )
         if cd == None:
-            cd = RunJobs.getDefault( 'chdir', None )
+            cd = JobRunner.getDefault( 'chdir', None )
         return cd
 
     def jobid(self):
@@ -249,6 +278,76 @@ class Job:
         self.jobid()
         assert self.has( 'command' )
         assert self.logname()
+
+        self.state = 'ready'
+
+    def start(self):
+        """
+        Start the job execution in a separate thread.  Returns without waiting
+        on the job.  The job state is set to "run".
+        """
+        try:
+            assert self.state == 'ready'
+
+            # a local function serves as the thread entry point to run the
+            # job; exceptions are caught, the 'exc' attribute set, and the
+            # exception re-raised
+            def threxec( jb ):
+                try:
+                    jb.execute()
+                except:
+                    xt,xv,xtb = sys.exc_info()
+                    xs = ''.join( traceback.format_exception_only( xt, xv ) )
+                    ct = time.ctime()
+                    jb.set( 'exc', '[' + ct + '] ' + xs )
+                    sys.stderr.write( '[' + ct + '] Exception: ' + xs + '\n' )
+                    raise
+
+            t = threading.Thread( target=threxec, args=(self,) )
+            self.runthread = t
+
+            t.setDaemon( True )  # so ctrl-C will exit the program
+
+            # set the thread name so exceptions include the job id
+            if hasattr( t, 'setName' ):
+                t.setName( str( self.jobid() ) )
+            else:
+                t.name = str( self.jobid() )
+
+            t.start()
+
+            self.state = "run"
+
+        except:
+            self.state = "done"
+            raise
+
+    def poll(self):
+        """
+        Tests for job completion.  Returns the job state.
+        """
+        if self.state == "run":
+            t = self.runthread
+            if hasattr( t, 'is_alive' ):
+                alive = t.is_alive()
+            else:
+                alive = t.isAlive()
+            if not alive:
+                t.join()
+                self.runthread = None
+                self.state = "done"
+
+        return self.state
+
+    def wait(self):
+        """
+        Waits for the job to complete (for the underlying job thread to
+        finish).
+        """
+        if self.state == "run":
+            self.runthread.join()
+            self.runthread = None
+            self.state = "done"
 
     def execute(self):
         """
@@ -273,38 +372,12 @@ class Job:
         else:
             self._run_remote( mach )
 
-    def _is_dryrun(self):
-        """
-        If the environment defines COMMAND_DRYRUN to an empty string or to the
-        value "1", then this function returns True, which means this is a dry
-        run and the job command should not be executed.
-
-        If COMMAND_DRYRUN is set to a nonempty string, it should be a list of
-        program basenames, where the list separator is a forward slash, "/".
-        If the basename of the job command program is in the list, then it is
-        allowed to run (False is returned).  Otherwise True is returned and the
-        command is not run.  For example,
-
-            COMMAND_DRYRUN="scriptname.py/jobname"
-        """
-        v = os.environ.get( 'COMMAND_DRYRUN', None )
-        if v != None:
-            if v and v != "1":
-                # use the job name, which is 'jobname' or basename of program
-                n = self.get( 'name' )
-                L = v.split('/')
-                if n in L:
-                    return False
-            return True
-
-        return False
-
     def _run_wait(self):
         """
         """
         ipoll = self.get( 'poll_interval',
-                          RunJobs.getDefault( 'poll_interval' ) )
-        timeout = self.get( 'timeout', RunJobs.getDefault( 'timeout' ) )
+                          JobRunner.getDefault( 'poll_interval' ) )
+        timeout = self.get( 'timeout', JobRunner.getDefault( 'timeout' ) )
 
         cmd = self.get( 'command' )
         chd = self.rundir()
@@ -335,12 +408,12 @@ class Job:
     def _run_remote(self, mach):
         """
         """
-        timeout = self.get( 'timeout', RunJobs.getDefault( 'timeout' ) )
+        timeout = self.get( 'timeout', JobRunner.getDefault( 'timeout' ) )
         cmd = self.get( 'command' )
         chd = self.rundir()
-        sshexe = self.get( 'sshexe', RunJobs.getDefault( 'sshexe' ) )
+        sshexe = self.get( 'sshexe', JobRunner.getDefault( 'sshexe' ) )
         numconn = self.get( 'connection_attempts',
-                            RunJobs.getDefault( 'connection_attempts' ) )
+                            JobRunner.getDefault( 'connection_attempts' ) )
 
         logf = self.logpath()
 
@@ -413,11 +486,11 @@ class Job:
     def _monitor(self, rmtpy, rusr, rpid):
         """
         """
-        ipoll = self.get( 'remote_poll_interval',
-                          RunJobs.getDefault( 'remote_poll_interval' ) )
+        ipoll = self.get( 'poll_interval',
+                          JobRunner.getDefault( 'remote_poll_interval' ) )
         xinterval = self.get( 'exception_print_interval',
-                        RunJobs.getDefault( 'exception_print_interval' ) )
-        timeout = self.get( 'timeout', RunJobs.getDefault( 'timeout' ) )
+                        JobRunner.getDefault( 'exception_print_interval' ) )
+        timeout = self.get( 'timeout', JobRunner.getDefault( 'timeout' ) )
 
         if timeout:
             ipoll = min( ipoll, int( 0.45 * timeout ) )
@@ -494,9 +567,9 @@ class Job:
         from remotepython import _BYTES_
         
         small = int( self.get( 'getlog_small_file_size',
-                        RunJobs.getDefault( 'getlog_small_file_size' ) ) )
+                        JobRunner.getDefault( 'getlog_small_file_size' ) ) )
         chunksize = int( self.get( 'getlog_chunk_size',
-                        RunJobs.getDefault( 'getlog_chunk_size' ) ) )
+                        JobRunner.getDefault( 'getlog_chunk_size' ) ) )
 
         lcl_sz = -1
         if os.path.exists( logname ):
@@ -572,15 +645,43 @@ class Job:
             if fp != None:
                 fp.close()
 
+    def _is_dryrun(self):
+        """
+        If the environment defines COMMAND_DRYRUN to an empty string or to the
+        value "1", then this function returns True, which means this is a dry
+        run and the job command should not be executed.
+
+        If COMMAND_DRYRUN is set to a nonempty string, it should be a list of
+        program basenames, where the list separator is a forward slash, "/".
+        If the basename of the job command program is in the list, then it is
+        allowed to run (False is returned).  Otherwise True is returned and the
+        command is not run.  For example,
+
+            COMMAND_DRYRUN="scriptname.py/jobname"
+        """
+        v = os.environ.get( 'COMMAND_DRYRUN', None )
+        if v != None:
+            if v and v != "1":
+                # use the job name, which is 'jobname' or basename of program
+                n = self.get( 'name' )
+                L = v.split('/')
+                if n in L:
+                    return False
+            return True
+
+        return False
+
 
 #########################################################################
 
-class RunJobs:
+class JobRunner:
     
     def __init__(self):
         """
         """
-        self.db = {}
+        self.jobdb = {}
+        self.waiting = {}
+
         self.defaults = {
                             'poll_interval': 15,
                             'remote_poll_interval': 5*60,
@@ -593,135 +694,46 @@ class RunJobs:
                             'getlog_chunk_size': 512,
                         }
 
-    inst = None  # a singleton RunJobs instance (set below)
+    inst = None  # a singleton JobRunner instance (set below)
 
     @staticmethod
-    def jobDefault( attr_name, attr_value ):
+    def seDefault( attr_name, attr_value ):
         """
-        Default values for job attributes can be set here.  Examples are
-        'timeout' and 'poll_frequency'.
+        Set default value for a job attribute.
         """
-        RunJobs.inst.defaults[ attr_name ] = attr_value
+        D = JobRunner.inst.defaults
+        D[ attr_name ] = attr_value
 
     @staticmethod
     def getDefault( attr_name, *args ):
         """
         Get the default value for a job attribute.
         """
+        D = JobRunner.inst.defaults
         if len(args) > 0:
-            return RunJobs.inst.defaults.get( attr_name, args[0] )
-        return RunJobs.inst.defaults[ attr_name ]
+            return D.get( attr_name, args[0] )
+        return D[ attr_name ]
 
-    def insert(self, job, thr=None):
+    def submit_job(self, *args, **kwargs ):
         """
-        Insert the job into the database.
-        """
-        self.db[ job.jobid() ] = ( job, thr )
+        Given the command arguments and keyword attributes, a Job object is
+        constructed and started in the background.  If the job depends on
+        another job completing first, then it is placed in the "waiting" list
+        instead of being run.
 
-    def start(self, job):
-        """
-        Add the given job in the database and start the job execution in a
-        separate thread.  Returns without waiting on the job.  The "done"
-        message is printed at join time in poll() and wait().
-        """
-        # local function which serves as the thread entry point to run the
-        # job; exceptions are caught, the 'exc' attribute set, and the
-        # exception re-raised
-        def threxec( jb ):
-            try:
-                jb.execute()
-            except:
-                xt,xv,xtb = sys.exc_info()
-                xs = ''.join( traceback.format_exception_only( xt, xv ) )
-                ct = time.ctime()
-                jb.set( 'exc', '[' + ct + '] ' + xs )
-                sys.stderr.write( '[' + ct + '] Exception: ' + xs + '\n' )
-                raise
+        The job id is returned.  The state of the job will be one of
 
-        t = threading.Thread( target=threxec, args=(job,) )
-        t.setDaemon( True )  # so ctrl-C will exit the program
-        self.insert( job, t )
-        # set the thread name so exceptions include the job id
-        if hasattr( t, 'setName' ):
-            t.setName( str( job.jobid() ) )
-        else:
-            t.name = str( job.jobid() )
-        t.start()
-
-    def poll(self, jobid):
+            setup : an error during job setup occurred
+            ready : the job is waiting on another job before being run
+            run   : the job was run in the background (in a thread)
         """
-        Tests for job completion.  Returns True if the underlying job thread
-        has completed.
-        """
-        job,t = self.db[ jobid ]
-        if t != None:
-            if hasattr( t, 'is_alive' ):
-                ia = t.is_alive()
-            else:
-                ia = t.isAlive()
-            if not ia:
-                t.join()
-                self.db[ jobid ] = ( job, None )
-                t = None
-                print3( '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<' )
-                tprint( 'JobDone:', 'jobid='+str(job.jobid()),
-                        'exit='+str(job.get('exit','')).strip(),
-                        'exc='+str(job.get('exc','')).strip() )
-        return t == None
+        # while here, we might as well check for job completion
+        self.poll_jobs()
 
-    def wait(self, jobid):
-        """
-        Waits for the job to complete (for the underlying job thread to finish)
-        then returns the Job object.
-        """
-        job,t = self.db[ jobid ]
-        if t != None:
-            t.join()
-            self.db[ jobid ] = ( job, None )
-            print3( '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<' )
-            tprint( 'JobDone:', 'jobid='+str(job.jobid()),
-                    'exit='+str(job.get('exit','')).strip(),
-                    'exc='+str(job.get('exc','')).strip() )
-        return job
-
-    def wait_all(self, *jobids, **kwargs):
-        """
-        Repeated poll of each job id, until all complete.  Returns the list
-        of Jobs.
-        """
-        ipoll = kwargs.get( 'poll_interval',
-                            RunJobs.getDefault( 'poll_interval' ) )
-
-        if len(jobids) == 0:
-            jobids = []
-            for jid,T in self.db.items():
-                if T[1] != None:
-                    jobids.append( jid )
-
-        jobD = {}
-        while len(jobD) < len(jobids):
-            for jid in jobids:
-                if jid not in jobD:
-                    if self.poll(jid):
-                        jobD[jid] = self.wait(jid)
-            if len(jobD) < len(jobids):
-                time.sleep( ipoll )
-
-        return [ jobD[jid] for jid in jobids ]
-
-    def run_job(self, *args, **kwargs ):
-        """
-        A helper function that executes a job command.
-
-        The Job.execute() is run in a separate thread and this function
-        returns immediately with the job id.  Uncaught exceptions will be
-        written to stderr by the normal threading behavior, and the thread
-        will finish.
-        """
-        print3( '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>' )
-        tprint( 'RunJob:', args, kwargs )
+        print3()
+        tprint( 'Submit:', args, kwargs )
         print3( ''.join( traceback.format_list(
-                            traceback.extract_stack()[:-1] ) ).rstrip() )
+                        traceback.extract_stack()[:-1] ) ).rstrip() )
 
         jb = Job()
 
@@ -744,7 +756,49 @@ class RunJobs:
             for n,v in kwargs.items():
                 jb.set( n, v )
 
+            if 'waitforjobid' in kwargs:
+                # check validity of waitfor job id before finalizing
+                wjid = kwargs['waitforjobid']
+                assert wjid in self.jobdb, \
+                    "waitforjobid not in existing job list: "+str(wjid)
+
             jb.finalize()
+
+            self.jobdb[ jb.jobid() ] = jb
+
+        except:
+            # treat exceptions as a job failure
+            xs,tb = capture_traceback( sys.exc_info() )
+            jb.set( 'exc', '[' + time.ctime() + '] ' + xs )
+            sys.stderr.write( '['+time.ctime() +'] ' + \
+                'Exception preparing job '+str(args)+' '+str(kwargs)+'\n' + tb )
+            sys.stderr.flush()
+            # make sure the job is in the database (as a failure)
+            self.jobdb[ jb.jobid() ] = jb
+
+        else:
+            if 'waitforjobid' in kwargs:
+                wjid = kwargs['waitforjobid']
+                tprint( 'WaitFor:', jb.jobid(), 'waiting on', wjid )
+                self.waiting[ jb.jobid() ] = ( jb, wjid )
+            else:
+                self.launch_job( jb )
+
+        # this just ensures that the next job will have a unique date stamp
+        time.sleep(1)
+
+        return jb.jobid()
+
+    def launch_job(self, jb):
+        """
+        A helper function that launches a job and returns without waiting.
+        The underlying command is executed in a thread.  The job state
+        becomes "run".
+        """
+        assert jb.getState() == "ready"
+
+        try:
+            tprint( 'RunJob:', jb.get( 'command' ) )
             tprint( 'JobID:', jb.jobid() )
             tprint( 'LogFile:', os.path.abspath(jb.logname()) )
             m = jb.get( 'machine', None )
@@ -752,26 +806,102 @@ class RunJobs:
             cd = jb.rundir()
             if cd: tprint( 'Directory:', cd )
 
-            # run in a thread and return without waiting
-            self.start( jb )
+            # run the job in a thread and return without waiting
+            jb.start()
 
         except:
-            # catch all exceptions to avoid crashing the calling script;
-            # instead, treat any issue as a job failure
             xs,tb = capture_traceback( sys.exc_info() )
             jb.set( 'exc', '[' + time.ctime() + '] ' + xs )
             sys.stderr.write( '['+time.ctime() +'] ' + \
                 'Exception running jobid '+str( jb.jobid() )+'\n' + tb )
             sys.stderr.flush()
-            self.insert( jb )  # make sure job is in the database
 
-        # this just ensures that the next job will have a unique date stamp
-        time.sleep(1)
+    def isDone(self, jobid):
+        """
+        Tests for job completion.  Returns True if the underlying job thread
+        has completed.
+        """
+        self.poll_jobs()
+        job = self.jobdb[ jobid ]
+        st = job.getState()
+        return st == 'setup' or st == "done"
 
-        return jb.jobid()
+    def complete(self, jobid, **kwargs):
+        """
+        Waits for the job to complete then returns the Job object.  There is
+        no harm in calling this function if the job is already complete.
+        """
+        job = self.jobdb[ jobid ]
 
-# construct the RunJobs singleton instance
-RunJobs.inst = RunJobs()
+        ipoll = kwargs.get( 'poll_interval',
+                            JobRunner.getDefault( 'poll_interval' ) )
+
+        while True:
+            self.poll_jobs()
+            st = job.getState()
+            if st == "setup" or st == "done":
+                break
+            time.sleep( ipoll )
+
+        return job
+
+    def poll_jobs(self):
+        """
+        Polls all running jobs, then launches pending jobs if the job they
+        are waiting on has completed.
+        """
+        for jid,jb in self.jobdb.items():
+            # this is the only place jobs move from "run" to "done"
+            if jb.getState() == 'run':
+                if jb.poll() == 'done':
+                    print3()
+                    tprint( 'JobDone:', 'jobid='+str(jb.jobid()),
+                            'exit='+str(jb.get('exit','')).strip(),
+                            'exc='+str(jb.get('exc','')).strip() )
+
+        D = {}
+        for jid,T in self.waiting.items():
+            jb,waitjid = T
+            waitstate = self.jobdb[waitjid].getState()
+            if waitstate == 'setup' or waitstate == 'done':
+                self.launch_job( jb )
+            else:
+                D[jid] = T
+        self.waiting = D
+
+    def complete_all(self, *jobids, **kwargs):
+        """
+        Repeated poll of each job id, until all complete.  Returns a list
+        of Jobs corresponding to the job ids.  If no job ids are given, then
+        all running and waiting jobs are completed.
+        """
+        ipoll = kwargs.get( 'poll_interval',
+                            JobRunner.getDefault( 'poll_interval' ) )
+
+        if len(jobids) == 0:
+            jobids = []
+            for jid,jb in self.jobdb.items():
+                st = jb.getState()
+                if st == 'ready' or st == 'run':
+                    jobids.append( jid )
+
+        jobD = {}
+        while True:
+            self.poll_jobs()
+            for jid in jobids:
+                jb = self.jobdb[jid]
+                st = jb.getState()
+                if st == 'setup' or st == 'done':
+                    jobD[jid] = jb
+            if len(jobD) == len(jobids):
+                break
+            time.sleep( ipoll )
+
+        return [ jobD[jid] for jid in jobids ]
+
+
+# construct the JobRunner singleton instance
+JobRunner.inst = JobRunner()
 
 
 def capture_traceback( excinfo ):
