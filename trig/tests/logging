@@ -38,7 +38,7 @@ def main():
     if len(argL) == 0:
         argL = """trig1 trig2
                   cmd1 cmd2 cmd3
-                  job1 job2 job3
+                  job1 job2 job3 job4
                   tree1 tree2
                   age1
                """.split()
@@ -151,8 +151,9 @@ def cmd1():
 
     ok = run_redirect( './scr', 'log' )
     assert ok
+    time.sleep(1)
 
-    jL = triglog.readlogfile( 'log' )
+    jL = triglog.RunLogReader( 'log' ).readlogfile()
     assert len(jL) == 1
     jb = jL[0]
     assert jb.get( 'name' ) == 'echo'
@@ -182,7 +183,7 @@ def cmd2():
     ok = run_redirect( './scr', 'log' )
     assert ok
 
-    jL = triglog.readlogfile( 'log' )
+    jL = triglog.RunLogReader( 'log' ).readlogfile()
     assert len(jL) == 2
     jb = jL[0]
     assert jb.get( 'name' ) == 'echo'
@@ -222,7 +223,7 @@ def cmd3():
     ok = run_redirect( './scr1', 'log' )
     assert ok
 
-    jL = triglog.readlogfile( 'log' )
+    jL = triglog.RunLogReader( 'log' ).readlogfile()
     assert len(jL) == 3
     jb = jL[0]
     assert jb.get( 'name' ) == 'scr2'
@@ -248,7 +249,7 @@ def job1():
         import os, sys, time
         sys.path.insert( 0, '"""+srcdir+"""' )
         import runjob
-        x = runjob.run_wait( 'echo hello ; sleep 1' )
+        x = runjob.run_wait( 'echo hello ; sleep 1', poll_interval=2 )
         assert x == 0
         """ )
     time.sleep(1)
@@ -256,7 +257,7 @@ def job1():
     ok = run_redirect( './scr', 'log' )
     assert ok
 
-    jL = triglog.readlogfile( 'log' )
+    jL = triglog.RunLogReader( 'log' ).readlogfile()
     assert len(jL) == 1
     jb = jL[0]
     assert jb.get( 'name' ) == 'echo'
@@ -276,7 +277,7 @@ def job2():
         sys.path.insert( 0, '"""+srcdir+"""' )
         import runjob
         x = runjob.run_wait( 'echo hello ; sleep 1',
-                             chdir='"""+rdir+"""' )
+                             chdir='"""+rdir+"""', poll_interval=2 )
         assert x == 0
         """ )
     time.sleep(1)
@@ -284,7 +285,7 @@ def job2():
     ok = run_redirect( './scr', 'log' )
     assert ok
 
-    jL = triglog.readlogfile( 'log' )
+    jL = triglog.RunLogReader( 'log' ).readlogfile()
     assert len(jL) == 1
     jb = jL[0]
     assert jb.get( 'name' ) == 'echo'
@@ -320,7 +321,7 @@ def job3():
     ok = run_redirect( '../scr', 'log' )
     assert ok
 
-    jL = triglog.readlogfile( 'log' )
+    jL = triglog.RunLogReader( 'log' ).readlogfile()
     assert len(jL) == 1
     jb = jL[0]
     assert jb.get( 'name' ) == 'echo'
@@ -329,6 +330,39 @@ def job3():
     assert 'echo hello ; sleep 1' in jb.get( 'command' )
     assert jb.get( 'machine' ) == sshmach
     assert jb.get( 'directory' ) == rdir
+
+
+def job4():
+    """
+    runjob.py log read, nested multiple jobs
+    """
+    writescript( 'scr', '#!/usr/bin/env python', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        import runjob
+        # make first job finish after the second
+        jid1 = runjob.run_job( 'echo hello ; sleep 3' )
+        jid2 = runjob.run_job( 'touch junkfile ; sleep 1' )
+        jb2 = runjob.wait_job( jid2, poll_interval=2 )
+        jb1 = runjob.wait_job( jid1, poll_interval=2 )
+        assert jb1
+        assert jb2
+        """ )
+    time.sleep(1)
+
+    ok = run_redirect( './scr', 'log' )
+    assert ok
+
+    jL = triglog.RunLogReader( 'log' ).readlogfile()
+    assert len(jL) == 2
+    jb = jL[0]
+    assert jb.get( 'name' ) == 'echo'
+    assert jb.get( 'exit' ) == 0
+    assert 'echo hello' in jb.get( 'command' )
+    jb = jL[1]
+    assert jb.get( 'name' ) == 'touch'
+    assert jb.get( 'exit' ) == 0
+    assert 'touch junkfile' in jb.get( 'command' )
 
 
 def tree1():
@@ -351,7 +385,7 @@ def tree1():
         import os, sys, time
         sys.path.insert( 0, '"""+srcdir+"""' )
         import runjob
-        x = runjob.run_wait( '"""+scr+"""' )
+        x = runjob.run_wait( '"""+scr+"""', poll_interval=2 )
         assert x == 0
         """ )
     os.mkdir( 'logs' )
@@ -419,7 +453,7 @@ def tree2():
         import os, sys, time
         sys.path.insert( 0, '"""+srcdir+"""' )
         import runjob
-        x = runjob.run_wait( '"""+scr+"""' )
+        x = runjob.run_wait( '"""+scr+"""', poll_interval=2 )
         assert x == 0
         """ )
     os.mkdir( 'logs' )
@@ -477,7 +511,7 @@ def age1():
         import os, sys, time
         sys.path.insert( 0, '"""+srcdir+"""' )
         import runjob
-        x = runjob.run_wait( 'echo "job foo"' )
+        x = runjob.run_wait( 'echo "job foo"', poll_interval=2 )
         assert x == 0
         """ )
 

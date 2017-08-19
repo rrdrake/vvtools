@@ -324,7 +324,8 @@ def readlogfile_recurse( logfile, jlog=None ):
     If 'jlog' is not None, it should be a JobLog instance, and the jobs in
     'logfile' are added to it.
     """
-    jobL = readlogfile( logfile )
+    reader = RunLogReader( logfile )
+    jobL = reader.readlogfile()
 
     for jb in jobL:
 
@@ -343,272 +344,327 @@ def readlogfile_recurse( logfile, jlog=None ):
     return jobL
 
 
-def readlogfile( logfile ):
-    """
-    Scans the given log file for sub job launches that use the runjob.py
-    and/or runcmd.py modules.  A list of JobLog instances is returned.
-    """
-    jobL = []
+class RunLogReader:
 
-    for jD in log_readlines( logfile ):
-        logf = jD.get( 'logfile', None )
+    def __init__(self, filename):
+        """
+        """
+        self.fname = filename
+        self.fileptr = None
+
+    def readlogfile(self):
+        """
+        Scans the given log file for sub job launches that use the runjob.py
+        and/or runcmd.py modules.  A list of JobLog instances is returned.
+        """
+        jobL = []
+
+        for jD in self.log_readlines():
+
+            # record the log file date stamp, if available
+            logf = jD.get( 'logfile', None )
+            if logf != None:
+                try:
+                    jD['logdate'] = os.path.getmtime(logf)
+                except:
+                    pass
+
+            jobL.append( JobLog( jD ) )
+
+        return jobL
+
+    def log_readlines(self):
+        """
+        Returns a list of dictionaries, each of which contain the attributes
+        for the jobs.
+        """
+        logdir = os.path.dirname(self.fname)
+
+        self.fileptr = open( self.fname, 'rb' )
+        try:
+            lines = self.logreadfilelines()
+        finally:
+            self.fileptr.close()
+            self.fileptr = None
+
+        jobL = []
+        jobD = {}
+
+        itr = LogLineIterator( lines )
+
+        while itr.morelines():
+
+            tm,ln,data = itr.getline()
+
+            if ln == 'RunJob':
+                try:
+                    attrs = self.get_runjob_data( itr )
+                    if 'logfile' in attrs:
+                        # an old format did not specify LogFile, so it had to
+                        # be calculated; the abs path is performed here
+                        f = attrs['logfile']
+                        if not os.path.isabs(f):
+                            attrs['logfile'] = os.path.join( logdir, f )
+                except:
+                    #traceback.print_exc()  # uncomment to debug
+                    pass
+                else:
+                    jobD[ attrs['jobid'] ] = attrs
+                    jobL.append( attrs )
+
+            elif ln == 'JobDone':
+                try:
+                    jid,x,ex = self.get_runjob_done_data( data )
+                    attrs = jobD[ jid ]
+                except:
+                    #traceback.print_exc()  # uncomment to debug
+                    pass
+                else:
+                    attrs['exit'] = x
+                    attrs['except'] = ex
+                    attrs['finish'] = tm
+
+            elif ln == 'runcmd':
+                try:
+                    attrs = self.get_runcmd_data( data )
+                except:
+                    #traceback.print_exc()  # uncomment to debug
+                    pass
+                else:
+                    jobD[ attrs['jobid'] ] = attrs
+                    # the start= time is used by runcmd for a jobid, override
+                    # with the time in brackets to be consistent
+                    attrs['start'] = tm
+                    jobL.append( attrs )
+
+            elif ln == 'return':
+                try:
+                    jid,x = self.get_runcmd_done_data( data )
+                    attrs = jobD[ jid ]
+                except:
+                    #traceback.print_exc()  # uncomment to debug
+                    pass
+                else:
+                    attrs['exit'] = x
+                    attrs['finish'] = tm
+
+            itr.advance()
+
+        return jobL
+
+    def logreadfilelines(self):
+        """
+        Collects the lines from the file that are relevant to job launch and
+        job finish.  Returns a list of
+
+                [ epoch time, line name, line data ]
+        """
+        relevant_markers = [
+                            'RunJob: ',
+                            'JobID: ',
+                            'LogFile: ',
+                            'Machine: ',
+                            'Directory: ',
+                            'JobDone: ',
+                            'runcmd: ',
+                            'return: ',
+                           ]
+
+        lines = []
+
+        while True:
+
+            try:
+                line = self.fileptr.readline()
+            except:
+                return lines
+
+            if not line:
+                return lines
+
+            line = _STRING_(line).rstrip()
+            m = datemark.match( line )
+            if m != None:
+                try:
+                    ts = line[:m.end()].strip().strip('[').strip(']')
+                    tm = time.mktime( time.strptime( ts ) )
+                    line = line[m.end():].strip()
+                    for n in relevant_markers:
+                        if line.startswith(n):
+                            data = line.split(n,1)[1].strip()
+                            L = [ tm, n.strip().rstrip(':'), data ]
+                            lines.append( L )
+                            break
+                except:
+                    #traceback.print_exc()  # uncomment to debug
+                    pass
+
+
+    def get_runjob_data(self, itr):
+        """
+        Reads the job data from a RunJob: section.  The iterator must be at
+        the start of a RunJob: section.
+
+        Returns a key/value dictionary storing the attributes of the job.
+        """
+        jobD = {}
+        repeatD = {}  
+        jn = None
+        logf = None
+
+        t,n,d = itr.getline()
+        assert n == 'RunJob'
+        repeatD[n] = d
+        jobD['start'] = t
+        jobD['command'] = d.strip()
+
+        while itr.morelines(1):
+
+            t,n,d = itr.lookahead()
+
+            # a repeat of any marker means the end of the current job
+            if n in repeatD:
+                break
+            repeatD[n] = d
+
+            if n == 'JobID':
+                jobD['jobid'] = d.strip()
+                if jn == None:
+                    # extract the job name from the job id tuple
+                    s = d.strip().strip('(').split(',',1)[0]
+                    jn = s.strip('"').strip("'")
+
+            elif n == 'LogFile':
+                logf = d.strip()
+
+            elif n == 'Machine':
+                jobD['machine'] = d.strip()
+
+            elif n == 'Directory':
+                jobD['directory'] = d.strip()
+
+            else:
+                break
+            
+            itr.advance()
+
+        if jn != None:
+            jobD['name'] = jn
+
         if logf != None:
+            jobD['logfile'] = logf
+        elif 'jobid' in jobD:
+            # an old format did not use LogFile, so try to compute the basename
             try:
-                jD['logdate'] = os.path.getmtime(logf)
-            except:
-                pass
-        jobL.append( JobLog( jD ) )
-
-    return jobL
-
-
-readnames = [ \
-              'RunJob: ',
-              'JobID: ',
-              'LogFile: ',
-              'Machine: ',
-              'Directory: ',
-              'JobDone: ',
-              'runcmd: ',
-              'return: ',
-            ]
-
-def log_readlines( filename ):
-    """
-    Returns a list of dictionaries, each of which contain the attributes for
-    the jobs.
-    """
-    logdir = os.path.dirname(filename)
-
-    fp = open( filename, 'rb' )
-    try:
-        lines = logreadfilelines( fp )
-    finally:
-        fp.close()
-
-    jobL = []
-    jobD = {}
-
-    i = 0
-    while i < len(lines):
-
-        tm,ln,data = lines[i]
-
-        if ln == 'RunJob':
-            try:
-                attrs = get_runjob_data( i, lines )
-                if 'logfile' in attrs:
-                    # an old format did not specify LogFile, so it had to
-                    # be calculated; the abs path is performed here
-                    f = attrs['logfile']
-                    if not os.path.isabs(f):
-                        attrs['logfile'] = os.path.join( logdir, f )
-            except:
-                pass
-            else:
-                jobD[ attrs['jobid'] ] = attrs
-                jobL.append( attrs )
-
-        elif ln == 'JobDone':
-            try:
-                jid,x,ex = get_runjob_done_data( data )
-                attrs = jobD[ jid ]
-            except:
-                #traceback.print_exc()  # uncomment to debug
-                pass
-            else:
-                attrs['exit'] = x
-                attrs['except'] = ex
-                attrs['finish'] = tm
-
-        elif ln == 'runcmd':
-            try:
-                attrs = get_runcmd_data( data )
-            except:
-                #traceback.print_exc()  # uncomment to debug
-                pass
-            else:
-                jobD[ attrs['jobid'] ] = attrs
-                # the start= time is used by runcmd for a jobid, override
-                # with the time in brackets to be consistent
-                attrs['start'] = tm
-                jobL.append( attrs )
-
-        elif ln == 'return':
-            try:
-                jid,x = get_runcmd_done_data( data )
-                attrs = jobD[ jid ]
-            except:
-                #traceback.print_exc()  # uncomment to debug
-                pass
-            else:
-                attrs['exit'] = x
-                attrs['finish'] = tm
-
-        i += 1
-
-    return jobL
-
-
-def logreadfilelines( fp ):
-    """
-    Collects the lines from the file that are relevant to job launch and job
-    finish.  Returns a list of
-
-            [ epoch time, line name, line data ]
-    """
-    lines = []
-
-    while True:
-
-        try:
-            line = fp.readline()
-        except:
-            return lines
-
-        if not line:
-            return lines
-
-        line = _STRING_(line).rstrip()
-        m = datemark.match( line )
-        if m != None:
-            try:
-                ts = line[:m.end()].strip().strip('[').strip(']')
-                tm = time.mktime( time.strptime( ts ) )
-                line = line[m.end():].strip()
-                for n in readnames:
-                    if line.startswith(n):
-                        data = line.split(n,1)[1].strip()
-                        L = [ tm, n.strip().rstrip(':'), data ]
-                        lines.append( L )
-                        break
+                n,m,d = eval( jobD['jobid'] )
+                if m: n += '-' + m
+                jobD['logfile'] = n + '-' + d + '.log'
             except:
                 pass
 
+        return jobD
 
-def get_runjob_data( i, lines ):
-    """
-    Reads the job data from a RunJob: section.  The 'lines' must be the list
-    produced by the logreadfilelines() function.  The index 'i' is the start
-    of the RunJob: section which is being read.
+    def get_runjob_done_data(self, datastr):
+        """
+        Extracts the ( jobid, exit status, exception ) from the given data
+        string.
+        """
+        L = datastr.split( 'exit=', 1 )
+        x,ex = [ s.strip() for s in L[1].split( 'exc=', 1 ) ]
 
-    Returns a key/value dictionary storing the attributes of the job.
-    """
-    assert lines[i][1] == 'RunJob'
+        if x:
+            if x == 'None': x = None
+            else:           x = int(x)
 
-    D = {}
-    jn = None
-    logf = None
-    j = i
-    while j < len(lines):
-        t,n,d = lines[j]
-        if n == 'RunJob':
-            D['start'] = t
-            D['command'] = d.strip()
-        elif n == 'JobID':
-            D['jobid'] = d.strip()
-            if jn == None:
-                s = d.strip().strip('(').split(',',1)[0]
-                jn = s.strip('"').strip("'")
-        elif n == 'LogFile':
-            logf = d.strip()
-        elif n == 'Machine':
-            D['machine'] = d.strip()
-        elif n == 'Directory':
-            D['directory'] = d.strip()
+        if not ex: ex = None
+
+        return L[0].strip().lstrip('jobid='), x, ex
+
+
+    def get_runcmd_data(self, datastr):
+        """
+        Reads the job data from a "runcmd:" line produced from runcmd.py module.
+        Returns a key/value dictionary storing the attributes of the jobs.
+        """
+        D = {}
+
+        L = eval( datastr )
+        for s in L:
+            if   s.startswith( 'dir=' ):     D['directory'] = s[4:]
+            elif s.startswith( 'logfile=' ): D['logfile']   = s[8:]
+            elif s.startswith( 'start=' ):   D['start']     = s[6:]
+            elif s.startswith( 'cmd=' ):     D['command']   = s[4:]
+            elif s.startswith( 'timeout=' ): D['timeout']   = s[8:]
+
+        if 'command' in D:
+            try:
+                n = os.path.basename( D['command'].split()[0] )
+            except:
+                n = 'anonymous'
         else:
-            break
-        j += 1
-
-    if jn != None:
-        D['name'] = jn
-
-    if logf != None:
-        D['logfile'] = logf
-    elif 'jobid' in D:
-        # an old format did not use LogFile, so try to compute the basename
-        try:
-            n,m,d = eval( D['jobid'] )
-            if m: n += '-' + m
-            D['logfile'] = n + '-' + d + '.log'
-        except:
-            pass
-
-    return D
-
-
-def get_runjob_done_data( datastr ):
-    """
-    """
-    L = datastr.split( 'exit=', 1 )
-    x,ex = [ s.strip() for s in L[1].split( 'exc=', 1 ) ]
-
-    if x:
-        if x == 'None': x = None
-        else:           x = int(x)
-
-    if not ex: ex = None
-
-    return L[0].strip().lstrip('jobid='), x, ex
-
-
-def get_runcmd_data( datastr ):
-    """
-    Reads the job data from a "runcmd:" line produced from runcmd.py module.
-    Returns a key/value dictionary storing the attributes of the jobs.
-    """
-    D = {}
-
-    L = eval( datastr )
-    for s in L:
-        if   s.startswith( 'dir=' ):     D['directory'] = s[4:]
-        elif s.startswith( 'logfile=' ): D['logfile']   = s[8:]
-        elif s.startswith( 'start=' ):   D['start']     = s[6:]
-        elif s.startswith( 'cmd=' ):     D['command']   = s[4:]
-        elif s.startswith( 'timeout=' ): D['timeout']   = s[8:]
-
-    if 'command' in D:
-        try:
-            n = os.path.basename( D['command'].split()[0] )
-        except:
             n = 'anonymous'
-    else:
-        n = 'anonymous'
-    D['name'] = n
+        D['name'] = n
 
-    if 'start' in D:
-        D['jobid' ] = D['start']
-    elif 'command' in D:
-        D['jobid'] = D['command']
-    else:
-        D['jobid'] = ''
+        if 'start' in D:
+            D['jobid' ] = D['start']
+        elif 'command' in D:
+            D['jobid'] = D['command']
+        else:
+            D['jobid'] = ''
 
-    return D
+        return D
 
 
-def get_runcmd_done_data( datastr ):
+    def get_runcmd_done_data(self, datastr):
+        """
+        Extracts the ( job id, exit status ) from the given data string.
+        """
+        x = jid = cmd = None
+
+        L = eval( datastr )
+        for s in L:
+            if s.startswith( 'exit=' ):
+                x = s[5:]
+            elif s.startswith( 'start=' ):
+                jid = s[6:]
+            elif s.startswith( 'command=' ):
+                cmd = s[8:]
+
+        if jid == None:
+            jid = cmd
+
+        if x:
+            if x == 'None': x = None
+            else:           x = int(x)
+
+        return jid,x
+
+
+class LogLineIterator:
     """
+    Given a list of lines, this forms an old fashion iterator with a "look
+    ahead" function.
     """
-    x = jid = cmd = None
 
-    L = eval( datastr )
-    for s in L:
-        if s.startswith( 'exit=' ):
-            x = s[5:]
-        elif s.startswith( 'start=' ):
-            jid = s[6:]
-        elif s.startswith( 'command=' ):
-            cmd = s[8:]
+    def __init__(self, line_list):
+        self.lines = line_list
+        self.i = 0
 
-    if jid == None:
-        jid = cmd
+    def morelines(self, lookahead=0):
+        """
+        Returns true if the current iterator location plus 'lookahead' is
+        valid (i.e., would not index off the end of the lines array).
+        """
+        return self.i+lookahead < len(self.lines)
 
-    if x:
-        if x == 'None': x = None
-        else:           x = int(x)
+    def getline(self):
+        return self.lines[ self.i ]
 
-    return jid,x
+    def lookahead(self):
+        return self.lines[self.i+1]
 
+    def advance(self):
+        self.i += 1
 
 
 ###########################################################################
