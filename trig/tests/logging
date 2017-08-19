@@ -36,7 +36,7 @@ def main():
             use_real_ssh = True
 
     if len(argL) == 0:
-        argL = """trig1 trig2
+        argL = """trig1 trig2 error1
                   cmd1 cmd2 cmd3
                   job1 job2 job3 job4
                   tree1 tree2
@@ -134,6 +134,15 @@ def trig2():
     assert len(jL) == 2
     assert len(jobs1) == 1 and id(jobs1[0]) == id(jL[0])
     assert len(jobs2) == 1 and id(jobs2[0]) == id(jL[1])
+
+
+def error1():
+    """
+    log file given does not exist
+    """
+    # make sure an exception is not raised
+    jobs = triglog.recurse_trigger_logs( ['noexist.log'] )
+    assert len(jobs) == 0
 
 
 def cmd1():

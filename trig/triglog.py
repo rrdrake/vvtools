@@ -77,6 +77,7 @@ def recurse_trigger_logs( trigfiles, age=None ):
     jobs = []
 
     for tlog in trigfiles:
+        jobL = []
         try:
             jobL = read_trigger_log( tlog )
         except:
@@ -149,14 +150,14 @@ class JobLog:
 
     def __str__(self):
         L = []
-        n = self.attrs.get( 'name', None )
-        if n != None: L.append( 'name='+n )
-        s = self.attrs.get( 'start', None )
-        if s != None: L.append( 'start='+time.ctime(s) )
-        f = self.attrs.get( 'finish', None )
-        if f != None: L.append( 'finish='+time.ctime(f) )
-        x = self.attrs.get( 'exit', None )
-        if x != None: L.append( 'exit='+str(x) )
+        if 'name' in self.attrs:
+            L.append( 'name='+str(self.attrs['name']) )
+        for k in ['start','finish']:
+            if k in self.attrs:
+                L.append( k+'='+time.ctime(self.attrs[k]) )
+        for k in ['exit','except']:
+            if k in self.attrs:
+                L.append( k+'='+str(self.attrs[k]) )
         return 'JobLog('+', '.join(L)+')'
 
     def __repr__(self):
@@ -420,8 +421,10 @@ class RunLogReader:
                     #traceback.print_exc()  # uncomment to debug
                     pass
                 else:
-                    attrs['exit'] = x
-                    attrs['except'] = ex
+                    if x != '':
+                        attrs['exit'] = x
+                    if ex != None:
+                        attrs['except'] = ex
                     attrs['finish'] = tm
 
             elif ln == 'runcmd':
@@ -576,7 +579,8 @@ class RunLogReader:
             if x == 'None': x = None
             else:           x = int(x)
 
-        if not ex: ex = None
+        if not ex:
+            ex = None
 
         return L[0].strip().lstrip('jobid='), x, ex
 
