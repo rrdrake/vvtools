@@ -23,8 +23,7 @@ def main():
     cwd = os.getcwd()
 
     if len(argL) == 0:
-        argL = """timeparse1
-                  dow1 trigtime1 trigtime2 trigtime3 trigtime4 trigtime5
+        argL = """dow1 trigtime1 trigtime2 trigtime3 trigtime4 trigtime5
                   log1 log2 log3 log4
                   run1 run2 run3 run4 run5 run6 run7
                   startup1 startup2 startup3 startup4
@@ -39,45 +38,6 @@ def main():
         time.sleep(1)
         print3( '====> ', func )
         eval( func+'()' )
-
-
-#######################################################################
-
-def timeparse1():
-    """
-    test seconds_since_midnight function
-    """
-    assert trigger.seconds_since_midnight( 0 ) == 0
-    assert trigger.seconds_since_midnight( 1 ) == 60*60
-    try: trigger.seconds_since_midnight(24)
-    except: print3( sys.exc_info()[1] )
-    else: raise Exception( "expected an exception" )
-    try: trigger.seconds_since_midnight(25)
-    except: print3( sys.exc_info()[1] )
-    else: raise Exception( "expected an exception" )
-
-    assert trigger.seconds_since_midnight( '0' ) == 0
-    assert trigger.seconds_since_midnight( '1' ) == 60*60
-    try: trigger.seconds_since_midnight('24')
-    except: print3( sys.exc_info()[1] )
-    else: raise Exception( "expected an exception" )
-    try: trigger.seconds_since_midnight('25')
-    except: print3( sys.exc_info()[1] )
-    else: raise Exception( "expected an exception" )
-
-    assert trigger.seconds_since_midnight( '1am' ) == 60*60
-    assert trigger.seconds_since_midnight( '1pm' ) == 13*60*60
-    assert trigger.seconds_since_midnight( '1 am' ) == 60*60
-    assert trigger.seconds_since_midnight( '1 pm' ) == 13*60*60
-    assert trigger.seconds_since_midnight( '1a' ) == 60*60
-    assert trigger.seconds_since_midnight( '1p' ) == 13*60*60
-    assert trigger.seconds_since_midnight( '1 a' ) == 60*60
-    assert trigger.seconds_since_midnight( '1 p' ) == 13*60*60
-
-    assert trigger.seconds_since_midnight( '1:30' ) == 60*60+30*60
-    assert trigger.seconds_since_midnight( '1:30:20' ) == 60*60+30*60+20
-    assert trigger.seconds_since_midnight( '13:30:20' ) == 13*60*60+30*60+20
-    assert trigger.seconds_since_midnight( '3:33pm' ) == 15*60*60+33*60
 
 
 #######################################################################

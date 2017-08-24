@@ -12,6 +12,8 @@ import subprocess
 import getopt
 import signal
 
+import timeutils
+
 
 help_string = \
 """
@@ -518,19 +520,19 @@ def next_trigger_time( spec, curtm ):
     if spec:
 
         # current midnight and day of week
-        epoch0 = chop_midnight( curtm )
-        dow0 = day_of_week( curtm )
+        epoch0 = timeutils.chop_midnight( curtm )
+        dow0 = timeutils.day_of_week( curtm )
 
         # upcoming midnight and day of week
-        epoch1 = chop_midnight( epoch0 + 26*60*60 )
-        dow1 = day_of_week( epoch0 + 26*60*60 )
+        epoch1 = timeutils.chop_midnight( epoch0 + 26*60*60 )
+        dow1 = timeutils.day_of_week( epoch0 + 26*60*60 )
 
         sL = [ s.strip() for s in spec.split(',') ]
         s0 = sL[0].split()[0].lower()
 
         if s0 == 'hourly':
-            epoch_hr0 = chop_hour( curtm )
-            epoch_hr1 = chop_hour( epoch_hr0 + 65*60 )
+            epoch_hr0 = timeutils.chop_hour( curtm )
+            epoch_hr1 = timeutils.chop_hour( epoch_hr0 + 65*60 )
 
             # a comma after hourly is optional, so handle both cases here
             L = sL[0].split( None, 1 )
@@ -553,8 +555,8 @@ def next_trigger_time( spec, curtm ):
 
         elif s0 == 'monthly':
 
-            d0 = first_day_of_month( epoch0+10*60*60 )
-            d1 = first_day_of_month( d0 + 45*24*60*60 + 10*60*60 )
+            d0 = timeutils.first_day_of_month( epoch0+10*60*60 )
+            d1 = timeutils.first_day_of_month( d0 + 45*24*60*60 + 10*60*60 )
 
             # a comma after monthly is optional, so handle both cases here
             L = sL[0].split( None, 1 )
@@ -568,7 +570,7 @@ def next_trigger_time( spec, curtm ):
             dow = None
             if len(dowL) == 1:
                 dow = dowL[0]
-                if dow not in daysofweek:
+                if dow not in timeutils.daysofweek:
                     raise Exception( "unknown day of week: "+dowL[0] )
             elif len(dowL) > 1:
                 raise Exception( "only zero or one day-of-week allowed: "+spec )
@@ -578,7 +580,7 @@ def next_trigger_time( spec, curtm ):
                 raise Exception( "only zero or one time-of-day allowed: "+spec )
             elif len(sL) == 1:
                 try:
-                    tod = seconds_since_midnight( sL[0] )
+                    tod = timeutils.seconds_since_midnight( sL[0] )
                 except:
                     raise Exception( 'bad time syntax: '+sL[0] )
 
@@ -587,9 +589,9 @@ def next_trigger_time( spec, curtm ):
                 tm = check_time( curtm, d1+tod, tm )
 
             else:
-                t = next_day_of_week( dow, d0 + 10*60*60 )
+                t = timeutils.next_day_of_week( dow, d0 + 10*60*60 )
                 tm = check_time( curtm, t+tod, tm )
-                t = next_day_of_week( dow, d1 + 10*60*60 )
+                t = timeutils.next_day_of_week( dow, d1 + 10*60*60 )
                 tm = check_time( curtm, t+tod, tm )
 
         else:
@@ -598,7 +600,7 @@ def next_trigger_time( spec, curtm ):
             sL = recurse_dow( sL, dowL )
             if len(dowL) == 0:
                 # no spec means no restriction, so include all days of week
-                dowL = daysofweekL
+                dowL = timeutils.daysofweekL
 
             if len(sL) == 0:
                 if dow0 in dowL:
@@ -610,7 +612,7 @@ def next_trigger_time( spec, curtm ):
             else:
                 for s in sL:
                     try:
-                        t = seconds_since_midnight( s )
+                        t = timeutils.seconds_since_midnight( s )
                     except:
                         raise Exception( 'bad time syntax: '+s )
 
@@ -618,7 +620,7 @@ def next_trigger_time( spec, curtm ):
                         tm = check_time( curtm, epoch0 + t, tm )
                     if dow1 in dowL:
                         tm = check_time( curtm, epoch1 + t, tm )
-    
+
     return tm
 
 
@@ -634,10 +636,6 @@ def check_time( curtm, newtm, prevtm ):
     return prevtm
 
 
-daysofweek = set( 'mon tue wed thu fri sat sun'.split() )
-daysofweekL = 'mon tue wed thu fri sat sun'.split()
-
-
 def recurse_dow( sL, dowL ):
     """
     Removes leading days-of-the-week strings from the list 'sL' and adds them
@@ -646,146 +644,18 @@ def recurse_dow( sL, dowL ):
     """
     if len(sL) > 0:
         s = sL.pop(0)
-        if s[:3].lower() in daysofweek:
+        if s[:3].lower() in timeutils.daysofweek:
             dowL.append( s[:3].lower() )
             iL = s.split( None, 1 )
             if len(iL) > 1:
                 s = iL[1]
                 return recurse_dow( [s]+sL, dowL )
-            
+
             return recurse_dow( []+sL, dowL )
 
         return [s]+sL
 
     return []
-
-
-def chop_midnight( tsecs ):
-    """
-    Returns the epoch time at midnight for the given day.
-    """
-    tup = time.localtime( tsecs )
-    tup = ( tup[0], tup[1], tup[2], 0, 0, 0, tup[6], tup[7], tup[8] )
-    return int( time.mktime( tup ) + 0.5 )
-
-
-def chop_hour( tsecs ):
-    """
-    Returns the epoch time at the most recent hour for the given time.
-    """
-    tup = time.localtime( tsecs )
-    tup = ( tup[0], tup[1], tup[2], tup[3], 0, 0, tup[6], tup[7], tup[8] )
-    return int( time.mktime( tup ) + 0.5 )
-
-
-def day_of_week( tsecs ):
-    """
-    Returns the day of the week for the given day, in lower case and first
-    three letters.
-    """
-    tup = time.localtime( tsecs )
-    return daysofweekL[ tup[6] ]
-
-
-def first_day_of_month( tsecs ):
-    """
-    Returns the epoch time at midnight of the first day of the month.
-    """
-    for i in range(40):
-        tup = time.localtime( tsecs )
-        if tup[2] == 1:
-            # found first day of the month; now chop to midnight
-            return chop_midnight( tsecs )
-        tsecs -= 24*60*60
-
-    raise Exception( 'the algorithm failed' )
-
-
-def next_day_of_week( dow, tsecs ):
-    """
-    Returns the epoch time at midnight of the next 'dow' day of the week.
-    """
-    for i in range(40):
-        tup = time.localtime( tsecs )
-        if dow == daysofweekL[ tup[6] ]:
-            # found first upcoming day; now chop to midnight
-            return chop_midnight( tsecs )
-        tsecs += 24*60*60
-
-    raise Exception( 'the algorithm failed' )
-
-
-def seconds_since_midnight( time_spec ):
-    """
-    Interprets the argument as a time of day specification.  The 'time_spec'
-    can be a number between zero and 24 or a string containing am, pm, and
-    colons (such as "3pm" or "21:30").  If the interpretation fails, an
-    exception is raised.  Returns the number of seconds since midnight.
-    """
-    orig = time_spec
-
-    try:
-        if type(time_spec) == type(''):
-
-            assert '-' not in time_spec
-            
-            ampm = None
-            time_spec = time_spec.strip()
-            if time_spec[-2:].lower() == 'am':
-              ampm = "am"
-              time_spec = time_spec[:-2]
-            elif time_spec[-2:].lower() == 'pm':
-              ampm = "pm"
-              time_spec = time_spec[:-2]
-            elif time_spec[-1:].lower() == 'a':
-              ampm = "am"
-              time_spec = time_spec[:-1]
-            elif time_spec[-1:].lower() == 'p':
-              ampm = "pm"
-              time_spec = time_spec[:-1]
-            
-            L = [ s.strip() for s in time_spec.split(':') ]
-            assert len(L) == 1 or len(L) == 2 or len(L) == 3
-            L2 = [ int(i) for i in L ]
-            
-            hr = L2[0]
-            mn = 0
-            sc = 0
-            
-            if ampm:
-                if ampm == 'am':
-                    if hr == 12:
-                        hr = 0
-                    else:
-                        assert hr < 12
-                else:
-                    if hr == 12:
-                        hr = 12
-                    else:
-                        assert hr < 12
-                        hr += 12
-            else:
-                assert hr < 24
-            
-            if len(L2) > 1:
-                mn = L2[1]
-                assert mn < 60
-            
-            if len(L2) > 2:
-                sc = L2[2]
-                assert sc < 60
-
-            nsecs = hr*60*60 + mn*60 + sc
-              
-        else:
-            # assume number of hours since midnight
-            assert not time_spec < 0 and time_spec < 24
-            nsecs = int(time_spec)*60*60
-
-    except:
-        raise Exception( "invalid time-of-day specification: "+str(orig) )
-
-    return nsecs
 
 
 #########################################################################
@@ -818,7 +688,7 @@ class Redirect:
     A convenience class to redirect the current process's stdout & stderr
     to a file.
     """
-    
+
     def __init__(self, filename, append=False):
         """
         If the 'append' value is True, the filename is appended rather than
@@ -835,7 +705,7 @@ class Redirect:
         self.save_stderr_fd = os.dup(2)
         os.dup2( self.filep.fileno(), 1 )
         os.dup2( self.filep.fileno(), 2 )
-    
+
     def close(self):
         """
         Call this to stop the redirection and reset stdout & stderr.

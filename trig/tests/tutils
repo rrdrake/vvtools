@@ -1,0 +1,193 @@
+#!/usr/bin/env python
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import getopt
+
+# this will os.chdir() to a subdirectory
+from testutils import *
+
+# this is the module we are testing
+import timeutils
+
+localpy = sys.executable
+
+
+def main():
+    """
+    """
+    optL,argL = getopt.getopt( sys.argv[1:], '' )
+    cwd = os.getcwd()
+
+    if len(argL) == 0:
+        argL = """midnight1
+                  hms1
+                  upcoming1
+               """.split()
+
+    for func in argL:
+        os.chdir( cwd )
+        rmallfiles()
+        time.sleep(1)
+        print3( '====> ', func )
+        eval( func+'()' )
+
+
+#######################################################################
+
+def midnight1():
+    """
+    test seconds_since_midnight function
+    """
+    assert timeutils.seconds_since_midnight( 0 ) == 0
+    assert timeutils.seconds_since_midnight( 1 ) == 60*60
+    try: timeutils.seconds_since_midnight(24)
+    except: print3( sys.exc_info()[1] )
+    else: raise Exception( "expected an exception" )
+    try: timeutils.seconds_since_midnight(25)
+    except: print3( sys.exc_info()[1] )
+    else: raise Exception( "expected an exception" )
+
+    assert timeutils.seconds_since_midnight( '0' ) == 0
+    assert timeutils.seconds_since_midnight( '1' ) == 60*60
+    try: timeutils.seconds_since_midnight('24')
+    except: print3( sys.exc_info()[1] )
+    else: raise Exception( "expected an exception" )
+    try: timeutils.seconds_since_midnight('25')
+    except: print3( sys.exc_info()[1] )
+    else: raise Exception( "expected an exception" )
+
+    assert timeutils.seconds_since_midnight( '1am' ) == 60*60
+    assert timeutils.seconds_since_midnight( '1pm' ) == 13*60*60
+    assert timeutils.seconds_since_midnight( '1 am' ) == 60*60
+    assert timeutils.seconds_since_midnight( '1 pm' ) == 13*60*60
+    assert timeutils.seconds_since_midnight( '1a' ) == 60*60
+    assert timeutils.seconds_since_midnight( '1p' ) == 13*60*60
+    assert timeutils.seconds_since_midnight( '1 a' ) == 60*60
+    assert timeutils.seconds_since_midnight( '1 p' ) == 13*60*60
+
+    assert timeutils.seconds_since_midnight( '1:30' ) == 60*60+30*60
+    assert timeutils.seconds_since_midnight( '1:30:20' ) == 60*60+30*60+20
+    assert timeutils.seconds_since_midnight( '13:30:20' ) == 13*60*60+30*60+20
+    assert timeutils.seconds_since_midnight( '3:33pm' ) == 15*60*60+33*60
+
+
+def hms1():
+    """
+    test hours_minutes_seconds function
+    """
+    assert timeutils.hours_minutes_seconds( '0' ) == (0,0,0)
+    assert timeutils.hours_minutes_seconds( '1' ) == (1,0,0)
+    try: timeutils.hours_minutes_seconds('24')
+    except: print3( sys.exc_info()[1] )
+    else: raise Exception( "expected an exception" )
+    try: timeutils.hours_minutes_seconds('25')
+    except: print3( sys.exc_info()[1] )
+    else: raise Exception( "expected an exception" )
+
+    assert timeutils.hours_minutes_seconds( '1am' ) == (1,0,0)
+    assert timeutils.hours_minutes_seconds( '1pm' ) == (13,0,0)
+    assert timeutils.hours_minutes_seconds( '1 am' ) == (1,0,0)
+    assert timeutils.hours_minutes_seconds( '1 pm' ) == (13,0,0)
+    assert timeutils.hours_minutes_seconds( '1a' ) == (1,0,0)
+    assert timeutils.hours_minutes_seconds( '1p' ) == (13,0,0)
+    assert timeutils.hours_minutes_seconds( '1 a' ) == (1,0,0)
+    assert timeutils.hours_minutes_seconds( '1 p' ) == (13,0,0)
+
+    assert timeutils.hours_minutes_seconds( '1:30' ) == (1,30,0)
+    assert timeutils.hours_minutes_seconds( '1:30:20' ) == (1,30,20)
+    assert timeutils.hours_minutes_seconds( '13:30:20' ) == (13,30,20)
+    assert timeutils.hours_minutes_seconds( '3:33pm' ) == (15,33,0)
+
+
+def upcoming1():
+    """
+    the upcoming_time() fu8nction
+    """
+    curtm = time.mktime( time.strptime( 'Wed Aug 23 08:53:40 2017' ) )
+    
+    up = timeutils.upcoming_time( '9am', timevalue=curtm )
+    chktm = time.mktime( time.strptime( 'Wed Aug 23 09:00:00 2017' ) )
+    assert abs( chktm - up ) < 2
+    
+    up = timeutils.upcoming_time( '9pm', timevalue=curtm )
+    chktm = time.mktime( time.strptime( 'Wed Aug 23 21:00:00 2017' ) )
+    assert abs( chktm - up ) < 2
+    
+    up = timeutils.upcoming_time( '8', timevalue=curtm )
+    chktm = time.mktime( time.strptime( 'Thu Aug 24 08:00:00 2017' ) )
+    assert abs( chktm - up ) < 2
+    
+    up = timeutils.upcoming_time( '9am', skip_num_days=1, timevalue=curtm )
+    chktm = time.mktime( time.strptime( 'Thu Aug 24 09:00:00 2017' ) )
+    assert abs( chktm - up ) < 2
+    
+    up = timeutils.upcoming_time( '9pm', skip_num_days=1, timevalue=curtm )
+    chktm = time.mktime( time.strptime( 'Thu Aug 24 21:00:00 2017' ) )
+    assert abs( chktm - up ) < 2
+    
+    up = timeutils.upcoming_time( '8', skip_num_days=1, timevalue=curtm )
+    chktm = time.mktime( time.strptime( 'Fri Aug 25 08:00:00 2017' ) )
+    assert abs( chktm - up ) < 2
+
+    curtm = time.mktime( time.strptime( 'Thu Dec 31 19:00:00 2015' ) )
+    up = timeutils.upcoming_time( '9pm', timevalue=curtm )
+    chktm = time.mktime( time.strptime( 'Thu Dec 31 21:00:00 2015' ) )
+    assert abs( chktm - up ) < 2
+    up = timeutils.upcoming_time( '5pm', timevalue=curtm )
+    chktm = time.mktime( time.strptime( 'Fri Jan  1 17:00:00 2016' ) )
+    assert abs( chktm - up ) < 2
+
+    curtm = time.mktime( time.strptime( 'Fri Dec 30 19:00:00 2016' ) )
+    up = timeutils.upcoming_time( '5pm', skip_num_days=1, timevalue=curtm )
+    chktm = time.mktime( time.strptime( 'Sun Jan 01 17:00:00 2017' ) )
+    assert abs( chktm - up ) < 2
+
+
+#######################################################################
+
+def string_time( seconds ):
+    """
+    For the given time in seconds since epoch, returns a string with the
+    time-of-day in format hour:minute:second am/pm.
+    """
+    tup = time.localtime( seconds )
+    return time.strftime( "%I:%M:%S %p", tup ).lower()
+
+def epoch_at_midnight( curtm ):
+    """
+    Helper function to return the epoch time at midnight last night
+    """
+    tup = time.localtime( curtm )
+    tup = ( tup[0], tup[1], tup[2], 0, 0, 0, tup[6], tup[7], tup[8] )
+    return int( time.mktime( tup ) )
+
+def day_of_week( tm ):
+    """
+    Helper function to return the day of the week for the given time.
+    Returns the full name.
+    """
+    return time.strftime( '%A', time.localtime( tm ) )
+
+def epoch_at_month_start( curtm ):
+    """
+    Returns the epoch time at midnight of the first of the month.
+    """
+    t = epoch_at_midnight( curtm )
+    t += 10*60*60  # 10am
+    for i in range(100):
+        # day of month
+        dom = int( time.strftime( '%d', time.localtime(t) ) )
+        if dom == 1:
+            # chop to midnight
+            return epoch_at_midnight( t )
+        t -= 24*60*60
+    raise Exception( 'algorithm failed' )
+
+
+#######################################################################
+
+mydir = os.path.abspath( sys.path[0] )
+
+main()
