@@ -710,6 +710,114 @@ def timeout2():
     assert L[0].strip() != 'world'
 
 
+def timeout3():
+    """
+    timeout_date a local job
+    """
+    t0 = time.time()
+    jid = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
+                          timeout_date=time.time()+5, poll_interval=2 )
+    jb = runjob.wait_job( jid, poll_interval=2 )
+    t1 = time.time()
+    assert jb.get( 'exit' ) == None
+    assert not jb.has( 'exc' )
+    assert t1 - t0 < 10
+
+    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
+    assert len(fL) == 1
+    assert len( filegrep( fL[0], 'hello' ) ) == 1
+    assert len( filegrep( fL[0], 'world' ) ) == 0
+
+
+def timeout4():
+    """
+    timeout_date a remote job
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    os.mkdir( 'rdir' )
+    os.mkdir( 'ldir' )
+    rd = os.path.abspath( 'rdir' )  # remote run directory
+    ld = os.path.abspath( 'ldir' )  # local run and log directory
+    time.sleep(1)
+
+    os.chdir( ld )
+
+    t0 = time.time()
+    jid = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
+                          machine=sshmach, sshexe=sshprog,
+                          chdir=rd, timeout_date=time.time()+5,
+                          poll_interval=2 )
+    jb = runjob.wait_job( jid, poll_interval=2 )
+    t1 = time.time()
+    assert jb.get( 'exit' ) == None
+
+    assert t1 - t0 < 15
+
+    fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
+    assert len(fL) == 1
+    lf = os.path.join( ld, fL[0] )
+
+    fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
+    assert len(fL) == 1
+    rf = os.path.join( rd, fL[0] )
+
+    assert os.path.basename(lf) == os.path.basename(rf)
+    assert filecmp.cmp( lf, rf, False )
+    
+    L = filegrep( lf, 'hello' )
+    assert len(L) == 2
+    assert L[1].strip() == 'hello'
+    # it should timeout before print "world"
+    L = filegrep( lf, 'world' )
+    assert len(L) == 1
+    assert L[0].strip() != 'world'
+
+
+def timeout5():
+    """
+    timeout_date a remote job with waitforjobid
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    os.mkdir( 'rdir' )
+    os.mkdir( 'ldir' )
+    rd = os.path.abspath( 'rdir' )  # remote run directory
+    ld = os.path.abspath( 'ldir' )  # local run and log directory
+    time.sleep(1)
+
+    os.chdir( ld )
+
+    t0 = time.time()
+    jid1 = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
+                           machine=sshmach, sshexe=sshprog,
+                           chdir=rd, timeout_date=time.time()+5,
+                           poll_interval=2 )
+    jid2 = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
+                           machine=sshmach, sshexe=sshprog,
+                           chdir=rd, timeout_date=time.time()+10,
+                           poll_interval=2, waitforjobid=jid1 )
+    jb1,jb2 = runjob.wait_all( jid1, jid2, poll_interval=2 )
+    t1 = time.time()
+    assert jb1.get( 'exit' ) == None
+    assert jb2.get( 'exit' ) == None
+
+    assert t1 - t0 < 17
+
+    fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
+    assert len(fL) == 2
+    for i in range(2):
+        lf = os.path.join( ld, fL[i] )
+
+        L = filegrep( lf, 'hello' )
+        assert len(L) == 2
+        assert L[1].strip() == 'hello'
+        # it should timeout before print "world"
+        L = filegrep( lf, 'world' )
+        assert len(L) == 1
+        assert L[0].strip() != 'world'
+
+
 def remotefail1():
     """
     failure to connect to remote machine

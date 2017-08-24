@@ -46,6 +46,7 @@ def run_job( *args, **kwargs ):
         name    : give the job a name, which is used in the log file anme
         chdir   : change to this directory before running the command
         timeout : apply a timeout to the command
+        timeout_date : apply timeout=timeout_date-time.time() at job start
         machine : run the command on a remote machine
         logdir  : for remote commands, place the remote log file here
 
@@ -206,7 +207,7 @@ class Job:
         if attr_name in ["name","machine"]:
             assert attr_value and attr_value == attr_value.strip(), \
                 'invalid "'+attr_name+'" value: "'+str(attr_value)+'"'
-        elif attr_name == 'timeout':
+        elif attr_name in ['timeout','timeout_date']:
             attr_value = int( attr_value )
         elif attr_name == 'poll_interval':
             attr_value = int( attr_value )
@@ -372,12 +373,25 @@ class Job:
         else:
             self._run_remote( mach )
 
+    def _compute_timeout(self):
+        """
+        Returns the timeout for the job by first looking for 'timeout' then
+        'timeout_date'.
+        """
+        if self.has( 'timeout' ):
+            return self.get( 'timeout' )
+
+        if self.has( 'timeout_date' ):
+            return self.get( 'timeout_date' ) - time.time()
+
+        return JobRunner.getDefault( 'timeout' )
+
     def _run_wait(self):
         """
         """
         ipoll = self.get( 'poll_interval',
                           JobRunner.getDefault( 'poll_interval' ) )
-        timeout = self.get( 'timeout', JobRunner.getDefault( 'timeout' ) )
+        timeout = self._compute_timeout()
 
         cmd = self.get( 'command' )
         chd = self.rundir()
@@ -385,7 +399,7 @@ class Job:
 
         cwd = os.getcwd()
         logfp = open( logn, 'w' )
-        
+
         x = None
         try:
             if timeout == None:
@@ -402,13 +416,13 @@ class Job:
                                              chdir=chd )
         finally:
             logfp.close()
-        
+
         self.set( 'exit', x )
 
     def _run_remote(self, mach):
         """
         """
-        timeout = self.get( 'timeout', JobRunner.getDefault( 'timeout' ) )
+        timeout = self._compute_timeout()
         cmd = self.get( 'command' )
         chd = self.rundir()
         sshexe = self.get( 'sshexe', JobRunner.getDefault( 'sshexe' ) )
@@ -453,9 +467,7 @@ class Job:
                                                  chdir=chd,
                                                  timeout=timeout )
 
-                time.sleep(2)
-
-                self._monitor( rmt, rusr, rpid )
+                self._monitor( rmt, rusr, rpid, timeout )
 
             finally:
                 rmt.shutdown()
@@ -483,17 +495,20 @@ class Job:
 
         return rtn
 
-    def _monitor(self, rmtpy, rusr, rpid):
+    def _monitor(self, rmtpy, rusr, rpid, timeout):
         """
         """
         ipoll = self.get( 'poll_interval',
                           JobRunner.getDefault( 'remote_poll_interval' ) )
         xinterval = self.get( 'exception_print_interval',
                         JobRunner.getDefault( 'exception_print_interval' ) )
-        timeout = self.get( 'timeout', JobRunner.getDefault( 'timeout' ) )
 
-        if timeout:
-            ipoll = min( ipoll, int( 0.45 * timeout ) )
+        # let the job start running before attempting to pull the log file
+        time.sleep(2)
+
+        if timeout != None:
+            timeout = max( 1, timeout+2 )
+            ipoll = min( ipoll, max( 1, int( 0.45 * timeout ) ) )
 
         logn = self.logname()
         logf = self.logpath()
@@ -548,7 +563,7 @@ class Job:
                     # remote process id not found - assume it is done
                     break
 
-            if timeout and time.time()-tstart > timeout:
+            if timeout != None and time.time()-tstart > timeout:
                 sys.stderr.write( 'Monitor process timed out at ' + \
                     str( int(time.time()-tstart) ) + ' seconds for jobid ' + \
                     str( self.jobid() ) + '\n' )

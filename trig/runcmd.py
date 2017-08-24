@@ -353,7 +353,8 @@ def run_timeout( *args, **kwargs ):
     See documentation at the top of this file for explanation of the command
     arguments.
 
-    The keyword timeout=<num seconds> is required.
+    The keyword timeout=<num seconds> or timeout_date=<epoch seconds> is
+    required.
 
     Optional keyword arguments are
 
@@ -368,6 +369,9 @@ def run_timeout( *args, **kwargs ):
 
     The 'timeout' is the number of seconds before the child process will be
     killed.  If the child times out, a None is returned for the exit status.
+    If 'timeout_date' is given, it should be an epoch time in seconds (which
+    time.time() returns, for example), and the timeout is computed as
+    timeout = timeout_date - time.time().
 
     If 'echo' is True, the command to be executed is written to stdout.
 
@@ -375,7 +379,7 @@ def run_timeout( *args, **kwargs ):
     running the command.  When this function returns, the directory will
     be changed back.  Note that 'chdir' is applied *before* a 'redirect'
     file, so an absolute redirect file path name may be necesary.
-    
+
     If 'redirect' is a string, it should be a file name which is opened and
     stdout and stderr is redirected to the file.  If 'append' is true, then
     the redirect file is appended.  The 'redirect' value can also be an
@@ -404,8 +408,12 @@ def run_timeout( *args, **kwargs ):
     mach = kwargs.get( 'machine', None )
     sshexe = kwargs.get( 'sshexe', None )
 
-    assert 'timeout' in kwargs and kwargs['timeout'] != None
-    timeout = float( kwargs['timeout'] )
+    if 'timeout' in kwargs:
+        timeout = float( kwargs['timeout'] )
+    else:
+        assert 'timeout_date' in kwargs, \
+            'one of "timeout" or "timeout_date" must be given'
+        timeout = float( kwargs['timeout_date'] ) - time.time()
 
     cmd,scmd = _assemble_command( *args )
     if mach:

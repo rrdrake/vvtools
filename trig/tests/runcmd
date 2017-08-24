@@ -35,7 +35,7 @@ def main():
                   fail1 fail2 fail3
                   redirect1 redirect2
                   outerr1
-                  timeout1 timeout2
+                  timeout1 timeout2 timeout3
                   dryrun1 dryrun2 dryrun3 dryrun4 dryrun5
                   ssh1 ssh2 ssh3
                """.split()
@@ -664,6 +664,59 @@ def timeout2():
     psout = processes()
     assert len( grep( psout, pid1 ) ) == 0
     assert len( grep( psout, pid2 ) ) == 0
+
+
+def timeout3():
+    """
+    use timeout_date
+    """
+    writefile( 'ok.py', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        def log( *args ):
+            fp = open( 'ok.txt', 'a' )
+            fp.write( ' '.join( [ str(x) for x in args ] ) + os.linesep )
+            fp.close()
+        log( 'PID', os.getpid(), time.asctime() )
+        time.sleep(2)
+        log( 'DONE', time.asctime() )
+        """ )
+
+    writefile( 'tout.py', """
+        import os, sys, time
+        sys.path.insert( 0, '"""+srcdir+"""' )
+        def log( *args ):
+            fp = open( 'tout.txt', 'a' )
+            fp.write( ' '.join( [ str(x) for x in args ] ) + os.linesep )
+            fp.close()
+        log( 'PID', os.getpid(), time.asctime() )
+        time.sleep(20)
+        log( 'DONE', time.asctime() )
+        """ )
+
+    t0 = time.time()
+    x = runcmd.run_timeout( localpy, 'ok.py', timeout_date=time.time()+10 )
+    t1 = time.time()
+    assert x != None and x == 0
+    assert t1 - t0 < 8
+    time.sleep(1)
+    L = filegrep( 'ok.txt', 'PID' )[0].strip().split(' ',2)
+    t2 = time.mktime( time.strptime( L[-1] ) )
+    L = filegrep( 'ok.txt', 'DONE' )[0].strip().split(' ',1)
+    t3 = time.mktime( time.strptime( L[-1] ) )
+    assert t3 - t2 < 8
+
+    t0 = time.time()
+    x = runcmd.run_timeout( localpy, 'tout.py',
+                            timeout_date=time.time()+5,
+                            raise_on_failure=False )
+    t1 = time.time()
+    assert x == None
+    assert t1-t0 >= 5 and t1-t0 < 15
+    time.sleep(1)
+    L = filegrep( 'tout.txt', 'PID' )[0].strip().split(' ',2)
+    t0 = time.mktime( time.strptime( L[-1] ) )
+    assert len( filegrep( 'tout.txt', 'DONE' ) ) == 0
 
 
 # TODO: test poll_interval in run_timeout()
