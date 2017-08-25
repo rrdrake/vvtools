@@ -788,7 +788,7 @@ class JobRunner:
             for n,v in kwargs.items():
                 jb.set( n, v )
 
-            if 'waitforjobid' in kwargs:
+            if 'waitforjobid' in kwargs and kwargs['waitforjobid']:
                 # check validity of waitfor job id before finalizing
                 wjid = kwargs['waitforjobid']
                 assert wjid in self.jobdb, \
@@ -809,7 +809,7 @@ class JobRunner:
             self.jobdb[ jb.jobid() ] = jb
 
         else:
-            if 'waitforjobid' in kwargs:
+            if 'waitforjobid' in kwargs and kwargs['waitforjobid']:
                 wjid = kwargs['waitforjobid']
                 tprint( 'WaitFor:', jb.jobid(), 'waiting on', wjid )
                 self.waiting[ jb.jobid() ] = ( jb, wjid )

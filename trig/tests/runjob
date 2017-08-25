@@ -44,6 +44,7 @@ def main():
                   update1
                   dryrun1 dryrun2 dryrun3 dryrun4 dryrun5 dryrun6
                   waitfor1 waitfor2 waitfor3 waitfor4 waitfor5 waitfor6
+                  waitfor7
                """.split()
 
     for func in argL:
@@ -1286,8 +1287,9 @@ def waitfor4():
     """
     waitforjobid with invalid job id
     """
+    invalidjid = (1,'a')
     jid1 = runjob.run_job( 'echo "hello" ; sleep 1',
-                           waitforjobid=None, poll_interval=2 )
+                           waitforjobid=invalidjid, poll_interval=2 )
     # second job waiting on the (failed) first should still run
     jid2 = runjob.run_job( 'sleep 1',
                            waitforjobid=jid1, poll_interval=2 )
@@ -1329,6 +1331,23 @@ def waitfor6():
     assert jb and jb.get('name') == 'echo'
     jb = runjob.wait_job( jid4 )
     assert jb and jb.get('name') == 'echo'
+
+
+def waitfor7():
+    """
+    using waitforjobid=None
+    """
+    jid1 = runjob.run_job( 'echo hello ; sleep 8', poll_interval=2 )
+    jid2 = runjob.run_job( 'sleep 1', waitforjobid=None, poll_interval=2 )
+    time.sleep(3)
+    assert not runjob.poll_job( jid1 )
+    assert runjob.poll_job( jid2 )  # job2 should not have waited
+    j1,j2 = runjob.wait_all( jid1, jid2, poll_interval=2 )
+    assert j2
+    assert j1
+
+    assert j1.get( 'name' ) == 'echo'
+    assert j2.get( 'name' ) == 'sleep'
 
 
 #######################################################################
