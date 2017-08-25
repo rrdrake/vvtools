@@ -38,7 +38,7 @@ def main():
                   multijob1
                   echo1 chdir1
                   jobcast1 jobcast2
-                  remote1 remote2 remote3
+                  remote1 remote2 remote3 remote4
                   timeout1 timeout2
                   remotefail1 remotefail2a remotefail2b
                   update1
@@ -642,6 +642,51 @@ def remote3():
     L = filegrep( lf1, 'hello' )
     assert len(L) == 2
     assert L[1].strip() == 'hello'
+    L = filegrep( lf2, 'world' )
+    assert len(L) == 2
+    assert L[1].strip() == 'world'
+
+
+def remote4():
+    """
+    logdir and sharedlog attributes
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    os.mkdir( 'rdir1' )
+    os.mkdir( 'rdir2' )
+    os.mkdir( 'ldir' )
+    rd1 = os.path.abspath( 'rdir1' )  # remote run directory
+    rd2 = os.path.abspath( 'rdir2' )  # remote run directory
+    ld = os.path.abspath( 'ldir' )  # local run and log directory
+    time.sleep(1)
+
+    os.chdir( ld )
+
+    jid1 = runjob.run_job( 'sleep 1; echo hello',
+                           machine=sshmach, sshexe=sshprog,
+                           logdir=rd1, poll_interval=2 )
+    jid2 = runjob.run_job( 'sleep 4; echo world',
+                           machine=sshmach, sshexe=sshprog,
+                           logdir=rd2, sharedlog=True, poll_interval=2 )
+    jb1,jb2 = runjob.wait_all( jid1, jid2, poll_interval=2 )
+    assert jb1.get( 'exit' ) == 0
+    assert jb1.get( 'exit' ) == 0
+ 
+    fL = fnmatch.filter( os.listdir( ld ), 'sleep-*.log' )
+    assert len(fL) == 2
+    fL.sort()
+    lf1,lf2 = os.path.join( ld, fL[0] ), os.path.join( ld, fL[1] )
+
+    fL = fnmatch.filter( os.listdir( rd1 ), 'sleep-*.log' )
+    assert len(fL) == 1
+    rf1 = os.path.join( rd1, fL[0] )
+
+    assert os.path.basename(lf1) == os.path.basename(rf1)
+    assert filecmp.cmp( lf1, rf1, False )
+
+    fL = fnmatch.filter( os.listdir( rd2 ), 'sleep-*.log' )
+    assert len(fL) == 0
     L = filegrep( lf2, 'world' )
     assert len(L) == 2
     assert L[1].strip() == 'world'

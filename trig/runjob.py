@@ -43,12 +43,17 @@ def run_job( *args, **kwargs ):
     Starts a job in the background and returns the job id.  See runcmd.py
     for ways to construct a command.  The optional keyword attributes are
 
-        name    : give the job a name, which is used in the log file anme
+        name    : give the job a name, which prefixes the log file name
         chdir   : change to this directory before running the command
         timeout : apply a timeout to the command
-        timeout_date : apply timeout=timeout_date-time.time() at job start
+        timeout_date : timeout the job at the given date (epoch time in seconds)
+
         machine : run the command on a remote machine
         logdir  : for remote commands, place the remote log file here
+        sharedlog : for remote commands, set this to True if the remote
+                    machine can write its log file to the local log file
+                    location (usually they share NFS mounts); in this case,
+                    the 'logdir' option is not used
 
         waitforjobid : only run this new job after the given jobid completes
 
@@ -207,11 +212,18 @@ class Job:
         if attr_name in ["name","machine"]:
             assert attr_value and attr_value == attr_value.strip(), \
                 'invalid "'+attr_name+'" value: "'+str(attr_value)+'"'
+
         elif attr_name in ['timeout','timeout_date']:
             attr_value = int( attr_value )
+
         elif attr_name == 'poll_interval':
             attr_value = int( attr_value )
             assert attr_value > 0
+
+        elif attr_name == 'sharedlog':
+            if attr_value: attr_value = True
+            else:          attr_value = False
+
         self.lock.acquire()
         try:
             self.attrD[attr_name] = attr_value
@@ -429,7 +441,10 @@ class Job:
         numconn = self.get( 'connection_attempts',
                             JobRunner.getDefault( 'connection_attempts' ) )
 
-        logf = self.logpath()
+        if self.get( 'sharedlog', False ):
+            remotelogf = os.path.abspath( self.logname() )
+        else:
+            remotelogf = self.logpath()
 
         mydir = os.path.dirname( os.path.abspath( __file__ ) )
         rfile = os.path.join( mydir, 'runjob_remote.py' )
@@ -463,7 +478,7 @@ class Job:
                 rusr = rmt.timeout(30).x_evaluate( 'return os.getuid()' )
 
                 rmt.timeout(30)
-                rpid = rmt.x_background_command( cmd, logf,
+                rpid = rmt.x_background_command( cmd, remotelogf,
                                                  chdir=chd,
                                                  timeout=timeout )
 
@@ -512,6 +527,7 @@ class Job:
 
         logn = self.logname()
         logf = self.logpath()
+        sharedlog = self.get( 'sharedlog', False )
 
         tstart = time.time()
         texc1 = tstart
@@ -536,7 +552,8 @@ class Job:
                 elapsed = True
                 try:
 
-                    self.updateFile( rmtpy, logf, logn )
+                    if not sharedlog:
+                        self.updateFile( rmtpy, logf, logn )
 
                     s = rmtpy.timeout(30).x_processes( pid=rpid, user=rusr,
                                                        fields='etime' )
