@@ -26,7 +26,7 @@ class PermissionSetter:
         try:
             self._parse_spec( spec )
         except:
-            raise Exception( "invalid permissions specification: "+spec )
+            raise Exception( "invalid permissions specification: "+str(spec) )
 
     def set(self, path):
         """
