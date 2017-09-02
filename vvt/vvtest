@@ -1293,13 +1293,7 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
     plat.display()
     starttime = time.time()
     print3( "Start time:", time.ctime() )
-    
-    # clean up old pipeline files
-    print3( "rm -rf batchset*" )
-    for f in os.listdir( test_dir ):
-        if f.startswith( 'batchset' ):
-            shutil.rmtree( os.path.join( test_dir, f ) )
-    
+
     # write testlist files for each qsub
     numjobs = pipes.writeQsubScripts()
 
@@ -1517,6 +1511,8 @@ class Pipelines:
 
         self.accountant = BatchAccountant()
 
+        self.namer = BatchFileNamer( self.test_dir )
+
         # allow these values to be set by environment variable, mainly for
         # unit testing; if setting these is needed more regularly then a
         # command line option should be added
@@ -1524,7 +1520,14 @@ class Pipelines:
         self.read_interval = val
         val = int( os.environ.get( 'VVTEST_BATCH_READ_TIMEOUT', 5*60 ) )
         self.read_timeout = val
-    
+
+    def removeBatchDirectories(self):
+        """
+        """
+        for d in self.namer.globBatchDirectories():
+            print3( 'rm -rf '+d )
+            shutil.rmtree( d )
+
     def createTestGroups(self):
         """
         """
@@ -1554,31 +1557,12 @@ class Pipelines:
         qL.sort()
         qL.reverse()
         self.qsublists = map( lambda L: L[2], qL )
-    
-    def filename(self, basename, pipeid, relative=False):
-        """
-        Given a base file name and a pipe/batch id, this function returns
-        the file name in the batchset subdirectory and with the id appended.
-        If 'relative' is true, then the path is relative to the TestResults
-        directory.
-        """
-        subd = batchset( pipeid )
-        if relative:
-            fn = os.path.join( subd, basename+'.'+str(pipeid) )
-        else:
-            fn = os.path.join( self.test_dir, subd, basename+'.'+str(pipeid) )
-        return fn
 
     def writeQsubScripts(self):
         """
         """
-        for i in range(len(self.qsublists)):
-          f = self.filename( testlist_name, i )
-          try:
-              os.unlink( f )
-          except:
-              pass
-        
+        self.removeBatchDirectories()
+
         commonopts = ''
         if '-e' in optdict: commonopts += ' -e'
         if '-m' in optdict: commonopts += ' -m'
@@ -1603,17 +1587,16 @@ class Pipelines:
           self.do_queue_pipe( qid, qL, qsubids, commonopts )
           qid += 1
         
-        L = qsubids.keys()
-        L.sort()
-        for i in L:
-          incl = self.filename( testlist_name, i, relative=True )
+        qidL = qsubids.keys()
+        qidL.sort()
+        for i in qidL:
+          incl = self.namer.getPath( testlist_name, i, relative=True )
           self.tlist.AddIncludeFile( incl )
         
         if self.perms != None:
-            for f in os.listdir( self.test_dir ):
-                if f.startswith( 'batchset' ):
-                    p = os.path.join( self.test_dir, f )
-                    self.perms.recurse( p )
+            for i in qidL:
+                d = self.namer.getSubdir( i )
+                self.perms.recurse( d )
 
         return len( qsubids )
     
@@ -1650,18 +1633,18 @@ class Pipelines:
             qtime = min( qtime, mx )
         
         npD[qnumber] = maxnp
-        pout = self.filename( 'pipe-out', qnumber )
-        tout = self.filename( 'testlist', qnumber )
+        pout = self.namer.getPath( 'pipe-out', qnumber )
+        tout = self.namer.getPath( testlist_name, qnumber )
 
         jb = BatchJob( maxnp, pout, tout, tL,
                        self.read_interval, self.read_timeout )
         self.accountant.addJob( qnumber, jb )
         
-        fn = self.filename( testlist_name, qidstr )
+        fn = self.namer.getPath( testlist_name, qidstr )
         tl.stringFileWrite( fn )
         tl.writeFinished()
         
-        fn = self.filename( 'pipe', qidstr )
+        fn = self.namer.getPath( 'pipe', qidstr )
         fp = open( fn, "w" )
         
         hdr = self.plat.getQsubScriptHeader( maxnp, qtime, self.test_dir, pout )
@@ -1698,7 +1681,7 @@ class Pipelines:
         if self.accountant.numStarted() < self.maxjobs:
             for qid,bjob in self.accountant.getNotStarted():
                 if self._check_deps( bjob ) == None:
-                    pin = self.filename( 'pipe', qid )
+                    pin = self.namer.getPath( 'pipe', qid )
                     jobid = self.plat.Qsubmit( self.test_dir, bjob.outfile, pin )
                     self.accountant.markJobStarted( qid, jobid )
                     return qid
@@ -1970,6 +1953,45 @@ class BatchJob:
         self.result = result
 
 
+class BatchFileNamer:
+
+    def __init__(self, rootdir):
+        """
+        """
+        self.rootdir = rootdir
+
+    def getPath(self, basename, qid, relative=False):
+        """
+        Given a base file name and a batch id, this function returns the
+        file name in the batchset subdirectory and with the id appended.
+        If 'relative' is true, then the path is relative to the TestResults
+        directory.
+        """
+        subd = self.getSubdir( qid, relative )
+        fn = os.path.join( subd, basename+'.'+str(qid) )
+        return fn
+
+    def getSubdir(self, qid, relative=False):
+        """
+        Given a queue/batch/pipe id, this function returns the corresponding
+        subdirectory name.  The 'qid' argument can be a string or integer.
+        """
+        d = 'batchset' + str( int( float(qid)/50 + 0.5 ) )
+        if relative:
+            return d
+        return os.path.join( self.rootdir, d )
+
+    def globBatchDirectories(self):
+        """
+        Returns a list of existing batch working directories.
+        """
+        dL = []
+        for f in os.listdir( self.rootdir ):
+            if f.startswith( 'batchset' ):
+                dL.append( os.path.join( self.rootdir, f ) )
+        return dL
+
+
 class BatchAccountant:
 
     def __init__(self):
@@ -2047,15 +2069,6 @@ class BatchAccountant:
         raise Exception( 'job id not found: '+str(qid) )
 
 
-
-def batchset( qid ):
-    """
-    Given a queue/batch/pipe id, this function returns the corresponding
-    subdirectory name.  The 'qid' argument can be a string or integer.
-    """
-    return 'batchset' + str( int( float(qid)/50 + 0.5 ) )
-
-
 def saveResults( tlist, plat, test_dir, inprogress=False ):
     """
     Option is
@@ -2127,8 +2140,8 @@ def restartTests( test_dir, plat, ufilter ):
         tfile = os.path.join( test_dir, testlist_name )
     else:
         # batch jobs have --qsub-id set and land here
-        subd = batchset( qid )
-        tfile = os.path.join( test_dir, subd, testlist_name+'.'+qid )
+        namer = BatchFileNamer( test_dir )
+        tfile = namer.getPath( testlist_name, qid )
 
     tlist = TestList.TestList( ufilter )
     tlist.readFile( tfile )
