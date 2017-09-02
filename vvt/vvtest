@@ -1515,14 +1515,7 @@ class Pipelines:
 
         self.maxjobs = maxjobs
 
-        # queue jobs to be submitted, qid -> BatchJob
-        self.qtodo = {}
-        # queue jobs submitted, qid -> BatchJob
-        self.qstart = {}
-        # queue jobs submitted then have left the queue, qid -> BatchJob
-        self.qstop  = {}
-        # queue jobs whose final results have been read, qid -> BatchJob
-        self.qread  = {}
+        self.accountant = BatchAccountant()
 
         # allow these values to be set by environment variable, mainly for
         # unit testing; if setting these is needed more regularly then a
@@ -1659,7 +1652,8 @@ class Pipelines:
         npD[qnumber] = maxnp
         pout = self.filename( 'pipe-out', qnumber )
         tout = self.filename( 'testlist', qnumber )
-        self.qtodo[ qnumber ] = BatchJob( qnumber, maxnp, pout, tout, tL )
+
+        self.accountant.addJob( qnumber, maxnp, pout, tout, tL )
         
         fn = self.filename( testlist_name, qidstr )
         tl.stringFileWrite( fn )
@@ -1699,12 +1693,12 @@ class Pipelines:
         Launches a new batch job if possible.  If it does, the batch id is
         returned.
         """
-        if len( self.qstart ) < self.maxjobs:
-            for qid,bjob in self.qtodo.items():
+        if self.accountant.numStarted() < self.maxjobs:
+            for qid,bjob in self.accountant.getNotStarted():
                 if self._check_deps( bjob ) == None:
                     pin = self.filename( 'pipe', qid )
                     jobid = self.plat.Qsubmit( self.test_dir, bjob.outfile, pin )
-                    self._start( qid, jobid )
+                    self.accountant.markJobStarted( qid, jobid )
                     return qid
         return None
 
@@ -1713,20 +1707,20 @@ class Pipelines:
         Returns the number of batch jobs are still running or stopped but
         whose results have not been read yet.
         """
-        return len( self.qstart ) + len( self.qstop )
+        return self.accountant.numInFlight()
 
     def numStarted(self):
         """
         Number of batch jobs currently running (those that have been started
         and still appear to be in the batch queue).
         """
-        return len( self.qstart )
+        return self.accountant.numStarted()
 
     def numDone(self):
         """
         Number of batch jobs that ran and completed.
         """
-        return len( self.qread )
+        return self.accountant.numDone()
 
     def checkdone(self):
         """
@@ -1742,25 +1736,26 @@ class Pipelines:
         and a list of tests that were successfully read in.
         """
         qdoneL = []
-        jobidL = [ bjob.jobid for bjob in self.qstart.values() ]
-        if len(jobidL) > 0:
+        startlist = self.accountant.getStarted()
+        if len(startlist) > 0:
+            jobidL = [ jb.jobid for qid,jb in startlist ]
             statusD = self.plat.Qquery( jobidL )
             tnow = time.time()
-            for qid,bjob in self.qstart.items():
+            for qid,bjob in startlist:
                 if not statusD[ bjob.jobid ]:
                     # empty status means its not in the queue, but double
                     # check that either the out file exists or enough time
                     # has elapsed since the submit occurred
                     elapsed = tnow - bjob.tstart
                     if elapsed > 30 or os.path.exists( bjob.outfile ):
-                        self._stop( qid )
+                        self.accountant.markJobStopped( qid, self.read_delay )
                         qdoneL.append( qid )
                     if self.perms != None and os.path.exists( bjob.outfile ):
                         self.perms.set( bjob.outfile )
 
         tnow = time.time()
         tdoneL = []
-        for qid,bjob in self.qstop.items():
+        for qid,bjob in self.accountant.getStopped():
             if bjob.tcheck < tnow:
                 # try to read the results
                 clean = False
@@ -1819,44 +1814,28 @@ class Pipelines:
               pair (a test, failed dependency test)
         """
         # should not be here if there are jobs currently running
-        assert len( self.qstart ) == 0 and len( self.qstop ) == 0
+        assert self.accountant.numInFlight() == 0
 
         # force remove the rest of the jobs that were not run and gather
         # the list of tests that were not run
         notrunL = []
-        for qid,bjob in self.qtodo.items():
+        for qid,bjob in self.accountant.getNotStarted():
             tx1 = self._check_deps( bjob )
             assert tx1 != None  # otherwise checkstart() should have ran it
             for tx0 in bjob.testL:
                 notrunL.append( (tx0,tx1) )
-            self.qtodo.pop( qid )
-            self.qread[ qid ] = bjob
-            bjob.finished( 'notrun' )
+            self.accountant.markJobDone( qid, 'notrun' )
         
         # TODO: rather than only reporting the jobs left on qtodo as not run,
         #       loop on all jobs in qread and look for 'notrun' mark
 
         notrun = []
         notdone = []
-        for qid,bjob in self.qread.items():
+        for qid,bjob in self.accountant.getDone():
             if bjob.result == 'notrun': notrun.append( str(qid) )
             elif bjob.result == 'notdone': notdone.append( str(qid) )
 
         return notrun, notdone, notrunL
-    
-    def _start(self, qid, jobid):
-        """
-        """
-        bjob = self.qtodo.pop( qid )
-        bjob.start( jobid )
-        self.qstart[ qid ] = bjob
-
-    def _stop(self, qid):
-        """
-        """
-        bjob = self.qstart.pop( qid )
-        bjob.stop( self.read_delay )
-        self.qstop[ qid ] = bjob
 
     def _check_deps(self, bjob):
         """
@@ -1878,13 +1857,11 @@ class Pipelines:
         tL = []
 
         if not os.path.exists( bjob.outfile ):
-            bjob.finished( 'notrun' )
+            mark = 'notrun'
         
         elif os.path.exists( bjob.testfile ):
             if mark == None:
-                bjob.finished( 'notdone' )
-            else:
-                bjob.finished( mark )
+                mark = 'notdone'
             counts = {}
             self.tlist.readFile( bjob.testfile, counts )
             # only add tests to the stopped list that have a count
@@ -1897,10 +1874,9 @@ class Pipelines:
                     self.tlist.stopped[ xdir ] = tx
         
         else:
-            bjob.finished( 'fail' )
+            mark = 'fail'
         
-        self.qstop.pop( qid )
-        self.qread[ qid ] = bjob
+        self.accountant.markJobDone( qid, mark )
 
         return tL
 
@@ -1936,6 +1912,84 @@ class BatchJob:
         """
         assert result in ['clean','notrun','notdone','fail']
         self.result = result
+
+
+class BatchAccountant:
+
+    def __init__(self):
+        # queue jobs to be submitted, qid -> BatchJob
+        self.qtodo = {}
+        # queue jobs submitted, qid -> BatchJob
+        self.qstart = {}
+        # queue jobs submitted then have left the queue, qid -> BatchJob
+        self.qstop  = {}
+        # queue jobs whose final results have been read, qid -> BatchJob
+        self.qdone  = {}
+
+    def addJob(self, qnumber, maxnp, pout, tout, tL ):
+        """
+        """
+        self.qtodo[ qnumber ] = BatchJob( qnumber, maxnp, pout, tout, tL )
+
+    def numStarted(self):
+        return len( self.qstart )
+
+    def numDone(self):
+        return len( self.qdone )
+
+    def numInFlight(self):
+        return len( self.qstart ) + len( self.qstop )
+
+    def getNotStarted(self):
+        """
+        """
+        return self.qtodo.items()
+
+    def getStarted(self):
+        """
+        """
+        return self.qstart.items()
+
+    def getStopped(self):
+        """
+        """
+        return self.qstop.items()
+
+    def getDone(self):
+        """
+        """
+        return self.qdone.items()
+
+    def markJobStarted(self, qid, jobid):
+        """
+        """
+        jb = self.popJob( qid )
+        jb.start( jobid )
+        self.qstart[ qid ] = jb
+
+    def markJobStopped(self, qid, pause_length_before_reading):
+        """
+        """
+        jb = self.popJob( qid )
+        jb.stop( pause_length_before_reading )
+        self.qstop[ qid ] = jb
+
+    def markJobDone(self, qid, done_mark):
+        """
+        """
+        jb = self.popJob( qid )
+        jb.finished( done_mark )
+        self.qdone[ qid ] = jb
+
+    def popJob(self, qid):
+        """
+        """
+        if qid in self.qtodo: return self.qtodo.pop( qid )
+        if qid in self.qstart: return self.qstart.pop( qid )
+        if qid in self.qstop: return self.qstop.pop( qid )
+        if qid in self.qdone: return self.qdone.pop( qid )
+        raise Exception( 'job id not found: '+str(qid) )
+
 
 
 def batchset( qid ):
