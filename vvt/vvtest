@@ -1502,16 +1502,10 @@ class Pipelines:
         self.test_dir = test_dir
         self.tlist = tlist
         self.perms = perms
-        # TODO: make Tzero a platform plugin thing
-        self.Tzero = 21*60*60  # no timeout in pipeline mode is 21 hours
-        
-        self.createTestGroups()
-
         self.maxjobs = maxjobs
 
-        self.accountant = BatchAccountant()
-
-        self.namer = BatchFileNamer( self.test_dir )
+        # TODO: make Tzero a platform plugin thing
+        self.Tzero = 21*60*60  # no timeout in pipeline mode is 21 hours
 
         # allow these values to be set by environment variable, mainly for
         # unit testing; if setting these is needed more regularly then a
@@ -1520,6 +1514,11 @@ class Pipelines:
         self.read_interval = val
         val = int( os.environ.get( 'VVTEST_BATCH_READ_TIMEOUT', 5*60 ) )
         self.read_timeout = val
+        
+        self.accountant = BatchAccountant()
+        self.namer = BatchFileNamer( self.test_dir, testlist_name )
+
+        self.createTestGroups()
 
     def removeBatchDirectories(self):
         """
@@ -1590,7 +1589,7 @@ class Pipelines:
         qidL = qsubids.keys()
         qidL.sort()
         for i in qidL:
-          incl = self.namer.getPath( testlist_name, i, relative=True )
+          incl = self.namer.getTestListName( i, relative=True )
           self.tlist.AddIncludeFile( incl )
         
         if self.perms != None:
@@ -1633,18 +1632,18 @@ class Pipelines:
             qtime = min( qtime, mx )
         
         npD[qnumber] = maxnp
-        pout = self.namer.getPath( 'pipe-out', qnumber )
-        tout = self.namer.getPath( testlist_name, qnumber )
+        pout = self.namer.getBatchOutputName( qnumber )
+        tout = self.namer.getTestListName( qnumber )
 
         jb = BatchJob( maxnp, pout, tout, tL,
                        self.read_interval, self.read_timeout )
         self.accountant.addJob( qnumber, jb )
         
-        fn = self.namer.getPath( testlist_name, qidstr )
+        fn = self.namer.getTestListName( qidstr )
         tl.stringFileWrite( fn )
         tl.writeFinished()
         
-        fn = self.namer.getPath( 'pipe', qidstr )
+        fn = self.namer.getBatchScriptName( qidstr )
         fp = open( fn, "w" )
         
         hdr = self.plat.getQsubScriptHeader( maxnp, qtime, self.test_dir, pout )
@@ -1681,7 +1680,7 @@ class Pipelines:
         if self.accountant.numStarted() < self.maxjobs:
             for qid,bjob in self.accountant.getNotStarted():
                 if self._check_deps( bjob ) == None:
-                    pin = self.namer.getPath( 'pipe', qid )
+                    pin = self.namer.getBatchScriptName( qid )
                     jobid = self.plat.Qsubmit( self.test_dir, bjob.outfile, pin )
                     self.accountant.markJobStarted( qid, jobid )
                     return qid
@@ -1955,10 +1954,26 @@ class BatchJob:
 
 class BatchFileNamer:
 
-    def __init__(self, rootdir):
+    def __init__(self, rootdir, listbasename):
         """
         """
         self.rootdir = rootdir
+        self.listbasename = listbasename
+
+    def getTestListName(self, qid, relative=False):
+        """
+        """
+        return self.getPath( self.listbasename, qid, relative )
+
+    def getBatchScriptName(self, qid):
+        """
+        """
+        return self.getPath( 'qbat', qid )
+
+    def getBatchOutputName(self, qid):
+        """
+        """
+        return self.getPath( 'qbat-out', qid )
 
     def getPath(self, basename, qid, relative=False):
         """
@@ -2140,8 +2155,8 @@ def restartTests( test_dir, plat, ufilter ):
         tfile = os.path.join( test_dir, testlist_name )
     else:
         # batch jobs have --qsub-id set and land here
-        namer = BatchFileNamer( test_dir )
-        tfile = namer.getPath( testlist_name, qid )
+        namer = BatchFileNamer( test_dir, testlist_name )
+        tfile = namer.getTestListName( qid )
 
     tlist = TestList.TestList( ufilter )
     tlist.readFile( tfile )
