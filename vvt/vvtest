@@ -1520,10 +1520,10 @@ class Pipelines:
         # allow these values to be set by environment variable, mainly for
         # unit testing; if setting these is needed more regularly then a
         # command line option should be added
-        val = int( os.environ.get( 'VVTEST_BATCH_READ_DELAY', 30 ) )
-        self.read_delay = val
-        val = int( os.environ.get( 'VVTEST_BATCH_READ_DELAY_MAX', 5*60 ) )
-        self.read_max_delay = val
+        val = int( os.environ.get( 'VVTEST_BATCH_READ_INTERVAL', 30 ) )
+        self.read_interval = val
+        val = int( os.environ.get( 'VVTEST_BATCH_READ_TIMEOUT', 5*60 ) )
+        self.read_timeout = val
     
     def createTestGroups(self):
         """
@@ -1653,7 +1653,9 @@ class Pipelines:
         pout = self.filename( 'pipe-out', qnumber )
         tout = self.filename( 'testlist', qnumber )
 
-        self.accountant.addJob( qnumber, maxnp, pout, tout, tL )
+        jb = BatchJob( maxnp, pout, tout, tL,
+                       self.read_interval, self.read_timeout )
+        self.accountant.addJob( qnumber, jb )
         
         fn = self.filename( testlist_name, qidstr )
         tl.stringFileWrite( fn )
@@ -1742,63 +1744,22 @@ class Pipelines:
             statusD = self.plat.Qquery( jobidL )
             tnow = time.time()
             for qid,bjob in startlist:
-                if not statusD[ bjob.jobid ]:
-                    # empty status means its not in the queue, but double
-                    # check that either the out file exists or enough time
-                    # has elapsed since the submit occurred
-                    elapsed = tnow - bjob.tstart
-                    if elapsed > 30 or os.path.exists( bjob.outfile ):
-                        self.accountant.markJobStopped( qid, self.read_delay )
-                        qdoneL.append( qid )
-                    if self.perms != None and os.path.exists( bjob.outfile ):
-                        self.perms.set( bjob.outfile )
+                if self.checkJobDone( bjob, statusD[ bjob.jobid ], tnow ):
+                    self.accountant.markJobStopped( qid )
+                    qdoneL.append( qid )
 
         tnow = time.time()
         tdoneL = []
         for qid,bjob in self.accountant.getStopped():
-            if bjob.tcheck < tnow:
-                # try to read the results
-                clean = False
-                fin = False
-                # first check the batch output file
-                try:
-                    sz = os.path.getsize( bjob.outfile )
-                    off = max(sz-512, 0)
-                    fp = open( bjob.outfile, 'r' )
-                except:
-                    pass
+            if bjob.timeToCheckIfFinished( tnow ):
+                if self.checkJobFinished( bjob.outfile, bjob.testfile ):
+                    # load the results into the TestList
+                    tdoneL.extend( self.finalizeJob( qid, bjob, 'clean' ) )
                 else:
-                    try:
-                        fp.seek(off)
-                        buf = fp.read(512)
-                    except:
-                        pass
-                    else:
-                        if buf.find("queue job finished cleanly") >= 0:
-                            clean = True
-                    fp.close()
-                if clean:
-                    # then check the testlist file for the "finished" mark
-                    tl = TestList.TestList()
-                    try:
-                        tl.scanFile( bjob.testfile )
-                        if tl.getFinishDate() != None:
-                            fin = True
-                    except:
-                        pass
-                    tl = None
-                if fin:
-                    # read worked, so load the results into the TestList
-                    tdoneL.extend( self._finish( qid, bjob, 'clean' ) )
-                else:
-                    # read failed
-                    if tnow < bjob.tstop+self.read_max_delay:
-                        # set the time for the next read
-                        bjob.tcheck = tnow + self.read_delay
-                    else:
+                    if not bjob.extendFinishCheck( tnow ):
                         # too many attempts to read; assume the queue job
                         # failed somehow, but force a read anyway
-                        tdoneL.extend( self._finish( qid, bjob ) )
+                        tdoneL.extend( self.finalizeJob( qid, bjob ) )
 
         return qdoneL, tdoneL
 
@@ -1837,6 +1798,83 @@ class Pipelines:
 
         return notrun, notdone, notrunL
 
+    def checkJobDone(self, bjob, queue_status, current_time):
+        """
+        If either the output file exists or enough time has elapsed since the
+        job was submitted, then mark the BatchJob as having started.
+
+        Returns true if the job was started.
+        """
+        started = False
+        elapsed = current_time - bjob.tstart
+
+        if not queue_status:
+            if elapsed > 30 or os.path.exists( bjob.outfile ):
+                started = True
+
+        if self.perms != None and os.path.exists( bjob.outfile ):
+            self.perms.set( bjob.outfile )
+
+        return started
+
+    def checkJobFinished(self, outfilename, testfilename):
+        """
+        """
+        finished = False
+        if self.scanBatchOutput( outfilename ):
+            finished = self.testListFinished( testfilename )
+        return finished
+
+    def scanBatchOutput(self, outfile):
+        """
+        Tries to read the batch output file, then looks for the marker
+        indicating a clean job script finish.  Returns true for a clean finish.
+        """
+        clean = False
+
+        try:
+            # compute file seek offset, and open the file
+            sz = os.path.getsize( outfile )
+            off = max(sz-512, 0)
+            fp = open( outfile, 'r' )
+        except:
+            pass
+        else:
+            try:
+                # read end of the file
+                fp.seek(off)
+                buf = fp.read(512)
+            except:
+                pass
+            else:
+                # look for clean finish marker
+                if buf.find("queue job finished cleanly") >= 0:
+                    clean = True
+
+            try:
+                fp.close()
+            except:
+                pass
+
+        return clean
+
+    def testListFinished(self, testfilename):
+        """
+        Opens the test list file produced by a batch job and looks for the
+        finish date mark.  Returns true if found.
+        """
+        finished = False
+
+        tl = TestList.TestList()
+        try:
+            tl.scanFile( testfilename )
+            if tl.getFinishDate() != None:
+                finished = True
+        except:
+            pass
+
+        return finished
+
     def _check_deps(self, bjob):
         """
         """
@@ -1851,7 +1889,7 @@ class Pipelines:
                     return childtx
         return None
     
-    def _finish(self, qid, bjob, mark=None):
+    def finalizeJob(self, qid, bjob, mark=None):
         """
         """
         tL = []
@@ -1883,8 +1921,8 @@ class Pipelines:
 
 class BatchJob:
     
-    def __init__(self, qid, maxnp, fout, flist, testL):
-        self.qid = qid
+    def __init__(self, maxnp, fout, flist, testL,
+                       read_interval, read_timeout):
         self.maxnp = maxnp
         self.outfile = fout
         self.testfile = flist
@@ -1894,6 +1932,8 @@ class BatchJob:
         self.tstop = None
         self.tcheck = None
         self.result = None
+        self.read_interval = read_interval
+        self.read_timeout = read_timeout
 
     def start(self, jobid):
         """
@@ -1901,11 +1941,27 @@ class BatchJob:
         self.jobid = jobid
         self.tstart = time.time()
 
-    def stop(self, delay):
+    def stop(self):
         """
         """
         self.tstop = time.time()
-        self.tcheck = self.tstop + delay
+        self.tcheck = self.tstop + self.read_interval
+
+    def timeToCheckIfFinished(self, current_time):
+        """
+        """
+        return self.tcheck < current_time
+
+    def extendFinishCheck(self, current_time):
+        """
+        Resets the finish check time to a time into the future.  Returns
+        False if the number of extensions has been exceeded.
+        """
+        if current_time < self.tstop+self.read_timeout:
+            # set the time for the next read attempt
+            self.tcheck = current_time + self.read_interval
+            return False
+        return True
 
     def finished(self, result):
         """
@@ -1926,10 +1982,10 @@ class BatchAccountant:
         # queue jobs whose final results have been read, qid -> BatchJob
         self.qdone  = {}
 
-    def addJob(self, qnumber, maxnp, pout, tout, tL ):
+    def addJob(self, qid, batchjob ):
         """
         """
-        self.qtodo[ qnumber ] = BatchJob( qnumber, maxnp, pout, tout, tL )
+        self.qtodo[ qid ] = batchjob
 
     def numStarted(self):
         return len( self.qstart )
@@ -1967,11 +2023,11 @@ class BatchAccountant:
         jb.start( jobid )
         self.qstart[ qid ] = jb
 
-    def markJobStopped(self, qid, pause_length_before_reading):
+    def markJobStopped(self, qid):
         """
         """
         jb = self.popJob( qid )
-        jb.stop( pause_length_before_reading )
+        jb.stop()
         self.qstop[ qid ] = jb
 
     def markJobDone(self, qid, done_mark):
