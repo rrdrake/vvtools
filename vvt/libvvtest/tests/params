@@ -18,7 +18,7 @@ def main():
                   test09
                """.split()
 
-    # set these for the pipeline tests
+    # set these for the batch tests
     os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
     os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
     os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
@@ -70,14 +70,14 @@ def test01():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( '-p np<8 -P np=1 --pipeline --qsub-length 0' )
+        out,np,nd,nf,nn = run_vvtest( '-p np<8 -P np=1 --batch --qsub-length 0' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         
         L = filegrep( tdir + '/basic.np=4/execute.log', 'execute basic2' )
         print "execute", L
         assert len(L) == 1 and L[0].strip() == 'execute basic2 np = 4'
         
-        out,np,nd,nf,nn = run_vvtest( '-p np<=8 --pipeline --qsub-length 0' )
+        out,np,nd,nf,nn = run_vvtest( '-p np<=8 --batch --qsub-length 0' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         
         out,np,nd,nf,nn = run_vvtest( '-i -p np=4' )
@@ -124,14 +124,14 @@ def test02():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( '-p np=4 --pipeline --qsub-length 0' )
+        out,np,nd,nf,nn = run_vvtest( '-p np=4 --batch --qsub-length 0' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         L = filegrep( tdir + '/basic.dt=0.01.np=4/execute.log', 'execute basic' )
         assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.01'
         L = filegrep( tdir + '/basic.dt=0.1.np=4/execute.log', 'execute basic' )
         assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.1'
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline --qsub-length 0' )
+        out,np,nd,nf,nn = run_vvtest( '--batch --qsub-length 0' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         
         out,np,nd,nf,nn = run_vvtest( '-i' )
@@ -338,7 +338,7 @@ def test07():
         remove_results()
 
         out,np,nd,nf,nn = run_vvtest( ['-p','isize<=2 or not isize',
-                                       '--pipeline'] )
+                                       '--batch'] )
         assert np == 3 and nd == 0 and nf == 0 and nn == 0
         
         assert     os.path.exists( tdir+'/basic.isize=1' )
@@ -347,7 +347,7 @@ def test07():
         assert     os.path.exists( tdir+'/basic' )
 
         os.chdir( tdir+'/basic' )
-        out,np,nd,nf,nn = run_vvtest( '-R --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-R --batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         os.chdir( cwd )
 
@@ -395,7 +395,7 @@ def test08():
         remove_results()
 
         out,np,nd,nf,nn = run_vvtest( ['-p','isize<=2 or not isize',
-                                       '--pipeline'] )
+                                       '--batch'] )
         assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
         assert os.path.exists( tdir+'/basic' )
@@ -407,7 +407,7 @@ def test08():
         assert pL == ['1', '2']
 
         os.chdir( tdir+'/basic' )
-        out,np,nd,nf,nn = run_vvtest( '-R --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-R --batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         
         L = filegrep( 'execute.log', "access PARAM_isize" )
@@ -488,7 +488,7 @@ def test09():
 
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 12 and nd == 0 and nf == 0 and nn == 0
 
         assert len( greptestlist(out,'pass.*animal=dog') ) == 1

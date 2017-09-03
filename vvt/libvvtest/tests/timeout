@@ -15,7 +15,7 @@ def main():
         argL = """test01 test02 test03 test04 test05
                """.split()
 
-    # set these for the pipeline tests
+    # set these for the batch tests
     os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
     os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
     os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
@@ -143,15 +143,15 @@ def test02():
               <timeout platforms="'''+platname+'''" value="15"/>
             </rtest>''' )
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         assert numtimeout(out) == 1
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -wT 1.5' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -wT 1.5' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert numtimeout(out) == 3
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -wT 20' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -wT 20' )
         assert np == 4 and nd == 0 and nf == 0 and nn == 0
         assert numtimeout(out) == 0
 
@@ -256,15 +256,15 @@ def test04():
     if platname in batchplatforms:
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         assert numtimeout(out) == 1
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -wT 1.5' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -wT 1.5' )
         assert np == 0 and nd == 0 and nf == 0 and nn == 0
         assert numtimeout(out) == 3
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -wT 20' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -wT 20' )
         assert np == 3 and nd == 0 and nf == 0 and nn == 0
         assert numtimeout(out) == 0
 
@@ -305,16 +305,16 @@ def test05():
     if platname in batchplatforms:
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -T 30' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -T 30' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--pipeline --max-timeout 6' )
+        out,np,nd,nf,nn = run_vvtest( '--batch --max-timeout 6' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert numtimeout(out) == 1
 
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -T 30 --max-timeout 6' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -T 30 --max-timeout 6' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert numtimeout(out) == 1
 

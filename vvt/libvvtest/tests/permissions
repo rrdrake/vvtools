@@ -21,7 +21,7 @@ def main():
         argL = """test01 test02
                """.split()
 
-    # set these for the pipeline tests
+    # set these for the batch tests
     os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
     os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
     os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
@@ -91,7 +91,7 @@ def test01():
         
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline --perms g=,o=' )
+        out,np,nd,nf,nn = run_vvtest( '--batch --perms g=,o=' )
         assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
         m = stat.S_IMODE( os.stat(tdir)[stat.ST_MODE] )
@@ -183,7 +183,7 @@ def test02():
         
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline --perms g=rws,o=rwx' )
+        out,np,nd,nf,nn = run_vvtest( '--batch --perms g=rws,o=rwx' )
         assert np == 3 and nd == 0 and nf == 0 and nn == 0
         tdir = os.path.abspath( results_dir() )
         platname = platform_name( out )

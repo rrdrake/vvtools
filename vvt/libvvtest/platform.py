@@ -170,7 +170,7 @@ class Platform:
             1. Use 'set_num' if not None
             2. The value of max procs
 
-        This function should not be called for batch/pipeline mode.
+        This function should not be called for batch mode.
         """
         if set_max == None:
             mx = self.attrs.get( 'maxprocs', None )

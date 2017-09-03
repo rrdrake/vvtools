@@ -107,14 +107,14 @@ OPTIONS
             test is included.
             
             Note that implicit results keywords are available:
-            
-            notrun  : test was in the test list but was not launched
-            notdone : test was launched but did not finish
-            fail    : test finished and returned a fail status
-            diff    : test finished with a diff status
-            pass    : test finished with a pass status
-            timeout : test finished by running out of time
-      
+
+                notrun  : test was in the test list but was not launched
+                notdone : test was launched but did not finish
+                fail    : test finished and returned a fail status
+                diff    : test finished with a diff status
+                pass    : test finished with a pass status
+                timeout : test finished by running out of time
+
             For example, "vvtest -k diff" would run all tests that
             finished with a diff status.  If no keywords are specified,
             then all tests "notrun" or "notdone" will be run.  If a test times
@@ -202,8 +202,8 @@ OPTIONS
       
       --include-tdd
             If a test has the keyword "TDD" in it, then it will be skipped by
-            default.  Adding the --include-tdd option causes such tests to not
-            be skipped.  The acronym TDD stands for Test Driven Development,
+            default.  Adding the --include-tdd option causes such tests to be
+            included.  The acronym TDD stands for Test Driven Development,
             in which tests are added before the code is modified to make them
             work.  These tests are not "production" yet so the TDD keyword can
             be used to separate and distinguish them in testing and reporting.
@@ -227,7 +227,7 @@ OPTIONS
             that do not have a previous runtime are given the value zero.
 
       -m    Do not overwrite existing scripts and no clean out.  By default,
-            the individual test scripts are always overritten and all files
+            the generated test scripts are always overritten and all files
             in the test directory are removed.  Turning this option on
             will prevent a test script that exists from being overwritten
             and the test directory will not be cleaned out.
@@ -292,17 +292,15 @@ OPTIONS
       
       -T timeout
             Apply a timeout value in seconds to each test.  Zero means no
-            timeout.  In pipeline/batch mode, note that the time given to
-            the batch queue for each batch job is the sum of the timeouts
-            of each test.
+            timeout.  In batch mode, note that the time given to the batch
+            queue for each batch job is the sum of the timeouts of each test.
       
       --timeout-multiplier mult
             Apply a float multiplier to the timeout value for each test.
 
       --max-timeout <seconds>
-            Apply a maximum timeout value for each test and for batch
-            (pipeline) jobs.  It is the last operation performed when
-            computing timeouts.
+            Apply a maximum timeout value for each test and for batch jobs.
+            It is the last operation performed when computing timeouts.
 
       -L    Do not use log files.  By default, each test output is sent to
             a log file contained in the run directory.  This option turns
@@ -330,25 +328,26 @@ OPTIONS
 
             An environment variable can be used instead, VVTEST_CONFIGDIR.
 
-      --pipeline
-            Collect tests in sequential pipelines and submit them to a batch
-            queue rather than executing individual tests as resources become
-            open.  In order to use the qsub capability of batch systems, the
+      --batch, --pipeline
+            Collect sets of tests in and submit them to a batch queue rather
+            than executing individual tests as resources become open.  In
+            order to use the queue submit capability of batch systems, the
             plugin for the platform must be set up to launch batch jobs.
+            The option --pipeline is deprecated.
       
       --qsub-limit <integer>
-            Used in conjunction with the --pipeline switch, this will limit
-            the number of pipelines submitted to the queue at any one time.
-            The default is 5 concurrent pipelines.
+            Used in conjunction with the --batch switch, this will limit
+            the number of batch jobs submitted to the queue at any one time.
+            The default is 5 concurrent batch jobs.
       
       --qsub-length=<integer>
-            Used in conjunction with the --pipeline switch, this limits the
-            number of tests that are placed into each pipeline batch.  The
-            sum of the timeouts of the tests in each batch will be less than
-            the given number of seconds.  The default is 30 minutes.  The
-            longer the length, the more tests will go in each batch job; the
-            shorter the length, the fewer.  A value of zero will force each
-            test to run in a separate batch job.
+            Used in conjunction with the --batch switch, this limits the
+            number of tests that are placed into each batch set.  The sum
+            of the timeouts of the tests in each set will be less than the
+            given number of seconds.  The default is 30 minutes.  The longer
+            the length, the more tests will go in each batch job; the shorter
+            the length, the fewer.  A value of zero will force each test to
+            run in a separate batch job.
       
       --check=<name>
             Activates optional sections in the test files.  The execution
@@ -1021,11 +1020,11 @@ def runTests( dirs, plat, ufilter ):
           if optdict.has_key('--save-results'):
             saveResults( tlist, plat, test_dir, inprogress=True )
 
-          if not optdict.has_key('--pipeline'):
+          if not optdict.has_key('--batch'):
             executeTestList( tlist, test_dir, plat, perms, tfile )
           
           else:
-            pipeLineTestList( tlist, test_dir, plat, perms )
+            batchTestList( tlist, test_dir, plat, perms )
         
           print3( "Test directory:", testdirname )
           
@@ -1280,7 +1279,7 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
     print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
 
 
-def pipeLineTestList( tlist, test_dir, plat, perms ):
+def batchTestList( tlist, test_dir, plat, perms ):
     """
     The 'tlist' is a TestList class instance.
     """
@@ -1288,14 +1287,14 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
 
     qsublimit = optdict.get( '--qsub-limit', plat.getDefaultQsubLimit() )
     
-    pipes = Pipelines( plat, test_dir, tlist, perms, qsublimit )
+    batch = Batcher( plat, test_dir, tlist, perms, qsublimit )
     
     plat.display()
     starttime = time.time()
     print3( "Start time:", time.ctime() )
 
     # write testlist files for each qsub
-    numjobs = pipes.writeQsubScripts()
+    numjobs = batch.writeQsubScripts()
 
     print3( 'Total number of batch jobs: ' + str(numjobs) + \
             ', maximum concurrent jobs: ' + str(qsublimit) )
@@ -1303,7 +1302,7 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
     if optdict.has_key('-g'):
       return
     
-    schedule = pipes.getScheduler()
+    schedule = batch.getScheduler()
 
     cwd = os.getcwd()
     qsleep = int( os.environ.get( 'VVTEST_BATCH_SLEEP_LENGTH', 15 ) )
@@ -1349,10 +1348,10 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
     if len(NS)+len(NF)+len(nrL) > 0:
         print3()
     if len(NS) > 0:
-      print3( "*** Warning: these pipe numbers did not seem to start:",
+      print3( "*** Warning: these batch numbers did not seem to start:",
               ' '.join(NS) )
     if len(NF) > 0:
-      print3( "*** Warning: these pipe numbers did not seem to finish:",
+      print3( "*** Warning: these batch numbers did not seem to finish:",
               ' '.join(NF) )
     for tx,deptx in nrL:
         assert tx.hasChildren() and deptx != None
@@ -1494,7 +1493,7 @@ def loadRunTimes( tlist, plat ):
     cache = None
 
 
-class Pipelines:
+class Batcher:
     
     def __init__(self, plat, test_dir, tlist, perms, maxjobs):
         """
@@ -1508,7 +1507,7 @@ class Pipelines:
         self.clean_exit_marker = "queue job finished cleanly"
 
         # TODO: make Tzero a platform plugin thing
-        self.Tzero = 21*60*60  # no timeout in pipeline mode is 21 hours
+        self.Tzero = 21*60*60  # no timeout in batch mode is 21 hours
 
         # allow these values to be set by environment variable, mainly for
         # unit testing; if setting these is needed more regularly then a
@@ -1591,11 +1590,11 @@ class Pipelines:
         for k,v in optdict.get('--platopt',{}).items():
             commonopts += ' --platopt ' + k + '=' + v
         
-        qsubids = {}  # maps qpipe id to max number of processors for that pipe
+        qsubids = {}  # maps batch id to max num processors for that batch
         
         qid = 0
         for qL in self.qsublists:
-          self.do_queue_pipe( qid, qL, qsubids, commonopts )
+          self.make_queue_batch( qid, qL, qsubids, commonopts )
           qid += 1
         
         qidL = qsubids.keys()
@@ -1611,7 +1610,7 @@ class Pipelines:
 
         return len( qsubids )
     
-    def do_queue_pipe(self, qnumber, qlist, npD, comopts):
+    def make_queue_batch(self, qnumber, qlist, npD, comopts):
         """
         """
         qidstr = str(qnumber)
@@ -1672,7 +1671,7 @@ class Pipelines:
         taopts = '--qsub-id=' + qidstr + ' '
         taopts += comopts
         if len(qlist) == 1:
-          # force a timeout for pipes with only one test
+          # force a timeout for batches with only one test
           if qtime < 600: taopts += ' -T ' + str(qtime*0.90)
           else:           taopts += ' -T ' + str(qtime-120)
         
@@ -1809,13 +1808,13 @@ def restartTests( test_dir, plat, ufilter ):
           if optdict.has_key('--save-results'):
             saveResults( tlist, plat, test_dir, inprogress=True )
           
-          if '--pipeline' not in optdict:
+          if '--batch' not in optdict:
             tlist.createTestExecs( test_dir, plat, config, perms )
             executeTestList( tlist, test_dir, plat, perms, tfile )
           
           else:
             tlist.createTestExecs( test_dir, plat, config, perms )
-            pipeLineTestList( tlist, test_dir, plat, perms )
+            batchTestList( tlist, test_dir, plat, perms )
         
           if optdict.has_key('--save-results'):
             saveResults( tlist, plat, test_dir )
@@ -2028,7 +2027,7 @@ def parseOptionsAndGenerateOptionDictionary():
     
     singles = 'hHvgGk:K:p:P:S:o:O:wAj:FRM:n:N:ibT:Lmeas:x:X:C'
     doubles = [ 'version','plat=','platopt=',
-                'keys', 'files', 'pipeline',
+                'keys', 'files', 'batch', 'pipeline',
                 'qsub-id=', 'qsub-limit=', 'qsub-length=',
                 'html', 'junit=', 'check=', 'analyze', 'cdir=',
                 'search=', 'extract=', 'include-tdd',
@@ -2045,10 +2044,13 @@ def parseOptionsAndGenerateOptionDictionary():
     
     for optpair in opts:
         n = optpair[0]
+
         if   n == '--analyze': n = '-a'
         elif n == '--search' : n = '-s'
         elif n == '--postclean': n = '-C'
         elif n == '-F': n = '-R'  # -F is deprecated, use -R instead
+        elif n == '--pipeline': n = '--batch'  # --pipeline is deprecated
+
         if n in ['--results-tag','--results-date']:
             optdict[n] = optpair[1]
         elif n == '--junit':

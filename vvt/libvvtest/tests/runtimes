@@ -33,7 +33,7 @@ def main():
                   test08 test09 test10
                """.split()
 
-    # set these for the pipeline tests
+    # set these for the batch tests
     os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
     os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
     os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
@@ -205,7 +205,7 @@ def test03():
         os.remove( 'timings' )
 
         # without a runtimes available, all tests should run
-        out,np,nd,nf,nn = run_vvtest( '--pipeline --tmax 6 tests' )
+        out,np,nd,nf,nn = run_vvtest( '--batch --tmax 6 tests' )
         assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
         # create a timings file
@@ -217,7 +217,7 @@ def test03():
 
         # select tests based on the timings file
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--pipeline --tmax 6 tests' )
+        out,np,nd,nf,nn = run_vvtest( '--batch --tmax 6 tests' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         L = testlist( out )
         assert len(L) == 2
@@ -287,7 +287,7 @@ def test04():
         remove_results()
         os.remove( 'timings' )
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline tests' )
+        out,np,nd,nf,nn = run_vvtest( '--batch tests' )
         assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
         # create a timings file
@@ -299,18 +299,18 @@ def test04():
 
         # select tests based on the timings file
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--pipeline --tmax 6 tests' )
+        out,np,nd,nf,nn = run_vvtest( '--batch --tmax 6 tests' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         L = testlist( out )
         assert len(L) == 2
         assert L[0][0] == 'AA'
         assert L[1][0] == 'BB'
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline', directory=tdir )
+        out,np,nd,nf,nn = run_vvtest( '--batch', directory=tdir )
         assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
         # and if we force tests to rerun, only 2 should be run
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -R', directory=tdir )
+        out,np,nd,nf,nn = run_vvtest( '--batch -R', directory=tdir )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         L = testlist( out )
         assert len(L) == 2
@@ -383,7 +383,7 @@ def test05():
         remove_results()
         os.remove( 'timings' )
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline tests' )
+        out,np,nd,nf,nn = run_vvtest( '--batch tests' )
         assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
         # create a timings file
@@ -395,16 +395,16 @@ def test05():
 
         # none of the execute/analyze tests should have been selected
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--pipeline --tmax 6 tests' )
+        out,np,nd,nf,nn = run_vvtest( '--batch --tmax 6 tests' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         L = testlist( out )
         assert len(L) == 1
         assert L[0][-1].endswith( os.sep+'AA' )
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline', directory=tdir )
+        out,np,nd,nf,nn = run_vvtest( '--batch', directory=tdir )
         assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -R', directory=tdir )
+        out,np,nd,nf,nn = run_vvtest( '--batch -R', directory=tdir )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         L = testlist( out )
         assert len(L) == 1
@@ -468,17 +468,17 @@ def test06():
     if platname in batchplatforms:
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline tests' )
+        out,np,nd,nf,nn = run_vvtest( '--batch tests' )
         assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline --tmin 3 tests' )
+        out,np,nd,nf,nn = run_vvtest( '--batch --tmin 3 tests' )
         assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
         # check that the test list in TestResults.* directory is intact
         out,np,nd,nf,nn = run_vvtest( '-i', directory=tdir )
         assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -R --tmin 3 tests' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -R --tmin 3 tests' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         L = testlist( out )
         assert len(L) == 1
@@ -592,10 +592,10 @@ def test08():
     if platname in batchplatforms:
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline --tsum 7 tests' )
+        out,np,nd,nf,nn = run_vvtest( '--batch --tsum 7 tests' )
         assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -R --tsum 7 tests' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -R --tsum 7 tests' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         L = testlist( out )
         assert len(L) == 2
@@ -603,7 +603,7 @@ def test08():
         assert L[1][-1].endswith( os.sep+'CC' )
 
         # check that the full list is still intact
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -R tests' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -R tests' )
         assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
 

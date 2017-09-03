@@ -21,7 +21,7 @@ def main():
                   test07 test08 test09
                """.split()
 
-    # set these for the pipeline tests
+    # set these for the batch tests
     os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
     os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
     os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
@@ -156,7 +156,7 @@ def test01batch():
             </rtest>""" )
 
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         testdir = results_dir()
 
         out,np,nd,nf,nn = run_vvtest( '-i' )
@@ -164,14 +164,14 @@ def test01batch():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( '-p np=1 --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-p np=1 --batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
         savedir = os.getcwd()
 
         os.chdir( testdir ) ; print "cd", testdir
 
-        out,np,nd,nf,nn = run_vvtest( '-R --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-R --batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
         os.chdir( savedir ) ; print "cd .."
@@ -180,7 +180,7 @@ def test01batch():
         remove_results()
         os.system( "ls -ltr" )
 
-        out,np,nd,nf,nn = run_vvtest( "-p np<=3 --pipeline" )
+        out,np,nd,nf,nn = run_vvtest( "-p np<=3 --batch" )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*np=1') ) == 1
         assert len( greptestlist(out,'pass.*np=3') ) == 1
@@ -188,7 +188,7 @@ def test01batch():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( "-p np!=3 --pipeline" )
+        out,np,nd,nf,nn = run_vvtest( "-p np!=3 --batch" )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*np=1') ) == 1
         assert len( greptestlist(out,'pass.*np=3') ) == 0
@@ -196,7 +196,7 @@ def test01batch():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( "-p np>=3 --pipeline" )
+        out,np,nd,nf,nn = run_vvtest( "-p np>=3 --batch" )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*np=1') ) == 0
         assert len( greptestlist(out,'pass.*np=3') ) == 1
@@ -204,7 +204,7 @@ def test01batch():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( "-p np>3 --pipeline" )
+        out,np,nd,nf,nn = run_vvtest( "-p np>3 --batch" )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*np=1') ) == 0
         assert len( greptestlist(out,'pass.*np=3') ) == 0
@@ -212,7 +212,7 @@ def test01batch():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( "-p np<3 --pipeline" )
+        out,np,nd,nf,nn = run_vvtest( "-p np<3 --batch" )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*np=1') ) == 1
         assert len( greptestlist(out,'pass.*np=3') ) == 0
@@ -220,7 +220,7 @@ def test01batch():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( "-p np=1/np=3 --pipeline" )
+        out,np,nd,nf,nn = run_vvtest( "-p np=1/np=3 --batch" )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*np=1') ) == 1
         assert len( greptestlist(out,'pass.*np=3') ) == 1
@@ -228,7 +228,7 @@ def test01batch():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( "-p np>1 -p np<6 --pipeline" )
+        out,np,nd,nf,nn = run_vvtest( "-p np>1 -p np<6 --batch" )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*np=1') ) == 0
         assert len( greptestlist(out,'pass.*np=3') ) == 1
@@ -289,7 +289,7 @@ def test02():
     if platname in batchplatforms:
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 2 and nd == 0 and nf == 2 and nn == 0
 
         assert len( greptestlist(out,'pass.*atest\.nx=1') ) == 1
@@ -297,7 +297,7 @@ def test02():
         assert len( greptestlist(out,'fail.*atest\.nx=4') ) == 1
         assert len( greptestlist(out,'fail.*btest\.nx=4') ) == 1
 
-        out,np,nd,nf,nn = run_vvtest( '-k atest/fail --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-k atest/fail --batch' )
         assert np == 1 and nd == 0 and nf == 2 and nn == 0
         
         assert len( greptestlist( out, 'atest.*pass.*\.nx=1' ) ) == 1
@@ -337,19 +337,19 @@ def test03():
     if platname in batchplatforms:
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '-k earth --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-k earth --batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-        out,np,nd,nf,nn = run_vvtest( '-w -K earth --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-w -K earth --batch' )
         assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-        out,np,nd,nf,nn = run_vvtest( '-w -k earth -K mars --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-w -k earth -K mars --batch' )
         assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-        out,np,nd,nf,nn = run_vvtest( '-w -k earth/mars --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-w -k earth/mars --batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-        out,np,nd,nf,nn = run_vvtest( '-w -k venus/mars --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-w -k venus/mars --batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
 
@@ -448,19 +448,19 @@ def test05():
     if platname in batchplatforms:
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( '-k earth --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-k earth --batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-        out,np,nd,nf,nn = run_vvtest( '-w -K earth --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-w -K earth --batch' )
         assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-        out,np,nd,nf,nn = run_vvtest( '-w -k earth -K mars --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-w -k earth -K mars --batch' )
         assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-        out,np,nd,nf,nn = run_vvtest( '-w -k earth/mars --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-w -k earth/mars --batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-        out,np,nd,nf,nn = run_vvtest( '-w -k venus/mars --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-w -k venus/mars --batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
 
@@ -499,7 +499,7 @@ def test06():
     if platname in batchplatforms:
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 2 and nd == 0 and nf == 1 and nn == 0
         platname = platform_name( out )
 
@@ -507,7 +507,7 @@ def test06():
         assert len( greptestlist(out,'fail.*btest') ) == 1
         assert len( greptestlist(out,'pass.*ctest') ) == 1
 
-        out,np,nd,nf,nn = run_vvtest( '-k atest/fail --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-k atest/fail --batch' )
         assert np == 1 and nd == 0 and nf == 1 and nn == 0
 
         assert len( greptestlist(out,'pass.*atest') ) == 1
@@ -603,15 +603,15 @@ def test07():
     if platname in batchplatforms:
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 16 and nd == 0 and nf == 0 and nn == 0
 
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '-n 1 --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-n 1 --batch' )
         assert np == 16 and nd == 0 and nf == 0 and nn == 0
 
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '-N 2 --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-N 2 --batch' )
         assert np == 6 and nd == 0 and nf == 0 and nn == 0
         assert len( glob.glob( tdir+'/atest*/execute.log' ) ) == 1
         assert len( glob.glob( tdir+'/xtest*/execute.log' ) ) == 1
@@ -621,7 +621,7 @@ def test07():
         assert len( glob.glob( tdir+'/ztest*/execute.log' ) ) == 0
 
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '-n 1 -N 2 --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-n 1 -N 2 --batch' )
         assert np == 6 and nd == 0 and nf == 0 and nn == 0
         assert len( glob.glob( tdir+'/atest*/execute.log' ) ) == 1
         assert len( glob.glob( tdir+'/xtest*/execute.log' ) ) == 1
@@ -631,11 +631,11 @@ def test07():
         assert len( glob.glob( tdir+'/ztest*/execute.log' ) ) == 0
 
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '-N 4 --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-N 4 --batch' )
         assert np == 16 and nd == 0 and nf == 0 and nn == 0
 
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( ['-p', 'np<=2 or not np', '--pipeline'] )
+        out,np,nd,nf,nn = run_vvtest( ['-p', 'np<=2 or not np', '--batch'] )
         assert np == 12 and nd == 0 and nf == 0 and nn == 0
         assert len( glob.glob( tdir+'/atest*/execute.log' ) ) == 1
         assert len( glob.glob( tdir+'/xtest*/execute.log' ) ) == 1
@@ -647,7 +647,7 @@ def test07():
 
 def test08():
     """
-    pipelines should not prune based on max procs
+    batch should not prune based on max procs
     """
     # determine the max num procs for this platform
     writescript( "null.vvt", """
@@ -692,7 +692,7 @@ def test08():
             print ( 'executing test, np='+str(vvt.np) )
             """ )
 
-        out,np,nd,nf,nn = run_vvtest( '-N '+str(maxprocs+1)+' --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-N '+str(maxprocs+1)+' --batch' )
         assert np == 3 and nd == 0 and nf == 0 and nn == 0
         
         assert os.path.exists( tdir+'/atest.np=1/execute.log' )
@@ -762,32 +762,32 @@ def test09():
     if platname in batchplatforms:
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 7 and nd == 0 and nf == 0 and nn == 0
 
         # first check that -N 2 does not remove tests if they are already there
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -R -N 2' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -R -N 2' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         L = testlist( out )
         assert len(L) == 2
         assert L[0][-1].endswith( os.sep+'btest.np=1' )
         assert L[1][-1].endswith( os.sep+'btest.np=2' )
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -R' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -R' )
         assert np == 7 and nd == 0 and nf == 0 and nn == 0
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -R', directory=tdir )
+        out,np,nd,nf,nn = run_vvtest( '--batch -R', directory=tdir )
         assert np == 7 and nd == 0 and nf == 0 and nn == 0
 
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -N 2' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -N 2' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         L = testlist( out )
         assert len(L) == 2
         assert L[0][-1].endswith( os.sep+'btest.np=1' )
         assert L[1][-1].endswith( os.sep+'btest.np=2' )
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -R', directory=tdir )
+        out,np,nd,nf,nn = run_vvtest( '--batch -R', directory=tdir )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         L = testlist( out )
         assert len(L) == 2

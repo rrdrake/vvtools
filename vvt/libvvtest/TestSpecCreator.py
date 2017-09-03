@@ -2299,8 +2299,8 @@ def cartesian_product_and_filter( paramD, ufilter ):
     modified in-place to remove parameters that are filtered out.
 
     Important: this function always applies filtering, even if the
-    "include_all" flag is present in 'ufilter'.  This implies that any
-    command line parameter expressions be passed along in pipeline/batch mode.
+    "include_all" flag is present in 'ufilter'.  This means any command line
+    parameter expressions be passed along in batch queue mode.
     """
     # first, make a list containing each parameter value list
     plist_keys = []

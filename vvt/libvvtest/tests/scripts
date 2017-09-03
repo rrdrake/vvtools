@@ -20,7 +20,7 @@ def main():
                   test21
                """.split()
 
-    # set these for the pipeline tests
+    # set these for the batch tests
     os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
     os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
     os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
@@ -165,11 +165,11 @@ def test04():
     
     if platname in batchplatforms:
 
-        # same thing in pipeline mode
+        # same thing in batch mode
 
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -j bin -o dbg' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -j bin -o dbg' )
         tdir = results_dir()
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*hello.py') ) == 1
@@ -210,11 +210,11 @@ def test05():
 
     if platname in batchplatforms:
 
-        # same thing in pipeline mode
+        # same thing in batch mode
 
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 1 and nd == 1 and nf == 1 and nn == 0
 
 
@@ -247,7 +247,7 @@ def test06():
 
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
         assert len( greptestlist(out,'pass.*multi') ) == 2
@@ -478,7 +478,7 @@ def test09():
     if platname in batchplatforms:
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 3 and nd == 6 and nf == 0 and nn == 0
         assert len( filegrep( tdir+'/pydiff/execute.log', 'exiting diff' ) ) == 1
         assert len( filegrep( tdir+'/shdiff/execute.log', 'exiting diff' ) ) == 1
@@ -711,7 +711,7 @@ def test13():
     
     if platname in batchplatforms:
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
 
@@ -790,11 +790,11 @@ def test14():
     if platname in batchplatforms:
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '-o dbg --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-o dbg --batch' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         assert os.path.exists( dbgdir+'/another/file3.txt' )
         assert not os.path.islink( dbgdir+'/another/file3.txt' )

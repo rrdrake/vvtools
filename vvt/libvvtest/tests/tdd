@@ -27,7 +27,7 @@ def main():
         argL = """filter01 results01 report01
                """.split()
     
-    # set these for the pipeline tests
+    # set these for the batch tests
     os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
     os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
     os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
@@ -106,7 +106,7 @@ def filter01():
     
     if platname in batchplatforms:
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
     os.chdir( tdir )
@@ -146,7 +146,7 @@ def filter01():
 
     if platname in batchplatforms:
         remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--pipeline --include-tdd' )
+        out,np,nd,nf,nn = run_vvtest( '--batch --include-tdd' )
         assert np == 4 and nd == 0 and nf == 0 and nn == 0
 
 

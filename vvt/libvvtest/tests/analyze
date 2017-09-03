@@ -21,7 +21,7 @@ def main():
                   test13 test14 test15 test16 test17 test18
                """.split()
 
-    # set these for the pipeline tests
+    # set these for the batch tests
     os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
     os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
     os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
@@ -170,7 +170,7 @@ def test02():
 
 def test03():
     """
-    same as test02 but use pipeline
+    same as test02 but use batch
     """
     # determine the platform
     writefile( "null.xml", """
@@ -210,7 +210,7 @@ def test03():
             </analyze>
           </rtest>""" )
       
-      out,np,nd,nf,nn = run_vvtest( '--pipeline parentchild' )
+      out,np,nd,nf,nn = run_vvtest( '--batch parentchild' )
       assert np == 3 and nd == 0 and nf == 2 and nn == 1
       
       # "fix" the bad test
@@ -227,7 +227,7 @@ def test03():
             </analyze>
           </rtest>""" )
       
-      out,np,nd,nf,nn = run_vvtest( '--pipeline -R -k notdone/notrun/fail parentchild' )
+      out,np,nd,nf,nn = run_vvtest( '--batch -R -k notdone/notrun/fail parentchild' )
       assert np == 3 and nd == 0 and nf == 0 and nn == 0
       
       remove_results()
@@ -252,7 +252,7 @@ def test03():
             </analyze>
           </rtest>""" )
       
-      out,np,nd,nf,nn = run_vvtest( '--pipeline -k bad parentchild' )
+      out,np,nd,nf,nn = run_vvtest( '--batch -k bad parentchild' )
       assert np == 1 and nd == 0 and nf == 1 and nn == 1
       
       # "fix" the bad test
@@ -269,7 +269,7 @@ def test03():
             </analyze>
           </rtest>""" )
       
-      out,np,nd,nf,nn = run_vvtest( '--pipeline -R -k notdone/notrun/fail -k bad parentchild' )
+      out,np,nd,nf,nn = run_vvtest( '--batch -R -k notdone/notrun/fail -k bad parentchild' )
       assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
 
@@ -438,7 +438,7 @@ def test08():
         
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '-n 4 --sort x --pipeline --qsub-limit 5' )
+        out,np,nd,nf,nn = run_vvtest( '-n 4 --sort x --batch --qsub-limit 5' )
         assert np == 4 and nd == 0 and nf == 0 and nn == 0
 
         tL = testtimes( out )
@@ -532,13 +532,13 @@ def test09():
             </rtest>""" )
         
         # the analyze should not run because a child fails
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 1 and nd == 0 and nf == 1 and nn == 1
         tdir = results_dir()
         platname = platform_name( out )
 
         # the analyze should not run here
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 0 and nd == 0 and nf == 0 and nn == 0
         
         # double check the state
@@ -559,11 +559,11 @@ def test09():
             </rtest>""" )
         
         # rerun the failure
-        out,np,nd,nf,nn = run_vvtest( '-k fail --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-k fail --batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         
         # now the analyze should run
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         
         out,np,nd,nf,nn = run_vvtest( '-i' )
@@ -631,7 +631,7 @@ def test10():
             </rtest>""" )
         
         # the analyze should fail
-        out,np,nd,nf,nn = run_vvtest( '--pipeline --qsub-length 1 --qsub-limit 5' )
+        out,np,nd,nf,nn = run_vvtest( '--batch --qsub-length 1 --qsub-limit 5' )
         assert np == 2 and nd == 0 and nf == 1 and nn == 0
 
         # "fix" the execute
@@ -651,7 +651,7 @@ def test10():
         
         # the analyze test should not run at the same time as the children
         # (if the analyze job does, then the analyze test will show a fail)
-        out,np,nd,nf,nn = run_vvtest( '-R --pipeline --qsub-length 1 --qsub-limit 5' )
+        out,np,nd,nf,nn = run_vvtest( '-R --batch --qsub-length 1 --qsub-limit 5' )
         assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
 
@@ -742,7 +742,7 @@ def test13():
         
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
         assert len( glob.glob( tdir+'/ana*/execute.log' ) ) == 3
@@ -777,7 +777,7 @@ def test13():
         
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
         assert len( glob.glob( tdir+'/ana*/execute.log' ) ) == 2
@@ -821,7 +821,7 @@ def test14():
         
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
         assert len( glob.glob( tdir+'/ana*/execute.log' ) ) == 3
@@ -880,7 +880,7 @@ def test15():
         
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 6 and nd == 0 and nf == 0 and nn == 0
         
         assert len( glob.glob( tdir+'/ana1*/execute.log' ) ) == 3
@@ -925,7 +925,7 @@ def test16():
         
         remove_results()
         
-        ok,out = run_cmd( [vvtest,'-p', 'V<b or !V', '--pipeline'] )
+        ok,out = run_cmd( [vvtest,'-p', 'V<b or !V', '--batch'] )
         assert ok
         np,nd,nf,nn = numpass(out),numdiff(out),numfail(out),numnotrun(out)
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
@@ -995,7 +995,7 @@ def test17():
     if platname in batchplatforms:
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
         assert len( filegrep( tdir+'/atest.ival=1/execute.log',
@@ -1011,7 +1011,7 @@ def test17():
         assert len( filegrep( tdir+'/atest/execute.log',
                               'running touch' ) ) == 0
         
-        out,np,nd,nf,nn = run_vvtest( '-Ra --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-Ra --batch' )
         assert np == 3 and nd == 0 and nf == 0 and nn == 0
         assert len( filegrep( tdir+'/atest.ival=1/execute.log',
                               'running touch' ) ) == 0
@@ -1105,7 +1105,7 @@ def test18():
     if platname in batchplatforms:
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 6 and nd == 0 and nf == 0 and nn == 0
         
         for tname in ['pytest','shtest']:
@@ -1122,7 +1122,7 @@ def test18():
             assert len( filegrep( tdir+'/'+tname+'/execute.log',
                                   'running touch' ) ) == 0
         
-        out,np,nd,nf,nn = run_vvtest( '-Ra --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-Ra --batch' )
         assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
         for tname in ['pytest','shtest']:

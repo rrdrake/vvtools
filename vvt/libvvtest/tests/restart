@@ -16,7 +16,7 @@ def main():
                   test04 test05 test06
                """.split()
 
-    # set these for the pipeline tests
+    # set these for the batch tests
     os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
     os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
     os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
@@ -136,7 +136,7 @@ def test02():
 
 def test03():
     """
-    restart with pipeline
+    restart with batch
     """
     writefile( 'atest.xml', """
         <rtest name="atest">
@@ -178,7 +178,7 @@ def test03():
 
     if platname in batchplatforms:
 
-        # same thing in pipeline mode
+        # same thing in batch mode
 
         remove_results()
 
@@ -199,7 +199,7 @@ def test03():
               </analyze>
             </rtest>""" )
 
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 1 and nd == 0 and nf == 1 and nn == 1
         tdir = os.path.abspath( results_dir() )
         platname = platform_name( out )
@@ -217,7 +217,7 @@ def test03():
               </analyze>
             </rtest>""" )
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline -k fail/notrun' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -k fail/notrun' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
 
@@ -313,17 +313,17 @@ def test05():
     if platname in batchplatforms:
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert os.path.exists( tdir+'/clean/generated_file.txt' )
 
         # run again should remove the generated file
-        out,np,nd,nf,nn = run_vvtest( '-R --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-R --batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 0
 
         # running again with -m option should fail
-        out,np,nd,nf,nn = run_vvtest( '-R -m --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-R -m --batch' )
         assert np == 0 and nd == 0 and nf == 1 and nn == 0
         assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 1
 
@@ -362,17 +362,17 @@ def test06():
     if platname in batchplatforms:
         remove_results()
         
-        out,np,nd,nf,nn = run_vvtest( '--pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
 
         # run again exercises the pre-clean logic
-        out,np,nd,nf,nn = run_vvtest( '-R --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-R --batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
 
         # now with post-clean
-        out,np,nd,nf,nn = run_vvtest( '-R -C --pipeline' )
+        out,np,nd,nf,nn = run_vvtest( '-R -C --batch' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert not os.path.exists( tdir+'/softdir/subdir/afile.txt' )
 

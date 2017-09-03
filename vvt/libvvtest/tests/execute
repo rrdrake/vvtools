@@ -23,7 +23,7 @@ def main():
                   batch1
                """.split()
 
-    # set these for the pipeline tests
+    # set these for the batch tests
     os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
     os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
     os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
@@ -774,17 +774,17 @@ def force3():
         # using SIGKILL prevents the "finished" mark from getting placed
         os.environ['VVTEST_INTERRUPT_BATCH'] = '1'
         os.environ['VVTEST_SIGNAL_BATCH'] = 'SIGKILL'
-        xok,out = run_cmd( vvtest + ' --pipeline --qsub-limit 1 --qsub-length 1' )
+        xok,out = run_cmd( vvtest + ' --batch --qsub-limit 1 --qsub-length 1' )
         del os.environ['VVTEST_INTERRUPT_BATCH']
         del os.environ['VVTEST_SIGNAL_BATCH']
         
         # this one should fail
-        xok,out = run_cmd( vvtest + ' --pipeline -R' )
+        xok,out = run_cmd( vvtest + ' --batch -R' )
         assert not xok
         assert len( grep( out, 'rror.*another process' ) ) == 1
         
         # this one should be forced to run
-        xok,out = run_cmd( vvtest + ' --pipeline -R --force' )
+        xok,out = run_cmd( vvtest + ' --batch -R --force' )
         assert xok
         assert len( grep( out, 'rror.*another process' ) ) == 0
 
@@ -828,13 +828,13 @@ def batch1():
                 <execute> sleep 5 </execute>
             </rtest>""" )
         
-        # these four tests are run in two pipelines
-        # pipeline zero will be ok, while pipeline one will crash
-        # this should cause pipeline one to show "did not seem to finish"
+        # these four tests are run in two batch
+        # batch zero will be ok, while batch one will crash
+        # this should cause batch one to show "did not seem to finish"
 
         os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
         os.environ['VVTEST_INTERRUPT_QID'] = '1'
-        xok,out = run_cmd( vvtest + ' --pipeline --qsub-limit 1 --qsub-length 40' )
+        xok,out = run_cmd( vvtest + ' --batch --qsub-limit 1 --qsub-length 40' )
         del os.environ['VVTEST_INTERRUPT_COUNT']
         del os.environ['VVTEST_INTERRUPT_QID']
 
