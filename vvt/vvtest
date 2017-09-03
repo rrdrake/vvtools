@@ -1303,21 +1303,23 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
     if optdict.has_key('-g'):
       return
     
+    schedule = pipes.getScheduler()
+
     cwd = os.getcwd()
     qsleep = int( os.environ.get( 'VVTEST_BATCH_SLEEP_LENGTH', 15 ) )
     
     while True:
 
-        qid = pipes.checkstart()
+        qid = schedule.checkstart()
         if qid != None:
             # nothing to print here because the qsubmit prints
             pass
-        elif pipes.numRunning() == 0:
+        elif schedule.numInFlight() == 0:
             break
         else:
             time.sleep( qsleep )
 
-        qidL,doneL = pipes.checkdone()
+        qidL,doneL = schedule.checkdone()
         
         if len(qidL) > 0:
             ids = ' '.join( [ str(qid) for qid in qidL ] )
@@ -1326,14 +1328,14 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
             ts = XstatusString( t, False, test_dir, cwd )
             print3( "Finished:", ts )
         
-        unit_test_hook( 'batch', pipes.numRunning(), pipes.numDone() )
+        unit_test_hook( 'batch', schedule.numInFlight(), schedule.numDone() )
 
         if len(doneL) > 0:
-            jpct = 100 * float(pipes.numDone()) / float(numjobs)
-            jdiv = 'jobs '+str(pipes.numDone())+'/'+str(numjobs)
-            jflt = '(in flight '+str(pipes.numStarted())+')'
-            ndone = pipes.tlist.numDone()
-            ntot = pipes.tlist.numActive()
+            jpct = 100 * float(schedule.numDone()) / float(numjobs)
+            jdiv = 'jobs '+str(schedule.numDone())+'/'+str(numjobs)
+            jflt = '(in flight '+str(schedule.numStarted())+')'
+            ndone = tlist.numDone()
+            ntot = tlist.numActive()
             tpct = 100 * float(ndone) / float(ntot)
             tdiv = 'tests '+str(ndone)+'/'+str(ntot)
             dt = pretty_time( time.time() - starttime )
@@ -1343,7 +1345,7 @@ def pipeLineTestList( tlist, test_dir, plat, perms ):
                     'time = '+dt )
 
     # any remaining tests cannot be run; flush then print warnings
-    NS, NF, nrL = pipes.flush()
+    NS, NF, nrL = schedule.flush()
     if len(NS)+len(NF)+len(nrL) > 0:
         print3()
     if len(NS) > 0:
@@ -1503,6 +1505,7 @@ class Pipelines:
         self.tlist = tlist
         self.perms = perms
         self.maxjobs = maxjobs
+        self.clean_exit_marker = "queue job finished cleanly"
 
         # TODO: make Tzero a platform plugin thing
         self.Tzero = 21*60*60  # no timeout in pipeline mode is 21 hours
@@ -1524,7 +1527,10 @@ class Pipelines:
                             self.test_dir, self.tlist,
                             self.accountant, self.namer,
                             self.perms, self.plat, self.maxjobs,
-                            "queue job finished cleanly" )
+                            self.clean_exit_marker )
+
+    def getScheduler(self):
+        return self.scheduler
 
     def removeBatchDirectories(self):
         """
@@ -1673,47 +1679,10 @@ class Pipelines:
         cmd = toolsdir+'/vvtest ' + taopts + ' || exit 1'
         fp.writelines( [ cmd+'\n\n' ] )
         
-        # put in an echo to help debug when jobs timeout
-        fp.writelines( [ 'echo "queue job finished cleanly"\n' ] )
+        # echo a marker to determine when a clean batch job exit has occurred
+        fp.writelines( [ 'echo "'+self.clean_exit_marker+'"\n' ] )
         
         fp.close()
-
-    def checkstart(self):
-        """
-        Launches a new batch job if possible.  If it does, the batch id is
-        returned.
-        """
-        return self.scheduler.checkstart()
-
-    def numRunning(self):
-        """
-        Returns the number of batch jobs are still running or stopped but
-        whose results have not been read yet.
-        """
-        return self.accountant.numInFlight()
-
-    def numStarted(self):
-        """
-        Number of batch jobs currently running (those that have been started
-        and still appear to be in the batch queue).
-        """
-        return self.accountant.numStarted()
-
-    def numDone(self):
-        """
-        Number of batch jobs that ran and completed.
-        """
-        return self.accountant.numDone()
-
-    def checkdone(self):
-        """
-        """
-        return self.scheduler.checkdone()
-
-    def flush(self):
-        """
-        """
-        return self.scheduler.flush()
 
 
 def saveResults( tlist, plat, test_dir, inprogress=False ):

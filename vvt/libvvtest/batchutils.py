@@ -20,6 +20,26 @@ class BatchScheduler:
         self.maxjobs = maxjobs
         self.clean_exit_marker = clean_exit_marker
 
+    def numInFlight(self):
+        """
+        Returns the number of batch jobs are still running or stopped but
+        whose results have not been read yet.
+        """
+        return self.accountant.numInFlight()
+
+    def numStarted(self):
+        """
+        Number of batch jobs currently running (those that have been started
+        and still appear to be in the batch queue).
+        """
+        return self.accountant.numStarted()
+
+    def numDone(self):
+        """
+        Number of batch jobs that ran and completed.
+        """
+        return self.accountant.numDone()
+
     def checkstart(self):
         """
         Launches a new batch job if possible.  If it does, the batch id is
@@ -314,7 +334,7 @@ class BatchFileNamer:
 
     def getSubdir(self, qid, relative=False):
         """
-        Given a queue/batch/pipe id, this function returns the corresponding
+        Given a queue/batch id, this function returns the corresponding
         subdirectory name.  The 'qid' argument can be a string or integer.
         """
         d = 'batchset' + str( int( float(qid)/50 + 0.5 ) )
