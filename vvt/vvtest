@@ -1520,6 +1520,12 @@ class Pipelines:
 
         self.createTestGroups()
 
+        self.scheduler = batchutils.BatchScheduler(
+                            self.test_dir, self.tlist,
+                            self.accountant, self.namer,
+                            self.perms, self.plat, self.maxjobs,
+                            "queue job finished cleanly" )
+
     def removeBatchDirectories(self):
         """
         """
@@ -1677,14 +1683,7 @@ class Pipelines:
         Launches a new batch job if possible.  If it does, the batch id is
         returned.
         """
-        if self.accountant.numStarted() < self.maxjobs:
-            for qid,bjob in self.accountant.getNotStarted():
-                if self._check_deps( bjob ) == None:
-                    pin = self.namer.getBatchScriptName( qid )
-                    jobid = self.plat.Qsubmit( self.test_dir, bjob.outfile, pin )
-                    self.accountant.markJobStarted( qid, jobid )
-                    return qid
-        return None
+        return self.scheduler.checkstart()
 
     def numRunning(self):
         """
@@ -1708,198 +1707,13 @@ class Pipelines:
 
     def checkdone(self):
         """
-        Uses the platform to find batch jobs that ran but are now no longer
-        in the batch queue.  These jobs are moved from the started list to
-        the stopped list.
-
-        Then the jobs in the "stopped" list are visited and their test
-        results are read.  When a job is successfully read, the job is moved
-        from the "stopped" list to the "read" list.
-
-        Returns a list of job ids that were removed from the batch queue,
-        and a list of tests that were successfully read in.
         """
-        qdoneL = []
-        startlist = self.accountant.getStarted()
-        if len(startlist) > 0:
-            jobidL = [ jb.jobid for qid,jb in startlist ]
-            statusD = self.plat.Qquery( jobidL )
-            tnow = time.time()
-            for qid,bjob in startlist:
-                if self.checkJobDone( bjob, statusD[ bjob.jobid ], tnow ):
-                    self.accountant.markJobStopped( qid )
-                    qdoneL.append( qid )
-
-        tnow = time.time()
-        tdoneL = []
-        for qid,bjob in self.accountant.getStopped():
-            if bjob.timeToCheckIfFinished( tnow ):
-                if self.checkJobFinished( bjob.outfile, bjob.testfile ):
-                    # load the results into the TestList
-                    tdoneL.extend( self.finalizeJob( qid, bjob, 'clean' ) )
-                else:
-                    if not bjob.extendFinishCheck( tnow ):
-                        # too many attempts to read; assume the queue job
-                        # failed somehow, but force a read anyway
-                        tdoneL.extend( self.finalizeJob( qid, bjob ) )
-
-        return qdoneL, tdoneL
+        return self.scheduler.checkdone()
 
     def flush(self):
         """
-        Remove any remaining jobs from the "todo" list, add them to the "read"
-        list, but mark them as not run.
-
-        Returns a triple
-            - a list of batch ids that were not run
-            - a list of batch ids that did not finish
-            - a list of the tests that did not run, each of which is a
-              pair (a test, failed dependency test)
         """
-        # should not be here if there are jobs currently running
-        assert self.accountant.numInFlight() == 0
-
-        # force remove the rest of the jobs that were not run and gather
-        # the list of tests that were not run
-        notrunL = []
-        for qid,bjob in self.accountant.getNotStarted():
-            tx1 = self._check_deps( bjob )
-            assert tx1 != None  # otherwise checkstart() should have ran it
-            for tx0 in bjob.testL:
-                notrunL.append( (tx0,tx1) )
-            self.accountant.markJobDone( qid, 'notrun' )
-        
-        # TODO: rather than only reporting the jobs left on qtodo as not run,
-        #       loop on all jobs in qread and look for 'notrun' mark
-
-        notrun = []
-        notdone = []
-        for qid,bjob in self.accountant.getDone():
-            if bjob.result == 'notrun': notrun.append( str(qid) )
-            elif bjob.result == 'notdone': notdone.append( str(qid) )
-
-        return notrun, notdone, notrunL
-
-    def checkJobDone(self, bjob, queue_status, current_time):
-        """
-        If either the output file exists or enough time has elapsed since the
-        job was submitted, then mark the BatchJob as having started.
-
-        Returns true if the job was started.
-        """
-        started = False
-        elapsed = current_time - bjob.tstart
-
-        if not queue_status:
-            if elapsed > 30 or os.path.exists( bjob.outfile ):
-                started = True
-
-        if self.perms != None and os.path.exists( bjob.outfile ):
-            self.perms.set( bjob.outfile )
-
-        return started
-
-    def checkJobFinished(self, outfilename, testfilename):
-        """
-        """
-        finished = False
-        if self.scanBatchOutput( outfilename ):
-            finished = self.testListFinished( testfilename )
-        return finished
-
-    def scanBatchOutput(self, outfile):
-        """
-        Tries to read the batch output file, then looks for the marker
-        indicating a clean job script finish.  Returns true for a clean finish.
-        """
-        clean = False
-
-        try:
-            # compute file seek offset, and open the file
-            sz = os.path.getsize( outfile )
-            off = max(sz-512, 0)
-            fp = open( outfile, 'r' )
-        except:
-            pass
-        else:
-            try:
-                # read end of the file
-                fp.seek(off)
-                buf = fp.read(512)
-            except:
-                pass
-            else:
-                # look for clean finish marker
-                #magic: this ties back to the script that gets written
-                if buf.find("queue job finished cleanly") >= 0:
-                    clean = True
-
-            try:
-                fp.close()
-            except:
-                pass
-
-        return clean
-
-    def testListFinished(self, testfilename):
-        """
-        Opens the test list file produced by a batch job and looks for the
-        finish date mark.  Returns true if found.
-        """
-        finished = False
-
-        tl = TestList.TestList()
-        try:
-            tl.scanFile( testfilename )
-            if tl.getFinishDate() != None:
-                finished = True
-        except:
-            pass
-
-        return finished
-
-    def _check_deps(self, bjob):
-        """
-        """
-        for tx in bjob.testL:
-            if tx.hasChildren():
-                for childtx in tx.getChildren():
-                    chxdir = childtx.atest.getExecuteDirectory()
-                    if chxdir not in self.tlist.stopped:
-                        return childtx
-                childtx = tx.badChild()
-                if childtx != None:
-                    return childtx
-        return None
-    
-    def finalizeJob(self, qid, bjob, mark=None):
-        """
-        """
-        tL = []
-
-        if not os.path.exists( bjob.outfile ):
-            mark = 'notrun'
-        
-        elif os.path.exists( bjob.testfile ):
-            if mark == None:
-                mark = 'notdone'
-            counts = {}
-            self.tlist.readFile( bjob.testfile, counts )
-            # only add tests to the stopped list that have a count
-            # of three (initial, launched, & finished)
-            for tx in bjob.testL:
-                xdir = tx.atest.getExecuteDirectory()
-                # TODO: could mark the tests that were not run somehow
-                if counts.get( xdir, 0 ) == 3:
-                    tL.append( tx.atest )
-                    self.tlist.stopped[ xdir ] = tx
-        
-        else:
-            mark = 'fail'
-        
-        self.accountant.markJobDone( qid, mark )
-
-        return tL
+        return self.scheduler.flush()
 
 
 def saveResults( tlist, plat, test_dir, inprogress=False ):
