@@ -742,25 +742,26 @@ class TestList:
                 i = 0
                 while i < N:
                     tx = tL[i]
-                    if self._children_ok( tx ):
+                    if self.getBadChild( tx ) == None:
                         self._pop_test_exec( np, i )
                         return tx
                     i += 1
         return None
 
-    def _children_ok(self, tx):
+    def getBadChild(self, tx):
         """
-        Returns True unless this test is a parent and one or more children
-        tests did not pass or diff.
+        If a child of the given test either did not run or ran but did not
+        pass or diff, then the child is returned.  Otherwise None.
         """
         if tx.hasChildren():
-            if tx.badChild() != None:
-                return False
             for childtx in tx.getChildren():
                 cxdir = childtx.atest.getExecuteDirectory()
                 if cxdir not in self.stopped:
-                    return False
-        return True
+                    return childtx
+            childtx = tx.badChild()
+            if childtx != None:
+                return childtx
+        return None
     
     def _pop_test_exec(self, np, i):
         """

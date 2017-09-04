@@ -47,25 +47,11 @@ class BatchScheduler:
         """
         if self.accountant.numStarted() < self.maxjobs:
             for qid,bjob in self.accountant.getNotStarted():
-                if self._check_deps( bjob ) == None:
+                if self.getBlockingChild( bjob ) == None:
                     pin = self.namer.getBatchScriptName( qid )
                     jobid = self.plat.Qsubmit( self.test_dir, bjob.outfile, pin )
                     self.accountant.markJobStarted( qid, jobid )
                     return qid
-        return None
-
-    def _check_deps(self, bjob):
-        """
-        """
-        for tx in bjob.testL:
-            if tx.hasChildren():
-                for childtx in tx.getChildren():
-                    chxdir = childtx.atest.getExecuteDirectory()
-                    if chxdir not in self.tlist.stopped:
-                        return childtx
-                childtx = tx.badChild()
-                if childtx != None:
-                    return childtx
         return None
 
     def checkdone(self):
@@ -200,7 +186,7 @@ class BatchScheduler:
         # the list of tests that were not run
         notrunL = []
         for qid,bjob in self.accountant.getNotStarted():
-            tx1 = self._check_deps( bjob )
+            tx1 = self.getBlockingChild( bjob )
             assert tx1 != None  # otherwise checkstart() should have ran it
             for tx0 in bjob.testL:
                 notrunL.append( (tx0,tx1) )
@@ -245,6 +231,18 @@ class BatchScheduler:
         self.accountant.markJobDone( qid, mark )
 
         return tL
+
+    def getBlockingChild(self, bjob):
+        """
+        If a child of any of the tests in the current list have not run or
+        ran but did not pass or diff, then that child is returned.  Otherwise
+        None is returned.
+        """
+        for tx in bjob.testL:
+            childtx = self.tlist.getBadChild( tx )
+            if childtx != None:
+                return childtx
+        return None
 
 
 class BatchJob:
