@@ -548,6 +548,7 @@ def duplicate():
             <execute> echo "test bdir" </execute>
         </rtest>""" )
 
+    # the bdir test should be selected because it is scanned first
     out,np,nd,nf,nn = run_vvtest( 'bdir adir' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
@@ -557,6 +558,20 @@ def duplicate():
 
     fl = os.readlink( os.path.join( tdir, 'subdir', 'dup', 'dup.xml' ) )
     s = 'bdir/subdir/dup.xml'
+    assert fl[-len(s):] == s
+
+    remove_results()
+
+    # now the adir test should be selected
+    out,np,nd,nf,nn = run_vvtest( 'adir bdir' )
+    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
+    xf = os.path.join( tdir, 'subdir', 'dup', 'execute.log' )
+    assert len( filegrep( xf, 'test adir' ) ) == 1
+    assert len( filegrep( xf, 'test bdir' ) ) == 0
+
+    fl = os.readlink( os.path.join( tdir, 'subdir', 'dup', 'dup.xml' ) )
+    s = 'adir/subdir/dup.xml'
     assert fl[-len(s):] == s
 
 
