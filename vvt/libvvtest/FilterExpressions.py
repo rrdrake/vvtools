@@ -69,43 +69,13 @@ class ExpressionSet:
           return expr.evaluate( keyword_list.count )
         return 1
     
-    def satisfies_nonresults_keywords(self, keyword_list, keyword_check=0):
+    def satisfies_nonresults_keywords(self, keyword_list):
         """
-        If 'keyword_check' is true, then
-          1. if no expression was given on the command line, false is returned
-          2. if none of the keywords in 'keyword_list' appear in the keyword
-             expression, then false is returned
         """
-        # TODO: is this function needed after removal of keyword expression
-        #       filtering in the test ??
-        #        - or maybe just the keyword_check argument ??
         if self.attrs.has_key('keyword_expr'):
           expr = self.attrs['keyword_expr']
-          if keyword_check:
-            wL = expr.getWordList()
-            for k in keyword_list:
-              if k in wL:
-                return expr.evaluate_nonresults( keyword_list.count )
-            return 0
-          else:
-            return expr.evaluate_nonresults( keyword_list.count )
-        elif keyword_check:
-          return 0
-        
+          return expr.evaluate_nonresults( keyword_list.count )
         return 1
-    
-    def evaluate_keyword_expr(self, expr):
-        """
-        Only needed for backward compatibility.  The given keyword expression
-        is evaluated against the keywords extracted from the command line
-        keyword expression.
-        """
-        if self.attrs.has_key('keyword_expr'):
-          kL = self.attrs['keyword_expr'].getWordList()
-        else:
-          kL = []
-        x = WordExpression(expr)
-        return x.evaluate( kL.count )
     
     def evaluate_parameters(self, paramD):
         pf = self.attrs.get( 'param_filter', None )
