@@ -244,7 +244,6 @@ class WordExpression:
         self.wordL = []   # list of the words in the expression
         
         self.has_results_keywords = 0
-        self.nr_wordL = []
         
         self.evalexpr = None
         self.nr_evalexpr = None
@@ -334,7 +333,7 @@ class WordExpression:
           self.expr = expr
           self.evalexpr = self._parse( expr, self.wordL )
           self.nr_expr = nr_expr
-          self.nr_evalexpr = self._parse( nr_expr, self.nr_wordL )
+          self.nr_evalexpr = self._parse( nr_expr, [] )
     
     def getWordList(self):
         """
