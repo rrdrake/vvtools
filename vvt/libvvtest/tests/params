@@ -14,7 +14,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02 test03 test04 test05 test06 test07 test08
+        argL = """test01 test02 test03   test05 test06 test07 test08
                   test09
                """.split()
 
@@ -164,7 +164,7 @@ def test03():
     writefile( 'basic.xml', """
       <rtest name="basic">
         <keywords> foobar </keywords>
-        <parameterize keywords="foobar"/>
+        <parameterize testname="basic"/>
         <execute> echo "execute basic3 np = $np" </execute>
       </rtest>""")
 
@@ -175,35 +175,6 @@ def test03():
     print "execute", L
     assert len(L) == 1 and L[0].strip() == 'execute basic3 np = 0'
 
-
-######################################################################
-
-def test04():
-    """
-    the keywords in a parameterize should be included in the test keywords
-    """
-    writefile( 'keyw.xml', """
-        <rtest name="keyw">
-          <keywords> fast medium </keywords>
-          <parameterize not_keywords="full" np="1"/>
-          <parameterize keywords="full"     np="2 4"/>
-          <analyze> echo "here we are" </analyze>
-        </rtest>""" )
-    
-    out,np,nd,nf,nn = run_vvtest( '-k full' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    fL = glob.glob( 'TestResults.*/keyw/execute.log' )
-    assert len(fL) == 1
-    fL = glob.glob( 'TestResults.*/keyw.np=*/execute.log' )
-    assert len(fL) == 2
-    
-    out,np,nd,nf,nn = run_vvtest( '-w' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    fL = glob.glob( 'TestResults.*/keyw/execute.log' )
-    assert len(fL) == 1
-    fL = glob.glob( 'TestResults.*/keyw.np=*/execute.log' )
-    assert len(fL) == 1
-    
 
 ######################################################################
 

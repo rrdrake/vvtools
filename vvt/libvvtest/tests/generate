@@ -14,7 +14,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02 test03 test04 test05 test06
+        argL = """test01 test02 test03 test04 test05 
                   test07 test08 test09
                """.split()
 
@@ -229,102 +229,6 @@ def test05():
 
     out,np,nd,nf,nn = run_vvtest( 'one' )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
-
-
-def test06():
-    """
-    parameterize with keywords attribute
-    """
-    writefile( "keys.xml", """
-        <rtest name="keys">
-          <keywords> early late </keywords>
-          <parameterize AB="a b"/>
-          <execute> echo "AB = $AB" </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    aL = glob.glob( 'TestResults.*/keys.AB=a/execute.log' )
-    bL = glob.glob( 'TestResults.*/keys.AB=b/execute.log' )
-    assert len(aL) == 1 and len(bL) == 1
-    assert len( filegrep( aL[0], 'AB = a' ) ) >= 1
-    assert len( filegrep( aL[0], 'AB = b' ) ) == 0
-    assert len( filegrep( bL[0], 'AB = b' ) ) >= 1
-    assert len( filegrep( bL[0], 'AB = a' ) ) == 0
-
-    writefile( "keys.xml", """
-        <rtest name="keys">
-          <parameterize keywords="early" AB="a b"/>
-          <parameterize keywords="late" AB="y z"/>
-          <execute> echo "AB = $?AB" </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest( '-w' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    fL = glob.glob( 'TestResults.*/keys/execute.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'AB = 0' ) ) >= 1
-
-    writefile( "keys.xml", """
-        <rtest name="keys">
-          <parameterize keywords="early" AB="a b"/>
-          <parameterize keywords="late" AB="y z"/>
-          <execute> echo "AB = $AB" </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest( '-w -k early' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    aL = glob.glob( 'TestResults.*/keys.AB=a/execute.log' )
-    bL = glob.glob( 'TestResults.*/keys.AB=b/execute.log' )
-    assert len(aL) == 1 and len(bL) == 1
-    assert len( filegrep( aL[0], 'AB = a' ) ) >= 1
-    assert len( filegrep( aL[0], 'AB = b' ) ) == 0
-    assert len( filegrep( bL[0], 'AB = b' ) ) >= 1
-    assert len( filegrep( bL[0], 'AB = a' ) ) == 0
-
-    out,np,nd,nf,nn = run_vvtest( '-w -k late' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    len( glob.glob( 'TestResults.*/keys.AB=a/execute.log' ) ) == 0
-    len( glob.glob( 'TestResults.*/keys.AB=b/execute.log' ) ) == 0
-    yL = glob.glob( 'TestResults.*/keys.AB=y/execute.log' )
-    zL = glob.glob( 'TestResults.*/keys.AB=z/execute.log' )
-    assert len(aL) == 1 and len(bL) == 1
-    assert len( filegrep( yL[0], 'AB = y' ) ) >= 1
-    assert len( filegrep( yL[0], 'AB = z' ) ) == 0
-    assert len( filegrep( zL[0], 'AB = z' ) ) >= 1
-    assert len( filegrep( zL[0], 'AB = y' ) ) == 0
-
-    writefile( "keys.xml", """
-        <rtest name="keys">
-          <keywords> early late </keywords>
-          <parameterize keywords="early" AB="a b"/>
-          <parameterize not_keywords="early" AB="y z"/>
-          <execute> echo "AB = $AB" </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest( '-w -k early' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    len( glob.glob( 'TestResults.*/keys.AB=a/execute.log' ) ) == 1
-    len( glob.glob( 'TestResults.*/keys.AB=b/execute.log' ) ) == 1
-    len( glob.glob( 'TestResults.*/keys.AB=y/execute.log' ) ) == 0
-    len( glob.glob( 'TestResults.*/keys.AB=z/execute.log' ) ) == 0
-    len( glob.glob( 'TestResults.*/keys/execute.log' ) ) == 0
-
-    out,np,nd,nf,nn = run_vvtest( '-w' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    len( glob.glob( 'TestResults.*/keys.AB=y/execute.log' ) ) == 1
-    len( glob.glob( 'TestResults.*/keys.AB=z/execute.log' ) ) == 1
-    len( glob.glob( 'TestResults.*/keys.AB=a/execute.log' ) ) == 0
-    len( glob.glob( 'TestResults.*/keys.AB=b/execute.log' ) ) == 0
-    len( glob.glob( 'TestResults.*/keys/execute.log' ) ) == 0
-
-    out,np,nd,nf,nn = run_vvtest( '-w -k late' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    len( glob.glob( 'TestResults.*/keys.AB=y/execute.log' ) ) == 1
-    len( glob.glob( 'TestResults.*/keys.AB=z/execute.log' ) ) == 1
-    len( glob.glob( 'TestResults.*/keys.AB=a/execute.log' ) ) == 0
-    len( glob.glob( 'TestResults.*/keys.AB=b/execute.log' ) ) == 0
-    len( glob.glob( 'TestResults.*/keys/execute.log' ) ) == 0
 
 
 def test07():

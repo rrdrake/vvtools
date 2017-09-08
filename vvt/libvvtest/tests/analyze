@@ -16,7 +16,7 @@ def main():
     argL = get_arg_list()
 
     if len(argL) == 0:
-        argL = """test01 test02 test03 test04 test05 test06 test07
+        argL = """test01 test02 test03        test05 test06 test07
                   test08 test09 test10 test11 test12
                   test13 test14 test15 test16 test17 test18
                """.split()
@@ -271,31 +271,6 @@ def test03():
       
       out,np,nd,nf,nn = run_vvtest( '--batch -R -k notdone/notrun/fail -k bad parentchild' )
       assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-
-def test04():
-    """
-    check that the keywords in an analyze are included in the test keywords
-    """
-    writefile( 'keyw.xml', """
-        <rtest name="keyw">
-          <keywords> fast medium </keywords>
-          <parameterize np="1 2"/>
-          <analyze not_keywords="full"> echo "is not full" </analyze>
-          <analyze keywords="full"> echo "is full" </analyze>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    fL = glob.glob( 'TestResults.*/keyw/execute.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'is not full' ) ) >= 1
-
-    out,np,nd,nf,nn = run_vvtest( '-w -k full' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    fL = glob.glob( 'TestResults.*/keyw/execute.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'is full' ) ) >= 1
 
 
 def test05():

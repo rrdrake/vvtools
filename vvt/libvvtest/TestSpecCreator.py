@@ -1505,22 +1505,14 @@ def filterAttr( attrname, attrvalue, testname, paramD, ufilter, lineno ):
         return True, ufilter.evaluate_platform_expr( attrvalue )
       
       elif attrname in ["keyword","keywords"]:
-        # TODO: deprecate keyword(s) attributes [Apr 2016]
-        #raise TestSpecError( n + " attribute not allowed here, " + \
-        #                     "line " + str(lineno) )
-        L = attrvalue.split()
-        if 'and' in L or 'or' in L or 'not' in L or \
-           '(' in attrvalue or ')' in attrvalue:
-          # allow keyword expressions for backward compatibility
-          return True, ufilter.evaluate_keyword_expr( attrvalue )
-        return True, ufilter.satisfies_nonresults_keywords( L, 1 )
+        # deprecated [became an error Sept 2017]
+        raise TestSpecError( attrname + " attribute not allowed here, " + \
+                             "line " + str(lineno) )
       
       elif attrname in ["not_keyword","not_keywords"]:
-        # TODO: deprecate not_keyword(s) attributes [Apr 2016]
-        #raise TestSpecError( n + " attribute not allowed here, " + \
-        #                     "line " + str(lineno) )
-        v = not ufilter.satisfies_nonresults_keywords( attrvalue.split(), 1 )
-        return True, v
+        # deprecated [became an error Sept 2017]
+        raise TestSpecError( attrname + " attribute not allowed here, " + \
+                             "line " + str(lineno) )
       
       elif attrname in ["option","options"]:
         return True, ufilter.evaluate_option_expr( attrvalue )
@@ -1595,12 +1587,7 @@ def parseTestParameters( filedoc, tname, ufilter, force_params ):
         if n in ["parameters","parameter"]:
           raise TestSpecError( n + " attribute not allowed here, " + \
                                "line " + str(nd.line_no) )
-        
-        # TODO: deprecate keyword(s) attributes [Apr 2016]
-        #if n in ["keywords","keyword"]:
-        #  raise TestSpecError( n + " attribute not allowed here, " + \
-        #                       "line " + str(nd.line_no) )
-        
+
         isfa, istrue = filterAttr( n, v, tname, None, ufilter, str(nd.line_no) )
         if isfa:
           if not istrue:
@@ -1664,8 +1651,8 @@ def parseKeywords( filedoc, tname, ufilter ):
       <keywords> key1 key2 </keywords>
       <keywords testname="mytest"> key3 </keywords>
     
-    Also includes the name="..." on <execute> blocks, the parameter names in
-    <parameterize> blocks, and the words in keywords="..." attributes.
+    Also includes the name="..." on <execute> blocks and the parameter names
+    in <parameterize> blocks.
     """
     keyD = {}
     
@@ -1688,8 +1675,8 @@ def parseKeywords( filedoc, tname, ufilter ):
       if nd.name == 'parameterize':
         # the parameter names are included in the test keywords
         for n,v in nd.getAttrs().items():
-          if n in ['parameter','parameters','keyword','keywords',
-                   'platform','platforms','option','options','testname']:
+          if n in ['parameter','parameters','testname'
+                   'platform','platforms','option','options']:
             pass
           elif allowableVariable(n):
             keyD[ str(n) ] = None
@@ -1698,29 +1685,7 @@ def parseKeywords( filedoc, tname, ufilter ):
         n = nd.getAttr('name', None)
         if n != None:
           keyD[ str(n) ] = None
-      
-      # TODO: deprecate keyword(s) attributes [Apr 2016]
-      if nd.name in ['parameterize','analyze','execute','timeout',
-                     'copy_files','link_files','glob_copy','glob_link',
-                     'baseline']:
-        # look for keywords attribute and include those as test keywords
-        kwstr = nd.getAttr( 'keywords', nd.getAttr( 'keyword', None ) )
-        if kwstr != None:
-          # can use this to find out if any tests use keywords attr
-          #print 'NOTE: keyword attr in', nd.name, nd.filename, nd.line_no
-          L = kwstr.split()
-          if 'and' in L or 'or' in L or 'not' in L or \
-             '(' in kwstr or ')' in kwstr:
-            try:
-              wx = FilterExpressions.WordExpression( kwstr )
-              for k in wx.getWordList():
-                keyD[ str(k) ] = None
-            except:
-              pass
-          else:
-            for k in L:
-              keyD[ str(k) ] = None
-    
+
     L = keyD.keys()
     L.sort()
     return L
@@ -1804,20 +1769,9 @@ class PlatformEvaluator:
             if '/' in s:
               raise TestSpecError( 'invalid "platforms" attribute content '
                                    ', line ' + str(nd.line_no) )
-            pL = s.split()
-            if len(pL) > 1:
-              if '(' in s or ')' in s or \
-                 'or' in pL or 'and' in pL or 'not' in pL:
-                # an expression syntax is being used
-                wx = FilterExpressions.WordExpression(s)
-              else:
-                # assume list of platform names to include; this is for
-                # backward compatibility (no uses since December 2014)
-                wx = FilterExpressions.WordExpression( ' or '.join( pL ) )
-            else:
-              wx = FilterExpressions.WordExpression(s)
-            
-              wx.evaluate( lambda tok: tok == plat_name )
+
+            wx = FilterExpressions.WordExpression(s)
+
             if not wx.evaluate( lambda tok: tok == plat_name ):
               return 0
         

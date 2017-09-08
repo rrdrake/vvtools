@@ -1,1883 +1,1652 @@
 #!/usr/bin/env python
 
-import os, sys, re, string
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import glob
+import time
 
+# this will os.chdir() to a subdirectory
 from testutils import *
 
-mydir = get_test_dir()
-
-vvtestdir = os.path.normpath( mydir + '/..' )
-xmlwrapperdir = os.path.normpath( mydir + '/../../makemflib' )
-
-sys.path.insert( 0, xmlwrapperdir )
-sys.path.insert( 0, vvtestdir )
 import TestSpec
 import TestSpecCreator
 import FilterExpressions
-import xmlwrapper
-
-xreader = xmlwrapper.XmlDocReader()
-
-def paramGather(testL):
-  """
-  Gathers a list of parameter values for a list of TestSpec objects.
-  """
-  pL = []
-  for t in tL:
-    tmp = []
-    parms = t.getParameters()
-    for (n,v) in parms.items():
-      tmp.append( n+'='+v )
-    tmp.sort()
-    pL.append( string.join(tmp, '.') )
-  pL.sort()
-  return pL
-
-
-nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
-
-
-print "1111111111111111111111111111111111111"
-
-fp = open('atest.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <keywords> junk1 junk2 </keywords>\n',
-     '  <keywords> junk3 </keywords>\n',
-     '  <parameterize np="1 4"/>\n',
-     '  <parameterize Nnodes="10 100 1000"/>\n',
-     '  <!--include platforms="IRIX64"/-->\n',
-     '  <!--include platforms=""/-->\n',
-     '  <include platforms="not SunOS and not Linux"/>\n',
-     '  <timeout platforms="SunOS" value="240"/>\n',
-     '  <timeout platforms="not IRIX64" value="1200"/>\n',
-     '  <mirror_files> file1.inp file1.exo </mirror_files>\n',
-     '  <copy_files linkname="f.inp f2.exo"> file2.inp file2.exo\n',
-     '  </copy_files>\n',
-     '  <execute name="alegra"> -o 2D </execute>\n',
-     '  <execute platforms="not SunOS"> # comment </execute>\n',
-     '  <baseline parameters="np=1" file="atest.exo"\n',
-     '                              destination="atest.base_exo"/>\n',
-     '  <baseline parameters="np=4"> # script here </baseline>\n',
-     '</rtest>\n' ] )
-fp.close()
-
-tL = TestSpecCreator.createTestObjects( '.', 'atest.xml', None, nofltr )
-for ti in tL:
-  print ti
-assert len(tL) == 6
-
-print "22222222222222222222222222222222"
-
-# test keywords
-
-fp = open('bad1.xml',"w")
-fp.writelines( [
-     '<rtest>\n',
-     '  <keywords> junk1 junk2 </keywords>\n',
-     '</rtest>\n' ] )
-fp.close()
-try: TestSpecCreator.createTestObjects( '.', 'bad1.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('bad2.xml',"w")
-fp.writelines( [
-     '<rtest name="ate/st">\n',
-     '  <keywords> junk1 junk2 </keywords>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad2.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('bad3.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <keywords> junk1 ju/nk2 </keywords>\n',
-     '</rtest>\n' ] )
-fp.close()
-try: TestSpecCreator.createTestObjects( '.', 'bad3.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('ok1.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <keywords> junk1 junk2 </keywords>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok1.xml', None, nofltr )
-assert len(tL) == 1
-kL = tL[0].getKeywords()
-kL.sort()
-print "keywords", kL
-assert len(kL) == 3
-assert kL[0] == 'atest' and kL[1] == 'junk1' and kL[2] == 'junk2'
-
-fp = open('ok2.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <keywords> junk1 </keywords>\n',
-     '  <execute name="exename"> # none </execute>\n',
-     '  <keywords> junk2 </keywords>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok2.xml', None, nofltr )
-assert len(tL) == 1
-kL = tL[0].getKeywords()
-kL.sort()
-print "keywords", kL
-assert len(kL) == 4
-assert kL[0] == 'atest' and kL[1] == 'exename'
-assert kL[2] == 'junk1' and kL[3] == 'junk2'
-assert tL[0].hasKeyword('atest')
-assert not tL[0].hasKeyword('junk')
-
-print "333333333333333333333333333333333"
-
-# test parameters
-
-fp = open('bad4.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize/>\n',
-     '</rtest>\n' ] )
-fp.close()
-TestSpecCreator.createTestObjects( '.', 'bad4.xml', None, nofltr )
-
-fp = open('bad5.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize h=r="2"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad5.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-except xmlwrapper.XmlError, e: print e
-else: raise Exception( "expected an exception" )
-
-fp = open('bad6.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize p=" "/>\n',
-     '</rtest>\n' ] )
-fp.close()
-try: TestSpecCreator.createTestObjects( '.', 'bad6.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('bad7.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize p="val1 val/2"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad7.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('ok3.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok3.xml', None, nofltr )
-assert len(tL) == 1
-
-fp = open('ok3a.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize pname="val1 val2"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok3a.xml', None, nofltr )
-assert len(tL) == 2
-kys = {}
-for t in tL: kys[t.getExecuteDirectory()] = None
-assert len(kys) == 2, "keys must be unique"
-pL = []
-for t in tL:
-  parms = t.getParameters()
-  for (n,v) in parms.items():
-    pL.append( n+'='+v )
-pL.sort()
-print "param list", pL
-assert pL[0] == 'pname=val1' and pL[1] == 'pname=val2'
-
-fp = open('ok4.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize pname="val1 "/>\n',
-     '  <parameterize parm="valA"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok4.xml', None, nofltr )
-assert len(tL) == 1
-pL = paramGather(tL)
-print "param list", pL
-assert pL[0] == 'parm=valA.pname=val1'
-
-fp = open('ok5.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize pname="val1 val2"/>\n',
-     '  <parameterize parm="valA valB valC"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok5.xml', None, nofltr )
-assert len(tL) == 6
-pL = paramGather(tL)
-print "param list", pL
-assert pL[0] == 'parm=valA.pname=val1' and pL[1] == 'parm=valA.pname=val2'
-assert pL[2] == 'parm=valB.pname=val1' and pL[3] == 'parm=valB.pname=val2'
-assert pL[4] == 'parm=valC.pname=val1' and pL[5] == 'parm=valC.pname=val2'
-
-fp = open('ok6.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize pname="val1 val2"/>\n',
-     '  <parameterize parm="valA"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok6.xml', None, nofltr )
-assert len(tL) == 2
-pL = paramGather(tL)
-print "param list", pL
-assert pL[0] == 'parm=valA.pname=val1' and pL[1] == 'parm=valA.pname=val2'
-
-fp = open('ok6b.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize paramA="A1 A2" paramB="B1 B2"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok6b.xml', None, nofltr )
-assert len(tL) == 2
-pL = paramGather(tL)
-print "param list", pL
-assert pL[0] == 'paramA=A1.paramB=B1' and pL[1] == 'paramA=A2.paramB=B2'
-
-fp = open('ok6c.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize paramA="A1" paramB="B1 "/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok6c.xml', None, nofltr )
-assert len(tL) == 1
-pL = paramGather(tL)
-print "param list", pL
-assert pL[0] == 'paramA=A1.paramB=B1'
-
-fp = open('ok6d.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize paramA="A1 A2" paramB="B1 B2"/>\n',
-     '  <parameterize paramC="C1 C2"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok6d.xml', None, nofltr )
-assert len(tL) == 4
-pL = paramGather(tL)
-print "param list", pL
-assert pL[0] == 'paramA=A1.paramB=B1.paramC=C1'
-assert pL[1] == 'paramA=A1.paramB=B1.paramC=C2'
-assert pL[2] == 'paramA=A2.paramB=B2.paramC=C1'
-assert pL[3] == 'paramA=A2.paramB=B2.paramC=C2'
-
-fp = open('ok6e.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize paramA="A1" paramB="B1"/>\n',
-     '  <parameterize paramC="C1 C2"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok6e.xml', None, nofltr )
-assert len(tL) == 2
-pL = paramGather(tL)
-print "param list", pL
-assert pL[0] == 'paramA=A1.paramB=B1.paramC=C1'
-assert pL[1] == 'paramA=A1.paramB=B1.paramC=C2'
-
-fp = open('bad7b.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize paramA="A1 A2" paramB="B1 "/>\n',
-     '</rtest>\n' ] )
-fp.close()
-try: TestSpecCreator.createTestObjects( '.', 'bad7b.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('bad7c.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize paramA="" paramB=" "/>\n',
-     '</rtest>\n' ] )
-fp.close()
-try: TestSpecCreator.createTestObjects( '.', 'bad7c.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('ok6f.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <keywords> fast medium </keywords>\n',
-     '  <parameterize keywords="fast" paramA="A1" paramB="B1"/>\n',
-     '  <parameterize not_keywords="fast" paramA="A1 A2" paramB="B1 B2"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-wx = FilterExpressions.WordExpression(['fast'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok6f.xml', None, uf )
-assert len(tL) == 1
-pL = paramGather(tL)
-print "param list", pL
-assert pL[0] == 'paramA=A1.paramB=B1'
-wx = FilterExpressions.WordExpression(['medium'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok6f.xml', None, uf )
-assert len(tL) == 2
-pL = paramGather(tL)
-print "param list", pL
-assert pL[0] == 'paramA=A1.paramB=B1'
-assert pL[1] == 'paramA=A2.paramB=B2'
-
-# try "keyword" which is an alias for "keywords"
-# also check backward compatibility
-fp = open('ok6g.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <keywords> fast medium </keywords>\n',
-     '  <parameterize keyword="fast" paramA="A1" paramB="B1"/>\n',
-     '  <parameterize keyword="not fast" paramA="A1 A2" paramB="B1 B2"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-wx = FilterExpressions.WordExpression(['fast'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok6g.xml', None, uf )
-assert len(tL) == 1
-pL = paramGather(tL)
-print "param list", pL
-assert pL[0] == 'paramA=A1.paramB=B1'
-wx = FilterExpressions.WordExpression(['medium'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok6g.xml', None, uf )
-assert len(tL) == 2
-pL = paramGather(tL)
-print "param list", pL
-assert pL[0] == 'paramA=A1.paramB=B1'
-assert pL[1] == 'paramA=A2.paramB=B2'
-
-# duplicate parameterize blocks
-fp = open('ok6h.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize paramA="A1" paramB="B1"/>\n',
-     '  <parameterize paramA="A1 A2" paramB="B1 B2"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok6h.xml', None, nofltr )
-assert len(tL) == 2
-pL = paramGather(tL)
-print "param list", pL
-assert pL[0] == 'paramA=A1.paramB=B1'
-assert pL[1] == 'paramA=A2.paramB=B2'
-
-fp = open('ok6i.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize paramA="A1 A2" paramB="B1 B2"/>\n',
-     '  <parameterize paramA="A1" paramB="B1"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok6i.xml', None, nofltr )
-assert len(tL) == 1
-pL = paramGather(tL)
-print "param list", pL
-assert pL[0] == 'paramA=A1.paramB=B1'
-
-print "4444444444444444444444444444444444444"
-
-# test platforms
-
-fp = open('bad10.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platforms="some/value"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad10.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('bad11.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platforms="" parameters="some value"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad11.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('bad12.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize some="value"/>\n',
-     '  <include platforms="" parameters="some=value =value"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad12.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('ok7.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok7.xml', None, nofltr )
-assert len(tL) == 1
-
-fp = open('ok8.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platform=""/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok8.xml' )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='Dummy' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok8.xml', None, uf )
-assert len(tL) == 0
-
-fp = open('ok8a.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platforms=""/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok8a.xml' )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='Dummy' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok8a.xml', None, uf )
-assert len(tL) == 0
-
-fp = open('ok8b.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platform=""/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok8b.xml' )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='Dummy' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok8b.xml', None, uf )
-assert len(tL) == 0
-
-fp = open('ok9.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platform="something"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok9.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok9.xml', None, uf )
-assert len(tL) == 0
-
-fp = open('ok9a.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platforms="something"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok9a.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok9a.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( platform_name='something',
-                                  platform_expr_list=['!something'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok9a.xml', None, uf )
-assert len(tL) == 0
-
-fp = open('ok10.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platform="something IRIX"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok10.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok10.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok10.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( platform_name='Linux',
-                                  platform_expr_list=['IRIX','!SunOS'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok10.xml', None, uf )
-assert len(tL) == 1
-
-fp = open('ok10a.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platforms="something IRIX"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok10a.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok10a.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok10a.xml', None, uf )
-assert len(tL) == 0
-
-fp = open('ok11.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platforms="not ( something or IRIX )"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok11.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok11.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok11.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='Linux',
-                                  platform_expr_list=['Linux','!IRIX'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok11.xml', None, uf )
-assert len(tL) == 1
-
-fp = open('ok11a.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platforms="not something and not IRIX"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok11a.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok11a.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok11a.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='Linux',
-                                  platform_expr_list=['SunOS','!IRIX'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok11a.xml', None, uf )
-assert len(tL) == 1
-
-fp = open('ok12.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platforms="not dummy"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='anything' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok12.xml', None, uf )
-assert len(tL) == 1
-
-fp = open('ok13.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platforms="something IRIX"/>\n',
-     '  <include platforms="not theother"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok13.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok13.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='theother' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok13.xml', None, uf )
-assert len(tL) == 0
-
-fp = open('ok13a.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platforms="something or IRIX"/>\n',
-     '  <include platforms="not theother"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok13a.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok13a.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='theother' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok13a.xml', None, uf )
-assert len(tL) == 0
-
-fp = open('ok14.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platforms="something IRIX"/>\n',
-     '  <include platforms="not IRIX"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( platform_name='theother' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14.xml', None, uf )
-assert len(tL) == 0
-
-fp = open('ok14a.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platforms="something IRIX"/>\n',
-     '  <include platforms="not IRIX"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14a.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14a.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( platform_name='theother' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14a.xml', None, uf )
-assert len(tL) == 0
-
-fp = open('ok14b.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include options=""/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14b.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14b.xml', None, uf )
-assert len(tL) == 1
-
-fp = open('ok14c.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include options="opt"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14c.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14c.xml', None, uf )
-assert len(tL) == 1
-
-fp = open('ok14d.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include option="opt or pop"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14d.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14d.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( option_list=['pop'], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14d.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( option_list=['opt','pop'], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14d.xml', None, uf )
-assert len(tL) == 1
-
-fp = open('ok14e.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platforms="PLAT" options=""/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14e.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='PLAT' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14e.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='PLAT' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14e.xml', None, uf )
-assert len(tL) == 1
-
-fp = open('ok14f.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include platforms="PLAT" options="opt"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14f.xml', None, uf )
-assert len(tL) == 0  # the options is false
-uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14f.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='PLAT' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok14f.xml', None, uf )
-assert len(tL) == 1
-
-fp = open('ok15.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize platforms="not IRIX" np="1 4"/>\n',
-     '  <parameterize platforms="IRIX" np="1"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok15.xml', None, uf )
-assert len(tL) == 1
-assert tL[0].getParameterValue('np') == '1'
-uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok15.xml', None, uf )
-assert len(tL) == 2
-assert ( tL[0].getParameterValue('np') == '1' and \
-         tL[1].getParameterValue('np') == '4' ) or \
-       ( tL[1].getParameterValue('np') == '1' and \
-         tL[0].getParameterValue('np') == '4' )
-
-fp = open('ok16.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize platforms="not IRIX" np="1 4"/>\n',
-     '  <parameterize platforms="IRIX" np="1"/>\n',
-     '  <parameterize hsize="1.0 2.0"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok16.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok16.xml', None, uf )
-assert len(tL) == 4
-
-fp = open('ok17.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize platforms="not IRIX" np="1 4"/>\n',
-     '  <parameterize platforms="IRIX"     np="1"/>\n',
-     '  <parameterize platforms="not IRIX" hsize="1.0 2.0"/>\n',
-     '  <parameterize platforms="IRIX"     hsize="1.0"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok17.xml', None, uf )
-assert len(tL) == 1
-assert tL[0].getParameterValue('np') == '1' and \
-       tL[0].getParameterValue('hsize') == '1.0'
-uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok17.xml', None, uf )
-assert len(tL) == 4
-
-fp = open('ok18.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="1 4"/>\n',
-     '  <parameterize platforms="not IRIX" hsize="1.0 2.0"/>\n',
-     '  <parameterize platforms="IRIX"     hsize="1.0"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok18.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet( platform_name='something' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok18.xml', None, uf )
-assert len(tL) == 4
-
-print "55555555555555555555555555555555555555"
-
-# test timeouts
-
-fp = open('bad16.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <timeout value=""/>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad16.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('bad17.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <timeout value="xyz"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad17.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('bad18.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <timeout value="-1"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad18.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('ok20.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <timeout value="240"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok20.xml', None, nofltr )
-assert len(tL) == 1
-assert tL[0].getTimeout() == 240
-
-fp = open('ok23.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <timeout value="240"/>\n',
-     '  <timeout platforms="SunOS" value="300"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='anything' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok23.xml', None, uf )
-assert len(tL) == 1
-assert tL[0].getTimeout() == 240
-uf = FilterExpressions.ExpressionSet( platform_name='SunOS' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok23.xml', None, uf )
-assert len(tL) == 1
-assert tL[0].getTimeout() == 300
-
-
-print "666666666666666666666666666666666666"
-
-# test execution fragments
-
-fp = open('bad22.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <execute name="ab/c"> # frag </execute>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad22.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('ok25.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <execute> set dummy = 10 </execute>\n',
-     '  <execute name="unixdiff"> filename1 filename2 </execute>\n',
-     '  <execute expect="anyexit"> echo "dummy = $dummy" </execute>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok25.xml', None, nofltr )
-assert len(tL) == 1
-xL = tL[0].getExecutionList()
-assert len(xL) == 3
-assert xL[0][0] == None
-assert xL[0][1] == "set dummy = 10"
-assert xL[0][2] == None
-assert xL[1][0] == "unixdiff"
-assert xL[1][1] == "filename1 filename2"
-assert xL[1][2] == None
-assert xL[2][0] == None
-assert xL[2][1] == 'echo "dummy = $dummy"'
-assert xL[2][2] == 'anyexit'
-
-fp = open('bad22a.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <execute ifdef="_NAME"> # frag </execute>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad22a.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('bad22b.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <execute ifdef="3NAME"> # frag </execute>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad22b.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('bad22c.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <execute ifdef="NAME."> # frag </execute>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad22c.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('ok25a.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <execute ifdef="VNAME"> # frag </execute>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok25a.xml', None, nofltr )
-assert len(tL) == 1
-t = tL[0]
-print t.getExecutionList()
-assert len( t.getExecutionList() ) == 0, \
-       "VNAME should have to be in the environment"
-os.environ[ 'VNAME' ] = "somevalue"
-tL = TestSpecCreator.createTestObjects( '.', 'ok25a.xml', None, nofltr )
-assert len(tL) == 1
-t = tL[0]
-assert len( t.getExecutionList() ) == 1, \
-       "VNAME defined in the environment should trigger the execute fragment"
-
-print "77777777777777777777777777777777777777"
-
-# test copy and link files
-
-fp = open('bad23.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <copy_files>   </copy_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad23.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('bad24.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <link_files linkname="file1"> file1 file2 </link_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad24.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('bad24b.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <link_files> /path/file1 </link_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad24b.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('bad24c.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <link_files linkname="/path/file1"> file1 </link_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad24c.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('bad24d.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <link_files linkname="/path/file1"> /apath/file1 </link_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad24d.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
-
-# this section tests using test_name attribute for backward compatibility
-fp = open('ok26b.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <copy_files> file1 file2 </copy_files>\n',
-     '  <link_files test_name="file3.in"> file3 </link_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok26b.xml', None, nofltr )
-assert len(tL) == 1
-cpL = tL[0].getCopyFiles()
-cpL.sort()
-print "copy files", cpL
-assert len(cpL) == 2
-assert cpL[0] == ("file1", None)
-assert cpL[1] == ("file2", None)
-lnL = tL[0].getLinkFiles()
-lnL.sort()
-print "link files", lnL
-assert len(lnL) == 2
-assert lnL[0] == ("file3", "file3.in")
-assert lnL[1] == ("ok26b.xml", None)
-
-fp = open('ok26.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <copy_files> file1 file2 </copy_files>\n',
-     '  <link_files linkname="file3.in"> file3 </link_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok26.xml', None, nofltr )
-assert len(tL) == 1
-cpL = tL[0].getCopyFiles()
-cpL.sort()
-print "copy files", cpL
-assert len(cpL) == 2
-assert cpL[0] == ("file1", None)
-assert cpL[1] == ("file2", None)
-lnL = tL[0].getLinkFiles()
-lnL.sort()
-print "link files", lnL
-assert len(lnL) == 2
-assert lnL[0] == ("file3", "file3.in")
-assert lnL[1] == ("ok26.xml", None)
-
-fp = open('ok27.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="1 4"/>\n',
-     '  <link_files parameters="np=1" linkname="file"> file.1 </link_files>\n',
-     '  <link_files parameters="np=4" linkname="file"> file.4 </link_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok27.xml', None, nofltr )
-assert len(tL) == 2
-for t in tL:
-  if t.getParameterValue('np') == '1':
-    assert len( t.getCopyFiles() ) == 0
-    lnL = t.getLinkFiles()
-    print "np=1 linked files", lnL
-    assert len(lnL) == 2
+
+
+def main():
+    """
+    """
+    argL = get_arg_list()
+
+    if len(argL) == 0:
+        argL = """test01 test02 test03 test04 test05 test06 test07 test08
+                  test09 test10 test11 test12 test13 test14 
+               """.split()
+
+    # set these for the batch tests
+    os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
+    os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
+    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+    
+    savedir = os.getcwd()
+    for func in argL:
+        os.chdir( savedir )
+        rmallfiles()
+        time.sleep(1)
+        print3( '====> ', func )
+        eval( func+'()' )
+
+
+#####################################################################
+
+def test01():
+    """
+    put a parameterize/analyze test at the top level
+    """
+    nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
+
+    writefile( 'atest.xml', """
+        <rtest name="atest">
+          <keywords> junk1 junk2 </keywords>
+          <keywords> junk3 </keywords>
+          <parameterize np="1 4"/>
+          <parameterize Nnodes="10 100 1000"/>
+          <include platforms="not SunOS and not Linux"/>
+          <timeout platforms="SunOS" value="240"/>
+          <timeout platforms="not IRIX64" value="1200"/>
+          <mirror_files> file1.inp file1.exo </mirror_files>
+          <copy_files linkname="f.inp f2.exo"> file2.inp file2.exo
+          </copy_files>
+          <execute name="alegra"> -o 2D </execute>
+          <execute platforms="not SunOS"> # comment </execute>
+          <baseline parameters="np=1" file="atest.exo"
+                                      destination="atest.base_exo"/>
+          <baseline parameters="np=4"> # script here </baseline>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'atest.xml', None, nofltr )
+    for ti in tL:
+      print ti
+    assert len(tL) == 6
+
+
+def test02():
+    """
+    test keywords
+    """
+    nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
+
+    writefile( 'bad1.xml', """
+        <rtest>
+          <keywords> junk1 junk2 </keywords>
+        </rtest>""" )
+
+    try: TestSpecCreator.createTestObjects( '.', 'bad1.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'bad2.xml', """
+        <rtest name="ate/st">
+          <keywords> junk1 junk2 </keywords>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad2.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'bad3.xml', """
+        <rtest name="atest">
+          <keywords> junk1 ju/nk2 </keywords>
+        </rtest>""" )
+
+    try: TestSpecCreator.createTestObjects( '.', 'bad3.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'ok1.xml', """
+        <rtest name="atest">
+          <keywords> junk1 junk2 </keywords>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok1.xml', None, nofltr )
+    assert len(tL) == 1
+    kL = tL[0].getKeywords()
+    kL.sort()
+    print "keywords", kL
+    assert len(kL) == 3
+    assert kL[0] == 'atest' and kL[1] == 'junk1' and kL[2] == 'junk2'
+
+    writefile( 'ok2.xml', """
+        <rtest name="atest">
+          <keywords> junk1 </keywords>
+          <execute name="exename"> # none </execute>
+          <keywords> junk2 </keywords>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok2.xml', None, nofltr )
+    assert len(tL) == 1
+    kL = tL[0].getKeywords()
+    kL.sort()
+    print "keywords", kL
+    assert len(kL) == 4
+    assert kL[0] == 'atest' and kL[1] == 'exename'
+    assert kL[2] == 'junk1' and kL[3] == 'junk2'
+    assert tL[0].hasKeyword('atest')
+    assert not tL[0].hasKeyword('junk')
+
+
+def test03():
+    """
+    test parameters
+    """
+    nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
+
+    writefile( 'bad4.xml', """
+        <rtest name="atest">
+          <parameterize/>
+        </rtest>""" )
+
+    TestSpecCreator.createTestObjects( '.', 'bad4.xml', None, nofltr )
+
+    writefile( 'bad5.xml', """
+        <rtest name="atest">
+          <parameterize h=r="2"/>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad5.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected an exception" )
+
+    writefile( 'bad6.xml', """
+        <rtest name="atest">
+          <parameterize p=" "/>
+        </rtest>""" )
+
+    try: TestSpecCreator.createTestObjects( '.', 'bad6.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'bad7.xml', """
+        <rtest name="atest">
+          <parameterize p="val1 val/2"/>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad7.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'ok3.xml', """
+        <rtest name="atest">
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok3.xml', None, nofltr )
+    assert len(tL) == 1
+
+    writefile( 'ok3a.xml', """
+        <rtest name="atest">
+          <parameterize pname="val1 val2"/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok3a.xml', None, nofltr )
+    assert len(tL) == 2
+    kys = {}
+    for t in tL: kys[t.getExecuteDirectory()] = None
+    assert len(kys) == 2, "keys must be unique"
+    pL = []
+    for t in tL:
+      parms = t.getParameters()
+      for (n,v) in parms.items():
+        pL.append( n+'='+v )
+    pL.sort()
+    print "param list", pL
+    assert pL[0] == 'pname=val1' and pL[1] == 'pname=val2'
+
+    writefile( 'ok4.xml', """
+        <rtest name="atest">
+          <parameterize pname="val1 "/>
+          <parameterize parm="valA"/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok4.xml', None, nofltr )
+    assert len(tL) == 1
+    pL = paramGather(tL)
+    print "param list", pL
+    assert pL[0] == 'parm=valA.pname=val1'
+
+    writefile( 'ok5.xml', """
+        <rtest name="atest">
+          <parameterize pname="val1 val2"/>
+          <parameterize parm="valA valB valC"/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok5.xml', None, nofltr )
+    assert len(tL) == 6
+    pL = paramGather(tL)
+    print "param list", pL
+    assert pL[0] == 'parm=valA.pname=val1' and pL[1] == 'parm=valA.pname=val2'
+    assert pL[2] == 'parm=valB.pname=val1' and pL[3] == 'parm=valB.pname=val2'
+    assert pL[4] == 'parm=valC.pname=val1' and pL[5] == 'parm=valC.pname=val2'
+
+    writefile( 'ok6.xml', """
+        <rtest name="atest">
+          <parameterize pname="val1 val2"/>
+          <parameterize parm="valA"/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok6.xml', None, nofltr )
+    assert len(tL) == 2
+    pL = paramGather(tL)
+    print "param list", pL
+    assert pL[0] == 'parm=valA.pname=val1' and pL[1] == 'parm=valA.pname=val2'
+
+    writefile( 'ok6b.xml', """
+        <rtest name="atest">
+          <parameterize paramA="A1 A2" paramB="B1 B2"/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok6b.xml', None, nofltr )
+    assert len(tL) == 2
+    pL = paramGather(tL)
+    print "param list", pL
+    assert pL[0] == 'paramA=A1.paramB=B1' and pL[1] == 'paramA=A2.paramB=B2'
+
+    writefile( 'ok6c.xml', """
+        <rtest name="atest">
+          <parameterize paramA="A1" paramB="B1 "/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok6c.xml', None, nofltr )
+    assert len(tL) == 1
+    pL = paramGather(tL)
+    print "param list", pL
+    assert pL[0] == 'paramA=A1.paramB=B1'
+
+    writefile( 'ok6d.xml', """
+        <rtest name="atest">
+          <parameterize paramA="A1 A2" paramB="B1 B2"/>
+          <parameterize paramC="C1 C2"/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok6d.xml', None, nofltr )
+    assert len(tL) == 4
+    pL = paramGather(tL)
+    print "param list", pL
+    assert pL[0] == 'paramA=A1.paramB=B1.paramC=C1'
+    assert pL[1] == 'paramA=A1.paramB=B1.paramC=C2'
+    assert pL[2] == 'paramA=A2.paramB=B2.paramC=C1'
+    assert pL[3] == 'paramA=A2.paramB=B2.paramC=C2'
+
+    writefile( 'ok6e.xml', """
+        <rtest name="atest">
+          <parameterize paramA="A1" paramB="B1"/>
+          <parameterize paramC="C1 C2"/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok6e.xml', None, nofltr )
+    assert len(tL) == 2
+    pL = paramGather(tL)
+    print "param list", pL
+    assert pL[0] == 'paramA=A1.paramB=B1.paramC=C1'
+    assert pL[1] == 'paramA=A1.paramB=B1.paramC=C2'
+
+    writefile( 'bad7b.xml', """
+        <rtest name="atest">
+          <parameterize paramA="A1 A2" paramB="B1 "/>
+        </rtest>""" )
+
+    try: TestSpecCreator.createTestObjects( '.', 'bad7b.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'bad7c.xml', """
+        <rtest name="atest">
+          <parameterize paramA="" paramB=" "/>
+        </rtest>""" )
+
+    try: TestSpecCreator.createTestObjects( '.', 'bad7c.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'ok6f.xml', """
+        <rtest name="atest">
+          <keywords> fast medium </keywords>
+          <parameterize keywords="fast" paramA="A1" paramB="B1"/>
+          <parameterize not_keywords="fast" paramA="A1 A2" paramB="B1 B2"/>
+        </rtest>""" )
+
+    wx = FilterExpressions.WordExpression(['fast'])
+    uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
+    try: tL = TestSpecCreator.createTestObjects( '.', 'ok6f.xml', None, uf )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    # duplicate parameterize blocks
+    writefile( 'ok6h.xml', """
+        <rtest name="atest">
+          <parameterize paramA="A1" paramB="B1"/>
+          <parameterize paramA="A1 A2" paramB="B1 B2"/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok6h.xml', None, nofltr )
+    assert len(tL) == 2
+    pL = paramGather(tL)
+    print "param list", pL
+    assert pL[0] == 'paramA=A1.paramB=B1'
+    assert pL[1] == 'paramA=A2.paramB=B2'
+
+    writefile( 'ok6i.xml', """
+        <rtest name="atest">
+          <parameterize paramA="A1 A2" paramB="B1 B2"/>
+          <parameterize paramA="A1" paramB="B1"/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok6i.xml', None, nofltr )
+    assert len(tL) == 1
+    pL = paramGather(tL)
+    print "param list", pL
+    assert pL[0] == 'paramA=A1.paramB=B1'
+
+
+def test04():
+    """
+    test platforms
+    """
+    nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
+
+    writefile( 'bad10.xml', """
+        <rtest name="atest">
+          <include platforms="some/value"/>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad10.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'bad11.xml', """
+        <rtest name="atest">
+          <include platforms="" parameters="some value"/>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad11.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'bad12.xml', """
+        <rtest name="atest">
+          <parameterize some="value"/>
+          <include platforms="" parameters="some=value =value"/>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad12.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'ok7.xml', """
+        <rtest name="atest">
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok7.xml', None, nofltr )
+    assert len(tL) == 1
+
+    writefile( 'ok8.xml', """
+        <rtest name="atest">
+          <include platform=""/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok8.xml' )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='Dummy' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok8.xml', None, uf )
+    assert len(tL) == 0
+
+    writefile( 'ok8a.xml', """
+        <rtest name="atest">
+          <include platforms=""/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok8a.xml' )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='Dummy' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok8a.xml', None, uf )
+    assert len(tL) == 0
+
+    writefile( 'ok8b.xml', """
+        <rtest name="atest">
+          <include platform=""/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok8b.xml' )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='Dummy' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok8b.xml', None, uf )
+    assert len(tL) == 0
+
+    writefile( 'ok9.xml', """
+        <rtest name="atest">
+          <include platform="something"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok9.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok9.xml', None, uf )
+    assert len(tL) == 0
+
+    writefile( 'ok9a.xml', """
+        <rtest name="atest">
+          <include platforms="something"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok9a.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok9a.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( platform_name='something',
+                                      platform_expr_list=['!something'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok9a.xml', None, uf )
+    assert len(tL) == 0
+
+    writefile( 'ok10.xml', """
+        <rtest name="atest">
+          <include platform="something or IRIX"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok10.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok10.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok10.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( platform_name='Linux',
+                                      platform_expr_list=['IRIX','!SunOS'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok10.xml', None, uf )
+    assert len(tL) == 1
+
+    writefile( 'ok10a.xml', """
+        <rtest name="atest">
+          <include platforms="something or IRIX"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok10a.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok10a.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok10a.xml', None, uf )
+    assert len(tL) == 0
+
+    writefile( 'ok11.xml', """
+        <rtest name="atest">
+          <include platforms="not ( something or IRIX )"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok11.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok11.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok11.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='Linux',
+                                      platform_expr_list=['Linux','!IRIX'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok11.xml', None, uf )
+    assert len(tL) == 1
+
+    writefile( 'ok11a.xml', """
+        <rtest name="atest">
+          <include platforms="not something and not IRIX"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok11a.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok11a.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( platform_name='somethingelse' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok11a.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='Linux',
+                                      platform_expr_list=['SunOS','!IRIX'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok11a.xml', None, uf )
+    assert len(tL) == 1
+
+    writefile( 'ok12.xml', """
+        <rtest name="atest">
+          <include platforms="not dummy"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='anything' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok12.xml', None, uf )
+    assert len(tL) == 1
+
+    writefile( 'ok13.xml', """
+        <rtest name="atest">
+          <include platforms="something or IRIX"/>
+          <include platforms="not theother"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok13.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok13.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='theother' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok13.xml', None, uf )
+    assert len(tL) == 0
+
+    writefile( 'ok13a.xml', """
+        <rtest name="atest">
+          <include platforms="something or IRIX"/>
+          <include platforms="not theother"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok13a.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok13a.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='theother' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok13a.xml', None, uf )
+    assert len(tL) == 0
+
+    writefile( 'ok14.xml', """
+        <rtest name="atest">
+          <include platforms="something or IRIX"/>
+          <include platforms="not IRIX"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( platform_name='theother' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14.xml', None, uf )
+    assert len(tL) == 0
+
+    writefile( 'ok14a.xml', """
+        <rtest name="atest">
+          <include platforms="something or IRIX"/>
+          <include platforms="not IRIX"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14a.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14a.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( platform_name='theother' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14a.xml', None, uf )
+    assert len(tL) == 0
+
+    writefile( 'ok14b.xml', """
+        <rtest name="atest">
+          <include options=""/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14b.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14b.xml', None, uf )
+    assert len(tL) == 1
+
+    writefile( 'ok14c.xml', """
+        <rtest name="atest">
+          <include options="opt"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14c.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14c.xml', None, uf )
+    assert len(tL) == 1
+
+    writefile( 'ok14d.xml', """
+        <rtest name="atest">
+          <include option="opt or pop"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14d.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14d.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( option_list=['pop'], platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14d.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( option_list=['opt','pop'], platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14d.xml', None, uf )
+    assert len(tL) == 1
+
+    writefile( 'ok14e.xml', """
+        <rtest name="atest">
+          <include platforms="PLAT" options=""/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14e.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='PLAT' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14e.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='PLAT' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14e.xml', None, uf )
+    assert len(tL) == 1
+
+    writefile( 'ok14f.xml', """
+        <rtest name="atest">
+          <include platforms="PLAT" options="opt"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( option_list=[], platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14f.xml', None, uf )
+    assert len(tL) == 0  # the options is false
+    uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14f.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( option_list=['opt'], platform_name='PLAT' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok14f.xml', None, uf )
+    assert len(tL) == 1
+
+    writefile( 'ok15.xml', """
+        <rtest name="atest">
+          <parameterize platforms="not IRIX" np="1 4"/>
+          <parameterize platforms="IRIX" np="1"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok15.xml', None, uf )
+    assert len(tL) == 1
+    assert tL[0].getParameterValue('np') == '1'
+    uf = FilterExpressions.ExpressionSet( platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok15.xml', None, uf )
+    assert len(tL) == 2
+    assert ( tL[0].getParameterValue('np') == '1' and \
+             tL[1].getParameterValue('np') == '4' ) or \
+           ( tL[1].getParameterValue('np') == '1' and \
+             tL[0].getParameterValue('np') == '4' )
+
+    writefile( 'ok16.xml', """
+        <rtest name="atest">
+          <parameterize platforms="not IRIX" np="1 4"/>
+          <parameterize platforms="IRIX" np="1"/>
+          <parameterize hsize="1.0 2.0"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok16.xml', None, uf )
+    assert len(tL) == 2
+    uf = FilterExpressions.ExpressionSet( platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok16.xml', None, uf )
+    assert len(tL) == 4
+
+    writefile( 'ok17.xml', """
+        <rtest name="atest">
+          <parameterize platforms="not IRIX" np="1 4"/>
+          <parameterize platforms="IRIX"     np="1"/>
+          <parameterize platforms="not IRIX" hsize="1.0 2.0"/>
+          <parameterize platforms="IRIX"     hsize="1.0"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok17.xml', None, uf )
+    assert len(tL) == 1
+    assert tL[0].getParameterValue('np') == '1' and \
+           tL[0].getParameterValue('hsize') == '1.0'
+    uf = FilterExpressions.ExpressionSet( platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok17.xml', None, uf )
+    assert len(tL) == 4
+
+    writefile( 'ok18.xml', """
+        <rtest name="atest">
+          <parameterize np="1 4"/>
+          <parameterize platforms="not IRIX" hsize="1.0 2.0"/>
+          <parameterize platforms="IRIX"     hsize="1.0"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='IRIX' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok18.xml', None, uf )
+    assert len(tL) == 2
+    uf = FilterExpressions.ExpressionSet( platform_name='something' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok18.xml', None, uf )
+    assert len(tL) == 4
+
+
+def test05():
+    """
+    test timeouts
+    """
+    nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
+
+    writefile( 'bad16.xml', """
+        <rtest name="atest">
+          <timeout value=""/>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad16.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'bad17.xml', """
+        <rtest name="atest">
+          <timeout value="xyz"/>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad17.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'bad18.xml', """
+        <rtest name="atest">
+          <timeout value="-1"/>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad18.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'ok20.xml', """
+        <rtest name="atest">
+          <timeout value="240"/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok20.xml', None, nofltr )
+    assert len(tL) == 1
+    assert tL[0].getTimeout() == 240
+
+    writefile( 'ok23.xml', """
+        <rtest name="atest">
+          <timeout value="240"/>
+          <timeout platforms="SunOS" value="300"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='anything' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok23.xml', None, uf )
+    assert len(tL) == 1
+    assert tL[0].getTimeout() == 240
+    uf = FilterExpressions.ExpressionSet( platform_name='SunOS' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok23.xml', None, uf )
+    assert len(tL) == 1
+    assert tL[0].getTimeout() == 300
+
+
+def test06():
+    """
+    test execution fragments
+    """
+    nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
+
+    writefile( 'bad22.xml', """
+        <rtest name="atest">
+          <execute name="ab/c"> # frag </execute>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad22.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'ok25.xml', """
+        <rtest name="atest">
+          <execute> set dummy = 10 </execute>
+          <execute name="unixdiff"> filename1 filename2 </execute>
+          <execute expect="anyexit"> echo "dummy = $dummy" </execute>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok25.xml', None, nofltr )
+    assert len(tL) == 1
+    xL = tL[0].getExecutionList()
+    assert len(xL) == 3
+    assert xL[0][0] == None
+    assert xL[0][1] == "set dummy = 10"
+    assert xL[0][2] == None
+    assert xL[1][0] == "unixdiff"
+    assert xL[1][1] == "filename1 filename2"
+    assert xL[1][2] == None
+    assert xL[2][0] == None
+    assert xL[2][1] == 'echo "dummy = $dummy"'
+    assert xL[2][2] == 'anyexit'
+
+    writefile( 'bad22a.xml', """
+        <rtest name="atest">
+          <execute ifdef="_NAME"> # frag </execute>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad22a.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'bad22b.xml', """
+        <rtest name="atest">
+          <execute ifdef="3NAME"> # frag </execute>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad22b.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'bad22c.xml', """
+        <rtest name="atest">
+          <execute ifdef="NAME."> # frag </execute>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad22c.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'ok25a.xml', """
+        <rtest name="atest">
+          <execute ifdef="VNAME"> # frag </execute>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok25a.xml', None, nofltr )
+    assert len(tL) == 1
+    t = tL[0]
+    print t.getExecutionList()
+    assert len( t.getExecutionList() ) == 0, \
+           "VNAME should have to be in the environment"
+    os.environ[ 'VNAME' ] = "somevalue"
+    tL = TestSpecCreator.createTestObjects( '.', 'ok25a.xml', None, nofltr )
+    assert len(tL) == 1
+    t = tL[0]
+    assert len( t.getExecutionList() ) == 1, \
+           "VNAME defined in the environment should trigger the execute fragment"
+
+
+def test07():
+    """
+    test copy and link files
+    """
+    nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
+
+    writefile( 'bad23.xml', """
+        <rtest name="atest">
+          <copy_files>   </copy_files>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad23.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'bad24.xml', """
+        <rtest name="atest">
+          <link_files linkname="file1"> file1 file2 </link_files>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad24.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'bad24b.xml', """
+        <rtest name="atest">
+          <link_files> /path/file1 </link_files>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad24b.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'bad24c.xml', """
+        <rtest name="atest">
+          <link_files linkname="/path/file1"> file1 </link_files>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad24c.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'bad24d.xml', """
+        <rtest name="atest">
+          <link_files linkname="/path/file1"> /apath/file1 </link_files>
+        </rtest>""" )
+
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad24d.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    # this section tests using test_name attribute for backward compatibility
+    writefile( 'ok26b.xml', """
+        <rtest name="atest">
+          <copy_files> file1 file2 </copy_files>
+          <link_files test_name="file3.in"> file3 </link_files>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok26b.xml', None, nofltr )
+    assert len(tL) == 1
+    cpL = tL[0].getCopyFiles()
+    cpL.sort()
+    print "copy files", cpL
+    assert len(cpL) == 2
+    assert cpL[0] == ("file1", None)
+    assert cpL[1] == ("file2", None)
+    lnL = tL[0].getLinkFiles()
     lnL.sort()
-    assert lnL[0] == ("file.1", "file")
-    assert lnL[1] == ("ok27.xml", None)
-  else:
-    assert t.getParameterValue('np') == '4'
-    assert len( t.getCopyFiles() ) == 0
-    lnL = t.getLinkFiles()
-    print "np=2 linked files", lnL
+    print "link files", lnL
     assert len(lnL) == 2
+    assert lnL[0] == ("file3", "file3.in")
+    assert lnL[1] == ("ok26b.xml", None)
+
+    writefile( 'ok26.xml', """
+        <rtest name="atest">
+          <copy_files> file1 file2 </copy_files>
+          <link_files linkname="file3.in"> file3 </link_files>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok26.xml', None, nofltr )
+    assert len(tL) == 1
+    cpL = tL[0].getCopyFiles()
+    cpL.sort()
+    print "copy files", cpL
+    assert len(cpL) == 2
+    assert cpL[0] == ("file1", None)
+    assert cpL[1] == ("file2", None)
+    lnL = tL[0].getLinkFiles()
     lnL.sort()
-    assert lnL[0] == ("file.4", "file")
-    assert lnL[1] == ("ok27.xml", None)
+    print "link files", lnL
+    assert len(lnL) == 2
+    assert lnL[0] == ("file3", "file3.in")
+    assert lnL[1] == ("ok26.xml", None)
 
-fp = open('ok28.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="1 4"/>\n',
-     '  <copy_files parameters="np=1" linkname="file"> file.1 </copy_files>\n',
-     '  <copy_files parameters="np=4" linkname="file"> file.4 </copy_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok28.xml', None, nofltr )
-assert len(tL) == 2
-for t in tL:
-  if t.getParameterValue('np') == '1':
-    assert len( t.getLinkFiles() ) == 1
-    cpL = t.getCopyFiles()
-    print "np=1 copied files", cpL
-    assert len(cpL) == 1
-    assert cpL[0] == ("file.1", "file")
-  else:
-    assert t.getParameterValue('np') == '4'
-    assert len( t.getLinkFiles() ) == 1
-    cpL = t.getCopyFiles()
-    print "np=2 copied files", cpL
-    assert len(cpL) == 1
-    assert cpL[0] == ("file.4", "file")
+    writefile( 'ok27.xml', """
+        <rtest name="atest">
+          <parameterize np="1 4"/>
+          <link_files parameters="np=1" linkname="file"> file.1 </link_files>
+          <link_files parameters="np=4" linkname="file"> file.4 </link_files>
+        </rtest>""" )
 
-print "8888888888888888888888888888888888888888888"
+    tL = TestSpecCreator.createTestObjects( '.', 'ok27.xml', None, nofltr )
+    assert len(tL) == 2
+    for t in tL:
+      if t.getParameterValue('np') == '1':
+        assert len( t.getCopyFiles() ) == 0
+        lnL = t.getLinkFiles()
+        print "np=1 linked files", lnL
+        assert len(lnL) == 2
+        lnL.sort()
+        assert lnL[0] == ("file.1", "file")
+        assert lnL[1] == ("ok27.xml", None)
+      else:
+        assert t.getParameterValue('np') == '4'
+        assert len( t.getCopyFiles() ) == 0
+        lnL = t.getLinkFiles()
+        print "np=2 linked files", lnL
+        assert len(lnL) == 2
+        lnL.sort()
+        assert lnL[0] == ("file.4", "file")
+        assert lnL[1] == ("ok27.xml", None)
 
-# test baseline
+    writefile( 'ok28.xml', """
+        <rtest name="atest">
+          <parameterize np="1 4"/>
+          <copy_files parameters="np=1" linkname="file"> file.1 </copy_files>
+          <copy_files parameters="np=4" linkname="file"> file.4 </copy_files>
+        </rtest>""" )
 
-fp = open('bad25.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <baseline destination="file1" file="file1 file2"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-try:
-  TestSpecCreator.createTestObjects( '.', 'bad25.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok28.xml', None, nofltr )
+    assert len(tL) == 2
+    for t in tL:
+      if t.getParameterValue('np') == '1':
+        assert len( t.getLinkFiles() ) == 1
+        cpL = t.getCopyFiles()
+        print "np=1 copied files", cpL
+        assert len(cpL) == 1
+        assert cpL[0] == ("file.1", "file")
+      else:
+        assert t.getParameterValue('np') == '4'
+        assert len( t.getLinkFiles() ) == 1
+        cpL = t.getCopyFiles()
+        print "np=2 copied files", cpL
+        assert len(cpL) == 1
+        assert cpL[0] == ("file.4", "file")
 
-fp = open('ok29.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <baseline file="afile.exo"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok29.xml', None, nofltr )
-assert len(tL) == 1
-bL = tL[0].getBaselineFiles()
-assert len(bL) == 1
-assert bL[0] == ('afile.exo', 'afile.exo')
 
-fp = open('ok30.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <baseline file="afile.exo" destination="bfile.exo"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok30.xml', None, nofltr )
-assert len(tL) == 1
-bL = tL[0].getBaselineFiles()
-assert len(bL) == 1
-assert bL[0] == ('afile.exo', 'bfile.exo')
+def test08():
+    """
+    test baseline
+    """
+    nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
 
-fp = open('ok31.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <baseline file="afile.exo" destination="bfile.exo"/>\n',
-     '  <baseline> set dummy = 10 </baseline>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok31.xml', None, nofltr )
-assert len(tL) == 1
-bL = tL[0].getBaselineFiles()
-assert len(bL) == 1
-assert bL[0] == ('afile.exo', 'bfile.exo')
-bL = tL[0].getBaselineFragments()
-assert len(bL) == 1
-assert bL[0] == "set dummy = 10"
+    writefile( 'bad25.xml', """
+        <rtest name="atest">
+          <baseline destination="file1" file="file1 file2"/>
+        </rtest>""" )
 
-fp = open('ok32.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="1 4"/>\n',
-     '  <baseline parameters="np=1" file="file.exo" destination="file.base_exo"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok32.xml', None, nofltr )
-assert len(tL) == 2
-for t in tL:
-  bL = t.getBaselineFiles()
-  assert len( t.getBaselineFragments() ) == 0
-  if t.getParameterValue('np') == '1':
+    try:
+      TestSpecCreator.createTestObjects( '.', 'bad25.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+    writefile( 'ok29.xml', """
+        <rtest name="atest">
+          <baseline file="afile.exo"/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok29.xml', None, nofltr )
+    assert len(tL) == 1
+    bL = tL[0].getBaselineFiles()
+    assert len(bL) == 1
+    assert bL[0] == ('afile.exo', 'afile.exo')
+
+    writefile( 'ok30.xml', """
+        <rtest name="atest">
+          <baseline file="afile.exo" destination="bfile.exo"/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok30.xml', None, nofltr )
+    assert len(tL) == 1
+    bL = tL[0].getBaselineFiles()
+    assert len(bL) == 1
+    assert bL[0] == ('afile.exo', 'bfile.exo')
+
+    writefile( 'ok31.xml', """
+        <rtest name="atest">
+          <baseline file="afile.exo" destination="bfile.exo"/>
+          <baseline> set dummy = 10 </baseline>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok31.xml', None, nofltr )
+    assert len(tL) == 1
+    bL = tL[0].getBaselineFiles()
+    assert len(bL) == 1
+    assert bL[0] == ('afile.exo', 'bfile.exo')
+    bL = tL[0].getBaselineFragments()
+    assert len(bL) == 1
+    assert bL[0] == "set dummy = 10"
+
+    writefile( 'ok32.xml', """
+        <rtest name="atest">
+          <parameterize np="1 4"/>
+          <baseline parameters="np=1" file="file.exo" destination="file.base_exo"/>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok32.xml', None, nofltr )
+    assert len(tL) == 2
+    for t in tL:
+      bL = t.getBaselineFiles()
+      assert len( t.getBaselineFragments() ) == 0
+      if t.getParameterValue('np') == '1':
+        assert len(bL) == 1
+        assert bL[0] == ('file.exo', 'file.base_exo')
+      else:
+        assert t.getParameterValue('np') == '4'
+        assert len(bL) == 0
+
+    writefile( 'ok33.xml', """
+        <rtest name="atest">
+          <baseline platforms="SunOS" file="file.exo" destination="file.SunOS_exo"/>
+          <baseline platforms="not SunOS" file="file.exo" destination="file.base_exo"/>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='SunOS' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok33.xml', None, uf )
+    assert len(tL) == 1
+    assert len( tL[0].getBaselineFragments() ) == 0
+    bL = tL[0].getBaselineFiles()
+    assert len(bL) == 1
+    assert bL[0] == ('file.exo', 'file.SunOS_exo')
+    uf = FilterExpressions.ExpressionSet( platform_name='Linux' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok33.xml', None, uf )
+    assert len(tL) == 1
+    assert len( tL[0].getBaselineFragments() ) == 0
+    bL = tL[0].getBaselineFiles()
     assert len(bL) == 1
     assert bL[0] == ('file.exo', 'file.base_exo')
-  else:
-    assert t.getParameterValue('np') == '4'
-    assert len(bL) == 0
-
-fp = open('ok33.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <baseline platforms="SunOS" file="file.exo" destination="file.SunOS_exo"/>\n',
-     '  <baseline platforms="not SunOS" file="file.exo" destination="file.base_exo"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='SunOS' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok33.xml', None, uf )
-assert len(tL) == 1
-assert len( tL[0].getBaselineFragments() ) == 0
-bL = tL[0].getBaselineFiles()
-assert len(bL) == 1
-assert bL[0] == ('file.exo', 'file.SunOS_exo')
-uf = FilterExpressions.ExpressionSet( platform_name='Linux' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok33.xml', None, uf )
-assert len(tL) == 1
-assert len( tL[0].getBaselineFragments() ) == 0
-bL = tL[0].getBaselineFiles()
-assert len(bL) == 1
-assert bL[0] == ('file.exo', 'file.base_exo')
-
-print "99999999999999999999999999999999999999999"
-
-# test refreshing a TestSpec
-
-fp = open('bad26.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'bad26.xml', None, nofltr )
-assert len(tL) == 1
-fp = open('bad26.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="1"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-TestSpecCreator.refreshTest( tL[0] )
-
-fp = open('bad27.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="1"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'bad27.xml', None, nofltr )
-assert len(tL) == 1
-fp = open('bad27.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="4"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-TestSpecCreator.refreshTest( tL[0] )
-
-fp = open('bad28.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="1 4"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'bad28.xml', None, nofltr )
-assert len(tL) == 2
-fp = open('bad28.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="1 4"/>\n',
-     '  <parameterize N="1 4"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-for t in tL:
-  TestSpecCreator.refreshTest( t )
-
-fp = open('bad29.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="1 4"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'bad29.xml', None, nofltr )
-assert len(tL) == 2
-fp = open('bad29.xml',"w")
-fp.writelines( [
-     '<rtest name="atest2">\n',
-     '  <parameterize np="1 4"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-for t in tL:
-  TestSpecCreator.refreshTest( t )
-
-fp = open('bad30.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="1 4"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'bad30.xml', None, nofltr )
-assert len(tL) == 2
-fp = open('bad30.xml',"w")
-fp.writelines( [
-     '<rtest>\n',
-     '  <parameterize np="1 4"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-for t in tL:
-  try: TestSpecCreator.refreshTest( t )
-  except TestSpecCreator.TestSpecError, e: print e
-  else: raise Exception( "expected a TestSpecError exception" )
-
-fp = open('ok34.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <keywords> key1 key2 </keywords>\n',
-     '  <parameterize np="1 4"/>\n',
-     '  <include platforms="Linux"/>\n',
-     '  <timeout value="120"/>\n',
-     '  <execute name="alegra"> content </execute>\n',
-     '  <copy_files> file1.C file2.F </copy_files>\n',
-     '  <link_files linkname="file"> lnfile </link_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='Linux' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok34.xml', None, uf )
-assert len(tL) == 2
-for t in tL:
-  print t
-  kL = t.getKeywords()
-  kL.sort()
-  assert kL == ["alegra", "atest", "key1", "key2", "np"]
-  assert t.getTimeout() == 120
-  xL = t.getExecutionList()
-  assert len(xL) == 1
-  assert xL[0][0] == "alegra"
-  assert xL[0][1] == "content"
-  cpL = t.getCopyFiles()
-  assert len(cpL) == 2
-  cpL.sort()
-  assert cpL[0] == ("file1.C",None)
-  assert cpL[1] == ("file2.F",None)
-  lnL = t.getLinkFiles()
-  assert len(lnL) == 2
-  lnL.sort()
-  assert lnL[0] == ("lnfile","file")
-  assert lnL[1] == ("ok34.xml",None)
-print "==========="
-fp = open('ok34.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <keywords> key3 key1 key2 </keywords>\n',
-     '  <parameterize np="1 4"/>\n',
-     '  <include platforms="not SunOS"/>\n',
-     '  <execute> fragment </execute>\n',
-     '  <copy_files> file1.C </copy_files>\n',
-     '  <link_files> lnfile </link_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='Linux' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok34.xml', None, uf )
-for t in tL:
-  TestSpecCreator.refreshTest( t, uf )
-  print t
-  kL = t.getKeywords()
-  kL.sort()
-  assert kL == ["atest", "key1", "key2", "key3", "np"]
-  assert t.getTimeout() == None
-  xL = t.getExecutionList()
-  assert len(xL) == 1
-  assert xL[0][0] == None
-  assert xL[0][1] == "fragment"
-  cpL = t.getCopyFiles()
-  assert len(cpL) == 1
-  cpL.sort()
-  assert cpL[0] == ("file1.C",None)
-  lnL = t.getLinkFiles()
-  assert len(lnL) == 2
-  lnL.sort()
-  assert lnL[0] == ("lnfile",None)
-  assert lnL[1] == ("ok34.xml",None)
 
 
-print "1010101010101010101010101010101010101010101010101010101"
+def test09():
+    """
+    test refreshing a TestSpec
+    """
+    nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
 
-# test using the attributes in TestSpec
+    writefile( 'bad26.xml', """
+        <rtest name="atest">
+        </rtest>""" )
 
-ts = TestSpec.TestSpec("atspec", "/rootpath", "filepath")
-ts.setAttr("name", "value")
-assert ts.getAttr("name") == "value"
-assert ts.getAttr("noexist", "defval") == "defval"
-try:
-  ts.getAttr("noexist")
-except KeyError, e: print "*** KeyError: 'noexist'"
-else: raise Exception( "*** expected an error" )
-try:
-  ts.setAttr("a space", "a value")
-except ValueError, e: print e
-else: raise Exception( "*** expected an error" )
-ts.setAttr("aname1", "a value")
-ts.setAttr("aname2", "a"+os.linesep+"value")
-ts.setAttr("aname3", 'a"value"')
-ts.setAttr("aname4", "a'value'")
-ts.setAttr('aname5', 23)
-ts.setAttr('aname6', 23.23)
-ts.setAttr('aname7', None)
+    tL = TestSpecCreator.createTestObjects( '.', 'bad26.xml', None, nofltr )
+    assert len(tL) == 1
+    writefile( 'bad26.xml', """
+        <rtest name="atest">
+          <parameterize np="1"/>
+        </rtest>""" )
 
-ts.setParameters( { 'np':'4' } )
+    TestSpecCreator.refreshTest( tL[0] )
 
-sid = TestSpecCreator.toString(ts)
-print "test string id", sid
-ts2 = TestSpecCreator.fromString(sid)
-assert ts.getName() == ts2.getName()
-assert ts.getRootpath() == ts2.getRootpath()
-assert ts.getFilename() == ts2.getFilename()
-for (n,v) in ts.getParameters().items():
-  assert v == ts2.getParameterValue(n)
-assert ts2.getAttr('aname1') == "a value"
-assert ts2.getAttr('aname2') == 'a' + os.linesep + 'value'
-assert ts2.getAttr('aname3') == 'a"value"'
-assert ts2.getAttr('aname4') == "a'value'"
-assert ts2.getAttr('aname5') == 23
-assert ts2.getAttr('aname6') == 23.23
-assert ts2.getAttr('aname7') == None
+    writefile( 'bad27.xml', """
+        <rtest name="atest">
+          <parameterize np="1"/>
+        </rtest>""" )
 
-print "11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11"
+    tL = TestSpecCreator.createTestObjects( '.', 'bad27.xml', None, nofltr )
+    assert len(tL) == 1
+    writefile( 'bad27.xml', """
+        <rtest name="atest">
+          <parameterize np="4"/>
+        </rtest>""" )
 
-# test build options
+    TestSpecCreator.refreshTest( tL[0] )
 
-fp = open('ok35.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <include options="2D and ( tridev or tri8 )"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( option_list=[] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( option_list=['2D','tridev'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( option_list=['2D','tri8'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
-assert len(tL) == 1
-uf = FilterExpressions.ExpressionSet( option_list=['3D','tri8'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( option_list=['tri8','2D','tridev'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
-assert len(tL) == 1
+    writefile( 'bad28.xml', """
+        <rtest name="atest">
+          <parameterize np="1 4"/>
+        </rtest>""" )
 
-print "12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12 12"
+    tL = TestSpecCreator.createTestObjects( '.', 'bad28.xml', None, nofltr )
+    assert len(tL) == 2
+    writefile( 'bad28.xml', """
+        <rtest name="atest">
+          <parameterize np="1 4"/>
+          <parameterize N="1 4"/>
+        </rtest>""" )
 
-fp = open('ok38.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <analyze>echo "hello from analyze"</analyze>\n',
-     '</rtest>\n' ] )
-fp.close()
-try: tL = TestSpecCreator.createTestObjects( '.', 'ok38.xml', None, nofltr )
-except: pass
-else: raise Exception( 'expected an exception' )
+    for t in tL:
+      TestSpecCreator.refreshTest( t )
 
-fp = open('ok39.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="1 4"/>\n',
-     '  <analyze>echo "hello from analyze"</analyze>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok39.xml', None, nofltr )
-assert len(tL) == 3
-print "print with parameterize/analyze 4:", tL
-if tL[0].getParent() == None:
-  assert tL[0].hasAnalyze()
-  assert tL[1].getParent() != None
-  assert tL[2].getParent() != None
-elif tL[1].getParent() == None:
-  assert tL[0].getParent() != None
-  assert tL[1].hasAnalyze()
-  assert tL[2].getParent() != None
-else:
-  assert tL[0].getParent() != None
-  assert tL[1].getParent() != None
-  assert tL[2].getParent() == None
-  assert tL[2].hasAnalyze()
+    writefile( 'bad29.xml', """
+        <rtest name="atest">
+          <parameterize np="1 4"/>
+        </rtest>""" )
 
-fp = open('ok41.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <keywords> fast medium </keywords>\n',
-     '  <parameterize keywords="fast" np="1"/>\n',
-     '  <parameterize not_keywords="fast" np="1 4"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-wx = FilterExpressions.WordExpression(['fast'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok41.xml', None, uf )
-assert len(tL) == 1
-wx = FilterExpressions.WordExpression(['medium'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok41.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet()
-tL = TestSpecCreator.createTestObjects( '.', 'ok41.xml', None, uf )
-assert len(tL) == 2
-wx = FilterExpressions.WordExpression(['fast/medium'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok41.xml', None, uf )
-assert len(tL) == 1
-wx = FilterExpressions.WordExpression(['medium/long'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok41.xml', None, uf )
-assert len(tL) == 2
-wx = FilterExpressions.WordExpression(['medium/fast'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok41.xml', None, uf )
-assert len(tL) == 1
+    tL = TestSpecCreator.createTestObjects( '.', 'bad29.xml', None, nofltr )
+    assert len(tL) == 2
+    writefile( 'bad29.xml', """
+        <rtest name="atest2">
+          <parameterize np="1 4"/>
+        </rtest>""" )
 
-# check the backward compatible keywords="not ..." mechanism
-fp = open('ok41b.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <keywords> fast medium </keywords>\n',
-     '  <parameterize keywords="fast" np="1"/>\n',
-     '  <parameterize keywords="not fast" np="1 4"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-wx = FilterExpressions.WordExpression(['fast'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok41b.xml', None, uf )
-assert len(tL) == 1
-wx = FilterExpressions.WordExpression(['medium'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok41b.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet()
-tL = TestSpecCreator.createTestObjects( '.', 'ok41b.xml', None, uf )
-assert len(tL) == 2
-wx = FilterExpressions.WordExpression(['fast/medium'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok41b.xml', None, uf )
-assert len(tL) == 1
-wx = FilterExpressions.WordExpression(['medium/long'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok41b.xml', None, uf )
-assert len(tL) == 2
-wx = FilterExpressions.WordExpression(['medium/fast'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok41b.xml', None, uf )
-assert len(tL) == 1
+    for t in tL:
+      TestSpecCreator.refreshTest( t )
 
-fp = open('ok42.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <keywords> fast medium long </keywords>\n',
-     '  <parameterize keywords="fast" np="1 2"/>\n',
-     '  <parameterize keywords="medium" np="1 2 4"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-wx = FilterExpressions.WordExpression(['fast'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok42.xml', None, uf )
-assert len(tL) == 2
-wx = FilterExpressions.WordExpression(['medium'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok42.xml', None, uf )
-assert len(tL) == 3
-wx = FilterExpressions.WordExpression(['long'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok42.xml', None, uf )
-assert len(tL) == 1
-assert len(tL[0].getParameters()) == 0
+    writefile( 'bad30.xml', """
+        <rtest name="atest">
+          <parameterize np="1 4"/>
+        </rtest>""" )
 
-fp = open('ok43.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize platforms="SunOS" np="1 2"/>\n',
-     '  <parameterize platforms="Linux or tbird" np="1 2 4"/>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( platform_name='SunOS' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok43.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet( platform_name='Linux' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok43.xml', None, uf )
-assert len(tL) == 3
-uf = FilterExpressions.ExpressionSet( platform_name='tbird' )
-tL = TestSpecCreator.createTestObjects( '.', 'ok43.xml', None, uf )
-assert len(tL) == 3
+    tL = TestSpecCreator.createTestObjects( '.', 'bad30.xml', None, nofltr )
+    assert len(tL) == 2
+    writefile( 'bad30.xml', """
+        <rtest>
+          <parameterize np="1 4"/>
+        </rtest>""" )
 
-print "13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13"
+    for t in tL:
+      try: TestSpecCreator.refreshTest( t )
+      except TestSpecCreator.TestSpecError, e: print e
+      else: raise Exception( "expected a TestSpecError exception" )
 
-fp = open('ok44.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <keywords> fast medium long </keywords>\n',
-     '  <parameterize junk="a"/>\n',
-     '  <analyze keywords="long">analyze long</analyze>\n',
-     '  <analyze keywords="fast">analyze fast</analyze>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok44.xml', None, nofltr )
-assert len(tL) == 1
-print tL[0]
-assert not tL[0].hasAnalyze()
-wx = FilterExpressions.WordExpression(['fast'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok44.xml', None, uf )
-assert len(tL) == 2
-print tL
-t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
-assert t.getAnalyze('scriptfrag').find( "analyze fast" ) >= 0
-wx = FilterExpressions.WordExpression(['long'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok44.xml', None, uf )
-assert len(tL) == 2
-print tL
-t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
-assert t.getAnalyze('scriptfrag').find( "analyze long" ) >= 0
+    writefile( 'ok34.xml', """
+        <rtest name="atest">
+          <keywords> key1 key2 </keywords>
+          <parameterize np="1 4"/>
+          <include platforms="Linux"/>
+          <timeout value="120"/>
+          <execute name="alegra"> content </execute>
+          <copy_files> file1.C file2.F </copy_files>
+          <link_files linkname="file"> lnfile </link_files>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='Linux' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok34.xml', None, uf )
+    assert len(tL) == 2
+    for t in tL:
+      print t
+      kL = t.getKeywords()
+      kL.sort()
+      assert kL == ["alegra", "atest", "key1", "key2", "np"]
+      assert t.getTimeout() == 120
+      xL = t.getExecutionList()
+      assert len(xL) == 1
+      assert xL[0][0] == "alegra"
+      assert xL[0][1] == "content"
+      cpL = t.getCopyFiles()
+      assert len(cpL) == 2
+      cpL.sort()
+      assert cpL[0] == ("file1.C",None)
+      assert cpL[1] == ("file2.F",None)
+      lnL = t.getLinkFiles()
+      assert len(lnL) == 2
+      lnL.sort()
+      assert lnL[0] == ("lnfile","file")
+      assert lnL[1] == ("ok34.xml",None)
+    print "==========="
+    writefile( 'ok34.xml', """
+        <rtest name="atest">
+          <keywords> key3 key1 key2 </keywords>
+          <parameterize np="1 4"/>
+          <include platforms="not SunOS"/>
+          <execute> fragment </execute>
+          <copy_files> file1.C </copy_files>
+          <link_files> lnfile </link_files>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( platform_name='Linux' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok34.xml', None, uf )
+    for t in tL:
+      TestSpecCreator.refreshTest( t, uf )
+      print t
+      kL = t.getKeywords()
+      kL.sort()
+      assert kL == ["atest", "key1", "key2", "key3", "np"]
+      assert t.getTimeout() == None
+      xL = t.getExecutionList()
+      assert len(xL) == 1
+      assert xL[0][0] == None
+      assert xL[0][1] == "fragment"
+      cpL = t.getCopyFiles()
+      assert len(cpL) == 1
+      cpL.sort()
+      assert cpL[0] == ("file1.C",None)
+      lnL = t.getLinkFiles()
+      assert len(lnL) == 2
+      lnL.sort()
+      assert lnL[0] == ("lnfile",None)
+      assert lnL[1] == ("ok34.xml",None)
 
 
-fp = open('ok44b.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <keywords> fast medium long </keywords>\n',
-     '  <parameterize junk="a"/>\n',
-     '  <analyze keywords="long">analyze long</analyze>\n',
-     '  <analyze not_keywords="long">analyze not long</analyze>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, nofltr )
-assert len(tL) == 2
-t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
-assert t.getAnalyze('scriptfrag').find( "analyze not long" ) >= 0
-wx = FilterExpressions.WordExpression(['fast'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, uf )
-assert len(tL) == 2
-t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
-assert t.getAnalyze('scriptfrag').find( "analyze not long" ) >= 0
-wx = FilterExpressions.WordExpression(['long'])
-uf = FilterExpressions.ExpressionSet( keyword_expr=wx )
-tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, uf )
-assert len(tL) == 2
-print tL
-t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
-assert t.getAnalyze('scriptfrag').find( "analyze long" ) >= 0
-uf = FilterExpressions.ExpressionSet()
-tL = TestSpecCreator.createTestObjects( '.', 'ok44b.xml', None, uf )
-assert len(tL) == 2
-print tL
-t = tL[0] if tL[0].getExecuteDirectory().find( 'junk' ) < 0 else tL[1]
-assert t.getAnalyze('scriptfrag').find( "analyze not long" ) >= 0
+def test10():
+    """
+    test using the attributes in TestSpec
+    """
+    nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
+
+    ts = TestSpec.TestSpec("atspec", "/rootpath", "filepath")
+    ts.setAttr("name", "value")
+    assert ts.getAttr("name") == "value"
+    assert ts.getAttr("noexist", "defval") == "defval"
+    try:
+      ts.getAttr("noexist")
+    except KeyError, e: print "*** KeyError: 'noexist'"
+    else: raise Exception( "*** expected an error" )
+    try:
+      ts.setAttr("a space", "a value")
+    except ValueError, e: print e
+    else: raise Exception( "*** expected an error" )
+    ts.setAttr("aname1", "a value")
+    ts.setAttr("aname2", "a"+os.linesep+"value")
+    ts.setAttr("aname3", 'a"value"')
+    ts.setAttr("aname4", "a'value'")
+    ts.setAttr('aname5', 23)
+    ts.setAttr('aname6', 23.23)
+    ts.setAttr('aname7', None)
+
+    ts.setParameters( { 'np':'4' } )
+
+    sid = TestSpecCreator.toString(ts)
+    print "test string id", sid
+    ts2 = TestSpecCreator.fromString(sid)
+    assert ts.getName() == ts2.getName()
+    assert ts.getRootpath() == ts2.getRootpath()
+    assert ts.getFilename() == ts2.getFilename()
+    for (n,v) in ts.getParameters().items():
+      assert v == ts2.getParameterValue(n)
+    assert ts2.getAttr('aname1') == "a value"
+    assert ts2.getAttr('aname2') == 'a' + os.linesep + 'value'
+    assert ts2.getAttr('aname3') == 'a"value"'
+    assert ts2.getAttr('aname4') == "a'value'"
+    assert ts2.getAttr('aname5') == 23
+    assert ts2.getAttr('aname6') == 23.23
+    assert ts2.getAttr('aname7') == None
 
 
-print "14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14 14"
+def test11():
+    """
+    test build options
+    """
+    nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
 
-fp = open( 'regexfile.txt', "w" )
-fp.writelines( [ ' One line \n',
-                 'Line Two, then\n',
-                 'line thrEE' ] )
-fp.close()
-fp = open('ok46.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="1 4"/>\n',
-     '  <link_files> regexfile.txt </link_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['One'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
-assert len(tL) == 2
-print tL[0]
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['three'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['line two'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['line one'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['LINE *THEN'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['line $'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['line$'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.nun','*.txt'],
-                                  search_patterns=['LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.nun','*.two'],
-                                  search_patterns=['LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['nomatch','LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
-assert len(tL) == 2
+    writefile( 'ok35.xml', """
+        <rtest name="atest">
+          <include options="2D and ( tridev or tri8 )"/>
+        </rtest>""" )
 
-fp = open('ok47.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="1 4"/>\n',
-     '  <copy_files> regexfile.txt </copy_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['One'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
-assert len(tL) == 2
-print tL[0]
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['three'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['line two'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['line one'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['LINE *THEN'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['line $'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['line$'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.nun','*.txt'],
-                                  search_patterns=['LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
-assert len(tL) == 2
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.nun','*.two'],
-                                  search_patterns=['LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
-assert len(tL) == 0
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['nomatch','LINE .*THEN'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
-assert len(tL) == 2
+    uf = FilterExpressions.ExpressionSet( option_list=[] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( option_list=['2D','tridev'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( option_list=['2D','tri8'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
+    assert len(tL) == 1
+    uf = FilterExpressions.ExpressionSet( option_list=['3D','tri8'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( option_list=['tri8','2D','tridev'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok35.xml', None, uf )
+    assert len(tL) == 1
 
-fp = open('ok48.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <parameterize np="1 4"/>\n',
-     '  <copy_files> noexist.txt </copy_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['One'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok48.xml', None, uf )
-assert len(tL) == 0
 
-fp = open('ok49.xml',"w")
-fp.writelines( [
-     '<rtest name="regexfile">\n',
-     '  <parameterize np="1 4"/>\n',
-     '  <copy_files> $NAME.txt </copy_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['One'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok49.xml', None, uf )
-assert len(tL) == 2
-print tL[0]
+def test12():
+    """
+    """
+    nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
 
-fp = open('ok50.xml',"w")
-fp.writelines( [
-     '<rtest name="regex">\n',
-     '  <parameterize np="1 4"/>\n',
-     '  <copy_files> ${NAME}file.txt </copy_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
-                                  search_patterns=['One'] )
-tL = TestSpecCreator.createTestObjects( '.', 'ok50.xml', None, uf )
-assert len(tL) == 2
-print tL[0]
+    writefile( 'ok38.xml', """
+        <rtest name="atest">
+          <analyze>echo "hello from analyze"</analyze>
+        </rtest>""" )
 
-print " 15 15 15 15 15 15 15 15 15 15 15 15 15 15 15 15 15 15 15 15 15 15"
+    try: tL = TestSpecCreator.createTestObjects( '.', 'ok38.xml', None, nofltr )
+    except: pass
+    else: raise Exception( 'expected an exception' )
 
-# test file globbing and source file specification
+    writefile( 'ok39.xml', """
+        <rtest name="atest">
+          <parameterize np="1 4"/>
+          <analyze>echo "hello from analyze"</analyze>
+        </rtest>""" )
 
-fp = open( 'globfile1.txt', "w" )
-fp.writelines( [ 'a file' ] )
-fp.close()
+    tL = TestSpecCreator.createTestObjects( '.', 'ok39.xml', None, nofltr )
+    assert len(tL) == 3
+    print "print with parameterize/analyze 4:", tL
+    if tL[0].getParent() == None:
+      assert tL[0].hasAnalyze()
+      assert tL[1].getParent() != None
+      assert tL[2].getParent() != None
+    elif tL[1].getParent() == None:
+      assert tL[0].getParent() != None
+      assert tL[1].hasAnalyze()
+      assert tL[2].getParent() != None
+    else:
+      assert tL[0].getParent() != None
+      assert tL[1].getParent() != None
+      assert tL[2].getParent() == None
+      assert tL[2].hasAnalyze()
 
-fp = open( 'globfile2.txt', "w" )
-fp.writelines( [ 'a second file' ] )
-fp.close()
+    writefile( 'ok43.xml', """
+        <rtest name="atest">
+          <parameterize platforms="SunOS" np="1 2"/>
+          <parameterize platforms="Linux or tbird" np="1 2 4"/>
+        </rtest>""" )
 
-fp = open( 'link_glob.txt', "w" )
-fp.writelines( [ 'a file for linking' ] )
-fp.close()
+    uf = FilterExpressions.ExpressionSet( platform_name='SunOS' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok43.xml', None, uf )
+    assert len(tL) == 2
+    uf = FilterExpressions.ExpressionSet( platform_name='Linux' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok43.xml', None, uf )
+    assert len(tL) == 3
+    uf = FilterExpressions.ExpressionSet( platform_name='tbird' )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok43.xml', None, uf )
+    assert len(tL) == 3
 
-fp = open( 'link2_glob.txt', "w" )
-fp.writelines( [ 'another file for linking' ] )
-fp.close()
 
-fp = open( 'conditional_glob.txt', "w" )
-fp.writelines( [ 'a file for linking' ] )
-fp.close()
+def test13():
+    """
+    """
+    nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
 
-fp = open( 'notme_glob.txt', "w" )
-fp.writelines( [ 'some other file' ] )
-fp.close()
+    writefile( 'regexfile.txt', """
+        One line 
+        Line Two, then
+        line thrEE""" )
 
-fp = open('ok51.xml',"w")
-fp.writelines( [
-     '<rtest name="glob">\n',
-     '  <parameterize np="1"/>\n',
-     '  <glob_copy> glob*.txt </glob_copy>\n',
-     '  <glob_link> link*_${NAME}.txt </glob_link>\n',
-     '  <glob_link parameters="np=1"> conditional*_glob.txt </glob_link>\n',
-     '  <glob_link parameters="np=4"> notme*_glob.txt </glob_link>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok51.xml', None, nofltr )
-assert len(tL) == 1
-L = tL[0].getCopyFiles() ; L.sort()
-assert L == [('glob*.txt',None)]
-L = tL[0].getLinkFiles() ; L.sort()
-assert L == [ ('conditional*_glob.txt',None),
-              ('link*_glob.txt',None),
-              ('ok51.xml',None) ]
+    writefile( 'ok46.xml', """
+        <rtest name="atest">
+          <parameterize np="1 4"/>
+          <link_files> regexfile.txt </link_files>
+        </rtest>""" )
 
-fp = open( 'baseline_glob.txt', "w" )
-fp.writelines( [ 'some other file' ] )
-fp.close()
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['One'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
+    assert len(tL) == 2
+    print tL[0]
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['three'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
+    assert len(tL) == 2
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['line two'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
+    assert len(tL) == 2
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['line one'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['LINE *THEN'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['LINE .*THEN'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
+    assert len(tL) == 2
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['line $'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
+    assert len(tL) == 2
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['line$'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.nun','*.txt'],
+                                      search_patterns=['LINE .*THEN'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
+    assert len(tL) == 2
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.nun','*.two'],
+                                      search_patterns=['LINE .*THEN'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['nomatch','LINE .*THEN'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
+    assert len(tL) == 2
 
-fp = open('ok52.xml',"w")
-fp.writelines( [
-     '<rtest name="srcfiles">\n',
-     '  <parameterize np="1"/>\n',
-     '  <glob_copy> glob*.txt </glob_copy>\n',
-     '  <copy_files> link_glob.txt </copy_files>\n',
-     '  <link_files> globfile2.txt </link_files>\n',
-     '  <baseline file="baseline_glob.txt" destination="baseline_glob.base_txt"/>\n',
-     '  <source_files> notme*_glob.txt cond*_glob.txt </source_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 'ok52.xml', None, nofltr )
-assert len(tL) == 1
-L = tL[0].getSourceFiles() ; L.sort()
-assert L == ['baseline_glob.base_txt', 'cond*_glob.txt',
-             'glob*.txt', 'globfile2.txt', 'link_glob.txt',
-             'notme*_glob.txt', 'ok52.xml']
+    writefile( 'ok47.xml', """
+        <rtest name="atest">
+          <parameterize np="1 4"/>
+          <copy_files> regexfile.txt </copy_files>
+        </rtest>""" )
 
-fp = open('bad31.xml',"w")
-fp.writelines( [
-     '<rtest name="badglob">\n',
-     '  <parameterize np="1"/>\n',
-     '  <source_files parameters="np=1"> glob*.txt </source_files>\n',
-     '</rtest>\n' ] )
-fp.close()
-try: TestSpecCreator.createTestObjects( '.', 'bad31.xml', None, nofltr )
-except TestSpecCreator.TestSpecError, e: print e
-else: raise Exception( "expected a TestSpecError exception" )
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['One'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
+    assert len(tL) == 2
+    print tL[0]
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['three'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
+    assert len(tL) == 2
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['line two'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
+    assert len(tL) == 2
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['line one'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['LINE *THEN'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['LINE .*THEN'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
+    assert len(tL) == 2
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['line $'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
+    assert len(tL) == 2
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['line$'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.nun','*.txt'],
+                                      search_patterns=['LINE .*THEN'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
+    assert len(tL) == 2
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.nun','*.two'],
+                                      search_patterns=['LINE .*THEN'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
+    assert len(tL) == 0
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['nomatch','LINE .*THEN'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
+    assert len(tL) == 2
+
+    writefile( 'ok48.xml', """
+        <rtest name="atest">
+          <parameterize np="1 4"/>
+          <copy_files> noexist.txt </copy_files>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['One'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok48.xml', None, uf )
+    assert len(tL) == 0
+
+    writefile( 'ok49.xml', """
+        <rtest name="regexfile">
+          <parameterize np="1 4"/>
+          <copy_files> $NAME.txt </copy_files>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['One'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok49.xml', None, uf )
+    assert len(tL) == 2
+    print tL[0]
+
+    writefile( 'ok50.xml', """
+        <rtest name="regex">
+          <parameterize np="1 4"/>
+          <copy_files> ${NAME}file.txt </copy_files>
+        </rtest>""" )
+
+    uf = FilterExpressions.ExpressionSet( search_file_globs=['*.txt'],
+                                      search_patterns=['One'] )
+    tL = TestSpecCreator.createTestObjects( '.', 'ok50.xml', None, uf )
+    assert len(tL) == 2
+    print tL[0]
+
+
+def test14():
+    """
+    test file globbing and source file specification
+    """
+    nofltr = FilterExpressions.ExpressionSet( platform_name='dummy' )
+
+    writefile( 'globfile1.txt', """
+        a file""" )
+
+    writefile( 'globfile2.txt', """
+        a second file""" )
+
+    writefile( 'link_glob.txt', """
+        a file for linking""" )
+
+    writefile( 'link2_glob.txt', """
+        another file for linking""" )
+
+    writefile( 'conditional_glob.txt', """
+        a file for linking""" )
+
+    writefile( 'notme_glob.txt', """
+        some other file""" )
+
+    writefile( 'ok51.xml', """
+        <rtest name="glob">
+          <parameterize np="1"/>
+          <glob_copy> glob*.txt </glob_copy>
+          <glob_link> link*_${NAME}.txt </glob_link>
+          <glob_link parameters="np=1"> conditional*_glob.txt </glob_link>
+          <glob_link parameters="np=4"> notme*_glob.txt </glob_link>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok51.xml', None, nofltr )
+    assert len(tL) == 1
+    L = tL[0].getCopyFiles() ; L.sort()
+    assert L == [('glob*.txt',None)]
+    L = tL[0].getLinkFiles() ; L.sort()
+    assert L == [ ('conditional*_glob.txt',None),
+                  ('link*_glob.txt',None),
+                  ('ok51.xml',None) ]
+
+    writefile( 'baseline_glob.txt', """
+        some other file""" )
+
+    writefile( 'ok52.xml', """
+        <rtest name="srcfiles">
+          <parameterize np="1"/>
+          <glob_copy> glob*.txt </glob_copy>
+          <copy_files> link_glob.txt </copy_files>
+          <link_files> globfile2.txt </link_files>
+          <baseline file="baseline_glob.txt" destination="baseline_glob.base_txt"/>
+          <source_files> notme*_glob.txt cond*_glob.txt </source_files>
+        </rtest>""" )
+
+    tL = TestSpecCreator.createTestObjects( '.', 'ok52.xml', None, nofltr )
+    assert len(tL) == 1
+    L = tL[0].getSourceFiles() ; L.sort()
+    assert L == ['baseline_glob.base_txt', 'cond*_glob.txt',
+                 'glob*.txt', 'globfile2.txt', 'link_glob.txt',
+                 'notme*_glob.txt', 'ok52.xml']
+
+    writefile( 'bad31.xml', """
+        <rtest name="badglob">
+          <parameterize np="1"/>
+          <source_files parameters="np=1"> glob*.txt </source_files>
+        </rtest>""" )
+
+    try: TestSpecCreator.createTestObjects( '.', 'bad31.xml', None, nofltr )
+    except TestSpecCreator.TestSpecError, e: print e
+    else: raise Exception( "expected a TestSpecError exception" )
+
+
+#####################################################################
+
+def paramGather(testL):
+    """
+    Gathers a list of parameter values for a list of TestSpec objects.
+    """
+    pL = []
+    for t in testL:
+        tmp = []
+        parms = t.getParameters()
+        for (n,v) in parms.items():
+            tmp.append( n+'='+v )
+        tmp.sort()
+        pL.append( '.'.join(tmp) )
+    pL.sort()
+    return pL
+
+#####################################################################
+
+main()

@@ -18,7 +18,7 @@ def main():
     if len(argL) == 0:
         argL = """null script links1 links2 links3
                   exitstat xmldir options params
-                  keywords autolink tname1 tname2 duplicate
+                  autolink tname1 tname2 duplicate
                   postclean force1 force2 force3
                   batch1
                """.split()
@@ -374,82 +374,6 @@ def params():
       if line[-1].find( "hello=mars" ) >= 0: nm = nm + 1
       if line[-1].find( "hello=world" ) >= 0: nw = nw + 1
     assert nj == 1 and nm == 1 and nw == 1
-
-
-#####################################################################
-
-def keywords():
-    """
-    use keywords in <execute> blocks
-    """
-    writefile( "keys.xml", """
-        <rtest name="keys">
-          <keywords> mars venus </keywords>
-          <execute> echo "in execute" </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    fL = glob.glob( 'TestResults.*/keys/execute.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'in execute' ) ) >= 1
-
-    # note how this one leaves out the <keywords> block (the test keywords
-    # should include mars & venus in this case)
-    writefile( "keys.xml", """
-        <rtest name="keys">
-          <execute keywords="mars"> echo "execute mars" </execute>
-          <execute keywords="venus"> echo "execute venus" </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest( '-w' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    fL = glob.glob( 'TestResults.*/keys/execute.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'execute mars' ) ) == 0
-    assert len( filegrep( fL[0], 'execute venus' ) ) == 0
-
-    out,np,nd,nf,nn = run_vvtest( '-w -k mars' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    fL = glob.glob( 'TestResults.*/keys/execute.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'execute mars' ) ) >= 1
-    assert len( filegrep( fL[0], 'execute venus' ) ) == 0
-
-    out,np,nd,nf,nn = run_vvtest( '-w -k venus' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    fL = glob.glob( 'TestResults.*/keys/execute.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'execute mars' ) ) == 0
-    assert len( filegrep( fL[0], 'execute venus' ) ) >= 1
-
-    writefile( "keys.xml", """
-        <rtest name="keys">
-          <keywords> mars venus </keywords>
-          <execute keywords="mars"> echo "execute mars" </execute>
-          <execute not_keywords="mars"> echo "execute venus" </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest( '-w -k venus' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    fL = glob.glob( 'TestResults.*/keys/execute.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'execute mars' ) ) == 0
-    assert len( filegrep( fL[0], 'execute venus' ) ) >= 1
-
-    out,np,nd,nf,nn = run_vvtest( '-w' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    fL = glob.glob( 'TestResults.*/keys/execute.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'execute mars' ) ) == 0
-    assert len( filegrep( fL[0], 'execute venus' ) ) >= 1
-
-    out,np,nd,nf,nn = run_vvtest( '-w -k mars' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    fL = glob.glob( 'TestResults.*/keys/execute.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'execute mars' ) ) >= 1
-    assert len( filegrep( fL[0], 'execute venus' ) ) == 0
 
 
 #####################################################################
