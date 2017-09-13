@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import glob
+import time
+
+# this will os.chdir() to a subdirectory
+from testutils import *
+
+import TestList
+import TestSpecCreator
+import FilterExpressions
+
+
+def main():
+    """
+    python -m cProfile -s cumulative .../libvvtest/tests/perf tspec01
+    """
+    argL = get_arg_list()
+
+    if len(argL) == 0:
+        argL = """tspec01 
+               """.split()
+    
+    savedir = os.getcwd()
+    for func in argL:
+        os.chdir( savedir )
+        rmallfiles()
+        time.sleep(1)
+        print3( '====> ', func )
+        eval( func+'()' )
+
+
+#####################################################################
+
+def tspec01( length=10 ):
+    """
+    """
+    pD = { 'np':'4', 'dt':'0.01' }
+    t0 = time.time()
+    i = 0
+    while i < length:
+        fL = [ ['foo{$np}_bar.$dt', 'foo{$np}_bar.$dt.base'],
+               ['blah{$np}_junk.$dt', 'blah{$np}_junk.$dt.base'] ]
+        TestSpecCreator.variableExpansion( 'tname', 'platname', pD, fL )
+        i += 1
+    t1 = time.time()
+    print3( 'loop time =', t1-t0 )
+    print3( 'magic: fL', fL )
+
+def tspec01_medium():
+    tspec01( 10000 )
+
+def tspec01_long():
+    tspec01( 200000 )
+
+
+def alegra01():
+    """
+    a manual test that scans the alegra/emphasis test tree
+    """
+    tl = TestList.TestList()
+    t0 = time.time()
+    #tl.scanDirectory( '/home/rrdrake/Alegra/Benchmarks' )
+    tl.scanDirectory( '/scratch/rrdrake/ta/Benchmarks' )
+    print3( 'time=', time.time()-t0 )
+
+
+#####################################################################
+
+main()
