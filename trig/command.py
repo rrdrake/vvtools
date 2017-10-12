@@ -908,6 +908,7 @@ class CommandEcho:
         self.cmd = cmdstr
     def preExecute(self):
         sys.stdout.write( self.cmd + '\n' )
+        sys.stdout.flush()
     def postExecute(self, exit_status):
         pass
 
