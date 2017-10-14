@@ -319,6 +319,28 @@ def apply1():
     time.sleep(1)
     assert grp == perms.filegroup( 'afile' )
 
+    out = runout( localpy+' '+srcdir+'/perms.py -f g=r-x afile',
+                  raise_on_failure=True )
+    time.sleep(1)
+    assert perms.permission( 'afile', 'group r-x' ) == True
+
+    os.mkdir( 'adir' )
+    time.sleep(1)
+    out = runout( localpy+' '+srcdir+'/perms.py -d g=--x adir',
+                  raise_on_failure=True )
+    time.sleep(1)
+    assert perms.permission( 'adir', 'group --x' ) == True
+
+    out = runout( localpy+' '+srcdir+'/perms.py -p g=-w- afile',
+                  raise_on_failure=True )
+    time.sleep(1)
+    assert perms.permission( 'afile', 'group -w-' ) == True
+
+    out = runout( localpy+' '+srcdir+'/perms.py -p g=-wx adir',
+                  raise_on_failure=True )
+    time.sleep(1)
+    assert perms.permission( 'adir', 'group -wx' ) == True
+
 
 def apply2():
     """
@@ -411,6 +433,14 @@ def recurse1():
     assert perms.permission( 'subdir/afile', 'world r--' ) == True
     assert perms.permission( 'subdir/bfile', 'group rw-' ) == True
     assert perms.permission( 'subdir/bfile', 'world r--' ) == True
+
+    out = runout( localpy+' '+srcdir+'/perms.py -R ' + \
+                  '-p g=--- -f g+w -d g+x subdir',
+                  raise_on_failure=True )
+    time.sleep(1)
+    assert perms.permission( 'subdir', 'group --x' ) == True
+    assert perms.permission( 'subdir/afile', 'group -w-' ) == True
+    assert perms.permission( 'subdir/bfile', 'group -w-' ) == True
 
 
 def recurse2():

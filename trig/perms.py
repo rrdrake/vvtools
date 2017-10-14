@@ -31,21 +31,51 @@ g-, or o-, then it is assumed to be a group name, and the file(s) group is set.
 
 OPTIONS:
     -h, --help : this help
-    -p <spec> : permission or group specification; may be repeated
+    -p <spec>  : permission specification for files and directories
+    -f <spec>  : permission specification for files
+    -d <spec>  : permission specification for directories
+    -R         : apply permissions recursively
+
+Note that the -p, -f, and -d arguments may be repeated.
 """
 
 
 def main():
 
-    optL,argL = getopt.getopt( sys.argv[1:], 'hd:',
-                               longopts=['help','prefix='] )
+    from getopt import getopt
+    optL,argL = getopt( sys.argv[1:], 'hp:f:d:R',
+                        longopts=['help','prefix='] )
     optD ={}
     for n,v in optL:
-        optD[n] = v
+        if n in ['-p','-f','-d']:
+            optD[n] = optD.get( n, [] ) + [v]
+        else:
+            optD[n] = v
 
     if '-h' in optD or '--help' in optD:
         print3( help_string )
-        sys.exit(0)
+        return
+
+    pspecs = optD.get( '-p', [] )
+    fspecs = optD.get( '-f', [] )
+    dspecs = optD.get( '-d', [] )
+
+    if len(pspecs) + len(fspecs) + len(dspecs) > 0 and len(argL) > 0:
+
+        if '-R' in optD:
+            for path in argL:
+                chmod_recurse( path, pspecs+fspecs, pspecs+dspecs )
+
+        else:
+            for path in argL:
+                if os.path.islink( path ):
+                    pass
+                elif os.path.isdir( path ):
+                    apply_chmod( path, *pspecs )
+                    apply_chmod( path, *dspecs )
+                else:
+                    apply_chmod( path, *pspecs )
+                    apply_chmod( path, *fspecs )
 
 
 ####################################################################
@@ -359,6 +389,17 @@ world_bits['--x'] = world_bits['x']
 world_bits['rw-'] = world_bits['rw']
 world_bits['r-x'] = world_bits['rx']
 world_bits['-wx'] = world_bits['wx']
+
+
+######################################################################
+
+def print3( *args ):
+    """
+    A print function compatible for Python 2 and 3.
+    """
+    s = ' '.join( [ str(x) for x in args ] )
+    sys.stdout.write( s + os.linesep )
+    sys.stdout.flush()
 
 
 ######################################################################
