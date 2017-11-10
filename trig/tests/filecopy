@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+#RUNTEST:
+#OPTION: realssh
 
 import sys
 sys.dont_write_bytecode = True
@@ -1215,7 +1217,11 @@ def recurse_listdir( directory ):
             assert dp.startswith( topdir+os.sep )
             pathL.append( dp[n:] )
     pL = []
-    os.path.walk( directory, gather, (directory,pL) )
+    if sys.version_info[0] == 2:
+        os.path.walk( directory, gather, (directory,pL) )
+    else:
+        for dirpath, dirnames, filenames in os.walk( directory ):
+            gather( (directory,pL), dirpath, filenames )
     return pL
 
 def compare_dirs( dir1, dir2 ):

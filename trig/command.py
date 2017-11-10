@@ -219,7 +219,7 @@ class Command:
         """
         Returns the subprocess exit status.
         """
-        pycmd,shcmd = self._makeFinalCommands( shell, machine, sshexe )
+        pycmd,shcmd = self.getCommands( shell, machine, sshexe )
         streams = SubprocessStreams( redirect, stdout, stderr )
         echobj = construct_echo_object( echo, shcmd, streams.getFilename() )
         runit = CommandDryRun().runIt( pycmd )
@@ -238,7 +238,7 @@ class Command:
         The 'capture' argument can be one of the values: "stdout", "stderr",
         or "stdouterr".  The captured output is returned as a string.
         """
-        pycmd,shcmd = self._makeFinalCommands( shell, machine, sshexe )
+        pycmd,shcmd = self.getCommands( shell, machine, sshexe )
         streams = SubprocessStreams( None, stdout, stderr, capture )
         echobj = construct_echo_object( echo, shcmd, streams.getFilename() )
         runit = CommandDryRun().runIt( pycmd )
@@ -265,7 +265,7 @@ class Command:
         """
         tm = compute_timeout_value( timeout, timeout_date )
 
-        pycmd,shcmd = self._makeFinalCommands( shell, machine, sshexe )
+        pycmd,shcmd = self.getCommands( shell, machine, sshexe )
         streams = SubprocessStreams( redirect, stdout, stderr )
         echobj = construct_echo_object( echo, shcmd, streams.getFilename(), tm )
         runit = CommandDryRun().runIt( pycmd )
@@ -307,7 +307,7 @@ class Command:
 
         return self.expander.expand( astring, D )
 
-    def _makeFinalCommands(self, shell, machine, sshexe):
+    def getCommands(self, shell, machine=None, sshexe=None):
         """
         Composes and returns the command to send to subprocess and an
         equivalent command as it would be executed on a shell command line.
@@ -357,6 +357,24 @@ class Command:
 
         return subproc_cmd, shell_cmd
 
+    def __str__(self): return self.asShellString()
+    def __repr__(self): return 'Command('+repr(self.argL)+')'
+
+
+def make_Command_from_repr( repr_string ):
+    """
+    The repr() function can be applied to Command objects, but to recover
+    them, use this function.  For example,
+
+        cmd1 = Command( 'echo hello' )
+        s = repr(cmd1)
+        cmd2 = make_Command_from_repr(s)
+    """
+    lst = repr_string.strip().lstrip('Command(').rstrip(')')
+    cmd = Command()
+    cmd.argL = eval( lst )
+    return cmd
+
 
 ###########################################################################
 
@@ -401,6 +419,8 @@ class SingleArgument:
         """
         return pipes.quote( self.arg )
 
+    def __repr__(self): return 'SingleArgument('+repr(self.arg)+')'
+
 
 class EscapedArgument:
 
@@ -415,6 +435,8 @@ class EscapedArgument:
 
     def shellStringWithoutExpansion(self):
         return pipes.quote( self.arg )
+
+    def __repr__(self): return 'EscapedArgument('+repr(self.arg)+')'
 
 
 ###########################################################################

@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+#RUNTEST:
+#OPTION: realssh
 
 import sys
 sys.dont_write_bytecode = True
@@ -10,6 +12,10 @@ from testutils import *
 
 # this is the module we are testing
 import runjob
+
+# the runjob module depends on the command module, and accepts Command()
+# objects; so import to test this use case
+import command
 
 localpy = sys.executable
 
@@ -31,7 +37,7 @@ def main():
             use_real_ssh = True
 
     if len(argL) == 0:
-        argL = """runjob1 runjob1b runjob1c runjob1d runjob1e
+        argL = """runjob1 runjob1b runjob1c
                   runjob2 runjob3 runjob4 runjob5a runjob5b
                   waitall1 waitall2 waitall3 waitall4 waitall5 waitall6
                   jobfail1 jobfail2 jobfail3 jobfail4 jobfail5
@@ -39,7 +45,7 @@ def main():
                   echo1 chdir1
                   jobcast1 jobcast2
                   remote1 remote2 remote3 remote4
-                  timeout1 timeout2
+                  timeout1 timeout2 timeout3 timeout4 timeout5
                   remotefail1 remotefail2a remotefail2b
                   update1
                   dryrun1 dryrun2 dryrun3 dryrun4 dryrun5 dryrun6
@@ -63,7 +69,7 @@ def runjob1():
     """
     run a simple shell command
     """
-    jid = runjob.run_job( 'echo "hello" ; ls -l job.py ; sleep 2',
+    jid = runjob.run_job( 'echo "hello" ; sleep 2',
                           poll_interval=2 )
     jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
@@ -71,15 +77,13 @@ def runjob1():
     fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
     assert len(fL) == 1
     assert len( filegrep( fL[0], 'hello' ) ) == 1
-    assert len( filegrep( fL[0], 'job.py' ) ) == 1
 
 
 def runjob1b():
     """
     run a command using an argument list
     """
-    jid = runjob.run_job( '/bin/bash', '-c',
-                          'echo "hello" ; ls -l job.py ; sleep 2',
+    jid = runjob.run_job( '/bin/bash', '-c', 'echo hello',
                           poll_interval=2 )
     jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
@@ -87,14 +91,14 @@ def runjob1b():
     fL = fnmatch.filter( os.listdir( '.' ), 'bash-*.log' )
     assert len(fL) == 1
     assert len( filegrep( fL[0], 'hello' ) ) == 1
-    assert len( filegrep( fL[0], 'job.py' ) ) == 1
 
 
 def runjob1c():
     """
-    run a command as a python list
+    run a Command object
     """
-    jid = runjob.run_job( ['touch', 'file name'], poll_interval=2 )
+    cmd = command.Command( 'touch' ).arg( 'file name' )
+    jid = runjob.run_job( cmd, poll_interval=2 )
     jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
@@ -105,29 +109,32 @@ def runjob1c():
 
 def runjob1d():
     """
-    run a command as a python list plus a string
+    Command object with shell True/False
     """
-    jid = runjob.run_job( ['touch'], 'file name', poll_interval=2 )
+    writefile( 'file1.txt', 'contents' )
+    time.sleep(1)
+
+    # shell expansion is True by default
+    cmd = command.Command( 'echo file*.txt' )
+    jid = runjob.run_job( cmd, poll_interval=2 )
     jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
+    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
     assert len(fL) == 1
-    assert os.path.exists( 'file name' )
+    f1 = fL[0]
+    assert len( filegrep( f1, 'file1.txt' ) ) == 1
 
-
-def runjob1e():
-    """
-    use the command() helper to create a command as a string
-    """
-    jid = runjob.run_job( runjob.command( 'touch', 'file name' ),
-                          poll_interval=2 )
+    # turn off shell expansion and the file glob should not occur
+    cmd = command.Command( 'echo file*.txt' )
+    jid = runjob.run_job( cmd, poll_interval=2, shell=False )
     jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
 
-    fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
-    assert len(fL) == 1
-    assert os.path.exists( 'file name' )
+    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
+    assert len(fL) == 2
+    fL.remove( f1 )
+    assert len( filegrep( fL[0], 'file1.txt' ) ) == 0
 
 
 def runjob2():
@@ -190,7 +197,7 @@ def runjob4():
     """
     give job a name
     """
-    jid = runjob.run_job( ['touch', 'file.txt'], name="makefile",
+    jid = runjob.run_job( 'touch', 'file.txt', name="makefile",
                           poll_interval=2 )
     jb = runjob.wait_job( jid, poll_interval=2 )
     assert jb.get( 'exit' ) == 0
@@ -338,8 +345,8 @@ def jobfail2():
     jid = runjob.run_job( '/an/arbitrary/path/badprogram', '-h',
                           poll_interval=2 )
     jb = runjob.wait_job( jid, poll_interval=2 )
-    assert not jb.has( 'exit' )
-    assert jb.get( 'exc' ).startswith('[')
+    assert jb.get( 'exit' ) > 0
+    assert not jb.has( 'exc' )
 
     fL = fnmatch.filter( os.listdir( '.' ), 'badprogram-*.log' )
     assert len(fL) == 1
@@ -366,13 +373,14 @@ def jobfail4():
     jb = runjob.wait_job( jid, poll_interval=2 )
     assert not jb.has( 'exit' )
     assert jb.has( 'exc' )
+
     jid = runjob.run_job( 'ls', ['-l','uhoh'], poll_interval=2 )
     jb = runjob.wait_job( jid, poll_interval=2 )
-    assert not jb.has( 'exit' )
-    assert jb.has( 'exc' )
+    assert jb.get( 'exit' ) != None and jb.get( 'exit' ) != 0
+    assert not jb.has( 'exc' )
 
     fL = fnmatch.filter( os.listdir( '.' ), '*.log' )
-    assert len(fL) == 0
+    assert len(fL) == 1
 
 
 def jobfail5():

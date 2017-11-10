@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+#RUNTEST:
+#OPTION: realssh
 
 import sys
 sys.dont_write_bytecode = True
@@ -40,6 +42,7 @@ def main():
         argL = """expand01 expand02 expand03 expand04
                   args01 args02
                   cmd01 cmd02 cmd03 cmd04 cmd05 cmd06
+                  repr01
                   frame01 frame02
                   vars01 vars02
                   redirect01 redirect02 redirect03 redirect04 redirect05
@@ -235,6 +238,13 @@ def args01():
     assert cmd.shellStringForExpansion() == "'~/dirname/file.*'"
     assert cmd.shellStringWithoutExpansion() == "'~/dirname/file.*'"
 
+    # test the repr() function
+    from command import EscapedArgument
+    cmd = command.EscapedArgument( 'hello' )
+    s = repr(cmd)
+    cmd2 = eval( s )
+    assert cmd.getArgument() == cmd2.getArgument()
+
 
 def args02():
     """
@@ -259,6 +269,13 @@ def args02():
     assert cmd.getArgument() == '~/dir/""'
     assert cmd.shellStringForExpansion() == '~/dir/\\"\\"'
     assert cmd.shellStringWithoutExpansion() == '\'~/dir/""\''
+
+    # test the repr() function
+    from command import SingleArgument
+    cmd = command.SingleArgument( 'hello' )
+    s = repr(cmd)
+    cmd2 = eval( s )
+    assert cmd.getArgument() == cmd2.getArgument()
 
 
 def cmd01():
@@ -489,6 +506,18 @@ def cmd06():
     assert cmd1.asShellString() == '-ltr'
     assert cmd2.asShellString( shell=False ) == 'ls -ltr filename'
     assert cmd2.asShellString() == 'ls -ltr filename'
+
+
+def repr01():
+    """
+    convert a Command to and from a string using repr()
+    """
+    cmd1 = Command( 'ls -ltr' )
+    s = repr( cmd1 )
+    cmd2 = command.make_Command_from_repr(s)
+    assert cmd1.asShellString() == cmd2.asShellString()
+    assert cmd1.asShellString( shell=False ) == \
+           cmd2.asShellString( shell=False )
 
 
 frameglobal = 'some value'
@@ -1056,31 +1085,31 @@ def dirswap01():
 
 def makecmd01():
     """
-    _makeFinalCommands(): no shell expansion
+    getCommands(): no shell expansion
     """
     cmd = Command( sys.executable, 'args1' )
-    py,sh = cmd._makeFinalCommands( False, None, None )
+    py,sh = cmd.getCommands( False )
     check_commands( py, sh, 'args1' )
 
     cmd = Command( sys.executable, 'args2', '-s', 'foo' )
-    py,sh = cmd._makeFinalCommands( False, None, None )
+    py,sh = cmd.getCommands( False )
     check_commands( py, sh, 'args2', '-s', 'foo' )
 
     cmd = Command( sys.executable, 'args3', '~', '*' )
-    py,sh = cmd._makeFinalCommands( False, None, None )
+    py,sh = cmd.getCommands( False )
     check_commands( py, sh, 'args3', '~', '*' )
 
 
 def makecmd02():
     """
-    _makeFinalCommands(): shell expansion
+    getCommands(): shell expansion
     """
     cmd = Command( sys.executable, 'args1' )
-    py,sh = cmd._makeFinalCommands( True, None, None )
+    py,sh = cmd.getCommands( True, None, None )
     check_commands( py, sh, 'args1' )
 
     cmd = Command( sys.executable, 'args2', '-s', 'foo' )
-    py,sh = cmd._makeFinalCommands( True, None, None )
+    py,sh = cmd.getCommands( True, None, None )
     check_commands( py, sh, 'args2', '-s', 'foo' )
 
     # write two files to test globbing
@@ -1089,46 +1118,46 @@ def makecmd02():
     time.sleep(1)
 
     cmd = Command( sys.executable, 'args3', '~', 'file*.ext' )
-    py,sh = cmd._makeFinalCommands( True, None, None )
+    py,sh = cmd.getCommands( True, None, None )
     check_commands( py, sh, 'args3',
                     os.path.expanduser('~'), 'file1.ext', 'file2.ext' )
 
     cmd = Command( sys.executable, 'args4' ).escape( 'file*.ext' )
-    py,sh = cmd._makeFinalCommands( True, None, None )
+    py,sh = cmd.getCommands( True, None, None )
     check_commands( py, sh, 'args4', 'file*.ext' )
 
 
 def makecmd03():
     """
-    _makeFinalCommands(): ssh with no shell expansion
+    getCommands(): ssh with no shell expansion
     """
     sshprog,sshmach = get_ssh_pair()
 
     cmd = Command( sys.executable, os.path.abspath('args1') )
-    py,sh = cmd._makeFinalCommands( False, sshmach, sshprog )
+    py,sh = cmd.getCommands( False, sshmach, sshprog )
     check_commands( py, sh, 'args1' )
 
     cmd = Command( sys.executable, os.path.abspath('args2'), '-s', 'foo' )
-    py,sh = cmd._makeFinalCommands( False, sshmach, sshprog )
+    py,sh = cmd.getCommands( False, sshmach, sshprog )
     check_commands( py, sh, 'args2', '-s', 'foo' )
 
     cmd = Command( sys.executable, os.path.abspath('args3'), '~', '*' )
-    py,sh = cmd._makeFinalCommands( False, sshmach, sshprog )
+    py,sh = cmd.getCommands( False, sshmach, sshprog )
     check_commands( py, sh, 'args3', '~', '*' )
 
 
 def makecmd04():
     """
-    _makeFinalCommands(): ssh with shell expansion
+    getCommands(): ssh with shell expansion
     """
     sshprog,sshmach = get_ssh_pair()
 
     cmd = Command( sys.executable, os.path.abspath('args1') )
-    py,sh = cmd._makeFinalCommands( True, sshmach, sshprog )
+    py,sh = cmd.getCommands( True, sshmach, sshprog )
     check_commands( py, sh, 'args1' )
 
     cmd = Command( sys.executable, os.path.abspath('args2'), '-s', 'foo' )
-    py,sh = cmd._makeFinalCommands( True, sshmach, sshprog )
+    py,sh = cmd.getCommands( True, sshmach, sshprog )
     check_commands( py, sh, 'args2', '-s', 'foo' )
 
     # write two files to test globbing
@@ -1142,7 +1171,7 @@ def makecmd04():
     # remote shell
     cmd = Command( sys.executable, os.path.abspath('args3'),
                    '~', os.path.abspath('file*.ext') )
-    py,sh = cmd._makeFinalCommands( True, sshmach, sshprog )
+    py,sh = cmd.getCommands( True, sshmach, sshprog )
     check_commands( py, sh, 'args3',
                     os.path.expanduser('~'),
                     os.path.abspath('file1.ext'),
@@ -1150,13 +1179,13 @@ def makecmd04():
 
     cmd = Command( sys.executable, os.path.abspath('args4')
                  ).escape( os.path.abspath('file*.ext') )
-    py,sh = cmd._makeFinalCommands( True, sshmach, sshprog )
+    py,sh = cmd.getCommands( True, sshmach, sshprog )
     check_commands( py, sh, 'args4', os.path.abspath('file*.ext') )
 
 
 def check_commands( pycmd, shcmd, pyscript, *args ):
     """
-    Checks the output from Command._makeFinalCommands() by executing the
+    Checks the output from Command.getCommands() by executing the
     pair of commands it returns (the one meant for subprocess and the one
     for a shell).
 
@@ -1727,12 +1756,12 @@ def runout04():
     cmd = Command( sys.executable, '-c' )
     cmd.arg(
         "import os,sys;" + \
-        "sys.stderr.write(os.getcwd()+os.linesep); sys.stderr.flush()" )
+        "sys.stderr.write('foobarbaz'+os.linesep); sys.stderr.flush()" )
 
     rtn,out,err = call_capture_output( cmd.run_output, capture="stderr",
                                        shell=False,
                                        machine=sshmach, sshexe=sshprog )
-    assert os.path.basename( rtn.strip() ) == os.path.basename( os.getcwd() )
+    assert 'foobarbaz' in rtn.strip()
     assert 'flush' in out
     assert not err.strip()
 

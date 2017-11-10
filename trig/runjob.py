@@ -10,8 +10,7 @@ import threading
 import pipes
 import traceback
 
-import runcmd
-from runcmd import command, escape
+import command
 
 
 """
@@ -29,9 +28,14 @@ The key functions are:
     wait_all : waits for all jobs to complete or a list of job ids
     run_wait : convenience function for run_job() plus wait_job()
 
-See the documentation in runcmd.py for how commands are specified to run_job().
-For example, the command() and escape() functions imported from runcmd.py can
-be useful for command constructions
+Commands to be run can be specified using
+
+    1. A single string, which is treated as a shell command
+    2. Multiple arguments, each of which are treated as a single shell argument
+    3. A single command.Command() object
+
+The third form is the most versatile; refer to the command module for
+documentation.
 
 Note: Look at the documentation below in the function "def _is_dryrun" for use
 of the envronment variable COMMAND_DRYRUN for noop execution.
@@ -40,11 +44,14 @@ of the envronment variable COMMAND_DRYRUN for noop execution.
 
 def run_job( *args, **kwargs ):
     """
-    Starts a job in the background and returns the job id.  See runcmd.py
-    for ways to construct a command.  The optional keyword attributes are
+    Starts a job in the background and returns the job id.  The argument list
+    can be a single command.Command() object, a single string, or multiple
+    string arguments.  The optional keyword attributes are
 
         name    : give the job a name, which prefixes the log file name
         chdir   : change to this directory before running the command
+        shell   : True means apply shell expansion to the command, while False
+                  means do not; default is True
         timeout : apply a timeout to the command
         timeout_date : timeout the job at the given date (epoch time in seconds)
 
@@ -406,6 +413,7 @@ class Job:
         timeout = self._compute_timeout()
 
         cmd = self.get( 'command' )
+        shl = self.get( 'shell', True )
         chd = self.rundir()
         logn = self.logname()
 
@@ -415,17 +423,17 @@ class Job:
         x = None
         try:
             if timeout == None:
-                x = runcmd.run_command( cmd, echo=False,
-                                             raise_on_failure=False,
-                                             redirect=logfp.fileno(),
-                                             chdir=chd )
+                x = cmd.run( shell=shl,
+                             chdir=chd,
+                             echo="none",
+                             redirect=logfp.fileno() )
             else:
-                x = runcmd.run_timeout( cmd, timeout=timeout,
-                                             echo=False,
-                                             raise_on_failure=False,
-                                             redirect=logfp.fileno(),
-                                             poll_interval=ipoll,
-                                             chdir=chd )
+                x = cmd.run_timeout( timeout=timeout,
+                                     poll_interval=ipoll,
+                                     shell=shl,
+                                     chdir=chd,
+                                     echo="none",
+                                     redirect=logfp.fileno() )
         finally:
             logfp.close()
 
@@ -436,6 +444,8 @@ class Job:
         """
         timeout = self._compute_timeout()
         cmd = self.get( 'command' )
+        shl = self.get( 'shell', True )
+        pycmd,shcmd = cmd.getCommands( shell=shl )
         chd = self.rundir()
         sshexe = self.get( 'sshexe', JobRunner.getDefault( 'sshexe' ) )
         numconn = self.get( 'connection_attempts',
@@ -454,7 +464,7 @@ class Job:
         rmt.addRemoteContent( filename=rfile )
 
         tprint( 'Connect machine:', mach )
-        tprint( 'Remote command:', cmd )
+        tprint( 'Remote command:', shcmd )
         if chd:
             tprint( 'Remote dir:', chd )
         if timeout != None:
@@ -478,7 +488,7 @@ class Job:
                 rusr = rmt.timeout(30).x_evaluate( 'return os.getuid()' )
 
                 rmt.timeout(30)
-                rpid = rmt.x_background_command( cmd, remotelogf,
+                rpid = rmt.x_background_command( pycmd, remotelogf,
                                                  chdir=chd,
                                                  timeout=timeout )
 
@@ -772,18 +782,27 @@ class JobRunner:
         try:
             assert len(args) > 0, "empty or no command given"
 
-            cmd,scmd = runcmd._assemble_command( *args )
+            if len(args) == 1:
+                if isinstance( args[0], command.Command ):
+                    cmdobj = args[0]
+                else:
+                    cmdobj = command.Command( args[0] )
+            else:
+                cmdobj = command.Command().arg( *args )
 
             if 'name' in kwargs:
                 jobname = kwargs['name']
             else:
+                cmd,scmd = cmdobj.getCommands( kwargs.get( 'shell', True ) )
                 if type(cmd) == type(''):
                     jobname = os.path.basename( cmd.strip().split()[0] )
                 else:
                     jobname = os.path.basename( cmd[0] )
 
             jb.set( 'name', jobname )
-            jb.set( 'command', cmd )
+            jb.set( 'command', cmdobj )
+            if 'shell' in kwargs:
+                jb.set( 'shell', kwargs['shell'] )
             
             for n,v in kwargs.items():
                 jb.set( n, v )
@@ -830,7 +849,10 @@ class JobRunner:
         assert jb.getState() == "ready"
 
         try:
-            tprint( 'RunJob:', jb.get( 'command' ) )
+            cmd = jb.get( 'command' )
+            shl = jb.get( 'shell', True )
+
+            tprint( 'RunJob:', cmd.asShellString( shell=shl ) )
             tprint( 'JobID:', jb.jobid() )
             tprint( 'LogFile:', os.path.abspath(jb.logname()) )
             m = jb.get( 'machine', None )

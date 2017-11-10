@@ -7,6 +7,7 @@ import os
 import getopt
 import subprocess
 import time
+import glob
 
 
 help_string = """
@@ -25,55 +26,25 @@ OPTIONS
     -h, --help  : this help
     -j <int>    : max concurrent tests (default is one)
     -s          : pass -s to the unit tests that take the option (use real ssh)
-    -p          : run each unit test using a list of python versions
+    -p <directory> : python version test; this triggers a loop over python
+                     installations under the given directory, and runs each
+                     test with using those versions; the python versions are
+                     chosen by globbing <directory>/*/bin/python
+    -v "sub1 sub2 ..." : the list of subdirectory names containing the python
+                         versions used with -p (instead of globbing)
     -r          : for tests that accept a remote python version (option -r),
                   iterate on a list of python versions and execute with -r
 """
-
-
-#
-# This is a manual list of all the test scripts; each entry is a tuple
-#
-#   ( script base name, -s is accepted, -r is accepted )
-#
-# where "-s is accepted" should be True if the test script accepts a -s
-# argument.  Similarly for "-r is accepted".
-#
-testlist = [ \
-    ( 'nulltest', False, False ),
-    ( 'remote',   True,  True  ),
-    ( 'runcmd',   True,  False ),
-    ( 'runjob',   True,  False ),
-    ( 'tutils',   False, False ),
-    ( 'trigs',    False, False ),
-    ( 'perms',    False, False ),
-    ( 'filesync', True,  False ),
-    ( 'logging',  True,  False ),
-    ( 'command',  True,  False ),
-]
-
-
-# list of pythons to iterate over
-# TODO: figure out a way to generalize the listing mechanism
-pyL = [ '/home/rrdrake/bin/Linux/py244/bin/python',
-        '/home/rrdrake/bin/Linux/py255/bin/python',
-        '/home/rrdrake/bin/Linux/py266/bin/python',
-        '/home/rrdrake/bin/Linux/py273/bin/python',
-        '/home/rrdrake/bin/Linux/py301/bin/python',
-        '/home/rrdrake/bin/Linux/py313/bin/python',
-        '/home/rrdrake/bin/Linux/py325/bin/python',
-        '/home/rrdrake/bin/Linux/py335/bin/python',
-        '/home/rrdrake/bin/Linux/py343/bin/python',
-        '/home/rrdrake/bin/Linux/py353/bin/python' ]
 
 
 ###########################################################################
 
 def main():
 
-    optL,argL = getopt.getopt( sys.argv[1:], 'hsprj:', longopts=['help'] )
+    optL,argL = getopt.getopt( sys.argv[1:], 'hsp:v:rj:', longopts=['help'] )
 
-    iterpy = False
+    iterpy = ''
+    pydirs = None
     realssh = False
     remotepy = False
     numconcurrent = 1
@@ -85,14 +56,24 @@ def main():
         elif n == '-s':
             realssh = True  # pass -s to test scripts
         elif n == '-p':
-            iterpy = True  # iterate python versions
+            iterpy = os.path.abspath( v )
+        elif n == '-v':
+            pydirs = v.strip().split()
         elif n == '-r':
             remotepy = True  # iterate remote python versions
         elif n == '-j':
             numconcurrent = int( v )
             assert numconcurrent >= 1
 
-    prependPATH( os.path.normpath( os.path.join( mydir, '..' ) ) )
+    if iterpy:
+        pyL = []
+        if pydirs == None:
+            for f in glob.glob( iterpy+'/*/bin/python' ):
+                if os.path.isfile(f):
+                    pyL.append(f)
+        else:
+            for d in pydirs:
+                pyL.append( os.path.join( iterpy, d, 'bin', 'python' ) )
 
     tdir = makeTestDir()
     print3( 'cd '+tdir )
@@ -100,43 +81,47 @@ def main():
 
     # collect the test commands to be run
     cmdD = {}
-    for tname,sopt,popt in testlist:
+    for fname in glob.glob( mydir+'/*' ):
 
-        if len(argL) == 0 or tname in argL:
+        if is_test_file( fname ):
 
-            tst = os.path.join( mydir, tname )
+            tname = os.path.basename( fname )
+            if len(argL) == 0 or tname in argL:
 
-            if sopt and realssh:
-                tst += ' -s'
+                popt,sopt = get_test_runtime_options( fname )
 
-            if iterpy:
-                # iterate python versions on the local (script) launch
-                for i in range(len(pyL)):
-                    py = pyL[i]
-                    if popt and remotepy:
-                        # also iterate python versions on the remote side
-                        for j in range(len(pyL)):
-                            rpy = pyL[j]
-                            cmd = py + ' ' + tst + ' -r ' + rpy
-                            tid = tname+'_p'+str(i)+'_r'+str(j)
+                tst = fname
+                if sopt and realssh:
+                    tst += ' -s'
+
+                if iterpy:
+                    # iterate python versions on the local (script) launch
+                    for i in range(len(pyL)):
+                        py = pyL[i]
+                        if popt and remotepy:
+                            # also iterate python versions on the remote side
+                            for j in range(len(pyL)):
+                                rpy = pyL[j]
+                                cmd = py + ' ' + tst + ' -r ' + rpy
+                                tid = tname+'_p'+str(i)+'_r'+str(j)
+                                cmdD[tid] = cmd
+                        else:
+                            cmd = py + ' ' + tst
+                            tid = tname+'_p'+str(i)
                             cmdD[tid] = cmd
-                    else:
-                        cmd = py + ' ' + tst
-                        tid = tname+'_p'+str(i)
+
+                elif popt and remotepy:
+                    # iterate python versions only on the remote side
+                    for j in range(len(pyL)):
+                        rpy = pyL[j]
+                        cmd = sys.executable + ' ' + tst + ' -r ' + rpy
+                        tid = tname+'_r'+str(j)
                         cmdD[tid] = cmd
 
-            elif popt and remotepy:
-                # iterate python versions only on the remote side
-                for j in range(len(pyL)):
-                    rpy = pyL[j]
-                    cmd = sys.executable + ' ' + tst + ' -r ' + rpy
-                    tid = tname+'_r'+str(j)
+                else:
+                    cmd = sys.executable + ' ' + tst
+                    tid = tname
                     cmdD[tid] = cmd
-
-            else:
-                cmd = sys.executable + ' ' + tst
-                tid = tname
-                cmdD[tid] = cmd
 
     cwd = os.getcwd()
     jobD = {}
@@ -148,7 +133,7 @@ def main():
                 break
             time.sleep(1)
 
-        jb = Job( cwd, tid, cmd )
+        jb = BackgroundJob( cwd, tid, cmd )
         jobD[tid] = jb
 
     # wait on all jobs
@@ -169,7 +154,7 @@ def main():
 
 ###########################################################################
 
-class Job:
+class BackgroundJob:
 
     def __init__(self, cwd, testid, cmd):
         assert os.path.isabs( cwd )
@@ -250,6 +235,63 @@ def print3( *args ):
     s = ' '.join( [ str(x) for x in args ] )
     sys.stdout.write( s + '\n' )
     sys.stdout.flush()
+
+
+def is_test_file( fname ):
+    """
+    Looks at the first few lines of the file to determine if it is a test file.
+    """
+    rtn = False
+    if not os.path.islink(fname) and os.path.isfile(fname):
+        lines = read_first_lines( fname, 4 )
+        for line in lines:
+            line = line.strip()
+            if len(line) > 0 and line[0] != '#':
+                break
+            if line.strip().startswith( '#RUNTEST:' ):
+                rtn = True
+                break
+    return rtn
+
+
+def read_first_lines( fname, numlines ):
+    """
+    Reads the first few lines of a file; returns them in a list.
+    """
+    L = []
+    fp = open( fname, 'r' )
+    try:
+        try:
+            i = 0
+            line = fp.readline()
+            while i < numlines and line:
+                L.append( line.rstrip() )
+                line = fp.readline()
+                i += 1
+        except:
+            pass  # just abort if error like read or unicode problem
+    finally:
+        fp.close()
+
+    return L
+
+def get_test_runtime_options( fname ):
+    """
+    """
+    popt = False
+    sopt = False
+
+    lines = read_first_lines( fname, 6 )
+    for line in lines:
+        line = line.strip()
+        if line.startswith( '#OPTION:' ):
+            for opt in line[8:].strip().split():
+                if opt.lower() == 'realssh':
+                    sopt = True
+                elif opt.lower() == 'remotepython':
+                    popt = True
+
+    return popt, sopt
 
 
 ###########################################################################
