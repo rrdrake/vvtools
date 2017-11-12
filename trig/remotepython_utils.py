@@ -58,13 +58,14 @@ def _listener():
                 elif sw == 'WOK':
                     # check write ok;  open file for write then close
                     fname = eval( val.strip() )
-                    fp = open( fname, 'wb' )
+                    fp = open( os.path.expanduser(fname), 'wb' )
                     fp.close() ; fp = None
                     rtn = True
                 
                 elif sw == 'PUT':
                     # recv file from local side, and stream into a file
                     nreads, fname, mt, at, fm = eval( val.strip() )
+                    fname = os.path.expanduser(fname)
                     fp = open( fname, 'wb' )
                     i = 0 ; sz = 0
                     while i < nreads:
@@ -85,6 +86,7 @@ def _listener():
                 elif sw == 'FSZ':
                     # send back file size prior to file get
                     fname, preserve = eval( val.strip() )
+                    fname = os.path.expanduser( fname )
                     mt = at = fm = None
                     if preserve:
                         mt = os.path.getmtime( fname )
@@ -98,6 +100,7 @@ def _listener():
                 elif sw == 'GET':
                     # send file from here to the local side
                     bufsize, n, r, fname = eval( val.strip() )
+                    fname = os.path.expanduser( fname )
                     nreads = n
                     if r > 0: nreads += 1
                     fp = open( fname, 'rb' )
@@ -221,10 +224,10 @@ def background_command( cmd, redirect, timeout=None, chdir=None ):
 
     if chdir != None:
         cwd = os.getcwd()
-        os.chdir( chdir )
+        os.chdir( os.path.expanduser(chdir) )
 
     try:
-        fpout = open( redirect, 'w' )
+        fpout = open( os.path.expanduser(redirect), 'w' )
         try:
             fpin = open( os.devnull, 'r' )
         except:
@@ -255,6 +258,30 @@ def background_command( cmd, redirect, timeout=None, chdir=None ):
     return p.pid
 
 #############################################################################
+
+def get_machine_info():
+    "Return user name, system name, network name, and uptime as a string."
+    usr = os.getuid()
+    try:
+        import getpass
+        usr = getpass.getuser()
+    except:
+        pass
+    rtn = 'user='+usr
+
+    L = os.uname()
+    rtn += ' sysname='+L[0]+' nodename='+L[1]
+
+    upt = '?'
+    try:
+        x,out = runout( 'uptime' )
+        upt = out.strip()
+    except:
+        pass
+    rtn += ' uptime='+upt
+
+    return rtn
+
 
 def runout( cmd, include_stderr=False ):
     "Run a command and return the exit status & output as a pair."

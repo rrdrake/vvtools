@@ -29,6 +29,7 @@ def file_size( filename ):
     Returns the number of bytes in the given file name, or -1 if the file
     does not exist.
     """
+    filename = os.path.expanduser( filename )
     if os.path.exists( filename ):
         return os.path.getsize( filename )
     return -1
@@ -41,6 +42,7 @@ def open_file_read( filename, offset=None ):
     after the file is opened.  Returns the file modification time, the access
     time, the file mode for the file, and the remote file pointer id.
     """
+    filename = os.path.expanduser( filename )
     mt = os.path.getmtime( filename )
     at = os.path.getatime( filename )
     fm = stat.S_IMODE( os.stat(filename)[stat.ST_MODE] )

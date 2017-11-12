@@ -47,6 +47,7 @@ def main():
                   return1
                   persist1
                   file1 file2 file3 file4 file5 file6 file7 file8
+                    file9 file10 file11
                   binary1 binary2
                   chunk1 chunk2
                   preserve1 preserve2
@@ -55,6 +56,7 @@ def main():
                   eval1 eval2 eval3 eval4
                   obj1
                   name1
+                  info1
                """.split()
 
     for func in argL:
@@ -528,6 +530,130 @@ def file8():
     m1 = stat.S_IMODE( os.stat('rmtfile.txt')[stat.ST_MODE] )
     m2 = stat.S_IMODE( os.stat('lclfile.txt')[stat.ST_MODE] )
     assert m1 == m2
+
+
+def file9():
+    """
+    put a file using tilde path expansion on the remote side
+
+    Note: This test writes into your home directory.  I don't like that but
+          not sure how to test tilde path expansion otherwise.
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    # skip this test if no home directory
+    home = os.path.expanduser( '~' )
+    if home != '~' and os.path.isdir(home):
+
+        tmpdir = 'remotepython_test_directory.'+str(os.getpid())
+        os.mkdir( os.path.expanduser( '~/'+tmpdir ) )
+
+        try:
+            rmtpath = '~/'+tmpdir+'/rmtfile.txt'
+
+            writefile( 'lclfile.txt', """
+                Line One.
+                Line Two.
+                """ )
+            time.sleep(1)
+
+            lnk = rpy.RemotePython( sshmach, sshexe=sshprog, remotepy=remotepy )
+            lnk.connect()
+            rtn = lnk.putFile( 'lclfile.txt', rmtpath )
+            lnk.shutdown()
+            time.sleep(1)
+
+            rf = os.path.expanduser( rmtpath )
+            assert filecmp.cmp( 'lclfile.txt', rf, False )
+        except:
+            raise
+        else:
+            shutil.rmtree( os.path.expanduser( '~/'+tmpdir ) )
+
+
+def file10():
+    """
+    put a file using tilde path expansion on the local side
+
+    Note: This test writes into your home directory.  I don't like that but
+          not sure how to test tilde path expansion otherwise.
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    # skip this test if no home directory
+    home = os.path.expanduser( '~' )
+    if home != '~' and os.path.isdir(home):
+
+        tmpdir = 'remotepython_test_directory.'+str(os.getpid())
+        os.mkdir( os.path.expanduser( '~/'+tmpdir ) )
+
+        try:
+            rmtpath = '~/'+tmpdir+'/rmtfile.txt'
+            lclpath = '~/'+tmpdir+'/lclfile.txt'
+
+            rmtfname = os.path.expanduser( rmtpath )
+            lclfname = os.path.expanduser( lclpath )
+
+            writefile( lclfname, """
+                Line One.
+                Line Two.
+                """ )
+            time.sleep(1)
+
+            lnk = rpy.RemotePython( sshmach, sshexe=sshprog, remotepy=remotepy )
+            lnk.connect()
+            rtn = lnk.putFile( lclpath, rmtpath )
+            lnk.shutdown()
+            time.sleep(1)
+
+            assert filecmp.cmp( lclfname, rmtfname, False )
+        except:
+            raise
+        else:
+            shutil.rmtree( os.path.expanduser( '~/'+tmpdir ) )
+
+
+
+def file11():
+    """
+    get a file using tilde path expansion
+
+    Note: This test writes into your home directory.  I don't like that but
+          not sure how to test tilde path expansion otherwise.
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    # skip this test if no home directory
+    home = os.path.expanduser( '~' )
+    if home != '~' and os.path.isdir(home):
+
+        tmpdir = 'remotepython_test_directory.'+str(os.getpid())
+        os.mkdir( os.path.expanduser( '~/'+tmpdir ) )
+
+        try:
+            rmtpath = '~/'+tmpdir+'/rmtfile.txt'
+            lclpath = '~/'+tmpdir+'/lclfile.txt'
+
+            rmtfname = os.path.expanduser( rmtpath )
+            lclfname = os.path.expanduser( lclpath )
+
+            writefile( rmtfname, """
+                Line One.
+                Line Two.
+                """ )
+            time.sleep(1)
+
+            lnk = rpy.RemotePython( sshmach, sshexe=sshprog, remotepy=remotepy )
+            lnk.connect()
+            rtn = lnk.getFile( rmtpath, lclpath )
+            lnk.shutdown()
+            time.sleep(1)
+
+            assert filecmp.cmp( lclfname, rmtfname, False )
+        except:
+            raise
+        else:
+            shutil.rmtree( os.path.expanduser( '~/'+tmpdir ) )
 
 
 def binary1():
@@ -1163,6 +1289,31 @@ def name1():
     assert len( grep( out, '__main__' ) ) == 0
     assert len( grep( out, 'NAME IS MAIN' ) ) == 0
     assert len( grep( out, 'ending' ) ) == 1
+
+
+def info1():
+    """
+    remote get_machine_info() utility 
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    lnk = rpy.RemotePython( sshmach, sshexe=sshprog, remotepy=remotepy )
+    lnk.connect()
+    rtn = lnk.r_get_machine_info()
+    lnk.shutdown()
+
+    L1 = rtn.split( 'uptime=', 1 )
+    assert 'load average' in L1[1]
+
+    L2 = L1[0].strip().split()
+    assert len(L2) == 3
+    usr,sn,nn = L2
+
+    import getpass
+    assert usr == 'user='+getpass.getuser()
+
+    assert sn == 'sysname='+os.uname()[0]
+    assert nn == 'nodename='+os.uname()[1]
 
 
 #######################################################################

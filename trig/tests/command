@@ -1047,40 +1047,51 @@ def echo04():
 
 def dirswap01():
     """
-    the ChangeDirectory class
+    the SwapDirectory class
     """
     d = os.getcwd()
-    cd = command.ChangeDirectory( None )
+    cd = command.SwapDirectory( None )
     assert os.getcwd() == d
-    cd.changeToOriginal()
+    cd.swapBack()
     assert os.getcwd() == d
 
-    d = os.getcwd()
     # an empty string behaves same as None
-    cd = command.ChangeDirectory( '' )
+    d = os.getcwd()
+    cd = command.SwapDirectory( '' )
     assert os.getcwd() == d
-    cd.changeToOriginal()
+    cd.swapBack()
     assert os.getcwd() == d
 
     os.mkdir( 'tmpdir' )
     time.sleep(1)
 
+    # change to subdirectory
     d = os.getcwd()
     newdir = os.path.abspath( 'tmpdir' )
-    cd = command.ChangeDirectory( 'tmpdir' )
+    cd = command.SwapDirectory( 'tmpdir' )
     assert os.getcwd() == newdir
-    cd.changeToOriginal()
+    cd.swapBack()
     assert os.getcwd() == d
 
     # change to bad directory raises an Exception
     d = os.getcwd()
     try:
-        cd = command.ChangeDirectory( 'existentialcrisis' )
+        cd = command.SwapDirectory( 'existentialcrisis' )
     except:
         pass
     else:
         raise Exception( 'expected an exception' )
     assert os.getcwd() == d
+
+    # skip this test if user expansion fails
+    home = os.path.expanduser( '~' )
+    if home != '~' and os.path.exists(home):
+        # expand user is applied to path
+        d = os.getcwd()
+        cd = command.SwapDirectory( '~' )
+        assert os.path.samefile( os.getcwd(), home )
+        cd.swapBack()
+        assert os.getcwd() == d
 
 
 def makecmd01():

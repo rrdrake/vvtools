@@ -317,6 +317,8 @@ class RemotePython:
 
             assert self.pssh != None, "connection lost or never started"
 
+            local_name = os.path.expanduser( local_name )
+
             mtime = atime = fmode = None
             if preserve:
                 mtime = os.path.getmtime( local_name )
@@ -406,6 +408,8 @@ class RemotePython:
             os.write( self.send_pipe, _BYTES_( 'FSZ:' + repr(msg) + '\n' ) )
         
             sz, mtime, atime, fmode = self._read_return()
+
+            local_name = os.path.expanduser( local_name )
 
             fp = open( local_name, 'wb' )
             n,r = int(sz/bufsize), sz%bufsize

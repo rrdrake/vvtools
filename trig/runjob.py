@@ -485,6 +485,9 @@ class Job:
                 raise Exception( "Could not connect to "+mach )
 
             try:
+                inf = rmt.timeout(30).x_get_machine_info()
+                tprint( 'Remote info:', inf )
+
                 rusr = rmt.timeout(30).x_evaluate( 'return os.getuid()' )
 
                 rmt.timeout(30)

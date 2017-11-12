@@ -558,7 +558,7 @@ class SubprocessRunner:
         rtn = self.errorReturnValue()
 
         try:
-            dirswap = ChangeDirectory( self.chdir )
+            dirswap = SwapDirectory( self.chdir )
 
         except:
             if raise_on_error:
@@ -572,7 +572,7 @@ class SubprocessRunner:
             try:
                 rtn = self.subprocessWrapper( raise_on_error, runit )
             finally:
-                dirswap.changeToOriginal()
+                dirswap.swapBack()
 
         return rtn
 
@@ -988,7 +988,7 @@ def construct_echo_object( echo, shell_cmd, logfile, timeout=None ):
 
 ###########################################################################
 
-class ChangeDirectory:
+class SwapDirectory:
 
     def __init__(self, chdir):
         """
@@ -996,9 +996,9 @@ class ChangeDirectory:
         """
         self.savedir = os.getcwd()
         if chdir:
-            os.chdir( chdir )
+            os.chdir( os.path.expanduser(chdir) )
 
-    def changeToOriginal(self):
+    def swapBack(self):
         os.chdir( self.savedir )
 
 
