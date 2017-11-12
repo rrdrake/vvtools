@@ -141,7 +141,7 @@ def copy_files( files, to_dir,
     wm,wd = splitmach( to_dir )
 
     assert rm == None or wm == None, \
-        "machine specification on both source and target is not supported"
+        "a machine specification on both source and target is not supported"
 
     # if needed, connect to remote machine
     rmt = None
@@ -168,6 +168,7 @@ def copy_files( files, to_dir,
         if not wdL[2]:
             raise Exception( "destination directory does not have " + \
                              "read, write & execute permissions: "+to_dir )
+        wd = wdL[3]
 
         # list source files
         if rm == None: rL,nL = glob_paths( fL )
@@ -228,15 +229,17 @@ import glob
 from shutil import rmtree as shutil_rmtree
 
 def check_dir( directory ):
-    # Returns python list:  [ dir exists, is dir, exe & write ok ]
-    rtnL = [ False, False, False ]
-    if os.path.exists( directory ):
+    # Returns python list:
+    #   [ dir exists, is dir, exe & write ok, path w/ user expanded ]
+    d = os.path.expanduser(directory)
+    rtnL = [ False, False, False, d ]
+    if os.path.exists( d ):
         rtnL[0] = True
-        if os.path.isdir( directory ):
+        if os.path.isdir( d ):
             rtnL[1] = True
-            xok = os.access( directory, os.X_OK )
-            rok = os.access( directory, os.R_OK )
-            wok = os.access( directory, os.W_OK )
+            xok = os.access( d, os.X_OK )
+            rok = os.access( d, os.R_OK )
+            wok = os.access( d, os.W_OK )
             if xok and rok and wok:
                 rtnL[2] = True
 
@@ -253,6 +256,7 @@ def glob_paths( paths ):
     fL = []
     noexistL = []
     for f in paths:
+        f = os.path.expanduser(f)
         if os.path.islink(f) or os.path.exists(f):
             # the path exists without glob expansion - take that file
             T = os.path.split( follow_link(f) )

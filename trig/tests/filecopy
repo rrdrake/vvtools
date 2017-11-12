@@ -45,6 +45,7 @@ def main():
                   glob1 glob2 glob3
                   mktemp1
                   swap1
+                  checkdir1 globpaths1
                   local1 local2 local3 local4 local5 local6 local7 local8
                   get1 get2 get3 get4 get5 get6 get7
                   put1 put2 put3 put4 put5 put6 put7
@@ -585,6 +586,32 @@ def local8():
     t = os.path.getmtime( 'dir/sub2' )
     assert t < time.time() - 300
     assert abs( t - os.path.getmtime( 'cpy/sub2' ) ) < 3
+
+
+def checkdir1():
+    """
+    check_dir() function with user name expansion
+    """
+    # skip this test if user expansion fails
+    home = os.path.expanduser( '~' )
+    if home != '~' and os.path.exists(home):
+        L = filecopy.check_dir( '~' )
+        assert len(L) == 4
+        assert L[0] and L[1] and L[2]
+        assert L[3] == home
+
+
+def globpaths1():
+    """
+    glob_paths() function with user name expansion
+    """
+    # skip this test if user expansion fails
+    home = os.path.expanduser( '~' )
+    if home != '~' and os.path.exists(home):
+        L1,L2 = filecopy.glob_paths( ['~'] )
+        assert len(L1) == 1
+        absdir,lnkbase,destbase = L1[0]
+        assert os.path.join( absdir, lnkbase ) == home
 
 
 def get1():
