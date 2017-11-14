@@ -376,11 +376,11 @@ def jobfail4():
 
     jid = runjob.run_job( 'ls', ['-l','uhoh'], poll_interval=2 )
     jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) != None and jb.get( 'exit' ) != 0
-    assert not jb.has( 'exc' )
+    assert jb.has( 'exc' )
+    assert 'arg must be a Command or string' in jb.get( 'exc' )
 
     fL = fnmatch.filter( os.listdir( '.' ), '*.log' )
-    assert len(fL) == 1
+    assert len(fL) == 0
 
 
 def jobfail5():
@@ -699,6 +699,58 @@ def remote4():
     L = filegrep( lf2, 'world' )
     assert len(L) == 2
     assert L[1].strip() == 'world'
+
+
+def remote5():
+    """
+    remote with a Command object
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    os.mkdir( 'rdir' )
+    os.mkdir( 'ldir' )
+    rd = os.path.abspath( 'rdir' )  # remote run directory
+    ld = os.path.abspath( 'ldir' )  # local run and log directory
+    time.sleep(1)
+
+    os.chdir( ld )
+
+    cmd = command.Command( 'touch' ).arg( 'file name' )
+    jid = runjob.run_job( cmd,
+                          machine=sshmach, sshexe=sshprog,
+                          chdir=rd, poll_interval=2 )
+    jb = runjob.wait_job( jid, poll_interval=2 )
+    assert jb.get( 'exit' ) == 0
+
+    fL = fnmatch.filter( os.listdir( rd ), 'touch-*.log' )
+    assert len(fL) == 1
+    assert os.path.exists( os.path.join( rd, 'file name' ) )
+
+
+def remote6():
+    """
+    remote with a Command object and shell=False
+    """
+    sshprog,sshmach = get_ssh_pair()
+
+    os.mkdir( 'rdir' )
+    os.mkdir( 'ldir' )
+    rd = os.path.abspath( 'rdir' )  # remote run directory
+    ld = os.path.abspath( 'ldir' )  # local run and log directory
+    time.sleep(1)
+
+    os.chdir( ld )
+
+    cmd = command.Command( 'touch' ).arg( 'file name' )
+    jid = runjob.run_job( cmd, shell=False,
+                          machine=sshmach, sshexe=sshprog,
+                          chdir=rd, poll_interval=2 )
+    jb = runjob.wait_job( jid, poll_interval=2 )
+    assert jb.get( 'exit' ) == 0
+
+    fL = fnmatch.filter( os.listdir( rd ), 'touch-*.log' )
+    assert len(fL) == 1
+    assert os.path.exists( os.path.join( rd, 'file name' ) )
 
 
 def timeout1():

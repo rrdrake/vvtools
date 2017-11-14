@@ -41,7 +41,7 @@ def main():
     if len(argL) == 0:
         argL = """expand01 expand02 expand03 expand04
                   args01 args02
-                  cmd01 cmd02 cmd03 cmd04 cmd05 cmd06
+                  cmd01 cmd02 cmd03 cmd04 cmd05 cmd06 cmd07
                   repr01
                   frame01 frame02
                   vars01 vars02
@@ -506,6 +506,46 @@ def cmd06():
     assert cmd1.asShellString() == '-ltr'
     assert cmd2.asShellString( shell=False ) == 'ls -ltr filename'
     assert cmd2.asShellString() == 'ls -ltr filename'
+
+
+def cmd07():
+    """
+    using invalid arguments to build the command
+    """
+    try:
+        cmd = Command( ['touch','file'] )
+    except command.CommandException:
+        pass
+    else:
+        raise Exception( 'expected an exception' )
+
+    try:
+        cmd = Command( ('touch','file') )
+    except command.CommandException:
+        pass
+    else:
+        raise Exception( 'expected an exception' )
+
+    try:
+        cmd = Command().add( ['touch','file'] )
+    except command.CommandException:
+        pass
+    else:
+        raise Exception( 'expected an exception' )
+
+    try:
+        cmd = Command().arg( ['touch','file'] )
+    except command.CommandException:
+        pass
+    else:
+        raise Exception( 'expected an exception' )
+
+    try:
+        cmd = Command().escape( ['touch','file'] )
+    except command.CommandException:
+        pass
+    else:
+        raise Exception( 'expected an exception' )
 
 
 def repr01():

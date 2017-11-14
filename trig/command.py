@@ -175,8 +175,11 @@ class Command:
         for arg in arglist:
             if isinstance( arg, Command ):
                 self.argL.extend( arg.argL )
+            elif type(arg) == type(''):
+                self.argL.append( SingleArgument( arg ) )
             else:
-                self.argL.append( SingleArgument( str(arg) ) )
+                raise CommandException(
+                    'arg must be a Command or string, not '+str(type(arg)) )
         return self
 
     def escape(self, *arglist):
@@ -192,8 +195,11 @@ class Command:
         for arg in arglist:
             if isinstance( arg, Command ):
                 self.argL.extend( arg.argL )
+            elif type(arg) == type(''):
+                self.argL.append( EscapedArgument( arg ) )
             else:
-                self.argL.append( EscapedArgument( str(arg) ) )
+                raise CommandException(
+                    'arg must be a Command or string, not '+str(type(arg)) )
         return self
 
     def asShellString(self, shell=True):
@@ -280,18 +286,24 @@ class Command:
         for arg1 in arglist:
             if isinstance( arg1, Command ):
                 self.argL.extend( arg1.argL )
-            else:
-                s = self._expandVars( str(arg1) )
+            elif type(arg1) == type(''):
+                s = self._expandVars( arg1 )
                 for arg2 in shlex.split(s):
                     self.argL.append( SingleArgument(arg2) )
+            else:
+                raise CommandException(
+                    'arg must be a Command or string, not '+str(type(arg1)) )
 
     def _appendReplace(self, *arglist):
         for arg in arglist:
             if isinstance( arg, Command ):
                 self.argL.extend( arg.argL )
-            else:
-                s = self._expandVars( str(arg) )
+            elif type(arg) == type(''):
+                s = self._expandVars( arg )
                 self.argL.append( SingleArgument(s) )
+            else:
+                raise CommandException(
+                    'arg must be a Command or string, not '+str(type(arg)) )
 
     def _expandVars(self, astring):
         """
