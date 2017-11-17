@@ -247,7 +247,8 @@ def set_test_form( tspec, vspecs=None ):
         tspec.setForm( 'file', 'runscript' )
         cmdL = ['/bin/csh', '-f', './runscript']
         tspec.setForm( 'cmd', cmdL )
-        tspec.setBaseline( 'cmd', cmdL+['--baseline'] )
+        if tspec.hasBaseline():
+            tspec.setBaseline( 'cmd', cmdL+['--baseline'] )
     
     else:
         
@@ -280,14 +281,15 @@ def set_test_form( tspec, vspecs=None ):
         if lang: tspec.setForm( 'lang', lang )
         tspec.setForm( 'cmd', cmdL )
 
-        arg = tspec.getBaseline( 'arg', None )
-        if arg:
-            basecmdL = tspec.getBaseline( 'cmd', None )
-            if basecmdL == None:
-                # use the test script itself for the baseline script
-                basecmdL = cmdL
-                if lang: tspec.setBaseline( 'lang', lang )
-            tspec.setBaseline( 'cmd', basecmdL+[arg] )
+        if tspec.hasBaseline():
+          arg = tspec.getBaseline( 'arg', None )
+          if arg:
+              basecmdL = tspec.getBaseline( 'cmd', None )
+              if basecmdL == None:
+                  # use the test script itself for the baseline script
+                  basecmdL = cmdL
+                  if lang: tspec.setBaseline( 'lang', lang )
+              tspec.setBaseline( 'cmd', basecmdL+[arg] )
 
         bfile = tspec.getBaseline( 'file', None )
         if bfile:

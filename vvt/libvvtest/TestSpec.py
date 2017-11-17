@@ -186,6 +186,12 @@ class TestSpec:
         """
         return [] + self.cpfiles
     
+    def hasBaseline(self):
+        """
+        Returns true if this test has a baseline specification.
+        """
+        return len(self.baseline) > 0
+
     def getBaselineFiles(self):
         """
         Returns a list of pairs (test directory name, source directory name)

@@ -249,7 +249,8 @@ class TestList:
         return self.tspecs.values()
 
     def loadAndFilter(self, maxprocs, filter_dir=None,
-                            analyze_only=0, prune=False ):
+                            analyze_only=0, prune=False,
+                            baseline=False ):
         """
         Creates the active test list using the scanned tests and the tests
         read in from a test list file.  A subdirectory filter is applied and
@@ -293,6 +294,8 @@ class TestList:
                 else:
                     # read from test source, which double checks filtering
                     keep = TestSpecCreator.refreshTest( t, self.ufilter )
+                    if baseline and not t.hasBaseline():
+                        keep = False
                     if keep:
                         self.active[ xdir ] = t
 
