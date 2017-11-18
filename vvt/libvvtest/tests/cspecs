@@ -1,6 +1,11 @@
 #!/usr/bin/env python
+#RUNTEST:
 
-import os, sys, re
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import re
 import time
 
 # this will os.chdir() to a subdirectory
@@ -45,7 +50,7 @@ def test01():
     xdoc = xreader.readDoc('db1.xml')
     db = CommonSpec.CommonSpecDB()
     CommonSpec.scanCommonSpecs( xdoc, db )
-    print db.getClear()
+    print3( db.getClear() )
     assert db.getClear() != None
     testNonEmptyLines( db.getClear(), ['unsetenv VARNAME1',
                                        'unsetenv VARNAME2'] )
@@ -57,7 +62,7 @@ def test01():
 
     xdoc = xreader.readDoc('db2.xml')
     CommonSpec.scanCommonSpecs( xdoc, db )
-    print db.getClear()
+    print3( db.getClear() )
     assert db.getClear() != None
     testNonEmptyLines( db.getClear(), ['unsetenv VARNAME1',
                                        'unsetenv VARNAME2',
@@ -72,7 +77,7 @@ def test01():
     xdoc = xreader.readDoc('db3.xml')
     db = CommonSpec.CommonSpecDB()
     try: CommonSpec.scanCommonSpecs( xdoc, db )
-    except CommonSpec.CommonSpecError, e: print e
+    except CommonSpec.CommonSpecError: print3( sys.exc_info()[1] )
     else: raise "expected a CommonSpec.CommonSpecError error"
 
 
@@ -94,7 +99,7 @@ def test02():
     CommonSpec.scanCommonSpecs( xdoc, db )
     assert len( db.getDefines() ) == 1
     cs = db.getDefines()[0]
-    print cs
+    print3( cs )
     testNonEmptyLines( cs.getDefine('anything'), ['# the script'] )
     assert cs.getVariable('anything') == None
     assert cs.getContent('anything') == None
@@ -112,7 +117,7 @@ def test02():
     CommonSpec.scanCommonSpecs( xdoc, db )
     assert len( db.getDefines() ) == 1
     cs = db.getDefines()[0]
-    print cs
+    print3( cs )
     testNonEmptyLines( cs.getDefine('something'), ['# default'] )
     testNonEmptyLines( cs.getDefine('Linux'), ['# Linux'] )
     assert cs.getVariable('anything') == None
@@ -128,7 +133,7 @@ def test02():
     xdoc = xreader.readDoc('db6.xml')
     db = CommonSpec.CommonSpecDB()
     try: CommonSpec.scanCommonSpecs( xdoc, db )
-    except CommonSpec.CommonSpecError, e: print e
+    except CommonSpec.CommonSpecError: print3( sys.exc_info()[1] )
     else: raise "expected a CommonSpec.CommonSpecError error"
 
 
@@ -147,7 +152,7 @@ def test03():
     xdoc = xreader.readDoc('db7.xml')
     db = CommonSpec.CommonSpecDB()
     try: CommonSpec.scanCommonSpecs( xdoc, db )
-    except CommonSpec.CommonSpecError, e: print e
+    except CommonSpec.CommonSpecError: print3( sys.exc_info()[1] )
     else: raise "expected a CommonSpec.CommonSpecError error"
 
     writefile( 'db8.xml', """
@@ -161,7 +166,7 @@ def test03():
     CommonSpec.scanCommonSpecs( xdoc, db )
     csL = db.getVariables()
     assert len(csL) == 1
-    print csL[0]
+    print3( csL[0] )
     assert csL[0].getVariable('any')[0] == "VARNAME"
     assert csL[0].getVariable('any')[1].strip() == ""
 
@@ -182,7 +187,7 @@ def test03():
     CommonSpec.scanCommonSpecs( xdoc, db )
     csL = db.getVariables()
     assert len(csL) == 1
-    print csL[0].getVariable('other')
+    print3( csL[0].getVariable('other') )
     assert csL[0].getVariable('other')[0] == "VARNAME"
     fragL = csL[0].getVariable('other')[1]
     assert len(fragL) == 1
@@ -210,14 +215,14 @@ def test03():
     CommonSpec.scanCommonSpecs( xdoc, db )
     csL = db.getVariables()
     assert len(csL) == 1
-    print csL[0].getVariable('other')
+    print3( csL[0].getVariable('other') )
     assert csL[0].getVariable('other')[0] == "VARNAME"
     locL = csL[0].getVariable('other')[1]
     assert len(locL) == 2
     locp = locL[0]
     assert len(locp) == 2 and locp == ['path1','path2']
     assert locL[1] == '-h'
-    print csL[0].getVariable('Linux')
+    print3( csL[0].getVariable('Linux') )
     locL = csL[0].getVariable('Linux')[1]
     assert len(locL) == 2
     locp = locL[0]
@@ -250,18 +255,18 @@ def test04():
     CommonSpec.scanCommonSpecs( xdoc, db )
     csL = db.getVariables()
     assert len(csL) == 1
-    print csL[0].getVariable('any')
+    print3( csL[0].getVariable('any') )
     assert csL[0].getVariable('any')[0] == None
     locL = csL[0].getVariable('any')[1]
     assert len(locL) == 1
     frag = locL[0]
     testNonEmptyLines( locL[0], ['set RUNME = runme'] )
     cont = csL[0].getContent('any')
-    print cont
+    print3( cont )
     testNonEmptyLines( cont, ['$RUNME $(CONTENT)'] )
 
     cs = db.findContent('runme')
-    print cs
+    print3( cs )
     assert cs.getVariable('any')[0] == None
     locL = cs.getVariable('any')[1]
     assert len(locL) == 1
@@ -402,10 +407,10 @@ def test05():
 def testNonEmptyLines( script, line_list ):
     i = 0
     for line in script.split( "\n" ):
-      line = line.strip()
-      if line:
-        assert line == line_list[i]
-        i = i + 1
+        line = line.strip()
+        if line:
+            assert line == line_list[i]
+            i = i + 1
     assert i == len(line_list)
 
 

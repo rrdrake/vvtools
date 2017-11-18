@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
 import os
 import string
 
@@ -247,19 +250,19 @@ def scanCommonSpecs( filedoc, common_db ):
     if len(ndL) > 1:
       raise CommonSpecError( \
               'more than one "clear" block not allowed, line ' + \
-              str(ndL[-1].line_no) )
+              str(ndL[-1].getLineNumber()) )
     if len(ndL) == 1:
       common_db.addClear( string.strip( ndL[0].getContent() ) )
     
     for nd in filedoc.getSubNodes():
       
-      if nd.name == "define":
+      if nd.getName() == "define":
         D = {}
         for snd in nd.getSubNodes():
-          if snd.name == "default":
+          if snd.getName() == "default":
             D[''] = string.strip( snd.getContent() )
           else:
-            D[snd.name] = string.strip( snd.getContent() )
+            D[snd.getName()] = string.strip( snd.getContent() )
         if len(D) > 0:
           cs = CommonSpec()
           cs.setDefinition(D)
@@ -267,9 +270,9 @@ def scanCommonSpecs( filedoc, common_db ):
         else:
           raise CommonSpecError( \
                    'a <define> block must have at least one sub-block, ' + \
-                   'line ' + str(nd.line_no) )
+                   'line ' + str(nd.getLineNumber()) )
         
-      elif nd.name == "executable":
+      elif nd.getName() == "executable":
         
         xname = nd.getAttr( "name", None )
         pname = nd.getAttr( "product", None )
@@ -282,8 +285,8 @@ def scanCommonSpecs( filedoc, common_db ):
           
           for snd in nd.getSubNodes():
             
-            if snd.name == "default": k = ''
-            else:                     k = snd.name
+            if snd.getName() == "default": k = ''
+            else:                          k = snd.getName()
             
             locL = snd.matchNodes( ['location'] )
             if len(locL) > 0:
@@ -297,7 +300,7 @@ def scanCommonSpecs( filedoc, common_db ):
                   raise CommonSpecError( \
                     'a <location> block cannot have a "search" attribute ' + \
                     'when the <execute> block does not have a "variable" ' + \
-                    'attribute, ' + str(locnd.line_no) )
+                    'attribute, ' + str(locnd.getLineNumber()) )
               else:
                 defineD[k] = ( string.strip(locnd.getContent()), )
             
@@ -321,7 +324,7 @@ def scanCommonSpecs( filedoc, common_db ):
         else:
           raise CommonSpecError( \
             'an <executable> block must have a "name" or "variable" ' + \
-            'attribute, ' + str(nd.line_no) )
+            'attribute, ' + str(nd.getLineNumber()) )
 
 
 ###########################################################################

@@ -287,12 +287,12 @@ def remove_results():
         if f[:12] == 'TestResults.':
             if os.path.islink(f):
                 dest = os.readlink(f)
-                print 'rm -r ' + dest
+                print3( 'rm -r ' + dest )
                 shutil.rmtree(dest)
-                print 'rm ' + f
+                print3( 'rm ' + f )
                 os.remove(f)
             else:
-                print 'rm -r ' + f
+                print3( 'rm -r ' + f )
                 shutil.rmtree( f, 1 )
 
 # these have to be modified if/when the output format changes in vvtest

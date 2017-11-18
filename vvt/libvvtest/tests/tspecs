@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#RUNTEST:
 
 import sys
 sys.dont_write_bytecode = True
@@ -40,6 +41,102 @@ def main():
 
 
 #####################################################################
+
+def xread01():
+    """
+    basic use of ElementTree (arrived in python 2.5)
+    """
+    import xml.etree.ElementTree as xtree
+
+    writefile( 'foo.xml', """
+        <big>
+            foo
+            <bad color="brown">
+                home
+            </bad>
+            bar
+            <wolf color="grey">
+                den
+            </wolf>
+            baz
+        </big>
+        """ )
+
+    tree = xtree.parse( 'foo.xml' )
+
+    root = tree.getroot()
+    print3( 'root', repr(root.tag), repr(root.text),
+                    repr(root.tail), repr(root.attrib) )
+    assert root.tag == 'big'
+    assert root.text.strip() == 'foo'
+    assert root.tail == None
+
+    subL = list(root)
+    print3( 'root children', subL )
+    assert len(subL) == 2
+
+    bad = subL[0]
+    assert bad.tag == 'bad'
+    assert len(bad.attrib) == 1 and bad.attrib['color'] == 'brown'
+    assert bad.text.strip() == 'home'
+    assert bad.tail.strip() == 'bar'
+
+    wolf = subL[1]
+    assert wolf.tag == 'wolf'
+    assert len(wolf.attrib) == 1 and wolf.attrib['color'] == 'grey'
+    assert wolf.text.strip() == 'den'
+    assert wolf.tail.strip() == 'baz'
+
+
+def xread02():
+    """
+    an xml file error should raise an exception
+    """
+    import xml.etree.ElementTree as xtree
+
+    writefile( 'foo.xml', """
+        <big>
+            foo
+            <bad color="brown">
+                home
+            baz
+        </big>
+        """ )
+
+    # determine what exception class is being used
+    try:
+        tree = xtree.parse( 'foo.xml' )
+    except:
+        ElementTreeException = sys.exc_info()[0]
+    else:
+        raise Exception( 'expected an exception' )
+
+    # catch that exception class
+    try:
+        tree = xtree.parse( 'foo.xml' )
+    except ElementTreeException:
+        print3( sys.exc_info()[1] )
+    else:
+        raise Exception( 'expected an exception' )
+
+
+def xread03():
+    """
+    """
+    writefile( 'foo.xml', """
+        <big>
+            foo
+            <bad color="brown">
+                home
+            </bad>
+            baz
+        </big>
+        """ )
+
+    import ElementTreeReader as etr
+    doc = etr.readxml( 'foo.xml' )
+    print3( 'doc line', doc._start_line_number, doc._end_line_number )
+
 
 def test01():
     """

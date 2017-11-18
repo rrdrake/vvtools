@@ -64,9 +64,10 @@ def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
     ext = os.path.splitext( relpath )[1]
     
     if ext == '.xml':
-        
+
+        docreader = xmlwrapper.XmlDocReader()
         try:
-            filedoc = readxml( fname )
+            filedoc = docreader.readDoc( fname )
         except xmlwrapper.XmlError:
             raise TestSpecError( str( sys.exc_info()[1] ) )
         
@@ -318,8 +319,9 @@ def refreshTest( testobj, ufilter=None ):
     keep = True
     
     if ext == '.xml':
-        
-        filedoc = readxml( fname )
+
+        docreader = xmlwrapper.XmlDocReader()
+        filedoc = docreader.readDoc( fname )
 
         # run through the test name logic to check XML validity
         nameL = testNameList(filedoc)
@@ -1452,25 +1454,12 @@ def filterAttr_scr( attrs, testname, paramD, ufilter, lineno ):
 
 ###########################################################################
 
-xmldocreader = None
-
-def readxml( filename ):
-    """
-    Uses the XML reader from the xmlwrapper module to read the XML file and
-    return an XML DOM object.
-    """
-    global xmldocreader
-    if xmldocreader == None:
-        xmldocreader = xmlwrapper.XmlDocReader()
-    return xmldocreader.readDoc( filename )
-
-
 def testNameList( filedoc ):
     """
     Determine the test name and check for validity.  If this XML file is not
     an "rtest" then returns None.  Otherwise returns a list of test names.
     """
-    if filedoc.name != "rtest":
+    if filedoc.getName() != "rtest":
         return None
     
     # determine the test name
@@ -1478,14 +1467,14 @@ def testNameList( filedoc ):
     name = filedoc.getAttr('name', '').strip()
     if not name or not allowableString(name):
         raise TestSpecError( 'missing or invalid test name attribute, ' + \
-                             'line ' + str(filedoc.line_no) )
+                             'line ' + str(filedoc.getLineNumber()) )
     
     L = [ name ]
     for xnd in filedoc.matchNodes( ['rtest'] ):
         nm = xnd.getAttr('name', '').strip()
         if not nm or not allowableString(nm):
             raise TestSpecError( 'missing or invalid test name attribute, ' + \
-                                 'line ' + str(xnd.line_no) )
+                                 'line ' + str(xnd.getLineNumber()) )
         L.append( nm )
 
     return L
@@ -1588,9 +1577,10 @@ def parseTestParameters( filedoc, tname, ufilter, force_params ):
         
         if n in ["parameters","parameter"]:
           raise TestSpecError( n + " attribute not allowed here, " + \
-                               "line " + str(nd.line_no) )
+                               "line " + str(nd.getLineNumber()) )
 
-        isfa, istrue = filterAttr( n, v, tname, None, ufilter, str(nd.line_no) )
+        isfa, istrue = filterAttr( n, v, tname, None, ufilter,
+                                   str(nd.getLineNumber()) )
         if isfa:
           if not istrue:
             skip = 1
@@ -1599,17 +1589,17 @@ def parseTestParameters( filedoc, tname, ufilter, force_params ):
         
         if not allowableVariable(n):
           raise TestSpecError( 'bad parameter name: "' + n + '", line ' + \
-                               str(nd.line_no) )
+                               str(nd.getLineNumber()) )
         
         vals = string.split(v)
         if len(vals) == 0:
           raise TestSpecError( "expected one or more values separated by " + \
-                               "spaces, line " + str(nd.line_no) )
+                               "spaces, line " + str(nd.getLineNumber()) )
         
         for val in vals:
           if not allowableString(val):
             raise TestSpecError( 'bad parameter value: "' + val + '", line ' + \
-                                 str(nd.line_no) )
+                                 str(nd.getLineNumber()) )
         
         vals = force_params.get(n,vals)
         L = [ n ]
@@ -1618,7 +1608,7 @@ def parseTestParameters( filedoc, tname, ufilter, force_params ):
         for mL in pL:
           if len(L) != len(mL):
             raise TestSpecError( 'combined parameters must have the same ' + \
-                                 'number of values, line ' + str(nd.line_no) )
+                                 'number of values, line ' + str(nd.getLineNumber()) )
         
         pL.append( L )
       
@@ -1669,12 +1659,12 @@ def parseKeywords( filedoc, tname, ufilter ):
           keyD[key] = None
         else:
           raise TestSpecError( 'invalid keyword: "' + key + '", line ' + \
-                               str(nd.line_no) )
+                               str(nd.getLineNumber()) )
     
     for nd in filedoc.getSubNodes():
       if not testname_ok( nd, tname, ufilter ):
         continue
-      if nd.name == 'parameterize':
+      if nd.getName() == 'parameterize':
         # the parameter names are included in the test keywords
         for n,v in nd.getAttrs().items():
           if n in ['parameter','parameters','testname'
@@ -1682,7 +1672,7 @@ def parseKeywords( filedoc, tname, ufilter ):
             pass
           elif allowableVariable(n):
             keyD[ str(n) ] = None
-      elif nd.name == 'execute':
+      elif nd.getName() == 'execute':
         # the execute name is included in the test keywords
         n = nd.getAttr('name', None)
         if n != None:
@@ -1723,7 +1713,7 @@ def parseIncludeTest( filedoc, tname, ufilter ):
       
       if nd.hasAttr( 'parameters' ) or nd.hasAttr( 'parameter' ):
         raise TestSpecError( 'the "parameters" attribute not allowed '
-                             'here, line ' + str(nd.line_no) )
+                             'here, line ' + str(nd.getLineNumber()) )
 
       if not testname_ok( nd, tname, ufilter ):
         # the <include> does not apply to this test name
@@ -1758,7 +1748,7 @@ class PlatformEvaluator:
           
           if nd.hasAttr( 'parameters' ) or nd.hasAttr( 'parameter' ):
             raise TestSpecError( 'the "parameters" attribute not allowed '
-                                 'here, line ' + str(nd.line_no) )
+                                 'here, line ' + str(nd.getLineNumber()) )
           
           if not testname_ok( nd, self.tname, self.ufilter ):
             # the <include> does not apply to this test name
@@ -1770,7 +1760,7 @@ class PlatformEvaluator:
             
             if '/' in s:
               raise TestSpecError( 'invalid "platforms" attribute content '
-                                   ', line ' + str(nd.line_no) )
+                                   ', line ' + str(nd.getLineNumber()) )
 
             wx = FilterExpressions.WordExpression(s)
 
@@ -1839,10 +1829,10 @@ def parseAnalyze( t, filedoc, ufilter ):
         if n in ["parameter","parameters"]:
           raise TestSpecError( 'an <analyze> block cannot have a ' + \
                                '"parameters=..." attribute: ' + \
-                               ', line ' + str(nd.line_no) )
+                               ', line ' + str(nd.getLineNumber()) )
         
         isfa, istrue = filterAttr( n, v, t.getName(), None,
-                                   ufilter, str(nd.line_no) )
+                                   ufilter, str(nd.getLineNumber()) )
         if isfa and not istrue:
           skip = 1
           break
@@ -1852,7 +1842,7 @@ def parseAnalyze( t, filedoc, ufilter ):
           content = str( nd.getContent() )
         except:
           raise TestSpecError( 'the content in an <analyze> block must be ' + \
-                               'ASCII characters, line ' + str(nd.line_no) )
+                               'ASCII characters, line ' + str(nd.getLineNumber()) )
         if a == None:
           a = content.strip()
         else:
@@ -1876,7 +1866,7 @@ def parseTimeouts( t, filedoc, ufilter ):
       skip = 0
       for n,v in nd.getAttrs().items():
         isfa, istrue = filterAttr( n, v, t.getName(), t.getParameters(),
-                                   ufilter, str(nd.line_no) )
+                                   ufilter, str(nd.getLineNumber()) )
         if isfa and not istrue:
           skip = 1
           break
@@ -1889,10 +1879,10 @@ def parseTimeouts( t, filedoc, ufilter ):
           try: to = int(val)
           except:
             raise TestSpecError( 'timeout value must be an integer: "' + \
-                                 val + '", line ' + str(nd.line_no) )
+                                 val + '", line ' + str(nd.getLineNumber()) )
           if to < 0:
             raise TestSpecError( 'timeout value must be non-negative: "' + \
-                                 val + '", line ' + str(nd.line_no) )
+                                 val + '", line ' + str(nd.getLineNumber()) )
         
         if to != None:
           t.setTimeout( to )
@@ -1924,7 +1914,7 @@ def parseExecuteList( t, filedoc, ufilter ):
       skip = 0
       for n,v in nd.getAttrs().items():
         isfa, istrue = filterAttr( n, v, t.getName(), t.getParameters(),
-                                   ufilter, str(nd.line_no) )
+                                   ufilter, str(nd.getLineNumber()) )
         if isfa and not istrue:
           skip = 1
           break
@@ -1934,7 +1924,7 @@ def parseExecuteList( t, filedoc, ufilter ):
         for n in L:
           if not allowableVariable(n):
             raise TestSpecError( 'invalid environment variable name: "' + \
-                                 n + '"' + ', line ' + str(nd.line_no) )
+                                 n + '"' + ', line ' + str(nd.getLineNumber()) )
         for n in L:
           if not os.environ.has_key(n):
             skip = 1
@@ -1951,7 +1941,7 @@ def parseExecuteList( t, filedoc, ufilter ):
         else:
           if not xname or not allowableString(xname):
             raise TestSpecError( 'invalid name value: "' + xname + \
-                                 '", line ' + str(nd.line_no) )
+                                 '", line ' + str(nd.getLineNumber()) )
 
         xstatus = nd.getAttr( 'expect', None )
         
@@ -2050,7 +2040,7 @@ def collectFileNames( nd, flist, tname, paramD, ufilter ):
       skip = 0
       for n,v in nd.getAttrs().items():
         isfa, istrue = filterAttr( n, v, tname, paramD,
-                                   ufilter, str(nd.line_no) )
+                                   ufilter, str(nd.getLineNumber()) )
         if isfa and not istrue:
           skip = 1
           break
@@ -2068,18 +2058,18 @@ def collectFileNames( nd, flist, tname, paramD, ufilter ):
             raise TestSpecError( 'the number of file names in the ' + \
                '"linkname" attribute must equal the number of names in ' + \
                'the content (' + str(len(tnames)) + ' != ' + str(len(fileL)) + \
-               '), line ' + str(nd.line_no) )
+               '), line ' + str(nd.getLineNumber()) )
           for i in range(len(fileL)):
             if os.path.isabs(fileL[i]) or os.path.isabs(tnames[i]):
               raise TestSpecError( 'file names cannot be absolute paths, ' + \
-                                   'line ' + str(nd.line_no) )
+                                   'line ' + str(nd.getLineNumber()) )
             fL.append( [str(fileL[i]), str(tnames[i])] )
         
         else:
           for f in fileL:
             if os.path.isabs(f):
               raise TestSpecError( 'file names cannot be absolute paths, ' + \
-                                   'line ' + str(nd.line_no) )
+                                   'line ' + str(nd.getLineNumber()) )
             fL.append( [str(f), None] )
         
         variableExpansion( tname, ufilter.platformName(), paramD, fL )
@@ -2088,7 +2078,7 @@ def collectFileNames( nd, flist, tname, paramD, ufilter ):
     
     else:
       raise TestSpecError( 'expected a list of file names as content' + \
-                           ', line ' + str(nd.line_no) )
+                           ', line ' + str(nd.getLineNumber()) )
 
 
 def globFileNames( nd, flist, t, ufilter, nofilter=0 ):
@@ -2110,10 +2100,10 @@ def globFileNames( nd, flist, t, ufilter, nofilter=0 ):
       skip = 0
       for n,v in nd.getAttrs().items():
         isfa, istrue = filterAttr( n, v, tname, paramD,
-                                   ufilter, str(nd.line_no) )
+                                   ufilter, str(nd.getLineNumber()) )
         if nofilter and isfa:
           raise TestSpecError( 'filter attributes not allowed here' + \
-                               ', line ' + str(nd.line_no) )
+                               ', line ' + str(nd.getLineNumber()) )
         if isfa and not istrue:
           skip = 1
           break
@@ -2128,7 +2118,7 @@ def globFileNames( nd, flist, t, ufilter, nofilter=0 ):
     
     else:
       raise TestSpecError( 'expected a list of file names as content' + \
-                           ', line ' + str(nd.line_no) )
+                           ', line ' + str(nd.getLineNumber()) )
 
 
 def parseFiles( t, filedoc, ufilter ):
@@ -2207,7 +2197,7 @@ def parseBaseline( t, filedoc, ufilter ):
       skip = 0
       for n,v in nd.getAttrs().items():
         isfa, istrue = filterAttr( n, v, t.getName(), t.getParameters(),
-                                   ufilter, str(nd.line_no) )
+                                   ufilter, str(nd.getLineNumber()) )
         if isfa and not istrue:
           skip = 1
           break
@@ -2231,7 +2221,7 @@ def parseBaseline( t, filedoc, ufilter ):
               raise TestSpecError( 'the number of file names in the ' + \
                '"file" attribute must equal the number of names in ' + \
                'the "destination" attribute (' + str(len(fdest)) + ' != ' + \
-               str(len(fname)) + '), line ' + str(nd.line_no) )
+               str(len(fname)) + '), line ' + str(nd.getLineNumber()) )
             
             for i in range(len(fname)):
               fL.append( [str(fname[i]), str(fdest[i])] )
