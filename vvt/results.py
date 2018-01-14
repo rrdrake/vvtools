@@ -2126,9 +2126,11 @@ def report_generation( optD, fileL ):
 
         print3( dashboard_preamble )
         if '--webloc' in optD:
-            print3( 'Go to the <a href="' + optD['--webloc'] + \
-                    '">full report</a>.\n<br>\n' )
-        
+            loc = optD['--webloc']
+            print3( 'Go to the <a href="'+loc+ '">full report</a>.\n<br>\n' )
+            loc = os.path.join( os.path.dirname( loc ), 'testrun.html' )
+            print3( 'Also the <a href="'+loc+'">machine summaries</a>.\n<br>\n' )
+
         html_start_rollup( sys.stdout, dmap, "Production Rollup", 7 )
         for rkey,cnts,rL in primary:
             html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
