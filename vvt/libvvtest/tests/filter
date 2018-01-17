@@ -19,7 +19,7 @@ def main():
 
     if len(argL) == 0:
         argL = """test01 test01batch test02 test03 test04 test05 test06
-                  test07 test08 test09
+                  test07 test08 test09 test10
                """.split()
 
     # set these for the batch tests
@@ -785,6 +785,75 @@ def test09():
         assert len(L) == 2
         assert L[0][-1] == 'btest.np=1'
         assert L[1][-1] == 'btest.np=2'
+
+
+def test10():
+    """
+    filter tests out by input file search
+    """
+    writefile( 'solar.inp', """
+        foo and bar
+        this and that
+        """ )
+    writefile( 'solar.xml', """
+        <rtest name="solar">
+          <execute> echo "solar ran" </execute>
+          <link_files> solar.inp </link_files>
+        </rtest>""" )
+    writescript( 'extrasolar.vvt', """
+        #!/usr/bin/env python
+        #VVT: link : solar.inp
+        import os
+        print ( "extrasolar ran" )
+        """ )
+
+    out,np,nd,nf,nn = run_vvtest()
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    platname = platform_name( out )
+
+    remove_results()
+    out,np,nd,nf,nn = run_vvtest( '--search foo' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+    remove_results()
+    out,np,nd,nf,nn = run_vvtest( '--search aliensrock' )
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+    remove_results()
+    out,np,nd,nf,nn = run_vvtest( '--search foo' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-R --search aliensrock' )
+    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( '-R --search foo' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+
+    if platname in batchplatforms:
+        remove_results()
+
+        out,np,nd,nf,nn = run_vvtest( '--batch' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        platname = platform_name( out )
+
+        remove_results()
+        out,np,nd,nf,nn = run_vvtest( '--search foo --batch' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+        remove_results()
+        out,np,nd,nf,nn = run_vvtest( '--search aliensrock --batch' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        remove_results()
+        out,np,nd,nf,nn = run_vvtest( '--search foo --batch' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = run_vvtest( '-R --search aliensrock --batch' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = run_vvtest( '-R --search foo --batch' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
 
 #######################################################################

@@ -60,7 +60,11 @@ class ExpressionSet:
         """
         """
         return self.getAttr( 'platform_name', None )
-    
+
+    def getOptionList(self):
+        ""
+        return self.attrs.get( 'option_list', [] )
+
     def satisfies_keywords(self, keyword_list):
         """
         """
@@ -92,13 +96,6 @@ class ExpressionSet:
         else:
           self.attrs['platform_expr'] = WordExpression()
     
-    def evaluate_platform_expr(self, expr):
-        """
-        Evaluate the given expression against the current platform name.
-        """
-        x = WordExpression(expr)
-        return x.evaluate( self._equals_platform )
-    
     def evaluate_platform_include(self, platform_test_func):
         """
         Evaluate the command line platform expression using the given function
@@ -120,20 +117,13 @@ class ExpressionSet:
         # expression is evaluated using the given 'platform_test_func'
         return platexpr.evaluate( platform_test_func )
     
-    def evauate_testname_expr(self, testname, expr):
-        """
-        """
-        x = WordExpression(expr)
-        L = [ testname ]
-        return x.evaluate( L.count )
-
     def evaluate_option_expr(self, expr):
         """
         Evaluate the given expression against the list of command line options.
         """
-        x = WordExpression(expr)
+        #x = WordExpression(expr)
         opL = self.attrs.get( 'option_list', [] )
-        return x.evaluate( opL.count )
+        return expr.evaluate( opL.count )
     
     def file_search(self, tspec):
         """
@@ -188,12 +178,6 @@ class ExpressionSet:
             return False
 
         return True
-    
-    def _equals_platform(self, platname):
-        n = self.attrs.get('platform_name',None)
-        if n != None:
-          return platname == n
-        return 1
 
 
 ###########################################################################

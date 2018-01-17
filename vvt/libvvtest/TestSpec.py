@@ -83,7 +83,7 @@ class TestSpec:
         """
         return []+self.origin
 
-    def getKeywords(self, result_attrs=0):
+    def getKeywords(self, result_attrs=False):
         """
         Returns the list of keyword strings.  If 'result_attrs' is true, the
         attribute values for "state" and "result" are included if they exist.
@@ -278,7 +278,9 @@ class TestSpec:
         path must be a relative path name.
         """
         assert not os.path.isabs(filepath)
-        
+
+        self.data = {}
+
         self.form = {}
 
         self.origin = []  # strings, such as "file", "string", "copy"
@@ -288,9 +290,9 @@ class TestSpec:
         self.name = name
         self.rootpath = rootpath
         self.filepath = filepath
-        
+
         self.parent_xdir = None    # if child, this is the parent execute dir
-        
+
         self.keywords = []         # list of strings
         self.params = {}           # name string to value string
         self.analyze = {}          # analyze script specifications
@@ -308,11 +310,11 @@ class TestSpec:
                                    # allowed characters are restricted
         self.paramD = {}           # for parent tests, this maps parameter
                                    # names to a list of values
-        
+
         # initial execute directory; recomputed by setParameters()
         self.xdir = os.path.normpath( \
                         os.path.join( os.path.dirname(filepath), name ) )
-        
+
         # set the default attributes
         self.attrs[ 'state' ] = 'notrun'
         self.attrs[ 'xtime' ] = -1
@@ -320,7 +322,7 @@ class TestSpec:
 
         # always add the test specification file to the linked file list
         self.lnfiles.append( (os.path.basename(self.filepath),None) )
-    
+
     def __cmp__(self, rhs):
         if rhs == None: return 1  # None objects are always less
         if   self.name < rhs.name: return -1
@@ -331,7 +333,13 @@ class TestSpec:
     
     def __repr__(self):
         return 'TestSpec(name=' + str(self.name) + ', xdir=' + self.xdir + ')'
-    
+
+    def addDataNameIfNeededAndReturnValue(self, name, data_type):
+        ""
+        if name not in self.data:
+            self.data[name] = data_type()
+        return self.data[name]
+
     ##########################################################
     
     # construction methods
@@ -363,7 +371,25 @@ class TestSpec:
         """
         """
         self.parent_xdir = parent_xdir
-    
+
+    def addEnablePlatformExpression(self, word_expression):
+        ""
+        L = self.addDataNameIfNeededAndReturnValue( 'platform enable', list )
+        L.append( word_expression )
+
+    def addEnableOptionExpression(self, word_expression):
+        ""
+        L = self.addDataNameIfNeededAndReturnValue( 'option enable', list )
+        L.append( word_expression )
+
+    def getPlatformEnableExpressions(self):
+        ""
+        return self.data.get( 'platform enable', [] )
+
+    def getOptionEnableExpressions(self):
+        ""
+        return self.data.get( 'option enable', [] )
+
     def setKeywords(self, keyword_list):
         """
         A list of strings.

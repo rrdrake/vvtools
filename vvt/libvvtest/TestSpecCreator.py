@@ -26,11 +26,217 @@ def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
     the name of the test file relative to 'rootpath' (it must not be an
     absolute path).  If 'force_params' is not None, then any parameters in
     the test that are in the 'force_params' dictionary have their values
-    replaced for that parameter name.  The 'ufilter' argument must be None
-    or an ExpressionSet instance.
+    replaced for that parameter name.
     
     Returns a list of TestSpec objects, including a "parent" test if needed.
 
+
+    Is the following note about parameter filtering still relevant?  Is it
+    any different when filtering is performed above create/refresh?
+
+        Important: this function always applies filtering, even if the
+        "include_all" flag is present in 'ufilter'.  This means any command
+        line parameter expressions must be passed along in batch queue mode.
+
+    """
+    if ufilter == None:
+      ufilter = FilterExpressions.ExpressionSet()
+
+    evaluator = ExpressionEvaluator( ufilter.platformName(),
+                                     ufilter.getOptionList() )
+
+    tests = create_unfiltered_testlist( rootpath, relpath,
+                                        force_params, evaluator )
+
+    tL = []
+    for t in tests:
+
+        if t.hasAnalyze():
+            # if parent test, filter the parameter set to the children
+            # that would be included
+            paramD = t.getParameterSet()
+            paramD = apply_parameter_filtering( paramD, ufilter )
+            t.setParameterSet( paramD )
+
+        if test_is_active( t, ufilter, results_keywords=False ):
+            tL.append( t )
+
+    return tL
+
+
+def refreshTest( testobj, ufilter=None ):
+    """
+    Parses the test source file and resets the settings for the given test.
+    The test name is not changed.  The parameters in the test XML file are
+    not considered; instead, the parameters already defined in the test
+    object are used.
+
+    If the test XML contains bad syntax, a TestSpecError is raised.
+    
+    Returns false if any of the filtering would exclude this test.
+    """
+    if ufilter == None:
+      ufilter = FilterExpressions.ExpressionSet()
+
+    evaluator = ExpressionEvaluator( ufilter.platformName(),
+                                     ufilter.getOptionList() )
+
+    reparse_test_object( testobj, evaluator )
+
+    if testobj.hasAnalyze():
+        # if parent test, filter parameterset
+        paramD = testobj.getParameterSet()
+        paramD = apply_parameter_filtering( paramD, ufilter )
+        testobj.setParameterSet( paramD )
+
+    keep = True
+    filt = not ufilter.getAttr( 'include_all', False )
+    if filt and not test_is_active( testobj, ufilter, results_keywords=True ):
+        keep = False
+
+    return keep
+
+
+def test_is_active( testobj, ufilter, results_keywords ):
+    """
+    Uses the given filter to test whether the test is active (enabled).  The
+    'results_keywords' boolean should be True when refreshing a test, but
+    False when creating a test.  (Yeah, I would like to avoid that logic, but
+    not sure how to do it yet.)
+    """
+    pev = PlatformEvaluator( testobj.getPlatformEnableExpressions() )
+    if not ufilter.evaluate_platform_include( pev.satisfies_platform ):
+        return False
+
+    for opexpr in testobj.getOptionEnableExpressions():
+        if not ufilter.evaluate_option_expr( opexpr ):
+            return False
+
+    if results_keywords:
+        if not ufilter.satisfies_keywords( testobj.getKeywords(True) ):
+            return False
+    else:
+        if not ufilter.satisfies_nonresults_keywords( testobj.getKeywords() ):
+            return False
+
+    if not ufilter.getAttr( 'include_tdd', False ) and \
+       'TDD' in testobj.getKeywords():
+        return False
+
+    if not ufilter.evaluate_parameters( testobj.getParameters() ):
+        return False
+
+    if not ufilter.file_search( testobj ):
+        return False
+
+    return True
+
+
+class PlatformEvaluator:
+    """
+    Tests can use platform expressions to enable/disable the test.  This class
+    caches the expressions and provides a function that answers the question
+
+        "Would the test run on the given platform name?"
+    """
+    def __init__(self, list_of_word_expr):
+        self.exprL = list_of_word_expr
+
+    def satisfies_platform(self, plat_name):
+        ""
+        for wx in self.exprL:
+            if not wx.evaluate( lambda tok: tok == plat_name ):
+                return False
+        return True
+
+
+class ExpressionEvaluator:
+    """
+    Script test headers or attributes in test XML can specify a word
+    expression that must be evaluated during test parsing.  This class caches
+    the current platform name and command line option list, and provides
+    functions to evaluate platform and option expressions.
+    """
+
+    def __init__(self, platname, option_list):
+        self.platname = platname
+        self.option_list = option_list
+
+    def getPlatformName(self):
+        ""
+        return self.platname
+
+    def evaluate_platform_expr(self, expr):
+        """
+        Evaluate the given expression against the current platform name.
+        """
+        wx = FilterExpressions.WordExpression(expr)
+        return wx.evaluate( self._equals_platform )
+
+    def _equals_platform(self, platname):
+        ""
+        if self.platname != None:
+          return platname == self.platname
+        return True
+
+    def evaluate_option_expr(self, word_expr):
+        """
+        Evaluate the given expression against the list of command line options.
+        """
+        #wx = WordExpression(expr)
+        #opL = self.attrs.get( 'option_list', [] )
+        return word_expr.evaluate( self.option_list.count )
+
+
+def apply_parameter_filtering( paramD, ufilter ):
+    """
+    Takes a cartesian product of the parameters in 'paramD', applies parameter
+    filtering, then reforms the dictionary with only the parameters NOT
+    filtered out.  The new dictionary is returned.
+    """
+    # first, make a list containing each parameter value list
+    plist_keys = []
+    plist_vals = []
+    for pname,pL in paramD.items():
+      plist_keys.append(pname)
+      plist_vals.append( pL )
+    
+    paramD_filtered = {}
+    
+    # then loop over each set in the cartesian product
+    dimvals = range(len(plist_vals))
+    for vals in _cartesianProduct(plist_vals):
+      # load the parameter values into a dictionary; note that any combined
+      # values are used which may have multiple parameter values embedded
+      pdict = {}
+      for i in dimvals:
+        kL = plist_keys[i]
+        sL = vals[i]
+        assert len(kL) == len(sL)
+        n = len(kL)
+        for j in range(n):
+          pdict[ kL[j] ] = sL[j]
+      
+      if ufilter.evaluate_parameters( pdict ):
+        
+        for i in dimvals:
+          kL = plist_keys[i]
+          sL = vals[i]
+          if kL in paramD_filtered:
+            if sL not in paramD_filtered[kL]:  # avoid duplicates
+              paramD_filtered[kL].append( sL )
+          else:
+            paramD_filtered[kL] = [ sL ]
+
+    return paramD_filtered
+
+
+###########################################################################
+
+def create_unfiltered_testlist( rootpath, relpath,
+                                force_params=None,
+                                evaluator=None ):
+    """
     Can use a (nested) rtest element to cause another test to be defined.
         
         <rtest name="mytest">
@@ -57,12 +263,9 @@ def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
     """
     assert not os.path.isabs( relpath )
 
-    if ufilter == None:
-      ufilter = FilterExpressions.ExpressionSet()
-    
     fname = os.path.join( rootpath, relpath )
     ext = os.path.splitext( relpath )[1]
-    
+
     if ext == '.xml':
 
         docreader = xmlwrapper.XmlDocReader()
@@ -78,7 +281,7 @@ def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
         tL = []
         for tname in nameL:
             L = createTestName( tname, filedoc, rootpath, relpath,
-                                force_params, ufilter )
+                                force_params, evaluator )
             tL.extend( L )
     
     elif ext == '.vvt':
@@ -88,7 +291,7 @@ def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
         tL = []
         for tname in nameL:
             L = createScriptTest( tname, vspecs, rootpath, relpath,
-                                  force_params, ufilter )
+                                  force_params, evaluator )
             tL.extend( L )
 
     else:
@@ -97,29 +300,20 @@ def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
     return tL
 
 
-def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
+def createTestName( tname, filedoc, rootpath, relpath, force_params,
+                    evaluator ):
     """
     """
-    if not parseIncludeTest( filedoc, tname, ufilter ):
-      return []
-    
-    paramD = parseTestParameters( filedoc, tname, ufilter, force_params )
+    paramD = parseTestParameters( filedoc, tname, evaluator, force_params )
     pcount = len( paramD )
     
-    keywords = parseKeywords( filedoc, tname, ufilter )
+    keywords = parseKeywords( filedoc, tname )
     
-    if not ufilter.satisfies_nonresults_keywords( keywords ):
-      return []
-    
-    if not ufilter.getAttr( 'include_tdd', False ) and 'TDD' in keywords:
-      return []
-
     # create the test instances
     
     testL = []
 
     if len(paramD) == 0:
-      if ufilter.evaluate_parameters( {} ):
         t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
         t.setKeywords( keywords )
         testL.append(t)
@@ -127,7 +321,7 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
     else:
       # take a cartesian product of all the parameter values but apply
       # parameter filtering (this may change the paramD)
-      instanceL = cartesian_product_and_filter( paramD, ufilter )
+      instanceL = make_cartesian_product_instances( paramD )
       for pdict in instanceL:
         # create the test and add to test list
         t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
@@ -138,7 +332,7 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
     if len(testL) > 0:
       # check for execute/analyze
       t = testL[0]
-      parseAnalyze( t, filedoc, ufilter )
+      parseAnalyze( t, filedoc, evaluator )
       if t.hasAnalyze():
         if pcount == 0:
           # a test with no parameters but with an analyze script
@@ -155,51 +349,38 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params, ufilter ):
 
     # parse and set the rest of the XML file for each test
     
-    finalL = []
     for t in testL:
-      
-      parseTimeouts     ( t, filedoc, ufilter )
-      parseExecuteList  ( t, filedoc, ufilter )
-      parseFiles        ( t, filedoc, ufilter )
-      parseBaseline     ( t, filedoc, ufilter )
-      
-      if ufilter.file_search(t):
-        finalL.append(t)
-        set_test_form( t )
+
+        parse_include_platform ( t, filedoc )
+        parseTimeouts          ( t, filedoc, evaluator )
+        parseExecuteList       ( t, filedoc, evaluator )
+        parseFiles             ( t, filedoc, evaluator )
+        parseBaseline          ( t, filedoc, evaluator )
+        set_test_form          ( t )
     
-    return finalL
+    return testL
 
 
 def createScriptTest( tname, vspecs, rootpath, relpath,
-                      force_params, ufilter ):
+                      force_params, evaluator ):
     """
     """
-    if not parseEnableTest( vspecs, tname, ufilter ):
-        return []
-    
-    paramD = parseTestParameters_scr( vspecs, tname, ufilter, force_params )
+    paramD = parseTestParameters_scr( vspecs, tname, evaluator, force_params )
     pcount = len( paramD )
     
-    keywords = parseKeywords_scr( vspecs, tname, ufilter )
-    
-    if not ufilter.satisfies_nonresults_keywords( keywords ):
-        return []
-    
-    if not ufilter.getAttr( 'include_tdd', False ) and 'TDD' in keywords:
-      return []
+    keywords = parseKeywords_scr( vspecs, tname )
     
     testL = []
 
     if len(paramD) == 0:
-        if ufilter.evaluate_parameters( {} ):
-            t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
-            t.setKeywords( keywords )
-            testL.append(t)
+        t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
+        t.setKeywords( keywords )
+        testL.append(t)
 
     else:
         # take a cartesian product of all the parameter values but apply
         # parameter filtering (this may change the paramD)
-        instanceL = cartesian_product_and_filter( paramD, ufilter )
+        instanceL = make_cartesian_product_instances( paramD )
         for pdict in instanceL:
             # create the test and add to test list
             t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
@@ -210,7 +391,7 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
     if len(testL) > 0:
       # check for execute/analyze
       t = testL[0]
-      parseAnalyze_scr( t, vspecs, ufilter )
+      parseAnalyze_scr( t, vspecs, evaluator )
       if t.hasAnalyze():
         if pcount == 0:
           # a test with no parameters but with an analyze script
@@ -225,19 +406,15 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
         # reset to no analyze, so that only analyze tests have an analyze
         t.setAnalyze( None, None )
 
-    finalL = []
     for t in testL:
-      
-        parseFiles_scr    ( t, vspecs, ufilter )
-        parseTimeouts_scr ( t, vspecs, ufilter )
-        #parseExecuteList  ( t, filedoc, ufilter )
-        parseBaseline_scr ( t, vspecs, ufilter )
-        
-        if ufilter.file_search(t):
-            finalL.append(t)
-            set_test_form( t, vspecs )
 
-    return finalL
+        parse_enable_platform ( t, vspecs )
+        parseFiles_scr        ( t, vspecs, evaluator )
+        parseTimeouts_scr     ( t, vspecs, evaluator )
+        parseBaseline_scr     ( t, vspecs, evaluator )
+        set_test_form         ( t, vspecs )
+
+    return testL
 
 
 def set_test_form( tspec, vspecs=None ):
@@ -297,27 +474,14 @@ def set_test_form( tspec, vspecs=None ):
             tspec.addLinkFile( bfile )
 
 
-def refreshTest( testobj, ufilter=None ):
+def reparse_test_object( testobj, evaluator ):
     """
-    Parses the test source file and resets the settings for the given test.
-    The test name is not changed.  The parameters in the test XML file are
-    not considered; instead, the parameters already defined in the test
-    object are used.
-
-    If the test XML contains bad syntax, a TestSpecError is raised.
-    
-    Returns false if any of the filtering would exclude this test.
+    Given a TestSpec object, this function opens the original test file,
+    parses, and overwrite the test contents.
     """
     fname = testobj.getFilename()
     ext = os.path.splitext( fname )[1]
 
-    if ufilter == None:
-      ufilter = FilterExpressions.ExpressionSet()
-    
-    filt = not ufilter.getAttr( 'include_all', False )
-    xtdd = not ufilter.getAttr( 'include_tdd', False )
-    keep = True
-    
     if ext == '.xml':
 
         docreader = xmlwrapper.XmlDocReader()
@@ -325,89 +489,56 @@ def refreshTest( testobj, ufilter=None ):
 
         # run through the test name logic to check XML validity
         nameL = testNameList(filedoc)
-        
-        tname = testobj.getName()
-        
-        if filt and not parseIncludeTest( filedoc, tname, ufilter ):
-          keep = False
-        
-        keywords = parseKeywords( filedoc, tname, ufilter )
-        testobj.setKeywords( keywords )
-        
-        if filt and not ufilter.satisfies_keywords( testobj.getKeywords(1) ):
-          keep = False
-        
-        if xtdd and 'TDD' in keywords:
-          keep = False
 
-        if filt and not ufilter.evaluate_parameters( testobj.getParameters() ):
-          keep = False
-        
+        tname = testobj.getName()
+
+        parse_include_platform( testobj, filedoc )
+
+        keywords = parseKeywords( filedoc, tname )
+        testobj.setKeywords( keywords )
+
         if not testobj.getParent():
           # to avoid children tests getting an analyze defined, only parse
           # analyze if the test does not have a parent; this is safe for 
           # a refresh because the parents are saved in the test list file
-          parseAnalyze( testobj, filedoc, ufilter )
-          
-          if testobj.hasAnalyze():
-            # this regenerates the parameter set for analyze tests
-            paramD = parseTestParameters( filedoc, tname, ufilter, None )
-            cartesian_product_and_filter( paramD, ufilter )
-            testobj.setParameterSet( paramD )
-        
-        parseFiles       ( testobj, filedoc, ufilter )
-        parseTimeouts    ( testobj, filedoc, ufilter )
-        parseExecuteList ( testobj, filedoc, ufilter )
-        parseBaseline    ( testobj, filedoc, ufilter )
-        
-        if filt and not ufilter.file_search(testobj):
-          keep = False
-        
+          parseAnalyze( testobj, filedoc, evaluator )
+
+          paramD = parseTestParameters( filedoc, tname, evaluator, None )
+          testobj.setParameterSet( paramD )
+
+        parseFiles       ( testobj, filedoc, evaluator )
+        parseTimeouts    ( testobj, filedoc, evaluator )
+        parseExecuteList ( testobj, filedoc, evaluator )
+        parseBaseline    ( testobj, filedoc, evaluator )
+
         set_test_form( testobj )
 
     elif ext == '.vvt':
-        
+
         vspecs = ScriptReader( fname )
-        
+
         # run through the test name logic to check validity
         nameL = testNameList_scr( vspecs )
 
         tname = testobj.getName()
 
-        if filt and not parseEnableTest( vspecs, tname, ufilter ):
-          keep = False
-        
-        keywords = parseKeywords_scr( vspecs, tname, ufilter )
-        testobj.setKeywords( keywords )
-        
-        if filt and not ufilter.satisfies_keywords( testobj.getKeywords(1) ):
-          keep = False
-        
-        if xtdd and 'TDD' in keywords:
-          keep = False
+        parse_enable_platform( testobj, vspecs )
 
-        if filt and not ufilter.evaluate_parameters( testobj.getParameters() ):
-          keep = False
-        
+        keywords = parseKeywords_scr( vspecs, tname )
+        testobj.setKeywords( keywords )
+
         if not testobj.getParent():
             # to avoid children tests getting an analyze defined, only parse
             # analyze if the test does not have a parent; this is safe for 
             # a refresh because the parents are saved in the test list file
-            parseAnalyze_scr( testobj, vspecs, ufilter )
+            parseAnalyze_scr( testobj, vspecs, evaluator )
             
-            if testobj.hasAnalyze():
-                # this regenerates the parameter set for analyze tests
-                paramD = parseTestParameters_scr( vspecs, tname, ufilter, None )
-                cartesian_product_and_filter( paramD, ufilter )
-                testobj.setParameterSet( paramD )
-        
-        parseFiles_scr    ( testobj, vspecs, ufilter )
-        parseTimeouts_scr ( testobj, vspecs, ufilter )
-        #parseExecuteList ( testobj, filedoc, ufilter )
-        parseBaseline_scr ( testobj, vspecs, ufilter )
-        
-        if filt and not ufilter.file_search(testobj):
-          keep = False
+            paramD = parseTestParameters_scr( vspecs, tname, evaluator, None )
+            testobj.setParameterSet( paramD )
+
+        parseFiles_scr    ( testobj, vspecs, evaluator )
+        parseTimeouts_scr ( testobj, vspecs, evaluator )
+        parseBaseline_scr ( testobj, vspecs, evaluator )
         
         set_test_form( testobj, vspecs )
 
@@ -415,8 +546,6 @@ def refreshTest( testobj, ufilter=None ):
         raise Exception( "invalid file extension: "+ext )
 
     testobj.addOrigin( 'file' )  # mark test as refreshed
-
-    return keep
 
 
 ##########################################################################
@@ -938,50 +1067,7 @@ def testNameList_scr( vspecs ):
     return L
 
 
-def parseEnableTest( vspecs, tname, ufilter ):
-    """
-    Parse syntax that will filter out this test by platform or build option.
-    Returns false if the test is to be disabled/excluded.
-    
-    Platform expressions and build options use word expressions.
-    
-        #VVT: enable (platforms="not SunOS and not Linux")
-        #VVT: enable (options="not dbg and ( tridev or tri8 )")
-        #VVT: enable (platforms="...", options="...")
-    
-    If both platform and option expressions are given, their results are
-    ANDed together.  If more than one "enable" block is given, each must
-    result in True for the test to be included.
-    """
-    # first, evaluate based purely on the platform restrictions
-    pev = PlatformEvaluator_scr( vspecs, tname, ufilter )
-    if not ufilter.evaluate_platform_include( pev.satisfies_platform ):
-        return False
-    
-    # second, evaluate based on the "options" attribute of "enable"
-    for spec in vspecs.getSpecList( 'enable' ):
-      
-        if spec.attrs:
-            
-            if 'parameters' in spec.attrs or 'parameter' in spec.attrs:
-                raise TestSpecError( "parameters attribute not " + \
-                                     "allowed here, line " + str(spec.lineno) )
-            
-            if not testname_ok_scr( spec.attrs, tname, ufilter ):
-              # the "enable" does not apply to this test name
-              continue
-            
-            opexpr = spec.attrs.get( 'options',
-                                     spec.attrs.get( 'option', None ) )
-            if opexpr != None:
-                opexpr = opexpr.strip()
-                if opexpr and not ufilter.evaluate_option_expr( opexpr ):
-                    return False
-    
-    return True
-
-
-def parseKeywords_scr( vspecs, tname, ufilter ):
+def parseKeywords_scr( vspecs, tname ):
     """
     Parse the test keywords for the test script file.
     
@@ -992,41 +1078,46 @@ def parseKeywords_scr( vspecs, tname, ufilter ):
     TODO: what other implicit keywords ??
     """
     keyD = {}
-    
+
     keyD[tname] = None
-    
+
     for spec in vspecs.getSpecList( 'keywords' ):
-        
-        if spec.attrs and \
-           ( 'parameters' in spec.attrs or 'parameter' in spec.attrs ):
-            raise TestSpecError( "parameters attribute not allowed here, " + \
+
+        if spec.attrs:
+            # explicitly deny certain attributes for keyword definition
+            for attrname in ['parameters','parameter',
+                             'platform','platforms',
+                             'option','options']:
+                if attrname in spec.attrs:
+                    raise TestSpecError( "the "+attrname + \
+                        " attribute is not allowed here, " + \
                                  "line " + str(spec.lineno) )
-        
-        if not filterAttr_scr( spec.attrs, tname, None, ufilter, spec.lineno ):
+
+        if not testname_ok_scr( spec.attrs, tname ):
             continue
-        
+
         for key in spec.value.strip().split():
             if allowableString(key):
                 keyD[key] = None
             else:
                 raise TestSpecError( 'invalid keyword: "'+key+'", line ' + \
                                      str(spec.lineno) )
-    
+
     # the parameter names are included in the test keywords
     for spec in vspecs.getSpecList( 'parameterize' ):
-        if not testname_ok_scr( spec.attrs, tname, ufilter ):
+        if not testname_ok_scr( spec.attrs, tname ):
             continue
         L = spec.value.split( '=', 1 )
         if len(L) == 2 and L[0].strip():
             for k in [ n.strip() for n in L[0].strip().split(',') ]:
                 keyD[k] = None
-    
+
     L = keyD.keys()
     L.sort()
     return L
 
 
-def parseTestParameters_scr( vspecs, tname, ufilter, force_params ):
+def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
     """
     Parses the parameter settings for a script test file.
         
@@ -1080,7 +1171,7 @@ def parseTestParameters_scr( vspecs, tname, ufilter, force_params ):
             raise TestSpecError( "parameters attribute not allowed here, " + \
                                  "line " + str(lnum) )
         
-        if not filterAttr_scr( spec.attrs, tname, None, ufilter, lnum ):
+        if not filterAttr_scr( spec.attrs, tname, None, evaluator, lnum ):
             continue
 
         L = spec.value.split( '=', 1 )
@@ -1138,7 +1229,7 @@ def parseTestParameters_scr( vspecs, tname, ufilter, force_params ):
     return paramD
 
 
-def parseAnalyze_scr( t, vspecs, ufilter ):
+def parseAnalyze_scr( t, vspecs, evaluator ):
     """
     Parse any analyze specifications.
     
@@ -1162,7 +1253,7 @@ def parseAnalyze_scr( t, vspecs, ufilter ):
                                  "line " + str(spec.lineno) )
         
         if not filterAttr_scr( spec.attrs, t.getName(), None,
-                               ufilter, spec.lineno ):
+                               evaluator, spec.lineno ):
             continue
 
         sval = spec.value
@@ -1236,7 +1327,7 @@ def configure_auxiliary_script( testobj, scriptname, test_filename ):
         raise TestSpecError( 'script file does not exist: ' + scriptname )
 
 
-def parseFiles_scr( t, vspecs, ufilter ):
+def parseFiles_scr( t, vspecs, evaluator ):
     """
         #VVT: copy : file1 file2
         #VVT: link : file3 file4
@@ -1251,12 +1342,12 @@ def parseFiles_scr( t, vspecs, ufilter ):
     params = t.getParameters()
 
     for spec in vspecs.getSpecList( 'copy' ):
-        if filterAttr_scr( spec.attrs, tname, params, ufilter, spec.lineno ):
-            collectFileNames_scr( spec, cpfiles, tname, params, ufilter )
+        if filterAttr_scr( spec.attrs, tname, params, evaluator, spec.lineno ):
+            collectFileNames_scr( spec, cpfiles, tname, params, evaluator )
 
     for spec in vspecs.getSpecList( 'link' ):
-        if filterAttr_scr( spec.attrs, tname, params, ufilter, spec.lineno ):
-            collectFileNames_scr( spec, lnfiles, tname, params, ufilter )
+        if filterAttr_scr( spec.attrs, tname, params, evaluator, spec.lineno ):
+            collectFileNames_scr( spec, lnfiles, tname, params, evaluator )
     
     for src,dst in lnfiles:
         t.addLinkFile( src, dst )
@@ -1265,15 +1356,15 @@ def parseFiles_scr( t, vspecs, ufilter ):
 
     fL = []
     for spec in vspecs.getSpecList( 'sources' ):
-        if filterAttr_scr( spec.attrs, tname, params, ufilter, spec.lineno ):
+        if filterAttr_scr( spec.attrs, tname, params, evaluator, spec.lineno ):
             if spec.value:
                 L = spec.value.split()
-                variableExpansion( tname, ufilter.platformName(), params, L )
+                variableExpansion( tname, evaluator.getPlatformName(), params, L )
                 fL.extend( L )
     t.setSourceFiles( fL )
 
 
-def collectFileNames_scr( spec, flist, tname, paramD, ufilter ):
+def collectFileNames_scr( spec, flist, tname, paramD, evaluator ):
     """
         #VVT: copy : file1 file2
         #VVT: copy (rename) : srcname1,copyname1 srcname2,copyname2
@@ -1294,7 +1385,7 @@ def collectFileNames_scr( spec, flist, tname, paramD, ufilter ):
                                      'paths, line ' + str(spec.lineno) )
             fL.append( [fsrc,fdst] )
         
-        variableExpansion( tname, ufilter.platformName(), paramD, fL )
+        variableExpansion( tname, evaluator.getPlatformName(), paramD, fL )
 
         flist.extend( fL )
 
@@ -1306,12 +1397,12 @@ def collectFileNames_scr( spec, flist, tname, paramD, ufilter ):
                 raise TestSpecError( 'file names cannot be absolute ' + \
                                      'paths, line ' + str(spec.lineno) )
         
-        variableExpansion( tname, ufilter.platformName(), paramD, fL )
+        variableExpansion( tname, evaluator.getPlatformName(), paramD, fL )
 
         flist.extend( [ [f,None] for f in fL ] )
 
 
-def parseTimeouts_scr( t, vspecs, ufilter ):
+def parseTimeouts_scr( t, vspecs, evaluator ):
     """
       #VVT: timeout : 3600
       #VVT: timeout (testname=vvfull, platforms=Linux) : 3600
@@ -1319,7 +1410,7 @@ def parseTimeouts_scr( t, vspecs, ufilter ):
     tname = t.getName()
     params = t.getParameters()
     for spec in vspecs.getSpecList( 'timeout' ):
-        if filterAttr_scr( spec.attrs, tname, params, ufilter, spec.lineno ):
+        if filterAttr_scr( spec.attrs, tname, params, evaluator, spec.lineno ):
             sval = spec.value
             try:
                 ival = int(sval)
@@ -1330,7 +1421,7 @@ def parseTimeouts_scr( t, vspecs, ufilter ):
             t.setTimeout( ival )
 
 
-def parseBaseline_scr( t, vspecs, ufilter ):
+def parseBaseline_scr( t, vspecs, evaluator ):
     """
       #VVT: baseline (attrs) : copyfrom,copyto copyfrom,copyto
       #VVT: baseline (file) : baseline.py
@@ -1349,7 +1440,7 @@ def parseBaseline_scr( t, vspecs, ufilter ):
 
     for spec in vspecs.getSpecList( 'baseline' ):
         
-        if filterAttr_scr( spec.attrs, tname, params, ufilter, spec.lineno ):
+        if filterAttr_scr( spec.attrs, tname, params, evaluator, spec.lineno ):
             
             sval = spec.value.strip()
 
@@ -1381,7 +1472,7 @@ def parseBaseline_scr( t, vspecs, ufilter ):
                                   'absolute paths, line ' + str(spec.lineno) )
                     fL.append( [fsrc,fdst] )
                 
-                variableExpansion( tname, ufilter.platformName(), params, fL )
+                variableExpansion( tname, evaluator.getPlatformName(), params, fL )
 
                 for fsrc,fdst in fL:
                     t.addBaselineFile( fsrc, fdst )
@@ -1406,17 +1497,25 @@ def parseBaseline_scr( t, vspecs, ufilter ):
                 t.setBaseline( 'arg', sval )
 
 
-def testname_ok_scr( attrs, tname, ufilter ):
+def testname_ok_scr( attrs, tname ):
     """
     """
     if attrs != None:
         tval = attrs.get( 'testname', None )
-        if tval != None and not ufilter.evauate_testname_expr( tname, tval ):
+        if tval != None and not evauate_testname_expr( tname, tval ):
             return False
     return True
 
 
-def filterAttr_scr( attrs, testname, paramD, ufilter, lineno ):
+def evauate_testname_expr( testname, expr ):
+    """
+    """
+    wx = FilterExpressions.WordExpression(expr)
+    L = [ testname ]
+    return wx.evaluate( L.count )
+
+
+def filterAttr_scr( attrs, testname, paramD, evaluator, lineno ):
     """
     Checks for known attribute names in the given 'attrs' dictionary.
     Returns False only if at least one attribute evaluates to false.
@@ -1424,31 +1523,32 @@ def filterAttr_scr( attrs, testname, paramD, ufilter, lineno ):
     if attrs:
 
         for name,value in attrs.items():
-            
+
             try:
-                
+
                 if name == "testname":
-                    if not ufilter.evauate_testname_expr( testname, value ):
+                    if not evauate_testname_expr( testname, value ):
                         return False
-                
+
                 elif name in ["platform","platforms"]:
-                    if not ufilter.evaluate_platform_expr( value ):
+                    if not evaluator.evaluate_platform_expr( value ):
                         return False
-                
+
                 elif name in ["option","options"]:
-                    if not ufilter.evaluate_option_expr( value ):
+                    wx = FilterExpressions.WordExpression( value )
+                    if not evaluator.evaluate_option_expr( wx ):
                         return False
 
                 elif name in ["parameter","parameters"]:
                     pf = FilterExpressions.ParamFilter(value)
                     if not pf.evaluate( paramD ):
                         return False
-            
+
             except ValueError:
                 raise TestSpecError( 'invalid '+name+' expression, ' + \
                                      'line ' + lineno + ": " + \
                                      str(sys.exc_info()[1]) )
-    
+
     return True
 
 
@@ -1480,7 +1580,7 @@ def testNameList( filedoc ):
     return L
 
 
-def filterAttr( attrname, attrvalue, testname, paramD, ufilter, lineno ):
+def filterAttr( attrname, attrvalue, testname, paramD, evaluator, lineno ):
     """
     Checks the attribute name for a filtering attributes.  Returns a pair of
     boolean values, (is filter, filter result).  The first is whether the
@@ -1490,10 +1590,10 @@ def filterAttr( attrname, attrvalue, testname, paramD, ufilter, lineno ):
     try:
       
       if attrname == "testname":
-        return True, ufilter.evauate_testname_expr( testname, attrvalue )
+        return True, evauate_testname_expr( testname, attrvalue )
       
       elif attrname in ["platform","platforms"]:
-        return True, ufilter.evaluate_platform_expr( attrvalue )
+        return True, evaluator.evaluate_platform_expr( attrvalue )
       
       elif attrname in ["keyword","keywords"]:
         # deprecated [became an error Sept 2017]
@@ -1506,7 +1606,8 @@ def filterAttr( attrname, attrvalue, testname, paramD, ufilter, lineno ):
                              "line " + str(lineno) )
       
       elif attrname in ["option","options"]:
-        return True, ufilter.evaluate_option_expr( attrvalue )
+        wx = FilterExpressions.WordExpression( attrvalue )
+        return True, evaluator.evaluate_option_expr( wx )
       
       elif attrname in ["parameter","parameters"]:
         pf = FilterExpressions.ParamFilter(attrvalue)
@@ -1519,7 +1620,7 @@ def filterAttr( attrname, attrvalue, testname, paramD, ufilter, lineno ):
     return False, False
 
 
-def parseTestParameters( filedoc, tname, ufilter, force_params ):
+def parseTestParameters( filedoc, tname, evaluator, force_params ):
     """
     Parses the parameter settings for a test XML file.
     
@@ -1579,7 +1680,7 @@ def parseTestParameters( filedoc, tname, ufilter, force_params ):
           raise TestSpecError( n + " attribute not allowed here, " + \
                                "line " + str(nd.getLineNumber()) )
 
-        isfa, istrue = filterAttr( n, v, tname, None, ufilter,
+        isfa, istrue = filterAttr( n, v, tname, None, evaluator,
                                    str(nd.getLineNumber()) )
         if isfa:
           if not istrue:
@@ -1627,16 +1728,16 @@ def parseTestParameters( filedoc, tname, ufilter, force_params ):
     return paramD
 
 
-def testname_ok( xmlnode, tname, ufilter ):
+def testname_ok( xmlnode, tname ):
     """
     """
     tval = xmlnode.getAttr( 'testname', None )
-    if tval != None and not ufilter.evauate_testname_expr( tname, tval ):
+    if tval != None and not evauate_testname_expr( tname, tval ):
         return False
     return True
 
 
-def parseKeywords( filedoc, tname, ufilter ):
+def parseKeywords( filedoc, tname ):
     """
     Parse the test keywords for the test XML file.
     
@@ -1651,7 +1752,7 @@ def parseKeywords( filedoc, tname, ufilter ):
     keyD[tname] = None
     
     for nd in filedoc.matchNodes(['keywords$']):
-      if not testname_ok( nd, tname, ufilter ):
+      if not testname_ok( nd, tname ):
         # skip this keyword set (filtered out based on test name)
         continue
       for key in string.split( nd.getContent() ):
@@ -1662,7 +1763,7 @@ def parseKeywords( filedoc, tname, ufilter ):
                                str(nd.getLineNumber()) )
     
     for nd in filedoc.getSubNodes():
-      if not testname_ok( nd, tname, ufilter ):
+      if not testname_ok( nd, tname ):
         continue
       if nd.getName() == 'parameterize':
         # the parameter names are included in the test keywords
@@ -1683,10 +1784,9 @@ def parseKeywords( filedoc, tname, ufilter ):
     return L
 
 
-def parseIncludeTest( filedoc, tname, ufilter ):
+def parse_include_platform( testobj, xmldoc ):
     """
     Parse syntax that will filter out this test by platform or build option.
-    Returns false if the test is to be excluded.
     
     Platform expressions and build options use word expressions.
     
@@ -1701,115 +1801,89 @@ def parseIncludeTest( filedoc, tname, ufilter ):
     For backward compatibility, allow the following.
     
        <include platforms="SunOS Linux"/>
-
     """
-    # first, evaluate based purely on the platform restrictions
-    pev = PlatformEvaluator( filedoc, tname, ufilter )
-    if not ufilter.evaluate_platform_include( pev.satisfies_platform ):
-      return 0
-    
-    # second, evaluate based on the "options" attribute of <include>
-    for nd in filedoc.matchNodes(['include$']):
-      
-      if nd.hasAttr( 'parameters' ) or nd.hasAttr( 'parameter' ):
-        raise TestSpecError( 'the "parameters" attribute not allowed '
-                             'here, line ' + str(nd.getLineNumber()) )
+    tname = testobj.getName()
 
-      if not testname_ok( nd, tname, ufilter ):
-        # the <include> does not apply to this test name
-        continue
-      
-      opexpr = nd.getAttr( 'options', nd.getAttr( 'option', None ) )
-      if opexpr != None:
-        opexpr = opexpr.strip()
-        if opexpr and not ufilter.evaluate_option_expr( opexpr ):
-          return 0
-    
-    return 1
-
-
-class PlatformEvaluator:
-    """
-    This class is a helper to provide UserFilter an evaluator function.
-    """
-    
-    def __init__(self, xmldoc, tname, ufilter):
-        self.xmldoc = xmldoc
-        self.tname = tname
-        self.ufilter = ufilter
-    
-    def satisfies_platform(self, plat_name):
-        """
-        This function parses the test XML file for platform restrictions and
-        returns true if the test would run under the given 'plat_name'.
-        Otherwise, it returns false.
-        """
-        for nd in self.xmldoc.matchNodes(['include$']):
+    for nd in xmldoc.matchNodes(['include$']):
           
-          if nd.hasAttr( 'parameters' ) or nd.hasAttr( 'parameter' ):
+        if nd.hasAttr( 'parameters' ) or nd.hasAttr( 'parameter' ):
             raise TestSpecError( 'the "parameters" attribute not allowed '
                                  'here, line ' + str(nd.getLineNumber()) )
-          
-          if not testname_ok( nd, self.tname, self.ufilter ):
+
+        if not testname_ok( nd, tname ):
             # the <include> does not apply to this test name
             continue
-          
-          s = nd.getAttr( 'platforms', nd.getAttr( 'platform', None ) )
-          if s != None:
-            s = s.strip()
-            
-            if '/' in s:
-              raise TestSpecError( 'invalid "platforms" attribute content '
-                                   ', line ' + str(nd.getLineNumber()) )
 
-            wx = FilterExpressions.WordExpression(s)
+        platexpr = nd.getAttr( 'platforms', nd.getAttr( 'platform', None ) )
+        if platexpr != None:
+            platexpr = platexpr.strip()
 
-            if not wx.evaluate( lambda tok: tok == plat_name ):
-              return 0
-        
-        return 1
+            if '/' in platexpr:
+                raise TestSpecError( 'invalid "platforms" attribute content '
+                                     ', line ' + str(nd.getLineNumber()) )
+
+            wx = FilterExpressions.WordExpression( platexpr )
+            testobj.addEnablePlatformExpression( wx )
+
+        opexpr = nd.getAttr( 'options', nd.getAttr( 'option', None ) )
+        if opexpr != None:
+            opexpr = opexpr.strip()
+            if opexpr:
+                wx = FilterExpressions.WordExpression( opexpr )
+                testobj.addEnableOptionExpression( wx )
 
 
-class PlatformEvaluator_scr:
+def parse_enable_platform( testobj, vspecs ):
     """
-    This class is a helper to provide UserFilter an evaluator function.
+    Parse syntax that will filter out this test by platform or build option.
+    
+    Platform expressions and build options use word expressions.
+    
+        #VVT: enable (platforms="not SunOS and not Linux")
+        #VVT: enable (options="not dbg and ( tridev or tri8 )")
+        #VVT: enable (platforms="...", options="...")
+    
+    If both platform and option expressions are given, their results are
+    ANDed together.  If more than one "enable" block is given, each must
+    result in True for the test to be included.
     """
-    
-    def __init__(self, vspecs, tname, ufilter):
-        self.vspecs = vspecs
-        self.tname = tname
-        self.ufilter = ufilter
-    
-    def satisfies_platform(self, plat_name):
-        """
-        This function parses the test header for platform restrictions and
-        returns true if the test would run under the given 'plat_name'.
-        Otherwise, it returns false.
-        """
-        for spec in self.vspecs.getSpecList( 'enable' ):
-            
-            if spec.attrs:
+    tname = testobj.getName()
 
-                if not testname_ok_scr( spec.attrs, self.tname, self.ufilter ):
-                  # the "enable" does not apply to this test name
-                  continue
-                
-                s = spec.attrs.get( 'platforms',
-                                    spec.attrs.get( 'platform', None ) )
-                if s != None:
-                    s = s.strip()
-                    if '/' in s:
-                        raise TestSpecError( \
+    for spec in vspecs.getSpecList( 'enable' ):
+
+        if spec.attrs:
+
+            if not testname_ok_scr( spec.attrs, tname ):
+                # the "enable" does not apply to this test name
+                continue
+
+            if 'parameters' in spec.attrs or 'parameter' in spec.attrs:
+                raise TestSpecError( "parameters attribute not " + \
+                                     "allowed here, line " + str(spec.lineno) )
+
+            platexpr = spec.attrs.get( 'platforms',
+                                       spec.attrs.get( 'platform', None ) )
+            if platexpr != None:
+                platexpr = platexpr.strip()
+                if '/' in platexpr:
+                    raise TestSpecError( \
                             'invalid "platforms" attribute value '
                             ', line ' + str(spec.lineno) )
-                    wx = FilterExpressions.WordExpression(s)
-                    if not wx.evaluate( lambda tok: tok == plat_name ):
-                        return False
-        
-        return True
+                wx = FilterExpressions.WordExpression( platexpr )
+                testobj.addEnablePlatformExpression( wx )
+
+            opexpr = spec.attrs.get( 'options',
+                                     spec.attrs.get( 'option', None ) )
+            if opexpr != None:
+                opexpr = opexpr.strip()
+
+                # an empty option expression is ignored
+                if opexpr:
+                    wx = FilterExpressions.WordExpression( opexpr )
+                    testobj.addEnableOptionExpression( wx )
 
 
-def parseAnalyze( t, filedoc, ufilter ):
+def parseAnalyze( t, filedoc, evaluator ):
     """
     Parse analyze scripts that get run after all parameterized tests complete.
     
@@ -1832,7 +1906,7 @@ def parseAnalyze( t, filedoc, ufilter ):
                                ', line ' + str(nd.getLineNumber()) )
         
         isfa, istrue = filterAttr( n, v, t.getName(), None,
-                                   ufilter, str(nd.getLineNumber()) )
+                                   evaluator, str(nd.getLineNumber()) )
         if isfa and not istrue:
           skip = 1
           break
@@ -1851,7 +1925,7 @@ def parseAnalyze( t, filedoc, ufilter ):
     t.setAnalyze( 'scriptfrag', a )
 
 
-def parseTimeouts( t, filedoc, ufilter ):
+def parseTimeouts( t, filedoc, evaluator ):
     """
     Parse test timeouts for the test XML file.
     
@@ -1866,7 +1940,7 @@ def parseTimeouts( t, filedoc, ufilter ):
       skip = 0
       for n,v in nd.getAttrs().items():
         isfa, istrue = filterAttr( n, v, t.getName(), t.getParameters(),
-                                   ufilter, str(nd.getLineNumber()) )
+                                   evaluator, str(nd.getLineNumber()) )
         if isfa and not istrue:
           skip = 1
           break
@@ -1888,7 +1962,7 @@ def parseTimeouts( t, filedoc, ufilter ):
           t.setTimeout( to )
 
 
-def parseExecuteList( t, filedoc, ufilter ):
+def parseExecuteList( t, filedoc, evaluator ):
     """
     Parse the execute list for the test XML file.
     
@@ -1914,7 +1988,7 @@ def parseExecuteList( t, filedoc, ufilter ):
       skip = 0
       for n,v in nd.getAttrs().items():
         isfa, istrue = filterAttr( n, v, t.getName(), t.getParameters(),
-                                   ufilter, str(nd.getLineNumber()) )
+                                   evaluator, str(nd.getLineNumber()) )
         if isfa and not istrue:
           skip = 1
           break
@@ -2018,7 +2092,7 @@ def variableExpansion( tname, platname, paramD, fL ):
           fL[i] = f
 
 
-def collectFileNames( nd, flist, tname, paramD, ufilter ):
+def collectFileNames( nd, flist, tname, paramD, evaluator ):
     """
     Helper function that parses file names in content with optional linkname
     attribute:
@@ -2040,7 +2114,7 @@ def collectFileNames( nd, flist, tname, paramD, ufilter ):
       skip = 0
       for n,v in nd.getAttrs().items():
         isfa, istrue = filterAttr( n, v, tname, paramD,
-                                   ufilter, str(nd.getLineNumber()) )
+                                   evaluator, str(nd.getLineNumber()) )
         if isfa and not istrue:
           skip = 1
           break
@@ -2072,7 +2146,7 @@ def collectFileNames( nd, flist, tname, paramD, ufilter ):
                                    'line ' + str(nd.getLineNumber()) )
             fL.append( [str(f), None] )
         
-        variableExpansion( tname, ufilter.platformName(), paramD, fL )
+        variableExpansion( tname, evaluator.getPlatformName(), paramD, fL )
         
         flist.extend(fL)
     
@@ -2081,7 +2155,7 @@ def collectFileNames( nd, flist, tname, paramD, ufilter ):
                            ', line ' + str(nd.getLineNumber()) )
 
 
-def globFileNames( nd, flist, t, ufilter, nofilter=0 ):
+def globFileNames( nd, flist, t, evaluator, nofilter=0 ):
     """
     Queries the file system for file names.  Syntax is
     
@@ -2100,7 +2174,7 @@ def globFileNames( nd, flist, t, ufilter, nofilter=0 ):
       skip = 0
       for n,v in nd.getAttrs().items():
         isfa, istrue = filterAttr( n, v, tname, paramD,
-                                   ufilter, str(nd.getLineNumber()) )
+                                   evaluator, str(nd.getLineNumber()) )
         if nofilter and isfa:
           raise TestSpecError( 'filter attributes not allowed here' + \
                                ', line ' + str(nd.getLineNumber()) )
@@ -2111,7 +2185,7 @@ def globFileNames( nd, flist, t, ufilter, nofilter=0 ):
       if not skip:
         
         # first, substitute variables into the file names
-        variableExpansion( tname, ufilter.platformName(), paramD, globL )
+        variableExpansion( tname, evaluator.getPlatformName(), paramD, globL )
         
         for fn in globL:
           flist.append( [str(fn),None] )
@@ -2121,7 +2195,7 @@ def globFileNames( nd, flist, t, ufilter, nofilter=0 ):
                            ', line ' + str(nd.getLineNumber()) )
 
 
-def parseFiles( t, filedoc, ufilter ):
+def parseFiles( t, filedoc, evaluator ):
     """
     Parse the files to copy and soft link for the test XML file.
     
@@ -2149,22 +2223,22 @@ def parseFiles( t, filedoc, ufilter ):
     lnfiles = []
     
     for nd in filedoc.matchNodes(["copy_files$"]):
-      collectFileNames( nd, cpfiles, t.getName(), t.getParameters(), ufilter )
+      collectFileNames( nd, cpfiles, t.getName(), t.getParameters(), evaluator )
     
     for nd in filedoc.matchNodes(["link_files$"]):
-      collectFileNames( nd, lnfiles, t.getName(), t.getParameters(), ufilter )
+      collectFileNames( nd, lnfiles, t.getName(), t.getParameters(), evaluator )
     
     # include mirror_files for backward compatibility
     for nd in filedoc.matchNodes(["mirror_files$"]):
-      collectFileNames( nd, lnfiles, t.getName(), t.getParameters(), ufilter )
+      collectFileNames( nd, lnfiles, t.getName(), t.getParameters(), evaluator )
     
     for nd in filedoc.matchNodes(["glob_link$"]):
       # This construct is deprecated [April 2016].
-      globFileNames( nd, lnfiles, t, ufilter )
+      globFileNames( nd, lnfiles, t, evaluator )
     
     for nd in filedoc.matchNodes(["glob_copy$"]):
       # This construct is deprecated [April 2016].
-      globFileNames( nd, cpfiles, t, ufilter )
+      globFileNames( nd, cpfiles, t, evaluator )
     
     for src,dst in lnfiles:
       t.addLinkFile( src, dst )
@@ -2173,11 +2247,11 @@ def parseFiles( t, filedoc, ufilter ):
     
     fL = []
     for nd in filedoc.matchNodes(["source_files$"]):
-      globFileNames( nd, fL, t, ufilter, 1 )
+      globFileNames( nd, fL, t, evaluator, 1 )
     t.setSourceFiles( map( lambda T: T[0], fL ) )
 
 
-def parseBaseline( t, filedoc, ufilter ):
+def parseBaseline( t, filedoc, evaluator ):
     """
     Parse the baseline files and scripts for the test XML file.
     
@@ -2197,7 +2271,7 @@ def parseBaseline( t, filedoc, ufilter ):
       skip = 0
       for n,v in nd.getAttrs().items():
         isfa, istrue = filterAttr( n, v, t.getName(), t.getParameters(),
-                                   ufilter, str(nd.getLineNumber()) )
+                                   evaluator, str(nd.getLineNumber()) )
         if isfa and not istrue:
           skip = 1
           break
@@ -2226,7 +2300,7 @@ def parseBaseline( t, filedoc, ufilter ):
             for i in range(len(fname)):
               fL.append( [str(fname[i]), str(fdest[i])] )
         
-        variableExpansion( t.getName(), ufilter.platformName(),
+        variableExpansion( t.getName(), evaluator.getPlatformName(),
                            t.getParameters(), fL )
         
         for f,d in fL:
@@ -2237,57 +2311,35 @@ def parseBaseline( t, filedoc, ufilter ):
           t.addBaselineFragment( script )
 
 
-def cartesian_product_and_filter( paramD, ufilter ):
+def make_cartesian_product_instances( paramD ):
     """
-    Takes a cartesian product of the parameters in 'paramD', applies parameter
-    filtering, then collects the cartesian product as a list of param=value
-    dictionaries (which is returned).  Note that the 'paramD' argument is
-    modified in-place to remove parameters that are filtered out.
-
-    Important: this function always applies filtering, even if the
-    "include_all" flag is present in 'ufilter'.  This means any command line
-    parameter expressions be passed along in batch queue mode.
+    Takes a cartesian product of the parameters in 'paramD', then collects and
+    returns the cartesian product as a list of param=value dictionaries.
     """
     # first, make a list containing each parameter value list
     plist_keys = []
     plist_vals = []
     for pname,pL in paramD.items():
-      plist_keys.append(pname)
-      plist_vals.append( pL )
-    
+        plist_keys.append(pname)
+        plist_vals.append( pL )
+
     instanceL = []
-    paramD_filtered = {}
-    
+
     # then loop over each set in the cartesian product
     dimvals = range(len(plist_vals))
     for vals in _cartesianProduct(plist_vals):
-      # load the parameter values into a dictionary; note that any combined
-      # values are used which may have multiple parameter values embedded
-      pdict = {}
-      for i in dimvals:
-        kL = plist_keys[i]
-        sL = vals[i]
-        assert len(kL) == len(sL)
-        n = len(kL)
-        for j in range(n):
-          pdict[ kL[j] ] = sL[j]
-      
-      if ufilter.evaluate_parameters( pdict ):
-        
-        instanceL.append( pdict )
-        
+        # load the parameter values into a dictionary; note that any combined
+        # values are used which may have multiple parameter values embedded
+        pdict = {}
         for i in dimvals:
-          kL = plist_keys[i]
-          sL = vals[i]
-          if kL in paramD_filtered:
-            if sL not in paramD_filtered[kL]:  # avoid duplicates
-              paramD_filtered[kL].append( sL )
-          else:
-            paramD_filtered[kL] = [ sL ]
+            kL = plist_keys[i]
+            sL = vals[i]
+            assert len(kL) == len(sL)
+            n = len(kL)
+            for j in range(n):
+                pdict[ kL[j] ] = sL[j]
 
-    # replace paramD parameters with a filtered set
-    paramD.clear()
-    paramD.update( paramD_filtered )
+        instanceL.append( pdict )
 
     return instanceL
 
