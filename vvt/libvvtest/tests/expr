@@ -7,15 +7,13 @@ sys.excepthook = sys.__excepthook__
 import os
 import re, string
 
+import testutils as util
+optD,argL = util.initialize( sys.argv )
+if 'TESTUTILS_RUNDIR' not in os.environ:
+    os.chdir( util.working_directory )
+
 from testutils import *
 
-mydir = get_test_dir()
-
-vvtestdir = os.path.normpath( mydir + '/..' )
-xmlwrapperdir = os.path.normpath( mydir + '/../../makemflib' )
-
-sys.path.insert( 0, xmlwrapperdir )
-sys.path.insert( 0, vvtestdir )
 import TestSpec
 import FilterExpressions
 import xmlwrapper

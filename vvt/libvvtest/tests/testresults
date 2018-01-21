@@ -11,7 +11,11 @@ import filecmp
 import shutil
 import glob
 
-# this will os.chdir() to a subdirectory
+import testutils as util
+optD,argL = util.initialize( sys.argv )
+if 'TESTUTILS_RUNDIR' not in os.environ:
+    os.chdir( util.working_directory )
+
 from testutils import *
 
 import results
@@ -25,7 +29,7 @@ multifname = results.multiruntimes_filename
 def main():
     """
     """
-    argL = get_arg_list()
+    global argL
 
     if len(argL) == 0:
         argL = """attrs01

@@ -8,16 +8,16 @@ import os
 import re, string
 import time
 
+import testutils as util
+optD,argL = util.initialize( sys.argv )
+if 'TESTUTILS_RUNDIR' not in os.environ:
+    os.chdir( util.working_directory )
+
 from testutils import *
 
-mydir = get_test_dir()
-
-vvtestdir = os.path.normpath( mydir + '/..' )
+vvtestdir = os.path.dirname( os.path.dirname(util.test_filename) )
 toolsdir = os.path.normpath( vvtestdir + '/..' )
-xmlwrapperdir = os.path.normpath( mydir + '/../../makemflib' )
 
-sys.path.insert( 0, xmlwrapperdir )
-sys.path.insert( 0, vvtestdir )
 import CommonSpec
 import xmlwrapper
 import cshScriptWriter
@@ -42,7 +42,7 @@ plat = FakePlatform()
 
 if not os.path.exists('tdir'):
   os.mkdir( 'tdir' )
-testdir = os.path.join( mydir, 'tdir' )
+testdir = os.path.abspath( 'tdir' )
 
 rmallfiles()
 

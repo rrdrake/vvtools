@@ -7,13 +7,17 @@ sys.excepthook = sys.__excepthook__
 import os
 import time
 
-# this will os.chdir() to a subdirectory
+import testutils as util
+optD,argL = util.initialize( sys.argv )
+if 'TESTUTILS_RUNDIR' not in os.environ:
+    os.chdir( util.working_directory )
+
 from testutils import *
 
 def main():
     """
     """
-    argL = get_arg_list()
+    global argL
 
     if len(argL) == 0:
         argL = """test01 test02 test03

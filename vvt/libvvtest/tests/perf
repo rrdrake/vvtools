@@ -8,7 +8,11 @@ import os
 import glob
 import time
 
-# this will os.chdir() to a subdirectory
+import testutils as util
+optD,argL = util.initialize( sys.argv )
+if 'TESTUTILS_RUNDIR' not in os.environ:
+    os.chdir( util.working_directory )
+
 from testutils import *
 
 import TestList
@@ -20,7 +24,7 @@ def main():
     """
     python -m cProfile -s cumulative .../libvvtest/tests/perf tspec01
     """
-    argL = get_arg_list()
+    global argL
 
     if len(argL) == 0:
         argL = """tspec01 

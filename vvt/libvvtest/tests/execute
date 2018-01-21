@@ -10,14 +10,18 @@ import glob
 import time
 import subprocess
 
-# this will os.chdir() to a subdirectory
+import testutils as util
+optD,argL = util.initialize( sys.argv )
+if 'TESTUTILS_RUNDIR' not in os.environ:
+    os.chdir( util.working_directory )
+
 from testutils import *
 
 
 def main():
     """
     """
-    argL = get_arg_list()
+    global argL
 
     if len(argL) == 0:
         argL = """null script links1 links2 links3

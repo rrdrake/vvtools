@@ -13,28 +13,169 @@ import subprocess
 import signal
 import shlex
 import pipes
+import getopt
 
 # this file is expected to be imported from a script that was run
 # within the tests directory (which is how all the tests are run)
-testdir = os.path.dirname( os.path.abspath( sys.argv[0] ) )
 
-srcdir = os.path.normpath( os.path.join( testdir, '..' ) )
-topdir = os.path.normpath( os.path.join( srcdir, '..' ) )
+test_filename = None
+working_directory = None
+vvtest = None
+resultspy = None
 
-sys.path.insert( 0, srcdir )
-sys.path.insert( 0, topdir )
 
-vvtest = os.path.join( topdir, 'vvtest' )
-resultspy = os.path.join( topdir, 'results.py' )
+def initialize( argv ):
+    """
+    """
+    global test_filename
+    global working_directory
+    global use_this_ssh
+    global vvtest
+    global resultspy
+
+    test_filename = os.path.abspath( argv[0] )
+
+    optL,argL = getopt.getopt( argv[1:], 'p:sS' )
+
+    optD = {}
+    for n,v in optL:
+        if n == '-p':
+            pass
+        elif n == '-s':
+            use_this_ssh = 'fake'
+        elif n == '-S':
+            use_this_ssh = 'ssh'
+        optD[n] = v
+
+    working_directory = make_working_directory( test_filename )
+
+    testdir = os.path.dirname( test_filename )
+
+    srcdir = os.path.normpath( os.path.join( testdir, '..' ) )
+    topdir = os.path.normpath( os.path.join( srcdir, '..' ) )
+
+    sys.path.insert( 0, srcdir )
+    sys.path.insert( 0, topdir )
+
+    vvtest = os.path.join( topdir, 'vvtest' )
+    resultspy = os.path.join( topdir, 'results.py' )
+
+    return optD, argL
+
+
+def run_test_cases( argv, test_module ):
+    """
+    """
+    optD, argL = initialize( argv )
+
+    loader = unittest.TestLoader()
+
+    tests = TestSuiteAccumulator( loader, test_module )
+
+    if len(argL) == 0:
+        tests.addModuleTests()
+
+    else:
+        test_classes = get_TestCase_classes( test_module )
+        for arg in argL:
+            if not tests.addTestCase( arg ):
+                # not a TestClass name; look for individual tests
+                count = 0
+                for name in test_classes.keys():
+                    if tests.addTestCase( name+'.'+arg ):
+                        count += 1
+                if count == 0:
+                    raise Exception( 'No tests found for "'+arg+'"' )
+
+    # it would be nice to use the 'failfast' argument (defaults to False), but
+    # not all versions of python have it
+    runner = unittest.TextTestRunner( stream=sys.stdout,
+                                      verbosity=2 )
+
+    results = runner.run( tests.getTestSuite() )
+    if len(results.errors) + len(results.failures) > 0:
+        sys.exit(1)
+
+
+class TestSuiteAccumulator:
+
+    def __init__(self, loader, test_module):
+        self.loader = loader
+        self.testmod = test_module
+        self.suite = unittest.TestSuite()
+
+    def getTestSuite(self):
+        ""
+        return self.suite
+
+    def addModuleTests(self):
+        ""
+        suite = self.loader.loadTestsFromModule( self.testmod )
+        self.suite.addTest( suite )
+
+    def addTestCase(self, test_name):
+        ""
+        haserrors = hasattr( self.loader, 'errors' )
+        if haserrors:
+            # starting in Python 3.5, the loader will not raise an exception
+            # if a test class or test case is not found; rather, the loader
+            # accumulates erros in a list; clear it first...
+            del self.loader.errors[:]
+
+        try:
+            suite = self.loader.loadTestsFromName( test_name, module=self.testmod )
+        except:
+            return False
+
+        if haserrors and len(self.loader.errors) > 0:
+            return False
+
+        self.suite.addTest( suite )
+        return True
+
+
+def get_TestCase_classes( test_module ):
+    """
+    Searches the given module for classes that derive from unittest.TestCase,
+    and returns a map from the class name as a string to the class object.
+    """
+    tcD = {}
+    for name in dir(test_module):
+        obj = getattr( test_module, name )
+        try:
+            if issubclass( obj, unittest.TestCase ):
+                tcD[name] = obj
+        except:
+            pass
+
+    return tcD
+
+
+def setup_test():
+    """
+    """
+    print3()
+    os.chdir( working_directory )
+    rmallfiles()
+    time.sleep(1)
+
+
+def make_working_directory( test_filename ):
+    """
+    directly executing a test script can be done but rm -rf * is performed;
+    to avoid accidental removal of files, cd into a working directory
+    """
+    d = os.path.join( 'tmpdir_'+os.path.basename( test_filename ) )
+    if not os.path.exists(d):
+        os.mkdir(d)
+        time.sleep(1)
+    return os.path.abspath(d)
+
+
+##########################################################################
 
 batchplatforms = [ 'ceelan', 'Linux', 'iDarwin', 'Darwin' ]
 
-arglist = sys.argv[1:]
-
-def get_arg_list(): return arglist
-
-def get_test_dir():  # magic: is this still needed ??
-    return testdir
 
 def print3( *args ):
     sys.stdout.write( ' '.join( [ str(x) for x in args ] ) + os.linesep )
@@ -445,15 +586,3 @@ def testtimes(out):
             pass
 
     return timesL
-
-
-###########################################################################
-
-if 'TOOLSET_RUNDIR' not in os.environ:
-    # directly executing a test script can be done but rm -rf * is performed;
-    # to avoid accidental removal of files, cd into a working directory
-    d = os.path.join( os.path.basename( sys.argv[0] )+'_dir' )
-    if not os.path.exists(d):
-        os.mkdir(d)
-    os.environ['TOOLSET_RUNDIR'] = d
-    os.chdir(d)

@@ -157,18 +157,25 @@ def main():
 class BackgroundJob:
 
     def __init__(self, cwd, testid, cmd):
+        """
+        """
         assert os.path.isabs( cwd )
         self.cmd = cmd
         os.chdir(cwd)
+
         rdir = testid + '_dir'
         os.mkdir( rdir )
         os.chdir( rdir )
-        os.environ['TOOLSET_RUNDIR'] = os.path.join( cwd, rdir )
+
+        os.environ['TESTUTILS_RUNDIR'] = os.path.join( cwd, rdir )
+
         log = os.path.join( cwd, testid+'.out' )
         self.logfp = open( log, 'w' )
         print3( "RUN: " + cmd )
         self.proc = subprocess.Popen( cmd, shell=True,
-                        stdout=self.logfp.fileno(), stderr=subprocess.STDOUT )
+                                      stdout=self.logfp.fileno(),
+                                      stderr=subprocess.STDOUT )
+        self.logfp.close()
         os.chdir(cwd)
 
     def poll(self):
@@ -215,25 +222,11 @@ def makeTestDir():
     return os.path.abspath(dname)
 
 
-def prependPATH(d):
-    """
-    Add the given directory to PATH.
-    """
-    if 'PATH' in os.environ:
-        if os.environ['PATH']:
-            os.environ['PATH'] = d + ':' + os.environ['PATH']
-        else:
-            os.environ['PATH'] = d
-    else:
-        os.environ['PATH'] = d
-
-
 def print3( *args ):
     """
     Python 2 & 3 compatible print function.
     """
-    s = ' '.join( [ str(x) for x in args ] )
-    sys.stdout.write( s + '\n' )
+    sys.stdout.write( ' '.join( [ str(x) for x in args ] ) + '\n' )
     sys.stdout.flush()
 
 
