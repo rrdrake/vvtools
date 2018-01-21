@@ -522,13 +522,13 @@ def relative_execute_directory( tst, testdir, cwd ):
 #
 # generation of tests
  
-def generateTestList( dirs, plat, ufilter ):
+def generateTestList( dirs, plat, rtconfig ):
     """
     """
     # default scan directory is the current working directory
     if len(dirs) == 0: dirs = ['.']
     
-    tlist = TestList.TestList( ufilter )
+    tlist = TestList.TestList( rtconfig )
     for d in dirs:
       if not os.path.exists(d):
         sys.stderr.write('*** ' + exeName + \
@@ -564,7 +564,7 @@ def generateTestList( dirs, plat, ufilter ):
     print "Test directory:", testdirname
 
 
-def extractTestFiles( dirs, plat, target_dir, ufilter ):
+def extractTestFiles( dirs, plat, target_dir, rtconfig ):
     """
     Uses all the regular filtering mechanisms to gather tests from a test
     source area and copies the files used for each test into a separate
@@ -573,7 +573,7 @@ def extractTestFiles( dirs, plat, target_dir, ufilter ):
     # default scan directory is the current working directory
     if len(dirs) == 0: dirs = ['.']
     
-    tlist = TestList.TestList( ufilter )
+    tlist = TestList.TestList( rtconfig )
     for d in dirs:
       if not os.path.exists(d):
         sys.stderr.write('*** ' + exeName + \
@@ -932,7 +932,7 @@ def readCommandInfo():
     return test_dir
 
 
-def runTests( dirs, plat, ufilter ):
+def runTests( dirs, plat, rtconfig ):
     """
     Executes a list of tests.
     """
@@ -968,7 +968,7 @@ def runTests( dirs, plat, ufilter ):
     
     writeCommandInfo( test_dir, plat, perms )
     
-    tlist = TestList.TestList( ufilter )
+    tlist = TestList.TestList( rtconfig )
 
     # generate test list by scanning directories
     if len(dirs) == 0:
@@ -1744,7 +1744,7 @@ def saveResults( tlist, plat, test_dir, inprogress=False ):
     tr.writeResults( fname, pname, cplr, mach, test_dir, inprogress )
 
 
-def restartTests( test_dir, plat, ufilter ):
+def restartTests( test_dir, plat, rtconfig ):
     
     assert test_dir != None
     
@@ -1758,7 +1758,7 @@ def restartTests( test_dir, plat, ufilter ):
         namer = batchutils.BatchFileNamer( test_dir, testlist_name )
         tfile = namer.getTestListName( qid )
 
-    tlist = TestList.TestList( ufilter )
+    tlist = TestList.TestList( rtconfig )
     tlist.readFile( tfile )
 
     if tlist.getFinishDate() == None and '--force' not in optdict:
@@ -1828,7 +1828,7 @@ def restartTests( test_dir, plat, ufilter ):
     tlist.writeFinished()
 
 
-def baselineTests( test_dir, plat, ufilter ):
+def baselineTests( test_dir, plat, rtconfig ):
     
     cwd = os.getcwd()
     
@@ -1840,7 +1840,7 @@ def baselineTests( test_dir, plat, ufilter ):
     
     tfile = os.path.join( test_dir, testlist_name )
 
-    tlist = TestList.TestList( ufilter )
+    tlist = TestList.TestList( rtconfig )
     tlist.readFile( tfile )
     
     filter_dir = None
@@ -2442,6 +2442,7 @@ if __name__ == '__main__':
   import batchutils
   import TestSpecCreator
   import FilterExpressions
+  from RuntimeConfig import RuntimeConfig
   import results
   from PermissionSetter import PermissionSetter
   
@@ -2485,7 +2486,7 @@ if __name__ == '__main__':
   # construct platform
   plat = platform.construct_Platform( toolsdir, optdict )
   
-  ufilter = FilterExpressions.ExpressionSet( \
+  rtconfig = RuntimeConfig( \
                 param_expr_list=optdict.get('-p', None),
                 keyword_expr=keyword_expr,
                 option_list=optdict.get('-o', []) + [plat.getCompiler()],
@@ -2499,7 +2500,7 @@ if __name__ == '__main__':
                                optdict.get('--tmax',None)],
                 runtime_sum=optdict.get( '--tsum', None ) )
   if optdict.has_key('--qsub-id'):
-    ufilter.setAttr( 'include_all', True )
+    rtconfig.setAttr( 'include_all', True )
   
   info = ( optdict.has_key('-i') or \
            optdict.has_key('--files') or \
@@ -2507,11 +2508,11 @@ if __name__ == '__main__':
   
   if optdict.has_key('-g') and not info:
     assert test_dir == None
-    generateTestList( dirs, plat, ufilter )
+    generateTestList( dirs, plat, rtconfig )
   
   elif info:
     
-    tlist = TestList.TestList( ufilter )
+    tlist = TestList.TestList( rtconfig )
     if test_dir != None:
       tfile = os.path.join( test_dir, testlist_name )
       tlist.readFile( tfile )
@@ -2520,7 +2521,7 @@ if __name__ == '__main__':
     elif os.path.exists( testResultsDir(plat.getName()) ):
       test_dir = os.path.join( os.getcwd(), testResultsDir(plat.getName()) )
       tfile = os.path.join( test_dir, testlist_name )
-      ufilter.setAttr( 'include_tdd', True )  # always include tdd with -i
+      rtconfig.setAttr( 'include_tdd', True )  # always include tdd with -i
       tlist.readFile( tfile )
       tlist.loadAndFilter( plat.getMaxProcs() )
     elif optdict.has_key('--keys') or optdict.has_key('--files'):
@@ -2554,10 +2555,10 @@ if __name__ == '__main__':
       print "*** error: cannot use -R or -w with -b (baseline)"
       sys.exit(1)
     
-    baselineTests( test_dir, plat, ufilter )
+    baselineTests( test_dir, plat, rtconfig )
   
   elif optdict.has_key('--extract'):
-    extractTestFiles( dirs, plat, optdict['--extract'], ufilter )
+    extractTestFiles( dirs, plat, optdict['--extract'], rtconfig )
   
   else:
     
@@ -2567,6 +2568,6 @@ if __name__ == '__main__':
       keyword_expr.append( ['notrun/notdone'], 'and' )
     
     if test_dir != None:
-      restartTests( test_dir, plat, ufilter )
+      restartTests( test_dir, plat, rtconfig )
     else:
-      runTests( dirs, plat, ufilter )
+      runTests( dirs, plat, rtconfig )

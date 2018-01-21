@@ -22,6 +22,7 @@ import CommonSpec
 import xmlwrapper
 import cshScriptWriter
 import TestSpecCreator
+from RuntimeConfig import RuntimeConfig
 
 xreader = xmlwrapper.XmlDocReader()
 
@@ -53,7 +54,7 @@ fp.writelines( [
      '  <execute name="exename"> echo "hello world" </execute>\n',
      '</rtest>\n' ] )
 fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 't1.xml' )
+tL = TestSpecCreator.createTestObjects( '.', 't1.xml', None, RuntimeConfig() )
 assert len(tL) == 1
 cshScriptWriter.writeScript( tL[0], xdb, plat,
                              toolsdir, os.getcwd(), testdir,

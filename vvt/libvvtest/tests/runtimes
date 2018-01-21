@@ -17,6 +17,7 @@ from testutils import *
 import results
 import TestSpec
 import TestSpecCreator
+from RuntimeConfig import RuntimeConfig
 import xmlwrapper
 
 timesfname = results.runtimes_filename
@@ -89,7 +90,8 @@ def test01():
     tr.writeRuntimes( 'tests', None )
 
     # even though a rootrel directory could be determined, no runtime is available
-    tst = TestSpecCreator.createTestObjects( os.getcwd()+'/tests', 'dir1/one.xml' )[0]
+    tst = TestSpecCreator.createTestObjects(
+        os.getcwd()+'/tests', 'dir1/one.xml', None, RuntimeConfig() )[0]
     cache = results.LookupCache( platname, 'cplr' )
     tm,tv = cache.getRunTime( tst )
     assert tm == None

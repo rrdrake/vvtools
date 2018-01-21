@@ -20,7 +20,7 @@ class TestSpecError(Exception):
 
 ###########################################################################
 
-def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
+def createTestObjects( rootpath, relpath, force_params, rtconfig ):
     """
     The 'rootpath' is the top directory of the file scan.  The 'relpath' is
     the name of the test file relative to 'rootpath' (it must not be an
@@ -35,15 +35,12 @@ def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
     any different when filtering is performed above create/refresh?
 
         Important: this function always applies filtering, even if the
-        "include_all" flag is present in 'ufilter'.  This means any command
+        "include_all" flag is present in 'rtconfig'.  This means any command
         line parameter expressions must be passed along in batch queue mode.
 
     """
-    if ufilter == None:
-      ufilter = FilterExpressions.ExpressionSet()
-
-    evaluator = ExpressionEvaluator( ufilter.platformName(),
-                                     ufilter.getOptionList() )
+    evaluator = ExpressionEvaluator( rtconfig.platformName(),
+                                     rtconfig.getOptionList() )
 
     tests = create_unfiltered_testlist( rootpath, relpath,
                                         force_params, evaluator )
@@ -55,16 +52,16 @@ def createTestObjects( rootpath, relpath, force_params=None, ufilter=None ):
             # if parent test, filter the parameter set to the children
             # that would be included
             paramD = t.getParameterSet()
-            paramD = apply_parameter_filtering( paramD, ufilter )
+            paramD = apply_parameter_filtering( paramD, rtconfig )
             t.setParameterSet( paramD )
 
-        if test_is_active( t, ufilter, results_keywords=False ):
+        if test_is_active( t, rtconfig, results_keywords=False ):
             tL.append( t )
 
     return tL
 
 
-def refreshTest( testobj, ufilter=None ):
+def refreshTest( testobj, rtconfig ):
     """
     Parses the test source file and resets the settings for the given test.
     The test name is not changed.  The parameters in the test XML file are
@@ -75,29 +72,26 @@ def refreshTest( testobj, ufilter=None ):
     
     Returns false if any of the filtering would exclude this test.
     """
-    if ufilter == None:
-      ufilter = FilterExpressions.ExpressionSet()
-
-    evaluator = ExpressionEvaluator( ufilter.platformName(),
-                                     ufilter.getOptionList() )
+    evaluator = ExpressionEvaluator( rtconfig.platformName(),
+                                     rtconfig.getOptionList() )
 
     reparse_test_object( testobj, evaluator )
 
     if testobj.hasAnalyze():
         # if parent test, filter parameterset
         paramD = testobj.getParameterSet()
-        paramD = apply_parameter_filtering( paramD, ufilter )
+        paramD = apply_parameter_filtering( paramD, rtconfig )
         testobj.setParameterSet( paramD )
 
     keep = True
-    filt = not ufilter.getAttr( 'include_all', False )
-    if filt and not test_is_active( testobj, ufilter, results_keywords=True ):
+    filt = not rtconfig.getAttr( 'include_all', False )
+    if filt and not test_is_active( testobj, rtconfig, results_keywords=True ):
         keep = False
 
     return keep
 
 
-def test_is_active( testobj, ufilter, results_keywords ):
+def test_is_active( testobj, rtconfig, results_keywords ):
     """
     Uses the given filter to test whether the test is active (enabled).  The
     'results_keywords' boolean should be True when refreshing a test, but
@@ -105,28 +99,28 @@ def test_is_active( testobj, ufilter, results_keywords ):
     not sure how to do it yet.)
     """
     pev = PlatformEvaluator( testobj.getPlatformEnableExpressions() )
-    if not ufilter.evaluate_platform_include( pev.satisfies_platform ):
+    if not rtconfig.evaluate_platform_include( pev.satisfies_platform ):
         return False
 
     for opexpr in testobj.getOptionEnableExpressions():
-        if not ufilter.evaluate_option_expr( opexpr ):
+        if not rtconfig.evaluate_option_expr( opexpr ):
             return False
 
     if results_keywords:
-        if not ufilter.satisfies_keywords( testobj.getKeywords(True) ):
+        if not rtconfig.satisfies_keywords( testobj.getKeywords(True) ):
             return False
     else:
-        if not ufilter.satisfies_nonresults_keywords( testobj.getKeywords() ):
+        if not rtconfig.satisfies_nonresults_keywords( testobj.getKeywords() ):
             return False
 
-    if not ufilter.getAttr( 'include_tdd', False ) and \
+    if not rtconfig.getAttr( 'include_tdd', False ) and \
        'TDD' in testobj.getKeywords():
         return False
 
-    if not ufilter.evaluate_parameters( testobj.getParameters() ):
+    if not rtconfig.evaluate_parameters( testobj.getParameters() ):
         return False
 
-    if not ufilter.file_search( testobj ):
+    if not rtconfig.file_search( testobj ):
         return False
 
     return True
@@ -188,7 +182,7 @@ class ExpressionEvaluator:
         return word_expr.evaluate( self.option_list.count )
 
 
-def apply_parameter_filtering( paramD, ufilter ):
+def apply_parameter_filtering( paramD, rtconfig ):
     """
     Takes a cartesian product of the parameters in 'paramD', applies parameter
     filtering, then reforms the dictionary with only the parameters NOT
@@ -217,7 +211,7 @@ def apply_parameter_filtering( paramD, ufilter ):
         for j in range(n):
           pdict[ kL[j] ] = sL[j]
       
-      if ufilter.evaluate_parameters( pdict ):
+      if rtconfig.evaluate_parameters( pdict ):
         
         for i in dimvals:
           kL = plist_keys[i]
@@ -233,9 +227,7 @@ def apply_parameter_filtering( paramD, ufilter ):
 
 ###########################################################################
 
-def create_unfiltered_testlist( rootpath, relpath,
-                                force_params=None,
-                                evaluator=None ):
+def create_unfiltered_testlist( rootpath, relpath, force_params, evaluator ):
     """
     Can use a (nested) rtest element to cause another test to be defined.
         

@@ -16,7 +16,7 @@ class TestList:
     
     version = '30'
     
-    def __init__(self, ufilter=None):
+    def __init__(self, runtime_config=None):
         
         self.filename = None
         self.datestamp = None
@@ -29,7 +29,7 @@ class TestList:
         self.started = {}  # TestSpec xdir -> TestExec object
         self.stopped = {}  # TestSpec xdir -> TestExec object
         
-        self.ufilter = ufilter
+        self.rtconfig = runtime_config
     
     def stringFileWrite(self, filename, datestamp=None):
         """
@@ -281,7 +281,7 @@ class TestList:
             if keep:
                 # apply runtime filtering
                 tm = testruntime(t)
-                if tm != None and not self.ufilter.evaluate_runtime( tm ):
+                if tm != None and not self.rtconfig.evaluate_runtime( tm ):
                     keep = False
                     rmD[ xdir ] = t
                     pxdir = t.getParent()
@@ -293,7 +293,7 @@ class TestList:
                     self.active[ xdir ] = t
                 else:
                     # read from test source, which double checks filtering
-                    keep = TestSpecCreator.refreshTest( t, self.ufilter )
+                    keep = TestSpecCreator.refreshTest( t, self.rtconfig )
                     if baseline and not t.hasBaseline():
                         keep = False
                     if keep:
@@ -302,7 +302,7 @@ class TestList:
         # remove tests that do not meet runtime requirements
         self._remove_tests( rmD )
 
-        rtsum = self.ufilter.getAttr( 'runtime_sum', None )
+        rtsum = self.rtconfig.getAttr( 'runtime_sum', None )
         if rtsum != None:
             # filter by cummulative runtime; first, generate list with times
             rmD.clear()
@@ -373,11 +373,11 @@ class TestList:
     def _apply_filters(self, xdir, tspec, subdir, analyze_only):
         """
         """
-        if self.ufilter.getAttr('include_all',0):
+        if self.rtconfig.getAttr('include_all',0):
             return True
         
         kwL = tspec.getResultsKeywords() + tspec.getKeywords()
-        if not self.ufilter.satisfies_keywords( kwL ):
+        if not self.rtconfig.satisfies_keywords( kwL ):
             return False
         
         if subdir != None and subdir != xdir and not is_subdir( subdir, xdir ):
@@ -388,10 +388,10 @@ class TestList:
         #if analyze_only and tspec.getParent() != None:
         #  return 0
         
-        if not self.ufilter.evaluate_parameters( tspec.getParameters() ):
+        if not self.rtconfig.evaluate_parameters( tspec.getParameters() ):
             return False
 
-        if not self.ufilter.getAttr( 'include_tdd', False ) and \
+        if not self.rtconfig.getAttr( 'include_tdd', False ) and \
            tspec.hasAttr( 'TDD' ):
             return False
 
@@ -551,7 +551,7 @@ class TestList:
         
         try:
           testL = TestSpecCreator.createTestObjects(
-                        basepath, relfile, force_params, self.ufilter )
+                        basepath, relfile, force_params, self.rtconfig )
         except TestSpecCreator.TestSpecError:
           print "*** skipping file " + os.path.join( basepath, relfile ) + \
                 ": " + str( sys.exc_info()[1] )
