@@ -14,6 +14,7 @@ import signal
 import shlex
 import pipes
 import getopt
+import unittest
 
 # this file is expected to be imported from a script that was run
 # within the tests directory (which is how all the tests are run)
@@ -22,6 +23,9 @@ test_filename = None
 working_directory = None
 vvtest = None
 resultspy = None
+
+testsrcdir = os.path.dirname( os.path.abspath( sys.argv[0] ) )
+sys.path.insert( 0, os.path.dirname( testsrcdir ) )
 
 
 def initialize( argv ):
@@ -53,9 +57,6 @@ def initialize( argv ):
 
     srcdir = os.path.normpath( os.path.join( testdir, '..' ) )
     topdir = os.path.normpath( os.path.join( srcdir, '..' ) )
-
-    sys.path.insert( 0, srcdir )
-    sys.path.insert( 0, topdir )
 
     vvtest = os.path.join( topdir, 'vvtest' )
     resultspy = os.path.join( topdir, 'results.py' )

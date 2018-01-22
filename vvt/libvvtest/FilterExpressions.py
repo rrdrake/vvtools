@@ -261,7 +261,7 @@ class ParamFilter:
     
     def __init__(self, expr=None):
         """
-        If 'params' is not None, load() is called.
+        If 'expr' is not None, load() is called.
         """
         self.wexpr = None
         self.wordD = {}
