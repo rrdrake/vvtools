@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-#RUNTEST:
 
 import sys
 sys.dont_write_bytecode = True
@@ -57,20 +56,40 @@ class ParameterSet:
         self.instances = \
             accumulate_parameter_group_list( curL, names, values_list )
 
-        self.params.append( (names, [] + values_list) )
+        self.params.append( ( [] + names, [] + values_list) )
 
     def applyParamFilter(self, param_filter):
         """
+        The param_filter.evaluate() method is used to filter down the set of
+        parameter instances.  The list returned with getInstances() will
+        reflect the filtering.
         """
-        pass
+        self._reconstructInstances()
 
-    def getParameterInstances(self):
+        newL = []
+        for instD in self.instances:
+            if param_filter.evaluate( instD ):
+                newL.append( instD )
+
+        self.instances = newL
+
+    def getInstances(self):
         """
         Return the list of dictionary instances, which contains all
         combinations of the parameter values (the cartesian product).
         """
         return self.instances
 
+    def _reconstructInstances(self):
+        ""
+        save_params = self.params
+        self.params = []
+        self.instances = []
+        for names,values in save_params:
+            self.addParameterGroup( names, values )
+
+
+###########################################################################
 
 def accumulate_parameter_group_list( Dlist, names, values_list ):
     """
