@@ -80,6 +80,26 @@ class ParameterSet:
         """
         return self.instances
 
+    def getParameters(self):
+        """
+        Returns the filtered parameters, such as
+
+            [
+              [ ['paramA'], [ ['a1'], ['a2'], ... ] ],
+              [ ['paramB', paramC'], [ ['b1','c1'], ['b2','c2'], ... ] ],
+            ]
+        """
+        instL = self.getInstances()
+        filtered_params = []
+        for nameL,valuesL in self.params:
+            L = []
+            for valL in valuesL:
+                if contains_parameter_name_value( instL, nameL, valL ):
+                    L.append( valL )
+            filtered_params.append( [nameL, L] )
+
+        return filtered_params
+
     def _reconstructInstances(self):
         ""
         save_params = self.params
@@ -90,6 +110,26 @@ class ParameterSet:
 
 
 ###########################################################################
+
+def contains_parameter_name_value( instances, nameL, valL ):
+    """
+    Returns true if the given parameter names are equal to the given values
+    for at least one instance dictionary in the 'instances' list.
+    """
+    zipL = list( zip( nameL, valL ) )
+
+    ok = False
+    for D in instances:
+        cnt = 0
+        for n,v in zipL:
+            if D[n] == v:
+                cnt += 1
+        if cnt == len(nameL):
+            ok = True
+            break
+
+    return ok
+
 
 def accumulate_parameter_group_list( Dlist, names, values_list ):
     """

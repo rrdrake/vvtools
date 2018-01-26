@@ -14,6 +14,7 @@ from testutils import print3
 import ParameterSet
 from ParameterSet import add_parameter_group_to_list_of_dicts
 from ParameterSet import accumulate_parameter_group_list
+from ParameterSet import contains_parameter_name_value
 
 
 class Function_add_parameter_group_to_list_of_dicts( unittest.TestCase ):
@@ -279,6 +280,183 @@ class ParameterSet_param_filter( unittest.TestCase ):
         assert {'A':'a', 'B':'y'} in instL
         assert {'A':'b', 'B':'y'} in instL
 
+
+class Function_contains_parameter_name_value( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_single_parameter_in_instances_list(self):
+        ""
+        instL = [{'A':'a1'}]
+        names = ['A'] ; values = ['a1']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == True
+
+    def test_single_parameter_not_in_instances_list(self):
+        ""
+        instL = [{'A':'a1'}]
+        names = ['A'] ; values = ['a2']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == False
+
+    def test_double_parameter_in_instances_list(self):
+        ""
+        instL = [{'A':'a1', 'B':'b1'}]
+        names = ['A','B'] ; values = ['a1','b1']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == True
+
+    def test_double_parameter_not_in_instances_list(self):
+        ""
+        instL = [{'A':'a1', 'B':'b1'}]
+
+        names = ['A','B'] ; values = ['a2','b2']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == False
+
+        names = ['A','B'] ; values = ['a1','b2']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == False
+
+        names = ['A','B'] ; values = ['a2','b1']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == False
+
+    def test_parameter_in_set_of_instances(self):
+        ""
+        instL = [{'A':'a1'}, {'A':'a2'}]
+
+        names = ['A'] ; values = ['a1']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == True
+
+        names = ['A'] ; values = ['a2']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == True
+
+        names = ['A'] ; values = ['a3']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == False
+
+    def test_double_parameter_in_set_of_instances(self):
+        ""
+        instL = [ {'A':'a1', 'B':'b1'},
+                  {'A':'a2', 'B':'b2'} ]
+
+        names = ['A','B'] ; values = ['a1','b1']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == True
+
+        names = ['A','B'] ; values = ['a2','b2']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == True
+
+        names = ['A','B'] ; values = ['a1','b2']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == False
+
+        names = ['A','B'] ; values = ['a2','b1']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == False
+
+    def test_double_parameter_in_multiple_sets_of_instances(self):
+        ""
+        instL = [ {'A':'a1', 'B':'b1', 'C':'c1'},
+                  {'A':'a2', 'B':'b2', 'C':'c1'},
+                  {'A':'a1', 'B':'b1', 'C':'c2'},
+                  {'A':'a2', 'B':'b2', 'C':'c2'} ]
+
+        names = ['A','B'] ; values = ['a1','b1']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == True
+
+        names = ['A','B'] ; values = ['a1','b2']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == False
+
+        names = ['A','B'] ; values = ['a2','b2']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == True
+
+        names = ['C'] ; values = ['c1']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == True
+
+        names = ['C'] ; values = ['c2']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == True
+
+        names = ['C'] ; values = ['c3']
+        b = contains_parameter_name_value( instL, names, values )
+        assert b == False
+
+
+class ParameterSet_getParameters( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_empty_does_not_crash(self):
+        ""
+        pset = ParameterSet.ParameterSet()
+        pL = pset.getParameters()
+        assert len(pL) == 0
+
+    def test_single_parameter_names_and_values(self):
+        ""
+        pset = ParameterSet.ParameterSet()
+        pset.addParameter( 'A', ['a1','a2','a3'] )
+
+        pL = pset.getParameters()
+        assert len(pL) == 1
+        assert len(pL[0]) == 2
+        names,values = pL[0]
+        assert names == ['A']
+        assert values == [ ['a1'], ['a2'], ['a3'] ]
+
+    def test_double_parameter_names_and_values(self):
+        ""
+        pset = ParameterSet.ParameterSet()
+        pset.addParameterGroup( ['A','B'], [ ['a1','b1'], ['a2','b2'] ] )
+
+        pL = pset.getParameters()
+        assert len(pL) == 1
+        assert len(pL[0]) == 2
+        names,values = pL[0]
+        assert names == ['A','B']
+        assert values == [ ['a1','b1'], ['a2','b2'] ]
+
+    def test_single_filtered_parameter_names_and_values(self):
+        ""
+        pset = ParameterSet.ParameterSet()
+        pset.addParameter( 'A', ['a1','x','a3'] )
+        filt = MockParamFilter_ExcludeXValues()
+        pset.applyParamFilter( filt )
+
+        pL = pset.getParameters()
+        assert len(pL) == 1
+        assert len(pL[0]) == 2
+        names,values = pL[0]
+        assert names == ['A']
+        assert values == [ ['a1'], ['a3'] ]
+
+    def test_double_filtered_parameter_names_and_values(self):
+        ""
+        pset = ParameterSet.ParameterSet()
+        pset.addParameterGroup( ['A','B'], [ ['a1','b1'], ['a2','x'] ] )
+        filt = MockParamFilter_ExcludeXValues()
+        pset.applyParamFilter( filt )
+
+        pL = pset.getParameters()
+        assert len(pL) == 1
+        assert len(pL[0]) == 2
+        names,values = pL[0]
+        assert names == ['A','B']
+        assert values == [ ['a1','b1'] ]
+
+
+############################################################################
 
 class MockParamFilter_AlwaysTrue:
     def evaluate(self, D):
