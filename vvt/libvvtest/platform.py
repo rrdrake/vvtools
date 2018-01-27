@@ -318,7 +318,18 @@ def construct_Platform( toolsdir, optdict, **kwargs ):
         if 'debug' in kwargs:
             print 'construct_Platform C:', plat.platname, plat.cplrname
             idplatform.debug = False
-    
+
+    platopts = optdict.get( '--platopt', {} )
+
+    q = platopts.get( 'queue', platopts.get( 'q', None ) )
+    plat.setattr( 'queue', q )
+
+    act = platopts.get( 'account', platopts.get( 'PT', None ) )
+    plat.setattr( 'account', act )
+
+    wall = platopts.get( 'walltime', None )
+    plat.setattr( 'walltime', wall )
+
     try:
         # this comes from the config directory
         import platform_plugin
@@ -399,4 +410,9 @@ else:
 ###############################################################################
 
 if __name__ == "__main__":
-  print 'hello'
+    """
+    """
+    toolsdir = os.path.dirname(mydir)
+    sys.path.insert( 1, os.path.join( toolsdir, 'config' ) )
+    plat = construct_Platform( toolsdir, {} )
+    plat.display()
