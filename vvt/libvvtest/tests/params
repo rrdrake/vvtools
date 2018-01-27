@@ -52,7 +52,7 @@ def test01():
           <execute> echo "execute basic2 np = $np" </execute>
         </rtest>""" )
     
-    out,np,nd,nf,nn = run_vvtest( '-p np<8 -P np=1' )
+    out,np,nd,nf,nn = run_vvtest( '-p np<8 -P np=1 -N 10' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
     platname = platform_name( out )
@@ -63,7 +63,7 @@ def test01():
     print "execute", L
     assert len(L) == 1 and L[0].strip() == 'execute basic2 np = 4'
     
-    out,np,nd,nf,nn = run_vvtest( '-p np<=8' )
+    out,np,nd,nf,nn = run_vvtest( '-p np<=8 -N 10' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     
     out,np,nd,nf,nn = run_vvtest( '-i' )
@@ -78,17 +78,17 @@ def test01():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( '-p np<8 -P np=1 --batch --qsub-length 0' )
+        out,np,nd,nf,nn = run_vvtest( '-p np<8 -P np=1 -N 10 --batch --qsub-length 0' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         
         L = filegrep( tdir + '/basic.np=4/execute.log', 'execute basic2' )
         print "execute", L
         assert len(L) == 1 and L[0].strip() == 'execute basic2 np = 4'
         
-        out,np,nd,nf,nn = run_vvtest( '-p np<=8 --batch --qsub-length 0' )
+        out,np,nd,nf,nn = run_vvtest( '-p np<=8 -N 10 --batch --qsub-length 0' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         
-        out,np,nd,nf,nn = run_vvtest( '-i -p np=4' )
+        out,np,nd,nf,nn = run_vvtest( '-i -p np=4 -N 10' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
 
@@ -103,7 +103,7 @@ def test02():
           <execute> echo "execute basic np = $np dt = $dt" </execute>
         </rtest>""" )
 
-    out,np,nd,nf,nn = run_vvtest()
+    out,np,nd,nf,nn = run_vvtest( '-N 10' )
     assert np == 4 and nd == 0 and nf == 0 and nn == 0
 
     tdir = results_dir()
@@ -115,7 +115,7 @@ def test02():
 
     remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( '-p np=4' )
+    out,np,nd,nf,nn = run_vvtest( '-p np=4 -N 10' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     L = filegrep( tdir + '/basic.dt=0.01.np=4/execute.log', 'execute basic' )
     assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.01'
@@ -132,14 +132,14 @@ def test02():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( '-p np=4 --batch --qsub-length 0' )
+        out,np,nd,nf,nn = run_vvtest( '-p np=4 -N 10 --batch --qsub-length 0' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         L = filegrep( tdir + '/basic.dt=0.01.np=4/execute.log', 'execute basic' )
         assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.01'
         L = filegrep( tdir + '/basic.dt=0.1.np=4/execute.log', 'execute basic' )
         assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.1'
         
-        out,np,nd,nf,nn = run_vvtest( '--batch --qsub-length 0' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -N 10 --qsub-length 0' )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         
         out,np,nd,nf,nn = run_vvtest( '-i' )
@@ -227,7 +227,7 @@ def test06():
           </analyze>
         </rtest> """ )
     
-    out,np,nd,nf,nn = run_vvtest()
+    out,np,nd,nf,nn = run_vvtest( '-N 10' )
     assert np == 5 and nd == 0 and nf == 0 and nn == 0
 
     tdir = results_dir()
@@ -243,7 +243,7 @@ def test06():
 
     cwd = os.getcwd()
     os.chdir( tdir+'/basic' )
-    out,np,nd,nf,nn = run_vvtest( '-R' )
+    out,np,nd,nf,nn = run_vvtest( '-R -N 10' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     L = filegrep( 'execute.log', 'access PARAM_np' )
     assert len(L) == 1
@@ -266,7 +266,7 @@ def test06():
           </analyze>
         </rtest> """ )
     
-    out,np,nd,nf,nn = run_vvtest()
+    out,np,nd,nf,nn = run_vvtest( '-N 10' )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
     L = filegrep( tdir+'/zip/execute.log', 'access PARAM_np_dt' )
     assert len(L) == 1
@@ -274,7 +274,7 @@ def test06():
     assert pL == ['1/0.1','4/0.01']
     
     os.chdir( tdir+'/zip' )
-    out,np,nd,nf,nn = run_vvtest( '-R' )
+    out,np,nd,nf,nn = run_vvtest( '-R -N 10' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     L = filegrep( 'execute.log', 'access PARAM_np_dt' )
     assert len(L) == 1

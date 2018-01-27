@@ -33,42 +33,35 @@ class ParameterSet:
 
     def __init__(self):
         ""
-        self.params = []
+        self.params = {}
         self.instances = []
 
     def addParameter(self, name, value_list):
         """
         Such as 'myparam', ['value1', 'value2'].
         """
-        names = [ name ]
+        names = (name,)
         values_list = [ [val] for val in value_list ]
         self.addParameterGroup( names, values_list )
 
     def addParameterGroup(self, names, values_list):
         """
-        Such as ['paramA','paramB'], [ ['A1','B1'], ['A2','B2'] ].
+        Such as ('paramA','paramB'), [ ['A1','B1'], ['A2','B2'] ].
         """
-        if len(self.params) == 0:
-            curL = [ {} ]  # a seed for the accumulation algorithm
-        else:
-            curL = self.instances
+        self.params[ tuple(names) ] = list(values_list)
+        self._constructInstances()
 
-        self.instances = \
-            accumulate_parameter_group_list( curL, names, values_list )
-
-        self.params.append( ( [] + names, [] + values_list) )
-
-    def applyParamFilter(self, param_filter):
+    def applyParamFilter(self, param_filter_function):
         """
-        The param_filter.evaluate() method is used to filter down the set of
-        parameter instances.  The list returned with getInstances() will
+        The param_filter_function() function is called to filter down the set
+        of parameter instances.  The list returned with getInstances() will
         reflect the filtering.
         """
-        self._reconstructInstances()
+        self._constructInstances()
 
         newL = []
         for instD in self.instances:
-            if param_filter.evaluate( instD ):
+            if param_filter_function( instD ):
                 newL.append( instD )
 
         self.instances = newL
@@ -82,49 +75,50 @@ class ParameterSet:
 
     def getParameters(self):
         """
-        Returns the filtered parameters, such as
-
-            [
-              [ ['paramA'], [ ['a1'], ['a2'], ... ] ],
-              [ ['paramB', paramC'], [ ['b1','c1'], ['b2','c2'], ... ] ],
-            ]
+        Returns the filtered parameters in a dictionary, such as
+            {
+              ('paramA',) : [ ['a1'], ['a2'], ... ] ],
+              ('paramB', paramC') : [ ['b1','c1'], ['b2','c2'], ... ] ],
+            }
         """
         instL = self.getInstances()
-        filtered_params = []
-        for nameL,valuesL in self.params:
+        filtered_params = {}
+        for nameT,valuesL in self.params.items():
             L = []
             for valL in valuesL:
-                if contains_parameter_name_value( instL, nameL, valL ):
+                if contains_parameter_name_value( instL, nameT, valL ):
                     L.append( valL )
-            filtered_params.append( [nameL, L] )
+            filtered_params[ nameT ] = L
 
         return filtered_params
 
-    def _reconstructInstances(self):
+    def _constructInstances(self):
         ""
-        save_params = self.params
-        self.params = []
-        self.instances = []
-        for names,values in save_params:
-            self.addParameterGroup( names, values )
+        if len(self.params) == 0:
+            self.instances = []
+
+        else:
+            instL = [ {} ]  # need a seed for the accumulation algorithm
+            for names,values in self.params.items():
+                instL = \
+                    accumulate_parameter_group_list( instL, names, values )
+            self.instances = instL
 
 
 ###########################################################################
 
-def contains_parameter_name_value( instances, nameL, valL ):
+def contains_parameter_name_value( instances, nameT, valL ):
     """
     Returns true if the given parameter names are equal to the given values
     for at least one instance dictionary in the 'instances' list.
     """
-    zipL = list( zip( nameL, valL ) )
-
     ok = False
     for D in instances:
         cnt = 0
-        for n,v in zipL:
+        for n,v in zip( nameT, valL ):
             if D[n] == v:
                 cnt += 1
-        if cnt == len(nameL):
+        if cnt == len(nameT):
             ok = True
             break
 
@@ -137,7 +131,7 @@ def accumulate_parameter_group_list( Dlist, names, values_list ):
     new name=value set.  For example, if
 
         Dlist = [ {'A':'a1'} ]
-        names = ['B']
+        names = ('B',)
         values_list = [ ['b1'], ['b2'] ]
 
     then this list is returned
@@ -148,7 +142,7 @@ def accumulate_parameter_group_list( Dlist, names, values_list ):
     An example using a group:
 
         Dlist = [ {'A':'a1'}, {'A':'a2'} ]
-        names = ['B','C']
+        names = ('B','C')
         values_list = [ ['b1','c1'], ['b2','c2'] ]
 
     would yield
@@ -160,7 +154,8 @@ def accumulate_parameter_group_list( Dlist, names, values_list ):
     """
     newL = []
     for values in values_list:
-        newL.extend( add_parameter_group_to_list_of_dicts( Dlist, names, values ) )
+        L = add_parameter_group_to_list_of_dicts( Dlist, names, values )
+        newL.extend( L )
     return newL
 
 

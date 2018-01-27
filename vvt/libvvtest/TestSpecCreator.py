@@ -8,6 +8,8 @@ import xmlwrapper
 import TestSpec
 import FilterExpressions
 
+from ParameterSet import ParameterSet
+
 
 class TestSpecError(Exception):
     def __init__(self, msg=None):
@@ -51,9 +53,8 @@ def createTestObjects( rootpath, relpath, force_params, rtconfig ):
         if t.hasAnalyze():
             # if parent test, filter the parameter set to the children
             # that would be included
-            paramD = t.getParameterSet()
-            paramD = apply_parameter_filtering( paramD, rtconfig )
-            t.setParameterSet( paramD )
+            paramset = t.getParameterSet()
+            paramset.applyParamFilter( rtconfig.evaluate_parameters )
 
         if test_is_active( t, rtconfig, results_keywords=False ):
             tL.append( t )
@@ -79,9 +80,8 @@ def refreshTest( testobj, rtconfig ):
 
     if testobj.hasAnalyze():
         # if parent test, filter parameterset
-        paramD = testobj.getParameterSet()
-        paramD = apply_parameter_filtering( paramD, rtconfig )
-        testobj.setParameterSet( paramD )
+        paramset = testobj.getParameterSet()
+        paramset.applyParamFilter( rtconfig.evaluate_parameters )
 
     keep = True
     filt = not rtconfig.getAttr( 'include_all', False )
@@ -182,49 +182,6 @@ class ExpressionEvaluator:
         return word_expr.evaluate( self.option_list.count )
 
 
-def apply_parameter_filtering( paramD, rtconfig ):
-    """
-    Takes a cartesian product of the parameters in 'paramD', applies parameter
-    filtering, then reforms the dictionary with only the parameters NOT
-    filtered out.  The new dictionary is returned.
-    """
-    # first, make a list containing each parameter value list
-    plist_keys = []
-    plist_vals = []
-    for pname,pL in paramD.items():
-      plist_keys.append(pname)
-      plist_vals.append( pL )
-    
-    paramD_filtered = {}
-    
-    # then loop over each set in the cartesian product
-    dimvals = range(len(plist_vals))
-    for vals in _cartesianProduct(plist_vals):
-      # load the parameter values into a dictionary; note that any combined
-      # values are used which may have multiple parameter values embedded
-      pdict = {}
-      for i in dimvals:
-        kL = plist_keys[i]
-        sL = vals[i]
-        assert len(kL) == len(sL)
-        n = len(kL)
-        for j in range(n):
-          pdict[ kL[j] ] = sL[j]
-      
-      if rtconfig.evaluate_parameters( pdict ):
-        
-        for i in dimvals:
-          kL = plist_keys[i]
-          sL = vals[i]
-          if kL in paramD_filtered:
-            if sL not in paramD_filtered[kL]:  # avoid duplicates
-              paramD_filtered[kL].append( sL )
-          else:
-            paramD_filtered[kL] = [ sL ]
-
-    return paramD_filtered
-
-
 ###########################################################################
 
 def create_unfiltered_testlist( rootpath, relpath, force_params, evaluator ):
@@ -296,8 +253,8 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
                     evaluator ):
     """
     """
-    paramD = parseTestParameters( filedoc, tname, evaluator, force_params )
-    pcount = len( paramD )
+    paramset = parseTestParameters( filedoc, tname, evaluator, force_params )
+    numparams = len( paramset.getParameters() )
     
     keywords = parseKeywords( filedoc, tname )
     
@@ -305,34 +262,32 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
     
     testL = []
 
-    if len(paramD) == 0:
+    if numparams == 0:
         t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
         t.setKeywords( keywords )
         testL.append(t)
-    
+
     else:
-      # take a cartesian product of all the parameter values but apply
-      # parameter filtering (this may change the paramD)
-      instanceL = make_cartesian_product_instances( paramD )
-      for pdict in instanceL:
-        # create the test and add to test list
-        t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
-        t.setParameters( pdict )
-        t.setKeywords( keywords )
-        testL.append(t)
-    
+        # take a cartesian product of all the parameter values
+        for pdict in paramset.getInstances():
+            # create the test and add to test list
+            t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
+            t.setParameters( pdict )
+            t.setKeywords( keywords )
+            testL.append(t)
+
     if len(testL) > 0:
       # check for execute/analyze
       t = testL[0]
       parseAnalyze( t, filedoc, evaluator )
       if t.hasAnalyze():
-        if pcount == 0:
+        if numparams == 0:
           # a test with no parameters but with an analyze script
           raise TestSpecError( 'an analyze requires at least one ' + \
                                'parameter to be defined' )
         # create an analyze test, and make it the parent of each test
         parent = t.makeParent()
-        parent.setParameterSet( paramD )
+        parent.setParameterSet( paramset )
         for t2 in testL:
           t2.setParent( parent.getExecuteDirectory() )
         testL.append( parent )
@@ -357,23 +312,21 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
                       force_params, evaluator ):
     """
     """
-    paramD = parseTestParameters_scr( vspecs, tname, evaluator, force_params )
-    pcount = len( paramD )
+    paramset = parseTestParameters_scr( vspecs, tname, evaluator, force_params )
+    numparams = len( paramset.getParameters() )
     
     keywords = parseKeywords_scr( vspecs, tname )
     
     testL = []
 
-    if len(paramD) == 0:
+    if numparams == 0:
         t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
         t.setKeywords( keywords )
         testL.append(t)
 
     else:
-        # take a cartesian product of all the parameter values but apply
-        # parameter filtering (this may change the paramD)
-        instanceL = make_cartesian_product_instances( paramD )
-        for pdict in instanceL:
+        # take a cartesian product of all the parameter values
+        for pdict in paramset.getInstances():
             # create the test and add to test list
             t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
             t.setParameters( pdict )
@@ -385,13 +338,13 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
       t = testL[0]
       parseAnalyze_scr( t, vspecs, evaluator )
       if t.hasAnalyze():
-        if pcount == 0:
+        if numparams == 0:
           # a test with no parameters but with an analyze script
           raise TestSpecError( 'an analyze requires at least one ' + \
                                'parameter to be defined' )
         # create an analyze test, and make it the parent of each test
         parent = t.makeParent()
-        parent.setParameterSet( paramD )
+        parent.setParameterSet( paramset )
         for t2 in testL:
           t2.setParent( parent.getExecuteDirectory() )
         testL.append( parent )
@@ -495,8 +448,8 @@ def reparse_test_object( testobj, evaluator ):
           # a refresh because the parents are saved in the test list file
           parseAnalyze( testobj, filedoc, evaluator )
 
-          paramD = parseTestParameters( filedoc, tname, evaluator, None )
-          testobj.setParameterSet( paramD )
+          paramset = parseTestParameters( filedoc, tname, evaluator, None )
+          testobj.setParameterSet( paramset )
 
         parseFiles       ( testobj, filedoc, evaluator )
         parseTimeouts    ( testobj, filedoc, evaluator )
@@ -525,8 +478,8 @@ def reparse_test_object( testobj, evaluator ):
             # a refresh because the parents are saved in the test list file
             parseAnalyze_scr( testobj, vspecs, evaluator )
             
-            paramD = parseTestParameters_scr( vspecs, tname, evaluator, None )
-            testobj.setParameterSet( paramD )
+            paramset = parseTestParameters_scr( vspecs, tname, evaluator, None )
+            testobj.setParameterSet( paramset )
 
         parseFiles_scr    ( testobj, vspecs, evaluator )
         parseTimeouts_scr ( testobj, vspecs, evaluator )
@@ -1152,7 +1105,7 @@ def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
     """
     cpat = re.compile( '[\t ]*,[\t ]*' )
 
-    paramD = {}
+    paramset = ParameterSet()
 
     for spec in vspecs.getSpecList( 'parameterize' ):
         
@@ -1173,9 +1126,9 @@ def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
         if not L[0].strip():
             raise TestSpecError( "no parameter name given, " + \
                                  "line " + str(lnum) )
-        
-        nL = tuple( [ n.strip() for n in L[0].strip().split(',') ] )
-        
+
+        nL = [ n.strip() for n in L[0].strip().split(',') ]
+
         for n in nL:
             if not allowableVariable(n):
                 raise TestSpecError( 'invalid parameter name: "'+n+'", ' + \
@@ -1192,9 +1145,9 @@ def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
                 if not allowableString(v):
                     raise TestSpecError( 'invalid parameter value: "' + \
                                          v+'", line ' + str(lnum) )
-            
-            paramD[ nL ] = [ (v,) for v in vL ]
-        
+
+            paramset.addParameter( nL[0], vL )
+
         else:
             
             if force_params != None:
@@ -1214,11 +1167,11 @@ def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
                     if not allowableString(v):
                         raise TestSpecError( 'invalid parameter value: "' + \
                                              v+'", line ' + str(lnum) )
-                vL.append( tuple(gL) )
-            
-            paramD[ nL ] = vL
+                vL.append( gL )
 
-    return paramD
+            paramset.addParameterGroup( nL, vL )
+
+    return paramset
 
 
 def parseAnalyze_scr( t, vspecs, evaluator ):
@@ -1655,10 +1608,10 @@ def parseTestParameters( filedoc, tname, evaluator, force_params ):
 
         { (pA,pB) : [ (value1,val1), (value2,val2) ] }
     """
-    
-    paramD = {}
+    paramset = ParameterSet()
+
     if force_params == None:
-      force_params = {}
+        force_params = {}
     
     for nd in filedoc.matchNodes(['parameterize$']):
       
@@ -1704,20 +1657,20 @@ def parseTestParameters( filedoc, tname, evaluator, force_params ):
                                  'number of values, line ' + str(nd.getLineNumber()) )
         
         pL.append( L )
-      
+
       if len(pL) > 0 and not skip:
-        # TODO: the parameter names should really be sorted here in order
-        #       to avoid duplicates if another parameterize comes along
-        #       with a different order of the same names
-        # the name(s) and each of the values are tuples
-        if len(pL) == 1:
-          L = pL[0]
-          paramD[ (L[0],) ] = [ (v,) for v in L[1:] ]
-        else:
-          L = zip( *pL )
-          paramD[ L[0] ] = L[1:]
-    
-    return paramD
+            # TODO: the parameter names should really be sorted here in order
+            #       to avoid duplicates if another parameterize comes along
+            #       with a different order of the same names
+            # the name(s) and each of the values are tuples
+            if len(pL) == 1:
+                L = pL[0]
+                paramset.addParameter( L[0], L[1:] )
+            else:
+                L = [ list(T) for T in zip( *pL ) ]
+                paramset.addParameterGroup( L[0], L[1:] )
+
+    return paramset
 
 
 def testname_ok( xmlnode, tname ):
@@ -2301,65 +2254,6 @@ def parseBaseline( t, filedoc, evaluator ):
         script = string.strip( nd.getContent() )
         if script:
           t.addBaselineFragment( script )
-
-
-def make_cartesian_product_instances( paramD ):
-    """
-    Takes a cartesian product of the parameters in 'paramD', then collects and
-    returns the cartesian product as a list of param=value dictionaries.
-    """
-    # first, make a list containing each parameter value list
-    plist_keys = []
-    plist_vals = []
-    for pname,pL in paramD.items():
-        plist_keys.append(pname)
-        plist_vals.append( pL )
-
-    instanceL = []
-
-    # then loop over each set in the cartesian product
-    dimvals = range(len(plist_vals))
-    for vals in _cartesianProduct(plist_vals):
-        # load the parameter values into a dictionary; note that any combined
-        # values are used which may have multiple parameter values embedded
-        pdict = {}
-        for i in dimvals:
-            kL = plist_keys[i]
-            sL = vals[i]
-            assert len(kL) == len(sL)
-            n = len(kL)
-            for j in range(n):
-                pdict[ kL[j] ] = sL[j]
-
-        instanceL.append( pdict )
-
-    return instanceL
-
-
-def _cartesianProduct(lists, current=[], idx=0):
-    """
-    Call this function with a list of lists.  It returns a list of all
-    combinations of each item in each list.  The additional arguments should
-    not be used directly.
-    """
-    
-    if idx < len(lists):
-      
-      plist = lists[idx]
-      
-      newp = []
-      if len(current) == 0:
-        for p in plist:
-          newp.append([p])
-      else:
-        for c in current:
-          for p in plist:
-            newp.append( c + [p] )
-      
-      return _cartesianProduct(lists, newp, idx+1)
-      
-    else:
-      return current
 
 
 ###########################################################################

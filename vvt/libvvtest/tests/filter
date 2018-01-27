@@ -56,7 +56,7 @@ def test01():
           </execute>
         </rtest>""" )
 
-    out,np,nd,nf,nn = run_vvtest()
+    out,np,nd,nf,nn = run_vvtest( '-N 10' )
     testdir = results_dir()
 
     out,np,nd,nf,nn = run_vvtest( '-i' )
@@ -64,7 +64,7 @@ def test01():
 
     remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( '-p np=1' )
+    out,np,nd,nf,nn = run_vvtest( '-p np=1 -N 10' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
     savedir = os.getcwd()
@@ -80,7 +80,7 @@ def test01():
     remove_results()
     os.system( "ls -ltr" )
 
-    out,np,nd,nf,nn = run_vvtest( "-p np<=3" )
+    out,np,nd,nf,nn = run_vvtest( "-p np<=3 -N 10" )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     assert len( greptestlist(out,'pass.*np=1') ) == 1
     assert len( greptestlist(out,'pass.*np=3') ) == 1
@@ -88,7 +88,7 @@ def test01():
 
     remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( "-p np!=3" )
+    out,np,nd,nf,nn = run_vvtest( "-p np!=3 -N 10" )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     assert len( greptestlist(out,'pass.*np=1') ) == 1
     assert len( greptestlist(out,'pass.*np=3') ) == 0
@@ -96,7 +96,7 @@ def test01():
 
     remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( "-p np>=3" )
+    out,np,nd,nf,nn = run_vvtest( "-p np>=3 -N 10" )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     assert len( greptestlist(out,'pass.*np=1') ) == 0
     assert len( greptestlist(out,'pass.*np=3') ) == 1
@@ -104,7 +104,7 @@ def test01():
 
     remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( "-p np>3" )
+    out,np,nd,nf,nn = run_vvtest( "-p np>3 -N 10" )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     assert len( greptestlist(out,'pass.*np=1') ) == 0
     assert len( greptestlist(out,'pass.*np=3') ) == 0
@@ -112,7 +112,7 @@ def test01():
 
     remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( "-p np<3" )
+    out,np,nd,nf,nn = run_vvtest( "-p np<3 -N 10" )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     assert len( greptestlist(out,'pass.*np=1') ) == 1
     assert len( greptestlist(out,'pass.*np=3') ) == 0
@@ -120,7 +120,7 @@ def test01():
 
     remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( "-p np=1/np=3" )
+    out,np,nd,nf,nn = run_vvtest( "-p np=1/np=3 -N 10" )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     assert len( greptestlist(out,'pass.*np=1') ) == 1
     assert len( greptestlist(out,'pass.*np=3') ) == 1
@@ -128,7 +128,7 @@ def test01():
 
     remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( "-p np>1 -p np<6" )
+    out,np,nd,nf,nn = run_vvtest( "-p np>1 -p np<6 -N 10" )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     assert len( greptestlist(out,'pass.*np=1') ) == 0
     assert len( greptestlist(out,'pass.*np=3') ) == 1
@@ -161,7 +161,7 @@ def test01batch():
             </rtest>""" )
 
 
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
+        out,np,nd,nf,nn = run_vvtest( '--batch -N 10' )
         testdir = results_dir()
 
         out,np,nd,nf,nn = run_vvtest( '-i' )
@@ -169,14 +169,14 @@ def test01batch():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( '-p np=1 --batch' )
+        out,np,nd,nf,nn = run_vvtest( '-p np=1 --batch -N 10' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
         savedir = os.getcwd()
 
         os.chdir( testdir ) ; print "cd", testdir
 
-        out,np,nd,nf,nn = run_vvtest( '-R --batch' )
+        out,np,nd,nf,nn = run_vvtest( '-R --batch -N 10' )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
         os.chdir( savedir ) ; print "cd .."
@@ -185,7 +185,7 @@ def test01batch():
         remove_results()
         os.system( "ls -ltr" )
 
-        out,np,nd,nf,nn = run_vvtest( "-p np<=3 --batch" )
+        out,np,nd,nf,nn = run_vvtest( "-p np<=3 --batch -N 10" )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*np=1') ) == 1
         assert len( greptestlist(out,'pass.*np=3') ) == 1
@@ -193,7 +193,7 @@ def test01batch():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( "-p np!=3 --batch" )
+        out,np,nd,nf,nn = run_vvtest( "-p np!=3 --batch -N 10" )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*np=1') ) == 1
         assert len( greptestlist(out,'pass.*np=3') ) == 0
@@ -201,7 +201,7 @@ def test01batch():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( "-p np>=3 --batch" )
+        out,np,nd,nf,nn = run_vvtest( "-p np>=3 --batch -N 10" )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*np=1') ) == 0
         assert len( greptestlist(out,'pass.*np=3') ) == 1
@@ -209,7 +209,7 @@ def test01batch():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( "-p np>3 --batch" )
+        out,np,nd,nf,nn = run_vvtest( "-p np>3 --batch -N 10" )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*np=1') ) == 0
         assert len( greptestlist(out,'pass.*np=3') ) == 0
@@ -217,7 +217,7 @@ def test01batch():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( "-p np<3 --batch" )
+        out,np,nd,nf,nn = run_vvtest( "-p np<3 --batch -N 10" )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*np=1') ) == 1
         assert len( greptestlist(out,'pass.*np=3') ) == 0
@@ -225,7 +225,7 @@ def test01batch():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( "-p np=1/np=3 --batch" )
+        out,np,nd,nf,nn = run_vvtest( "-p np=1/np=3 --batch -N 10" )
         assert np == 2 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*np=1') ) == 1
         assert len( greptestlist(out,'pass.*np=3') ) == 1
@@ -233,7 +233,7 @@ def test01batch():
 
         remove_results()
 
-        out,np,nd,nf,nn = run_vvtest( "-p np>1 -p np<6 --batch" )
+        out,np,nd,nf,nn = run_vvtest( "-p np>1 -p np<6 --batch -N 10" )
         assert np == 1 and nd == 0 and nf == 0 and nn == 0
         assert len( greptestlist(out,'pass.*np=1') ) == 0
         assert len( greptestlist(out,'pass.*np=3') ) == 1

@@ -164,10 +164,22 @@ class ParameterSet_single_parameters( unittest.TestCase ):
 
         instL = pset.getInstances()
         assert len(instL) == 4
-        assert instL[0] == { 'A':'a1', 'B':'b1' }
-        assert instL[1] == { 'A':'a2', 'B':'b1' }
-        assert instL[2] == { 'A':'a1', 'B':'b2' }
-        assert instL[3] == { 'A':'a2', 'B':'b2' }
+        assert { 'A':'a1', 'B':'b1' } in instL
+        assert { 'A':'a2', 'B':'b1' } in instL
+        assert { 'A':'a1', 'B':'b2' } in instL
+        assert { 'A':'a2', 'B':'b2' } in instL
+
+    def test_add_duplicate_parameter_names(self):
+        ""
+        pset = ParameterSet.ParameterSet()
+        pset.addParameter( 'A', ['a1','a2'] )
+        pset.addParameter( 'B', ['b1','b2'] )
+        pset.addParameter( 'A', ['a3'] )
+
+        instL = pset.getInstances()
+        assert len(instL) == 2
+        assert { 'A':'a3', 'B':'b1' } in instL
+        assert { 'A':'a3', 'B':'b2' } in instL
 
 
 class ParameterSet_group_parameters( unittest.TestCase ):
@@ -219,6 +231,20 @@ class ParameterSet_group_parameters( unittest.TestCase ):
         assert {'A':'a2', 'B':'b1', 'C':'c1'} in instL
         assert {'A':'a2', 'B':'b2', 'C':'c2'} in instL
 
+    def test_add_duplicate_parameter_group_names(self):
+        ""
+        pset = ParameterSet.ParameterSet()
+        pset.addParameterGroup( ['B','C'], [ ['b1','c1'], ['b2','c2'] ] )
+        pset.addParameter( 'A', ['a1','a2'] )
+        pset.addParameterGroup( ['B','C'], [ ['b1','c3'], ['b2','c4'] ] )
+
+        instL = pset.getInstances()
+        assert len(instL) == 4
+        assert {'A':'a1', 'B':'b1', 'C':'c3'} in instL
+        assert {'A':'a1', 'B':'b2', 'C':'c4'} in instL
+        assert {'A':'a2', 'B':'b1', 'C':'c3'} in instL
+        assert {'A':'a2', 'B':'b2', 'C':'c4'} in instL
+
 
 class ParameterSet_param_filter( unittest.TestCase ):
 
@@ -231,8 +257,7 @@ class ParameterSet_param_filter( unittest.TestCase ):
         pset.addParameter( 'A', ['a1','a2'] )
         origL = [] + pset.getInstances()
 
-        filt = MockParamFilter_AlwaysTrue()
-        pset.applyParamFilter( filt )
+        pset.applyParamFilter( param_filter_evaluate_to_true )
         instL = pset.getInstances()
 
         assert lists_are_equal_without_order( origL, instL )
@@ -244,8 +269,7 @@ class ParameterSet_param_filter( unittest.TestCase ):
         origL = pset.getInstances()
         assert len(origL) > 0
 
-        filt = MockParamFilter_AlwaysFalse()
-        pset.applyParamFilter( filt )
+        pset.applyParamFilter( param_filter_evaluate_to_false )
         instL = pset.getInstances()
         assert len(instL) == 0
 
@@ -255,12 +279,10 @@ class ParameterSet_param_filter( unittest.TestCase ):
         pset.addParameter( 'A', ['a1','a2'] )
         origL = [] + pset.getInstances()
 
-        filt = MockParamFilter_AlwaysFalse()
-        pset.applyParamFilter( filt )
+        pset.applyParamFilter( param_filter_evaluate_to_false )
         assert len( pset.getInstances() ) == 0
 
-        filt = MockParamFilter_AlwaysTrue()
-        pset.applyParamFilter( filt )
+        pset.applyParamFilter( param_filter_evaluate_to_true )
         instL = pset.getInstances()
 
         assert lists_are_equal_without_order( origL, instL )
@@ -272,8 +294,7 @@ class ParameterSet_param_filter( unittest.TestCase ):
         pset.addParameter( 'B', ['x','y'] )
         assert len( pset.getInstances() ) == 4
 
-        filt = MockParamFilter_ExcludeXValues()
-        pset.applyParamFilter( filt )
+        pset.applyParamFilter( param_filter_evaluate_exclude_x_values )
 
         instL = pset.getInstances()
         assert len( instL ) == 2
@@ -400,81 +421,78 @@ class ParameterSet_getParameters( unittest.TestCase ):
     def test_empty_does_not_crash(self):
         ""
         pset = ParameterSet.ParameterSet()
-        pL = pset.getParameters()
-        assert len(pL) == 0
+        pD = pset.getParameters()
+        assert len(pD) == 0
 
     def test_single_parameter_names_and_values(self):
         ""
         pset = ParameterSet.ParameterSet()
         pset.addParameter( 'A', ['a1','a2','a3'] )
 
-        pL = pset.getParameters()
-        assert len(pL) == 1
-        assert len(pL[0]) == 2
-        names,values = pL[0]
-        assert names == ['A']
-        assert values == [ ['a1'], ['a2'], ['a3'] ]
+        pD = pset.getParameters()
+        assert len(pD) == 1
+        assert pD[ ('A',) ] == [ ['a1'], ['a2'], ['a3'] ]
 
     def test_double_parameter_names_and_values(self):
         ""
         pset = ParameterSet.ParameterSet()
         pset.addParameterGroup( ['A','B'], [ ['a1','b1'], ['a2','b2'] ] )
 
-        pL = pset.getParameters()
-        assert len(pL) == 1
-        assert len(pL[0]) == 2
-        names,values = pL[0]
-        assert names == ['A','B']
-        assert values == [ ['a1','b1'], ['a2','b2'] ]
+        pD = pset.getParameters()
+        assert len(pD) == 1
+        assert pD[ ('A','B') ] == [ ['a1','b1'], ['a2','b2'] ]
 
     def test_single_filtered_parameter_names_and_values(self):
         ""
         pset = ParameterSet.ParameterSet()
         pset.addParameter( 'A', ['a1','x','a3'] )
-        filt = MockParamFilter_ExcludeXValues()
-        pset.applyParamFilter( filt )
+        pset.applyParamFilter( param_filter_evaluate_exclude_x_values )
 
-        pL = pset.getParameters()
-        assert len(pL) == 1
-        assert len(pL[0]) == 2
-        names,values = pL[0]
-        assert names == ['A']
-        assert values == [ ['a1'], ['a3'] ]
+        pD = pset.getParameters()
+        assert len(pD) == 1
+        assert pD[ ('A',) ] == [ ['a1'], ['a3'] ]
 
     def test_double_filtered_parameter_names_and_values(self):
         ""
         pset = ParameterSet.ParameterSet()
         pset.addParameterGroup( ['A','B'], [ ['a1','b1'], ['a2','x'] ] )
-        filt = MockParamFilter_ExcludeXValues()
-        pset.applyParamFilter( filt )
+        pset.applyParamFilter( param_filter_evaluate_exclude_x_values )
 
-        pL = pset.getParameters()
-        assert len(pL) == 1
-        assert len(pL[0]) == 2
-        names,values = pL[0]
-        assert names == ['A','B']
-        assert values == [ ['a1','b1'] ]
+        pD = pset.getParameters()
+        assert len(pD) == 1
+        assert pD[ ('A','B') ] == [ ['a1','b1'] ]
+
+    def test_duplicate_params_and_filtered(self):
+        ""
+        pset = ParameterSet.ParameterSet()
+        pset.addParameterGroup( ['A','B'], [ ['a1','b1'], ['a2','x'] ] )
+        pset.addParameter( 'C', [ 'x', 'c2', 'c3' ] )
+        pset.addParameterGroup( ['A','B'], [ ['x','b1'], ['a2','b2'] ] )
+
+        pset.applyParamFilter( param_filter_evaluate_exclude_x_values )
+
+        pD = pset.getParameters()
+        assert len(pD) == 2
+        assert pD[ ('A','B') ] == [ ['a2','b2'] ]
+        assert pD[ ('C',) ] == [ ['c2'], ['c3'] ]
 
 
 ############################################################################
 
-class MockParamFilter_AlwaysTrue:
-    def evaluate(self, D):
-        return True
+def param_filter_evaluate_to_true( D ):
+    return True
 
-class MockParamFilter_AlwaysFalse:
-    def evaluate(self, D):
-        return False
+def param_filter_evaluate_to_false( D ):
+    return False
 
-class MockParamFilter_ExcludeXValues:
+def param_filter_evaluate_exclude_x_values( D ):
     """
-    The evaluate() returns False if any value is equal to 'x'.
+    Returns False if any value is equal to 'x'.
     """
-    def evaluate(self, D):
-        for k,v in D.items():
-            if v == 'x':
-                return False
-        return True
+    for k,v in D.items():
+        if v == 'x':
+            return False
+    return True
 
 
 def lists_are_equal_without_order( L1, L2 ):

@@ -70,17 +70,16 @@ def writeScript( testobj, filename, lang, config, plat ):
         
         if testobj.getParent() == None and testobj.hasAnalyze():
             w.add( '', '# parameters comprising the children' )
-            D = testobj.getParameterSet()
-            if len(D) > 0:
-              # the parameter names and values of the children tests
-              for n,L in D.items():
-                assert type(n) == type(())
-                if len(n) == 1:
-                    L2 = [ T[0] for T in L ]
-                    w.add( 'PARAM_'+n[0]+' = ' + repr(L2) )
-                else:
-                    n2 = '_'.join( n )
-                    w.add( 'PARAM_'+n2+' = ' + repr(L) )
+            psetD = testobj.getParameterSet().getParameters()
+            if len(psetD) > 0:
+                # the parameter names and values of the children tests
+                for n,L in psetD.items():
+                    if len(n) == 1:
+                        L2 = [ T[0] for T in L ]
+                        w.add( 'PARAM_'+n[0]+' = ' + repr(L2) )
+                    else:
+                        n2 = '_'.join( n )
+                        w.add( 'PARAM_'+n2+' = ' + repr(L) )
         
         w.add( """
             # to avoid circular imports in python, the script_util.py
@@ -144,14 +143,13 @@ def writeScript( testobj, filename, lang, config, plat ):
         
         if testobj.getParent() == None and testobj.hasAnalyze():
             w.add( '', '# parameters comprising the children' )
-            D = testobj.getParameterSet()
-            if len(D) > 0:
-              # the parameter names and values of the children tests
-              for n,L in D.items():
-                assert type(n) == type(())
-                n2 = '_'.join( n )
-                L2 = [ '/'.join( v ) for v in L ]
-                w.add( 'PARAM_'+n2+'="' + ' '.join(L2) + '"' )
+            psetD = testobj.getParameterSet().getParameters()
+            if len(psetD) > 0:
+                # the parameter names and values of the children tests
+                for n,L in psetD.items():
+                    n2 = '_'.join( n )
+                    L2 = [ '/'.join( v ) for v in L ]
+                    w.add( 'PARAM_'+n2+'="' + ' '.join(L2) + '"' )
 
         # for sh/bash, all variables go into a global namespace; therefore,
         # we can just source the utility scripts from here
@@ -207,14 +205,13 @@ def writeScript( testobj, filename, lang, config, plat ):
         
         if testobj.getParent() == None and testobj.hasAnalyze():
             w.add( '', '# parameters comprising the children' )
-            D = testobj.getParameterSet()
-            if len(D) > 0:
-              # the parameter names and values of the children tests
-              for n,L in D.items():
-                assert type(n) == type(())
-                n2 = '_'.join( n )
-                L2 = [ '/'.join( v ) for v in L ]
-                w.add( 'set PARAM_'+n2+'="' + ' '.join(L2) + '"' )
+            psetD = testobj.getParameterSet().getParameters()
+            if len(psetD) > 0:
+                # the parameter names and values of the children tests
+                for n,L in psetD.items():
+                    n2 = '_'.join( n )
+                    L2 = [ '/'.join( v ) for v in L ]
+                    w.add( 'set PARAM_'+n2+'="' + ' '.join(L2) + '"' )
         
         w.add(  """
                 set have_diff=0

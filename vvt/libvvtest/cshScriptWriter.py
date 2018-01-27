@@ -250,16 +250,18 @@ def writeScript( tspec, xdb, plat, \
       line_list.append('################ begin analyze script')
       line_list.append('')
 
-      D = tspec.getParameterSet()
-      if len(D) > 0:
-        # provide the parameter names and values that formed the children tests
-        for n,L in D.items():
-          assert type(n) == type(())
-          n2 = '_'.join( n )
-          L2 = [ '/'.join( v ) for v in L ]
-          line_list.append( 'set PARAM_'+n2+' = ( ' + ' '.join(L2) + ' )' )
-          line_list.append( 'echo "PARAM_'+n2+' = $PARAM_'+n2+'"' )
-        line_list.append('')
+      paramset = tspec.getParameterSet()
+      if paramset != None:
+          psetD = paramset.getParameters()
+          if len(psetD) > 0:
+              # provide the parameter names and values that formed the
+              # children tests
+              for n,L in psetD.items():
+                  n2 = '_'.join( n )
+                  L2 = [ '/'.join( v ) for v in L ]
+                  line_list.append( 'set PARAM_'+n2+' = ( ' + ' '.join(L2) + ' )' )
+                  line_list.append( 'echo "PARAM_'+n2+' = $PARAM_'+n2+'"' )
+              line_list.append('')
 
       line_list.extend( string.split( tspec.getAnalyze('scriptfrag'), os.linesep ) )
       line_list.append('')

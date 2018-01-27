@@ -135,11 +135,10 @@ class TestSpec:
     
     def getParameterSet(self):
         """
-        For parent tests, this returns a dict mapping parameter names to a
-        list of parameter values.  Combined/zipped parameter name and values
-        are separated by a comma, such as 'np,h' -> ['2,0.2','4,0.1'].
+        Return the test's ParameterSet instance.  Will be None unless this
+        is a parent.
         """
-        return self.paramD
+        return self.paramset
 
     def hasAnalyze(self):
         """
@@ -308,8 +307,8 @@ class TestSpec:
         self.src_files = []        # extra source files listed by the test
         self.attrs = {}            # maps name string to value string; the
                                    # allowed characters are restricted
-        self.paramD = {}           # for parent tests, this maps parameter
-                                   # names to a list of values
+        self.paramset = None       # for parent tests, this maps parameter
+                                   # names to lists of values
 
         # initial execute directory; recomputed by setParameters()
         self.xdir = os.path.normpath( \
@@ -418,14 +417,12 @@ class TestSpec:
         
         self.xdir = os.path.normpath( os.path.join( d, b ) )
     
-    def setParameterSet(self, paramD):
+    def setParameterSet(self, param_set):
         """
-        For parent tests, set the dict which maps parameter names to a
-        list of parameter values (which is what generated the child
-        tests prior to this).
+        Set the ParameterSet instance, which maps parameter names to a list of
+        parameter values.
         """
-        self.paramD = {}
-        self.paramD.update( paramD )
+        self.paramset = param_set
     
     def setAnalyze(self, key, value):
         """
