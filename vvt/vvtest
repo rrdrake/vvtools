@@ -2425,6 +2425,25 @@ def getExeDirAndName():
     return d, n
 
 
+def bootstrap_config_paths( config ):
+    """
+    """
+    sys.path.insert( 1, config.get('configdir') )
+
+    # if vvtest_bootstrap.py exists in the same directory as vvtest,
+    # then import it (which may set os.environ & sys.path)
+    try:
+        import vvtest_bootstrap
+    except ImportError:
+        # to allow for vvtest to be a soft link to an installed vvtest area,
+        # look for a bootstrap file in the directory containing the soft link
+        bindir = os.path.dirname( os.path.abspath( sys.argv[0] ) )
+        boot = os.path.join( bindir, 'vvtest_bootstrap.py' )
+        if os.path.exists( boot ):
+            sys.path.append( bindir )
+            import vvtest_bootstrap
+
+
 ##############################################################################
 
 
@@ -2454,8 +2473,8 @@ if __name__ == '__main__':
   # this creates the global "optdict" dictionary and returns non-option args
   dirs = parseOptionsAndGenerateOptionDictionary()
   
-  # set this after options are parsed
-  sys.path.insert( 1, config.get('configdir') )
+  # do this after options are parsed
+  bootstrap_config_paths( config )
   
   # the help option quits immediately
   if optdict.has_key('-h'):
