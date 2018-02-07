@@ -235,10 +235,10 @@ class TestExec:
                 # set up python pathing to make import of script utils easy
                 pth = os.getcwd()
                 if self.config.get('configdir'):
-                    # make sure the config dir comes before libvvtest
+                    # make sure the config dir comes before vvtest/config
                     pth += ':'+self.config.get('configdir')
                 d = self.config.get('toolsdir')
-                pth += ':'+os.path.join( d, 'libvvtest' )
+                pth += ':'+os.path.join( d, 'config' )
                 val = os.environ.get( 'PYTHONPATH', '' )
                 if val: os.environ['PYTHONPATH'] = pth + ':' + val
                 else:   os.environ['PYTHONPATH'] = pth

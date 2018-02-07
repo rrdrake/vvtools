@@ -160,12 +160,12 @@ def writeScript( testobj, filename, lang, config, plat ):
                 then
                     source $CONFIGDIR/script_util_plugin.sh
                 else
-                    source $VVTESTLIB/script_util.sh
+                    source $VVTESTSRC/config/script_util.sh
                 fi
                 """ )
         else:
             w.add( '',
-                   'source $VVTESTLIB/script_util.sh )' )
+                   'source $VVTESTSRC/config/script_util.sh )' )
 
         ###################################################################
     

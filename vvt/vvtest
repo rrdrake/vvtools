@@ -2425,15 +2425,14 @@ def getExeDirAndName():
     return d, n
 
 
-def bootstrap_config_paths( config ):
+def check_for_bootstrap_file():
     """
+    if vvtest_bootstrap.py exists in the same directory as vvtest,
+    then import it (which may set os.environ variables)
     """
-    sys.path.insert( 1, config.get('configdir') )
-
-    # if vvtest_bootstrap.py exists in the same directory as vvtest,
-    # then import it (which may set os.environ & sys.path)
     try:
         import vvtest_bootstrap
+
     except ImportError:
         # to allow for vvtest to be a soft link to an installed vvtest area,
         # look for a bootstrap file in the directory containing the soft link
@@ -2466,7 +2465,9 @@ if __name__ == '__main__':
   from PermissionSetter import PermissionSetter
   
   keyword_expr = FilterExpressions.WordExpression()
-  
+
+  check_for_bootstrap_file()
+
   # set this before options are parsed
   config.set( 'toolsdir', toolsdir )
   
@@ -2474,7 +2475,7 @@ if __name__ == '__main__':
   dirs = parseOptionsAndGenerateOptionDictionary()
   
   # do this after options are parsed
-  bootstrap_config_paths( config )
+  sys.path.insert( 1, config.get('configdir') )
   
   # the help option quits immediately
   if optdict.has_key('-h'):

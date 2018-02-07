@@ -65,6 +65,78 @@ class Testing_boostrap_file( unittest.TestCase ):
         L = util.filegrep( fL[0], 'var=special value' )
         assert len(L) == 1
 
+    def test_a_bootstrap_file_setting_the_config_dir(self):
+        ""
+        util.writefile( 'myconfig/script_util_plugin.py', """
+            import os, sys
+            def my_special_func():
+                print ( 'my special function called' )
+            """ )
+
+        os.symlink( util.vvtest, 'vvtest' )
+        util.writefile( 'vvtest_bootstrap.py', """
+            import os
+            os.environ['VVTEST_CONFIGDIR'] = '"""+os.path.abspath('myconfig')+"""'
+            """ )
+
+        util.writefile( 'hello.py.vvt', """
+            import os, sys
+            import script_util_plugin as util
+            util.my_special_func()
+            """ )
+
+        time.sleep(1)
+
+        ok,out = util.run_cmd( os.path.abspath( 'vvtest' ) )
+        assert ok
+        assert util.numpass( out ) == 1
+
+        fL = glob.glob( 'TestResults*/hello.py*/execute.log' )
+        assert len(fL) == 1
+        L = util.filegrep( fL[0], 'my special function called' )
+        assert len(L) == 1
+
+    def test_a_bootstrap_config_dir_is_overridden_with_command_line(self):
+        ""
+        util.writefile( 'myconfig/script_util_plugin.py', """
+            import os, sys
+            def my_special_func():
+                print ( 'my special function called' )
+            """ )
+
+        util.writefile( 'cmdconfig/script_util_plugin.py', """
+            import os, sys
+            def my_special_func():
+                print ( 'command config function called' )
+            """ )
+
+        os.symlink( util.vvtest, 'vvtest' )
+        util.writefile( 'vvtest_bootstrap.py', """
+            import os
+            os.environ['VVTEST_CONFIGDIR'] = '"""+os.path.abspath('myconfig')+"""'
+            """ )
+
+        util.writefile( 'hello.py.vvt', """
+            import os, sys
+            import script_util_plugin as util
+            util.my_special_func()
+            """ )
+
+        time.sleep(1)
+
+        cmd = os.path.abspath( 'vvtest' )
+        cmd += ' --config '+os.path.abspath('cmdconfig')
+        ok,out = util.run_cmd( cmd )
+        assert ok
+        assert util.numpass( out ) == 1
+
+        fL = glob.glob( 'TestResults*/hello.py*/execute.log' )
+        assert len(fL) == 1
+        L = util.filegrep( fL[0], 'my special function called' )
+        assert len(L) == 0
+        L = util.filegrep( fL[0], 'command config function called' )
+        assert len(L) == 1
+
 
 ############################################################################
 

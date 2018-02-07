@@ -274,7 +274,7 @@ def test04():
         source vvtest_util.sh
         special_function
         """ )
-    
+
     writefile( "config/script_util_plugin.py", """
         import os, sys
         from script_util import *
@@ -282,16 +282,16 @@ def test04():
             print3( 'hello from spec func' )
         """ )
     writefile( "config/script_util_plugin.sh", """
-        source $VVTESTLIB/script_util.sh
+        source $VVTESTSRC/config/script_util.sh
         special_function() {
             echo 'hello from sh spec func'
         }
         """ )
-    
+
     out,np,nd,nf,nn = run_vvtest( '--config config' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
-    
+
     assert len( filegrep( tdir+'/pytest/execute.log',
                           "hello from spec func" ) ) == 1
     assert len( filegrep( tdir+'/shtest/execute.log',
