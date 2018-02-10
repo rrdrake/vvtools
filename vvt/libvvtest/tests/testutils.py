@@ -366,6 +366,67 @@ def grep(out, pat):
             L.append(line)
     return L
 
+class vvtestRunner:
+    """
+    This runs a vvtest command line then captures the results as data
+    members of this class.  They are
+
+        out          : the stdout from running vvtest
+        num_pass
+        num_fail
+        num_diff
+        num_notrun
+        num_timeout
+        testdir      : such as TestResults.Linux
+        platname     : such as Linux
+    """
+
+    def __init__(self, *args, **kwargs):
+        ""
+        cmd = vvtest
+        for arg in args:
+            cmd += ' '+arg
+
+        self.run( cmd, **kwargs )
+
+    def run(self, cmd, **kwargs):
+        ""
+        self.out = ''
+        self.num_pass = 0
+        self.num_fail = 0
+        self.num_diff = 0
+        self.num_notrun = 0
+        self.num_timeout = 0
+        self.testdir = ''
+        self.platname = ''
+
+        if 'directory' in kwargs:
+            curdir = os.getcwd()
+            os.chdir( kwargs['directory'] )
+
+            ignore = kwargs.get( 'ignore_errors', False )
+
+        try:
+            ok,out = run_cmd( cmd )
+
+            if not ok and not ignore:
+                print3( out )
+                raise Exception( 'vvtest command failed: '+cmd )
+
+            self.out         = out
+            self.num_pass    = numpass( out )
+            self.num_fail    = numfail( out )
+            self.num_diff    = numdiff( out )
+            self.num_notrun  = numnotrun( out )
+            self.num_timeout = numtimeout( out )
+            self.testdir     = get_results_dir( out )
+            self.platname    = platform_name( out )
+
+        finally:
+            if 'directory' in kwargs:
+                os.chdir( curdir )
+
+
 def run_vvtest( args='', ignore_errors=0, directory=None ):
     """
     Runs vvtest with the given argument string and returns
@@ -388,6 +449,7 @@ def run_vvtest( args='', ignore_errors=0, directory=None ):
         raise Exception( "vvtest command failed: " + cmd )
     return out,numpass(out),numdiff(out),numfail(out),numnotrun(out)
 
+
 def platform_name( test_out ):
     """
     After running the 'run_vvtest' command, give the output (the first return
@@ -407,6 +469,7 @@ def platform_name( test_out ):
         raise Exception( "Could not determine the platform name from output" )
     return platname
 
+
 def results_dir( pat=None ):
     """
     After running vvtest, this will return the TestResults directory.  If 'pat'
@@ -418,6 +481,18 @@ def results_dir( pat=None ):
             if pat == None or f.find( pat ) >= 0:
                 return f
     return ''
+
+def get_results_dir( out ):
+    """
+    """
+    tdir = None
+
+    for line in out.split( os.linesep ):
+        if line.strip().startswith( 'Test directory:' ):
+            tdir = line.split( 'Test directory:', 1 )[1].strip()
+
+    return tdir
+
 
 def remove_results():
     """

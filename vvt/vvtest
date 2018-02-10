@@ -2395,7 +2395,7 @@ def parseOptionsAndGenerateOptionDictionary():
     
     if optdict.has_key('--extract'):
       optdict['--extract'] = optdict['--extract'][-1]
-    
+
     if '--config' in optdict:
         config.set( 'configdir', os.path.abspath( optdict['--config'][-1] ) )
     else:
@@ -2443,6 +2443,23 @@ def check_for_bootstrap_file():
             import vvtest_bootstrap
 
 
+def insert_configdir_into_sys_path( toolsdir, config ):
+    ""
+    d1 = os.path.normpath( os.path.join( toolsdir, 'config' ) )
+
+    d2 = config.get('configdir')
+    if d2:
+        d2 = os.path.normpath( d2 )
+
+        if d1 != d2:
+            sys.path.insert( 1, d1 )
+
+        sys.path.insert( 1, d2 )
+
+    else:
+        sys.path.insert( 1, d1 )
+
+
 ##############################################################################
 
 
@@ -2475,7 +2492,7 @@ if __name__ == '__main__':
   dirs = parseOptionsAndGenerateOptionDictionary()
   
   # do this after options are parsed
-  sys.path.insert( 1, config.get('configdir') )
+  insert_configdir_into_sys_path( toolsdir, config )
   
   # the help option quits immediately
   if optdict.has_key('-h'):
