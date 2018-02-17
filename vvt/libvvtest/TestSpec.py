@@ -146,6 +146,17 @@ class TestSpec:
         """
         return len( self.analyze ) > 0
 
+    def isAnalyze(self):
+        """
+        Returns true if this is the analyze test of a parameterize/analyze
+        test group.
+        """
+        if self.paramset != None:
+            if len( self.params ) == 0:
+                return True
+
+        return False
+
     def getAnalyze(self, key, *default):
         """
         An analyze script can be specified by the contents of the script,
@@ -427,19 +438,13 @@ class TestSpec:
     def setAnalyze(self, key, value):
         """
         Add the given 'key'='value' pair to the analyze information.
-        If both 'key' and 'value' are None, then all analyze information is
-        removed (the default state).  If just 'value' is None, then 'key' is
-        removed.
+        If 'value' is None, then 'key' is removed.
         """
-        if key == None:
-            if value == None:
-                self.analyze.clear()
+        if value == None:
+            if key in self.analyze:
+                self.analyze.pop( key )
         else:
-            if value == None:
-                if key in self.analyze:
-                    self.analyze.pop( key )
-            else:
-                self.analyze[ key ] = value
+            self.analyze[ key ] = value
     
     def setTimeout(self, timeout):
         """

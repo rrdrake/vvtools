@@ -264,6 +264,8 @@ class TestList:
         """
         self.active = {}
 
+        self._create_group_map()
+
         subdir = None
         if filter_dir != None:
           subdir = os.path.normpath( filter_dir )
@@ -284,9 +286,6 @@ class TestList:
                 if tm != None and not self.rtconfig.evaluate_runtime( tm ):
                     keep = False
                     rmD[ xdir ] = t
-                    pxdir = t.getParent()
-                    if pxdir != None:
-                        rmD[pxdir] = self.tspecs.get( pxdir, None )
 
             if keep:
                 if 'file' in t.getOrigin():
@@ -325,9 +324,6 @@ class TestList:
             while i < n:
                 tm,xdir,t = tL[i]
                 rmD[xdir] = t
-                pxdir = t.getParent()
-                if pxdir != None:
-                    rmD[pxdir] = self.tspecs.get( pxdir, None )
                 i += 1
             tL = None
             self._remove_tests( rmD )
@@ -340,9 +336,12 @@ class TestList:
             # remove analyze tests from the active set if they have inactive
             # children that have a bad result
             for xdir,t in self.tspecs.items():
-                pxdir = t.getParent()
+
+                pxdir = self._find_group_analyze_test( t )
+
                 # does this test have a parent and is this test inactive
                 if pxdir != None and xdir not in self.active:
+
                     # is the parent active and does the child have a bad result
                     if pxdir in self.active and \
                           ( t.getAttr('state') != 'done' or \
@@ -362,14 +361,22 @@ class TestList:
                 if np > maxprocs:
                     rmD[xdir] = t
                     cntmax += 1
-                    pxdir = t.getParent()
-                    if pxdir != None:
-                        rmD[pxdir] = self.tspecs.get( pxdir, None )
             self._remove_tests( rmD )
             rmD = None
 
         return pruneL, cntmax
-    
+
+    def _create_group_map(self):
+        ""
+        self.groups = {}
+        for xdir,t in self.tspecs.items():
+            key = ( t.getFilepath(), t.getName() )
+            L = self.groups.get( key, None )
+            if L == None:
+                L = []
+                self.groups[ key ] = L
+            L.append( t )
+
     def _apply_filters(self, xdir, tspec, subdir, analyze_only):
         """
         """
@@ -397,30 +404,65 @@ class TestList:
 
         return True
 
-    def _remove_tests(self, removeD, popactive=True, poplist=True):
+
+    def _remove_tests(self, removeD):
         """
         The 'removeD' should be a dict mapping xdir to TestSpec.  Those tests
-        will be removed from self.tspecs and self.active sets.  Also, all
-        children tests of parents who are in 'removeD' will be removed.
+        will be removed from the self.tspecs and self.active sets.  If any test
+        to be removed is part of a parameterize/analyze group, then the entire
+        group is removed.
         """
-        if len(removeD) > 0:
+        for xdir,t in removeD.items():
 
-            # add child tests whose parent is to be removed
-            for xdir,t in self.tspecs.items():
-                pxdir = t.getParent()
-                if pxdir != None and pxdir in removeD:
-                    removeD[xdir] = t
+            key = ( t.getFilepath(), t.getName() )
 
-            # perform the removal
-            for xdir,t in removeD.items():
-                if popactive:
-                    if xdir in self.active:
-                        self.active.pop( xdir )
-                if poplist:
-                    if xdir in self.tspecs:
-                        # don't remove if test was previously selected
-                        if t == None or 'string' not in t.getOrigin():
-                            self.tspecs.pop( xdir )
+            grpL = self.groups[key]
+
+            if not self._test_group_has_analyze( grpL ):
+                grpL = [ t ]
+
+            for grpt in grpL:
+
+                xdir = grpt.getExecuteDirectory()
+
+                if xdir in self.active:
+                    self.active.pop( xdir )
+
+                # don't remove a test from the TestResults test list if
+                # it was there previously
+                if xdir in self.tspecs and 'string' not in t.getOrigin():
+                    self.tspecs.pop( xdir )
+
+    def _test_group_has_analyze(self, grpL):
+        ""
+        for t in grpL:
+            if t.isAnalyze():
+                return True
+        return False
+
+    def _find_group_analyze_test(self, testobj):
+        ""
+        key = ( testobj.getFilepath(), testobj.getName() )
+
+        grpL = self.groups[key]
+
+        for t in grpL:
+            if t.isAnalyze():
+                return t.getExecuteDirectory()
+
+        return None
+
+    def _has_dependent_test(self, testobj):
+        ""
+        key = ( testobj.getFilepath(), testobj.getName() )
+
+        grpL = self.groups[key]
+
+        for t in grpL:
+            if t != testobj and t.isAnalyze():
+                return True
+
+        return False
 
     def getActiveTests(self, sorting=''):
         """
@@ -605,7 +647,10 @@ class TestList:
 
           assert 'file' in t.getOrigin()
 
-          xt = TestExec.TestExec( t, perms )
+          has_dependent = ( t.getParent() != None )
+          #has_dependent = self._has_dependent_test( t )
+
+          xt = TestExec.TestExec( t, perms, has_dependent )
           
           np = int( t.getParameters().get('np', 0) )
           if self.xtlist.has_key(np):

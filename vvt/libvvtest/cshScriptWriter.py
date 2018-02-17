@@ -187,12 +187,8 @@ def writeScript( tspec, xdb, plat, \
       'endif', '' ] )
     
     # finally, add the main execution fragments
-    
-    just_analyze = 0
-    if tspec.getParent() == None and tspec.hasAnalyze():
-      just_analyze = 1
-    
-    if not just_analyze:
+
+    if not tspec.isAnalyze():
       
       line_list.extend( [ '',
                    '######## main execution fragments ########', '' ] )

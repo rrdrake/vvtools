@@ -50,7 +50,7 @@ def createTestObjects( rootpath, relpath, force_params, rtconfig ):
     tL = []
     for t in tests:
 
-        if t.hasAnalyze():
+        if t.isAnalyze():
             # if parent test, filter the parameter set to the children
             # that would be included
             paramset = t.getParameterSet()
@@ -78,7 +78,7 @@ def refreshTest( testobj, rtconfig ):
 
     reparse_test_object( testobj, evaluator )
 
-    if testobj.hasAnalyze():
+    if testobj.isAnalyze():
         # if parent test, filter parameterset
         paramset = testobj.getParameterSet()
         paramset.applyParamFilter( rtconfig.evaluate_parameters )
@@ -291,8 +291,6 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
         for t2 in testL:
           t2.setParent( parent.getExecuteDirectory() )
         testL.append( parent )
-        # reset to no analyze, so that only analyze tests have an analyze
-        t.setAnalyze( None, None )
 
     # parse and set the rest of the XML file for each test
     
@@ -348,8 +346,6 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
         for t2 in testL:
           t2.setParent( parent.getExecuteDirectory() )
         testL.append( parent )
-        # reset to no analyze, so that only analyze tests have an analyze
-        t.setAnalyze( None, None )
 
     for t in testL:
 
@@ -386,7 +382,7 @@ def set_test_form( tspec, vspecs=None ):
 
         tspec.setForm( 'file', fname )
 
-        if tspec.hasAnalyze():
+        if tspec.isAnalyze():
             # an analyze test may be a separate script
             zfile = tspec.getAnalyze( 'file', None )
             if zfile != None:
@@ -442,14 +438,13 @@ def reparse_test_object( testobj, evaluator ):
         keywords = parseKeywords( filedoc, tname )
         testobj.setKeywords( keywords )
 
-        if not testobj.getParent():
-          # to avoid children tests getting an analyze defined, only parse
-          # analyze if the test does not have a parent; this is safe for 
-          # a refresh because the parents are saved in the test list file
-          parseAnalyze( testobj, filedoc, evaluator )
-
-          paramset = parseTestParameters( filedoc, tname, evaluator, None )
-          testobj.setParameterSet( paramset )
+        parseAnalyze( testobj, filedoc, evaluator )
+        if testobj.hasAnalyze() and len( testobj.getParameters() ) == 0:
+            paramset = parseTestParameters( filedoc, tname, evaluator, None )
+            if len( paramset.getParameters() ) == 0:
+                raise TestSpecError( 'an analyze requires at least one ' + \
+                               'parameter to be defined' )
+            testobj.setParameterSet( paramset )
 
         parseFiles       ( testobj, filedoc, evaluator )
         parseTimeouts    ( testobj, filedoc, evaluator )
@@ -472,13 +467,12 @@ def reparse_test_object( testobj, evaluator ):
         keywords = parseKeywords_scr( vspecs, tname )
         testobj.setKeywords( keywords )
 
-        if not testobj.getParent():
-            # to avoid children tests getting an analyze defined, only parse
-            # analyze if the test does not have a parent; this is safe for 
-            # a refresh because the parents are saved in the test list file
-            parseAnalyze_scr( testobj, vspecs, evaluator )
-            
+        parseAnalyze_scr( testobj, vspecs, evaluator )
+        if testobj.hasAnalyze() and len( testobj.getParameters() ) == 0:
             paramset = parseTestParameters_scr( vspecs, tname, evaluator, None )
+            if len( paramset.getParameters() ) == 0:
+                raise TestSpecError( 'an analyze requires at least one ' + \
+                               'parameter to be defined' )
             testobj.setParameterSet( paramset )
 
         parseFiles_scr    ( testobj, vspecs, evaluator )

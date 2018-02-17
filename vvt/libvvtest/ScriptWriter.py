@@ -67,8 +67,8 @@ def writeScript( testobj, filename, lang, config, plat ):
         w.add( 'PARAM_DICT = '+repr( paramD ) )
         for k,v in paramD.items():
             w.add( k+' = "'+v+'"' )
-        
-        if testobj.getParent() == None and testobj.hasAnalyze():
+
+        if testobj.isAnalyze():
             w.add( '', '# parameters comprising the children' )
             psetD = testobj.getParameterSet().getParameters()
             if len(psetD) > 0:
@@ -140,8 +140,8 @@ def writeScript( testobj, filename, lang, config, plat ):
         w.add( 'PARAM_DICT="'+s+'"' )
         for k,v in paramD.items():
             w.add( k+'="'+v+'"' )
-        
-        if testobj.getParent() == None and testobj.hasAnalyze():
+
+        if testobj.isAnalyze():
             w.add( '', '# parameters comprising the children' )
             psetD = testobj.getParameterSet().getParameters()
             if len(psetD) > 0:
@@ -202,8 +202,8 @@ def writeScript( testobj, filename, lang, config, plat ):
         w.add( 'PARAM_DICT="'+s+'"' )
         for k,v in paramD.items():
             w.add( 'set '+k+'="'+v+'"' )
-        
-        if testobj.getParent() == None and testobj.hasAnalyze():
+
+        if testobj.isAnalyze():
             w.add( '', '# parameters comprising the children' )
             psetD = testobj.getParameterSet().getParameters()
             if len(psetD) > 0:

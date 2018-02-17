@@ -155,15 +155,15 @@ def test02():
 
     out,np,nd,nf,nn = run_vvtest( '-i --tmax 6' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    assert len( grep( out, 'AA' ) ) == 1
-    assert len( grep( out, 'BB' ) ) == 1
-    assert len( grep( out, 'CC' ) ) == 0
+    assert len( greptestlist( out, 'AA' ) ) == 1
+    assert len( greptestlist( out, 'BB' ) ) == 1
+    assert len( greptestlist( out, 'CC' ) ) == 0
 
     out,np,nd,nf,nn = run_vvtest( '-i --tmin 3' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    assert len( grep( out, 'AA' ) ) == 0
-    assert len( grep( out, 'BB' ) ) == 1
-    assert len( grep( out, 'CC' ) ) == 1
+    assert len( greptestlist( out, 'AA' ) ) == 0
+    assert len( greptestlist( out, 'BB' ) ) == 1
+    assert len( greptestlist( out, 'CC' ) ) == 1
 
 
 def test03():
@@ -276,15 +276,14 @@ def test04():
     assert L[0][0] == 'AA'
     assert L[1][0] == 'BB'
 
-    # when run inside the TestResults.* directory, the test list should
-    # reflect the previous test selection;  if vvtest is run within the
-    # TestResults.* directory (and without arguments) and the test list is
-    # incorrect, then additional tests will get run;  we check that does
-    # not happen
+    # the --tmax 6 above filtered out test CC, which means test CC should
+    # not be in the TestResults test list;  check this by running vvtest
+    # inside the TestResults directory (test CC should never be run)
+
     out,np,nd,nf,nn = run_vvtest( directory=tdir )
     assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-    # and if we force tests to rerun, only 2 should be run
+    # if we force tests to rerun, only 2 should be run
     out,np,nd,nf,nn = run_vvtest( '-R', directory=tdir )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     L = testlist( out )

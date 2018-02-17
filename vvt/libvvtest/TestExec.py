@@ -24,13 +24,14 @@ class TestExec:
     The status and test results are saved in the TestSpec object.
     """
     
-    def __init__(self, atest, perms):
+    def __init__(self, atest, perms, has_dependent):
         """
         Constructs a test execution object which references a TestSpec obj.
         The 'perms' argument is a Permissions object, or None.
         """
         self.atest = atest
         self.perms = perms
+        self.has_dependent = has_dependent
         
         self.platform = None
         self.timeout = 0
@@ -312,7 +313,7 @@ class TestExec:
 
           if self.config.get('postclean') and \
              self.atest.getAttr('result') == 'pass' and \
-             self.atest.getParent() == None:
+             not self.has_dependent:
             self.postclean()
           
         # not done .. check for timeout
