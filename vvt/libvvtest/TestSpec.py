@@ -140,12 +140,6 @@ class TestSpec:
         """
         return self.paramset
 
-    def hasAnalyze(self):
-        """
-        Returns true if this test has an analyze specification.
-        """
-        return len( self.analyze ) > 0
-
     def isAnalyze(self):
         """
         Returns true if this is the analyze test of a parameterize/analyze

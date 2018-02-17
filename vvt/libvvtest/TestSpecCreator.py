@@ -279,8 +279,8 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
     if len(testL) > 0:
       # check for execute/analyze
       t = testL[0]
-      parseAnalyze( t, filedoc, evaluator )
-      if t.hasAnalyze():
+      has_analyze = parseAnalyze( t, filedoc, evaluator )
+      if has_analyze:
         if numparams == 0:
           # a test with no parameters but with an analyze script
           raise TestSpecError( 'an analyze requires at least one ' + \
@@ -334,8 +334,8 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
     if len(testL) > 0:
       # check for execute/analyze
       t = testL[0]
-      parseAnalyze_scr( t, vspecs, evaluator )
-      if t.hasAnalyze():
+      has_analyze = parseAnalyze_scr( t, vspecs, evaluator )
+      if has_analyze:
         if numparams == 0:
           # a test with no parameters but with an analyze script
           raise TestSpecError( 'an analyze requires at least one ' + \
@@ -438,8 +438,8 @@ def reparse_test_object( testobj, evaluator ):
         keywords = parseKeywords( filedoc, tname )
         testobj.setKeywords( keywords )
 
-        parseAnalyze( testobj, filedoc, evaluator )
-        if testobj.hasAnalyze() and len( testobj.getParameters() ) == 0:
+        has_analyze = parseAnalyze( testobj, filedoc, evaluator )
+        if has_analyze and len( testobj.getParameters() ) == 0:
             paramset = parseTestParameters( filedoc, tname, evaluator, None )
             if len( paramset.getParameters() ) == 0:
                 raise TestSpecError( 'an analyze requires at least one ' + \
@@ -467,8 +467,8 @@ def reparse_test_object( testobj, evaluator ):
         keywords = parseKeywords_scr( vspecs, tname )
         testobj.setKeywords( keywords )
 
-        parseAnalyze_scr( testobj, vspecs, evaluator )
-        if testobj.hasAnalyze() and len( testobj.getParameters() ) == 0:
+        has_analyze = parseAnalyze_scr( testobj, vspecs, evaluator )
+        if has_analyze and len( testobj.getParameters() ) == 0:
             paramset = parseTestParameters_scr( vspecs, tname, evaluator, None )
             if len( paramset.getParameters() ) == 0:
                 raise TestSpecError( 'an analyze requires at least one ' + \
@@ -1181,6 +1181,8 @@ def parseAnalyze_scr( t, vspecs, evaluator ):
     If neither (file) nor (argument) is given as an attribute, then
         - if the value starts with a dash, then (argument) is assumed
         - otherwise, (file) is assumed
+
+    Returns true if an analyze specification was found.
     """
     form = None
     specval = None
@@ -1229,9 +1231,15 @@ def parseAnalyze_scr( t, vspecs, evaluator ):
         t.setAnalyze( 'file', fname )
         t.setAnalyze( 'lang', lang )
         t.setAnalyze( 'cmd', cmdL )
-        
+
+        return True
+
     elif form == 'arg':
         t.setAnalyze( 'arg', specval )
+        return True
+
+    else:
+        return False
 
 
 def configure_auxiliary_script( testobj, scriptname, test_filename ):
@@ -1829,6 +1837,8 @@ def parseAnalyze( t, filedoc, evaluator ):
        <analyze keywords="..." parameters="..." platform="...">
          script contents that post processes test results
        </analyze>
+
+    Returns true if the test specifies an analyze script.
     """
     a = None
     
@@ -1862,6 +1872,8 @@ def parseAnalyze( t, filedoc, evaluator ):
           a += os.linesep + content.strip()
     
     t.setAnalyze( 'scriptfrag', a )
+
+    return a != None
 
 
 def parseTimeouts( t, filedoc, evaluator ):
