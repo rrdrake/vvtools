@@ -447,7 +447,7 @@ class TestList:
         grpL = self.groups[key]
 
         for t in grpL:
-            if t.isAnalyze():
+            if t != testobj and t.isAnalyze():
                 return t.getExecuteDirectory()
 
         return None
@@ -665,13 +665,13 @@ class TestList:
         
         # add children tests to parent tests
         for xt in self.getTestExecList():
-          pxdir = xt.atest.getParent()
-          if pxdir != None:
-            # this test has a parent; find the parent TestExec object
-            pxt = xtD.get( pxdir, None )
-            if pxt != None:
-              pxt.addChild( xt )
-    
+            pxdir = self._find_group_analyze_test( xt.atest )
+            if pxdir != None:
+                # this test has a parent; find the parent TestExec object
+                pxt = xtD.get( pxdir, None )
+                if pxt != None:
+                    pxt.addChild( xt )
+
     def sortTestExecList(self):
         """
         Sort the TestExec objects by runtime, descending order.  This is so
