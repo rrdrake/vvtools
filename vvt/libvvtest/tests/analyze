@@ -22,22 +22,23 @@ def main():
     global argL
 
     if len(argL) == 0:
-        argL = """test01 test02 test03        test05 test06 test07
+        argL = """test01 test02 test05 test06 test07
                   test08 test09 test10 test11 test12
-                  test13 test14 test15 test16 test17 test18
+                  test13a test13b test14 test15 test16 test17 test18
                """.split()
 
-    # set these for the batch tests
-    os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-    os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
-    
     savedir = os.getcwd()
     for func in argL:
         os.chdir( savedir )
         rmallfiles()
         time.sleep(1)
         print3( '====> ', func )
+
+        # for batch tests
+        os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
+        os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
+        os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+
         eval( func+'()' )
 
 
@@ -83,6 +84,11 @@ def test01():
           </analyze>
         </rtest>""" )
 
+    run_test01( '' )
+    run_test01( '--plat '+core_platform_name()+' --batch' )
+
+def run_test01( opt ):
+    ""
     writefile( 'parentchild/bad.xml', """
         <rtest name="bad">
           <keywords> fast medium </keywords>
@@ -97,7 +103,9 @@ def test01():
           </analyze>
         </rtest>""" )
 
-    out,np,nd,nf,nn = run_vvtest( "parentchild" )
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt+" parentchild" )
     assert np == 3 and nd == 0 and nf == 2 and nn == 1
 
     # "fix" the bad test
@@ -114,7 +122,7 @@ def test01():
           </analyze>
         </rtest>""" )
 
-    out,np,nd,nf,nn = run_vvtest( '-R -k notdone/notrun/fail parentchild' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -R -k notdone/notrun/fail parentchild' )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
 
@@ -134,149 +142,50 @@ def test02():
              ls ../good.timestep=2/afile.2 || exit 1
           </analyze>
         </rtest>""" )
-    
-    writefile( 'parentchild/bad.xml', """
-    <rtest name="bad">
-      <keywords> fast medium </keywords>
-      <parameterize timestep="1 2"/>
-      <execute>
-        if ( "$timestep" == 2 ) then
-          echo "fake failure"
-          exit 1
-        else
-          touch bfile.$timestep
-        endif
-      </execute>
-      <analyze>
-         ls ../bad.timestep=1/bfile.1 || exit 1
-         ls ../bad.timestep=2/bfile.2 || exit 1
-      </analyze>
-    </rtest>""" )
 
-    out,np,nd,nf,nn = run_vvtest( '-k bad parentchild' )
+    run_test02( '' )
+    run_test02( '--plat '+core_platform_name()+' --batch' )
+
+def run_test02( opt ):
+    ""
+    writefile( 'parentchild/bad.xml', """
+        <rtest name="bad">
+          <keywords> fast medium </keywords>
+          <parameterize timestep="1 2"/>
+          <execute>
+            if ( "$timestep" == 2 ) then
+              echo "fake failure"
+              exit 1
+            else
+              touch bfile.$timestep
+            endif
+          </execute>
+          <analyze>
+             ls ../bad.timestep=1/bfile.1 || exit 1
+             ls ../bad.timestep=2/bfile.2 || exit 1
+          </analyze>
+        </rtest>""" )
+
+    out,np,nd,nf,nn = run_vvtest( opt+' -k bad parentchild' )
     assert np == 1 and nd == 0 and nf == 1 and nn == 1
 
     # "fix" the bad test
     writefile( 'parentchild/bad.xml', """
-    <rtest name="bad">
-      <keywords> fast medium </keywords>
-      <parameterize timestep="1 2"/>
-      <execute>
-        touch bfile.$timestep
-      </execute>
-      <analyze>
-         ls ../bad.timestep=1/bfile.1 || exit 1
-         ls ../bad.timestep=2/bfile.2 || exit 1
-      </analyze>
-    </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest( '-R -k notdone/notrun/fail -k bad parentchild' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-
-def test03():
-    """
-    same as test02 but use batch
-    """
-    # determine the platform
-    writefile( "null.xml", """
-        <rtest name="null">
+        <rtest name="bad">
+          <keywords> fast medium </keywords>
+          <parameterize timestep="1 2"/>
+          <execute>
+            touch bfile.$timestep
+          </execute>
+          <analyze>
+             ls ../bad.timestep=1/bfile.1 || exit 1
+             ls ../bad.timestep=2/bfile.2 || exit 1
+          </analyze>
         </rtest>""" )
-    out,np,nd,nf,nn = run_vvtest()
-    platname = platform_name( out )
-    os.remove( 'null.xml' )
-    remove_results()
-    
-    if platname in batchplatforms:
-      
-      writefile( 'parentchild/good.xml', """
-          <rtest name="good">
-            <keywords> fast medium </keywords>
-            <parameterize timestep="1 2"/>
-            <execute>
-              touch afile.$timestep
-            </execute>
-            <analyze>
-               ls ../good.timestep=1/afile.1 || exit 1
-               ls ../good.timestep=2/afile.2 || exit 1
-            </analyze>
-          </rtest>""" )
-      
-      writefile( 'parentchild/bad.xml', """
-          <rtest name="bad">
-            <keywords> fast medium </keywords>
-            <parameterize timestep="1 2"/>
-            <execute>
-              echo "fake failure"
-              exit 1
-            </execute>
-            <analyze>
-               ls ../bad.timestep=1/bfile.1 || exit 1
-               ls ../bad.timestep=2/bfile.2 || exit 1
-            </analyze>
-          </rtest>""" )
-      
-      out,np,nd,nf,nn = run_vvtest( '--batch parentchild' )
-      assert np == 3 and nd == 0 and nf == 2 and nn == 1
-      
-      # "fix" the bad test
-      writefile( 'parentchild/bad.xml', """
-          <rtest name="bad">
-            <keywords> fast medium </keywords>
-            <parameterize timestep="1 2"/>
-            <execute>
-              touch bfile.$timestep
-            </execute>
-            <analyze>
-               ls ../bad.timestep=1/bfile.1 || exit 1
-               ls ../bad.timestep=2/bfile.2 || exit 1
-            </analyze>
-          </rtest>""" )
-      
-      out,np,nd,nf,nn = run_vvtest( '--batch -R -k notdone/notrun/fail parentchild' )
-      assert np == 3 and nd == 0 and nf == 0 and nn == 0
-      
-      remove_results()
-      
-      # exercise logic with only one analyze
-      
-      writefile( 'parentchild/bad.xml', """
-          <rtest name="bad">
-            <keywords> fast medium </keywords>
-            <parameterize timestep="1 2"/>
-            <execute>
-              if ( "$timestep" == 2 ) then
-                echo "fake failure"
-                exit 1
-              else
-                touch bfile.$timestep
-              endif
-            </execute>
-            <analyze>
-               ls ../bad.timestep=1/bfile.1 || exit 1
-               ls ../bad.timestep=2/bfile.2 || exit 1
-            </analyze>
-          </rtest>""" )
-      
-      out,np,nd,nf,nn = run_vvtest( '--batch -k bad parentchild' )
-      assert np == 1 and nd == 0 and nf == 1 and nn == 1
-      
-      # "fix" the bad test
-      writefile( 'parentchild/bad.xml', """
-          <rtest name="bad">
-            <keywords> fast medium </keywords>
-            <parameterize timestep="1 2"/>
-            <execute>
-              touch bfile.$timestep
-            </execute>
-            <analyze>
-               ls ../bad.timestep=1/bfile.1 || exit 1
-               ls ../bad.timestep=2/bfile.2 || exit 1
-            </analyze>
-          </rtest>""" )
-      
-      out,np,nd,nf,nn = run_vvtest( '--batch -R -k notdone/notrun/fail -k bad parentchild' )
-      assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+    out,np,nd,nf,nn = run_vvtest( opt+' -R -k notdone/notrun/fail ' + \
+                                      '-k bad parentchild' )
+    assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
 
 def test05():
@@ -314,7 +223,14 @@ def test06():
           </analyze>
         </rtest>""" )
 
-    out,np,nd,nf,nn = run_vvtest()
+    run_test06( '' )
+    run_test06( '--plat '+core_platform_name()+' --batch' )
+
+def run_test06( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
     
     fL = glob.glob( 'TestResults.*/multi.param=one/execute.log' )
@@ -352,7 +268,14 @@ def test07():
           </analyze>
         </rtest>""" )
 
-    out,np,nd,nf,nn = run_vvtest()
+    run_test07( '' )
+    run_test07( '--plat '+core_platform_name()+' --batch' )
+
+def run_test07( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 5 and nd == 0 and nf == 0 and nn == 0
     
     fL = glob.glob( 'TestResults.*/multi.param=one/execute.log' )
@@ -400,8 +323,15 @@ def test08():
             echo "that was a nice nap"
           </execute>
         </rtest>""" )
-    
-    out,np,nd,nf,nn = run_vvtest( '-n 4 --sort x' )
+
+    run_test08( '' )
+    run_test08( '--plat '+core_platform_name()+' --batch --qsub-limit 5' )
+
+def run_test08( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt+' -n 4 --sort x' )
     assert np == 4 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
     platname = platform_name( out )
@@ -414,28 +344,19 @@ def test08():
     assert tL[3][0] == tdir+'/test2'
     assert tL[0][1] >= tL[1][2] and tL[0][1] >= tL[2][2]
     assert tL[0][1] < tL[3][2]
-    
-    if platname in batchplatforms:
-        
-        remove_results()
-        
-        out,np,nd,nf,nn = run_vvtest( '-n 4 --sort x --batch --qsub-limit 5' )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
-
-        tL = testtimes( out )
-        assert len(tL) == 4
-        assert tL[0][0] == tdir+'/test1'
-        assert tL[1][0] == tdir+'/test1.timestep=1'
-        assert tL[2][0] == tdir+'/test1.timestep=2'
-        assert tL[3][0] == tdir+'/test2'
-        assert tL[0][1] >= tL[1][2] and tL[0][1] >= tL[2][2]
-        assert tL[0][1] < tL[3][2]
 
 
 def test09():
     """
     analyze should not run if a child failed previously
     """
+    run_test09( '' )
+    run_test09( '--plat '+core_platform_name()+' --batch' )
+
+def run_test09( opt ):
+    ""
+    remove_results()
+
     writefile( 'atest.xml', """
         <rtest name="atest">
           <parameterize timestep="1 2"/>
@@ -454,17 +375,17 @@ def test09():
         </rtest>""" )
     
     # the analyze should not run because a child fails
-    out,np,nd,nf,nn = run_vvtest()
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 1 and nd == 0 and nf == 1 and nn == 1
     tdir = results_dir()
     platname = platform_name( out )
 
     # the analyze should not run here
-    out,np,nd,nf,nn = run_vvtest()
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 0 and nd == 0 and nf == 0 and nn == 0
     
     # double check the state
-    out,np,nd,nf,nn = run_vvtest( "-i" )
+    out,np,nd,nf,nn = run_vvtest( "--plat "+platname+" -i" )
     assert np == 1 and nd == 0 and nf == 1 and nn == 1
     
     # "fix" the failure
@@ -481,80 +402,28 @@ def test09():
         </rtest>""" )
     
     # rerun the failure
-    out,np,nd,nf,nn = run_vvtest( '-k fail' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -k fail' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     
     # now the analyze should run
-    out,np,nd,nf,nn = run_vvtest()
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     
-    out,np,nd,nf,nn = run_vvtest( "-i" )
+    out,np,nd,nf,nn = run_vvtest( "--plat "+platname+" -i" )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    
-    if platname in batchplatforms:
-        
-        remove_results()
-        
-        writefile( 'atest.xml', """
-            <rtest name="atest">
-              <parameterize timestep="1 2"/>
-              <execute>
-                if ( "$timestep" == 2 ) then
-                  echo "fake failure"
-                  exit 1
-                else
-                  touch afile.$timestep
-                endif
-              </execute>
-              <analyze>
-                 ls ../atest.timestep=1/afile.1 || exit 1
-                 ls ../atest.timestep=2/afile.2 || exit 1
-              </analyze>
-            </rtest>""" )
-        
-        # the analyze should not run because a child fails
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 1 and nd == 0 and nf == 1 and nn == 1
-        tdir = results_dir()
-        platname = platform_name( out )
-
-        # the analyze should not run here
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
-        
-        # double check the state
-        out,np,nd,nf,nn = run_vvtest( '-i' )
-        assert np == 1 and nd == 0 and nf == 1 and nn == 1
-        
-        # "fix" the failure
-        writefile( 'atest.xml', """
-            <rtest name="atest">
-              <parameterize timestep="1 2"/>
-              <execute>
-                touch afile.$timestep
-              </execute>
-              <analyze>
-                 ls ../atest.timestep=1/afile.1 || exit 1
-                 ls ../atest.timestep=2/afile.2 || exit 1
-              </analyze>
-            </rtest>""" )
-        
-        # rerun the failure
-        out,np,nd,nf,nn = run_vvtest( '-k fail --batch' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        
-        # now the analyze should run
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        
-        out,np,nd,nf,nn = run_vvtest( '-i' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
 
 def test10():
     """
     behavior with previous children test results
     """
+    run_test10( '' )
+    run_test10( '--batch --qsub-length 1 --qsub-limit 5' )
+
+def run_test10( opt ):
+    ""
+    remove_results()
+
     writefile( 'atest.xml', """
         <rtest name="atest">
           <parameterize timestep="1 2"/>
@@ -569,7 +438,7 @@ def test10():
         </rtest>""" )
     
     # the analyze should fail
-    out,np,nd,nf,nn = run_vvtest( '-n 3' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -n 3' )
     assert np == 2 and nd == 0 and nf == 1 and nn == 0
     tdir = results_dir()
     platname = platform_name( out )
@@ -590,50 +459,8 @@ def test10():
     
     # the analyze test should NOT run at the same time as the children
     # (if it does in this case, then the analyze test will show a fail)
-    out,np,nd,nf,nn = run_vvtest( '-R -n 3' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -R -n 3' )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    
-    if platname in batchplatforms:
-        
-        remove_results()
-
-        writefile( 'atest.xml', """
-            <rtest name="atest">
-              <timeout value="15"/>
-              <parameterize timestep="1 2"/>
-              <execute>
-                sleep 5
-                touch afile.$timestep
-              </execute>
-              <analyze>
-                 ls ../atest.timestep=1/bfile.1 || exit 1
-                 ls ../atest.timestep=2/bfile.2 || exit 1
-              </analyze>
-            </rtest>""" )
-        
-        # the analyze should fail
-        out,np,nd,nf,nn = run_vvtest( '--batch --qsub-length 1 --qsub-limit 5' )
-        assert np == 2 and nd == 0 and nf == 1 and nn == 0
-
-        # "fix" the execute
-        writefile( 'atest.xml', """
-            <rtest name="atest">
-              <timeout value="15"/>
-              <parameterize timestep="1 2"/>
-              <execute>
-                sleep 5
-                touch bfile.$timestep
-              </execute>
-              <analyze>
-                 ls ../atest.timestep=1/bfile.1 || exit 1
-                 ls ../atest.timestep=2/bfile.2 || exit 1
-              </analyze>
-            </rtest>""" )
-        
-        # the analyze test should not run at the same time as the children
-        # (if the analyze job does, then the analyze test will show a fail)
-        out,np,nd,nf,nn = run_vvtest( '-R --batch --qsub-length 1 --qsub-limit 5' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
 
 def test11():
@@ -693,7 +520,7 @@ def test12():
 
 ########################################################################
 
-def test13():
+def test13a():
     """
     execute/analyze in a script test
     """    
@@ -708,8 +535,15 @@ def test13():
         else:
             print ( 'running execute' )
         """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
+
+    run_test13a( '' )
+    run_test13a( '--plat '+core_platform_name()+' --batch' )
+
+def run_test13a( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
     platname = platform_name( out )
@@ -718,21 +552,12 @@ def test13():
     assert len( filegrep( tdir+'/ana.V=a/execute.log', 'running execute' ) ) == 1
     assert len( filegrep( tdir+'/ana.V=b/execute.log', 'running execute' ) ) == 1
     assert len( filegrep( tdir+'/ana/execute.log', 'running analyze' ) ) == 1
-    
-    if platname in batchplatforms:
-        
-        remove_results()
-        
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
-        assert len( glob.glob( tdir+'/ana*/execute.log' ) ) == 3
-        assert len( filegrep( tdir+'/ana.V=a/execute.log', 'running execute' ) ) == 1
-        assert len( filegrep( tdir+'/ana.V=b/execute.log', 'running execute' ) ) == 1
-        assert len( filegrep( tdir+'/ana/execute.log', 'running analyze' ) ) == 1
 
-    # with only a single parameter value
-    remove_results()
+def test13b():
+    """
+    execute/analyze in a script test with only a single parameter value
+    """
     writescript( 'ana.vvt', """
         #!/usr/bin/env python
         #VVT: parameterize : V=a
@@ -744,8 +569,15 @@ def test13():
         else:
             print ( 'running execute' )
         """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
+
+    run_test13b( '' )
+    run_test13b( '--plat '+core_platform_name()+' --batch' )
+
+def run_test13b( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
     platname = platform_name( out )
@@ -753,17 +585,6 @@ def test13():
     assert len( glob.glob( tdir+'/ana*/execute.log' ) ) == 2
     assert len( filegrep( tdir+'/ana.V=a/execute.log', 'running execute' ) ) == 1
     assert len( filegrep( tdir+'/ana/execute.log', 'running analyze' ) ) == 1
-    
-    if platname in batchplatforms:
-        
-        remove_results()
-        
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-        assert len( glob.glob( tdir+'/ana*/execute.log' ) ) == 2
-        assert len( filegrep( tdir+'/ana.V=a/execute.log', 'running execute' ) ) == 1
-        assert len( filegrep( tdir+'/ana/execute.log', 'running analyze' ) ) == 1
 
 
 def test14():
@@ -784,8 +605,15 @@ def test14():
         echo "running analyze"
         echo "name is $NAME with children params $PARAM_V"
         """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
+
+    run_test14( '' )
+    run_test14( '--plat '+core_platform_name()+' --batch' )
+
+def run_test14( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
     platname = platform_name( out )
@@ -797,21 +625,6 @@ def test14():
     assert len( filegrep( tdir+'/ana.V=b/execute.log', 'param b' ) ) == 1
     assert len( filegrep( tdir+'/ana/execute.log', 'running analyze' ) ) == 1
     assert len( filegrep( tdir+'/ana/execute.log', 'params a b' ) ) == 1
-    
-    if platname in batchplatforms:
-        
-        remove_results()
-        
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-
-        assert len( glob.glob( tdir+'/ana*/execute.log' ) ) == 3
-        assert len( filegrep( tdir+'/ana.V=a/execute.log', 'running execute' ) ) == 1
-        assert len( filegrep( tdir+'/ana.V=a/execute.log', 'param a' ) ) == 1
-        assert len( filegrep( tdir+'/ana.V=b/execute.log', 'running execute' ) ) == 1
-        assert len( filegrep( tdir+'/ana.V=b/execute.log', 'param b' ) ) == 1
-        assert len( filegrep( tdir+'/ana/execute.log', 'running analyze' ) ) == 1
-        assert len( filegrep( tdir+'/ana/execute.log', 'params a b' ) ) == 1
 
 
 def test15():
@@ -842,8 +655,15 @@ def test15():
         else:
             print ( 'running execute' )
         """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
+
+    run_test15( '' )
+    run_test15( '--plat '+core_platform_name()+' --batch' )
+
+def run_test15( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
     platname = platform_name( out )
@@ -856,22 +676,6 @@ def test15():
     assert len( filegrep( tdir+'/ana2.V=a/execute.log', 'running execute' ) ) == 1
     assert len( filegrep( tdir+'/ana2.V=b/execute.log', 'running execute' ) ) == 1
     assert len( filegrep( tdir+'/ana2/execute.log', 'running analyze' ) ) == 1
-    
-    if platname in batchplatforms:
-        
-        remove_results()
-        
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-        
-        assert len( glob.glob( tdir+'/ana1*/execute.log' ) ) == 3
-        assert len( filegrep( tdir+'/ana1.V=a/execute.log', 'running py execute' ) ) == 1
-        assert len( filegrep( tdir+'/ana1.V=b/execute.log', 'running py execute' ) ) == 1
-        assert len( filegrep( tdir+'/ana1/execute.log', 'running sh analyze' ) ) == 1
-        assert len( glob.glob( tdir+'/ana2*/execute.log' ) ) == 3
-        assert len( filegrep( tdir+'/ana2.V=a/execute.log', 'running execute' ) ) == 1
-        assert len( filegrep( tdir+'/ana2.V=b/execute.log', 'running execute' ) ) == 1
-        assert len( filegrep( tdir+'/ana2/execute.log', 'running analyze' ) ) == 1
 
 
 def test16():
@@ -889,8 +693,15 @@ def test16():
         else:
             print ( 'running execute' )
         """ )
-    
-    ok,out = run_cmd( [vvtest,'-p', 'V<b or !V'] )
+
+    run_test16( [] )
+    run_test16( ['--plat',core_platform_name(),'--batch'] )
+
+def run_test16( optL ):
+    ""
+    remove_results()
+
+    ok,out = run_cmd( [vvtest]+optL+['-p','V<b or !V'] )
     assert ok
     np,nd,nf,nn = numpass(out),numdiff(out),numfail(out),numnotrun(out)
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
@@ -901,20 +712,6 @@ def test16():
     assert len( filegrep( tdir+'/scr.V=a/execute.log', 'running execute' ) ) == 1
     assert not os.path.exists( tdir+'/scr.V=b/execute.log' )
     assert len( filegrep( tdir+'/scr/execute.log', 'running analyze' ) ) == 1
-    
-    if platname in batchplatforms:
-        
-        remove_results()
-        
-        ok,out = run_cmd( [vvtest,'-p', 'V<b or !V', '--batch'] )
-        assert ok
-        np,nd,nf,nn = numpass(out),numdiff(out),numfail(out),numnotrun(out)
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-        assert len( glob.glob( tdir+'/scr*/execute.log' ) ) == 2
-        assert len( filegrep( tdir+'/scr.V=a/execute.log', 'running execute' ) ) == 1
-        assert not os.path.exists( tdir+'/scr.V=b/execute.log' )
-        assert len( filegrep( tdir+'/scr/execute.log', 'running analyze' ) ) == 1
 
 
 ########################################################################
@@ -939,8 +736,15 @@ def test17():
             ls ../atest.ival=2/afile.2 || exit 1
           </analyze>
         </rtest>""" )
-    
-    out,np,nd,nf,nn = run_vvtest()
+
+    run_test17( '' )
+    run_test17( '--plat '+core_platform_name()+' --batch' )
+
+def run_test17( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
     platname = platform_name( out )
@@ -958,7 +762,7 @@ def test17():
     assert len( filegrep( tdir+'/atest/execute.log',
                           'running touch' ) ) == 0
     
-    out,np,nd,nf,nn = run_vvtest( '-Ra' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -Ra' )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
     assert len( filegrep( tdir+'/atest.ival=1/execute.log',
                           'running touch' ) ) == 0
@@ -972,40 +776,6 @@ def test17():
                           'running analyze' ) ) == 1
     assert len( filegrep( tdir+'/atest/execute.log',
                           'running touch' ) ) == 0
-
-    if platname in batchplatforms:
-        remove_results()
-        
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-
-        assert len( filegrep( tdir+'/atest.ival=1/execute.log',
-                              'running touch' ) ) == 1
-        assert len( filegrep( tdir+'/atest.ival=1/execute.log',
-                              'running execute analyze' ) ) == 1
-        assert len( filegrep( tdir+'/atest.ival=2/execute.log',
-                              'running touch' ) ) == 1
-        assert len( filegrep( tdir+'/atest.ival=2/execute.log',
-                              'running execute analyze' ) ) == 1
-        assert len( filegrep( tdir+'/atest/execute.log',
-                              'running analyze' ) ) == 1
-        assert len( filegrep( tdir+'/atest/execute.log',
-                              'running touch' ) ) == 0
-        
-        out,np,nd,nf,nn = run_vvtest( '-Ra --batch' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        assert len( filegrep( tdir+'/atest.ival=1/execute.log',
-                              'running touch' ) ) == 0
-        assert len( filegrep( tdir+'/atest.ival=1/execute.log',
-                              'running execute analyze' ) ) == 1
-        assert len( filegrep( tdir+'/atest.ival=2/execute.log',
-                              'running touch' ) ) == 0
-        assert len( filegrep( tdir+'/atest.ival=2/execute.log',
-                              'running execute analyze' ) ) == 1
-        assert len( filegrep( tdir+'/atest/execute.log',
-                              'running analyze' ) ) == 1
-        assert len( filegrep( tdir+'/atest/execute.log',
-                              'running touch' ) ) == 0
 
 
 def test18():
@@ -1046,8 +816,15 @@ def test18():
             echo "running execute"
         fi
         """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
+
+    run_test18( '' )
+    run_test18( '--plat '+core_platform_name()+' --batch' )
+
+def run_test18( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
     platname = platform_name( out )
@@ -1066,7 +843,7 @@ def test18():
         assert len( filegrep( tdir+'/'+tname+'/execute.log',
                               'running touch' ) ) == 0
     
-    out,np,nd,nf,nn = run_vvtest( '-Ra' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -Ra' )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
     
     for tname in ['pytest','shtest']:
@@ -1082,43 +859,6 @@ def test18():
                               'running analyze' ) ) == 1
         assert len( filegrep( tdir+'/'+tname+'/execute.log',
                               'running touch' ) ) == 0
-
-    if platname in batchplatforms:
-        remove_results()
-
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-        
-        for tname in ['pytest','shtest']:
-            assert len( filegrep( tdir+'/'+tname+'.ival=1/execute.log',
-                                  'running touch' ) ) == 1
-            assert len( filegrep( tdir+'/'+tname+'.ival=1/execute.log',
-                                  'running execute' ) ) == 1
-            assert len( filegrep( tdir+'/'+tname+'.ival=2/execute.log',
-                                  'running touch' ) ) == 1
-            assert len( filegrep( tdir+'/'+tname+'.ival=2/execute.log',
-                                  'running execute' ) ) == 1
-            assert len( filegrep( tdir+'/'+tname+'/execute.log',
-                                  'running analyze' ) ) == 1
-            assert len( filegrep( tdir+'/'+tname+'/execute.log',
-                                  'running touch' ) ) == 0
-        
-        out,np,nd,nf,nn = run_vvtest( '-Ra --batch' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-
-        for tname in ['pytest','shtest']:
-            assert len( filegrep( tdir+'/'+tname+'.ival=1/execute.log',
-                                  'running touch' ) ) == 0
-            assert len( filegrep( tdir+'/'+tname+'.ival=1/execute.log',
-                                  'running execute' ) ) == 1
-            assert len( filegrep( tdir+'/'+tname+'.ival=2/execute.log',
-                                  'running touch' ) ) == 0
-            assert len( filegrep( tdir+'/'+tname+'.ival=2/execute.log',
-                                  'running execute' ) ) == 1
-            assert len( filegrep( tdir+'/'+tname+'/execute.log',
-                                  'running analyze' ) ) == 1
-            assert len( filegrep( tdir+'/'+tname+'/execute.log',
-                                  'running touch' ) ) == 0
 
 
 ########################################################################

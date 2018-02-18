@@ -30,11 +30,6 @@ def main():
                   postclean force1 force2 force3
                   batch1
                """.split()
-
-    # set these for the batch tests
-    os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-    os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
     
     cwd = os.getcwd()
     for func in argL:
@@ -42,6 +37,12 @@ def main():
         rmallfiles()
         time.sleep(1)
         print3( '====> ', func )
+
+        # for batch tests
+        os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
+        os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
+        os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+
         eval( func+'()' )
 
 
@@ -545,15 +546,14 @@ def postclean():
             fp.close()
         """ )
 
-    platname = run_postclean( '' )
+    run_postclean( '' )
+    run_postclean( '--plat '+core_platform_name()+' --batch' )
 
-    if platname in batchplatforms:
-        remove_results()
-        run_postclean( '--batch' )
-
-def run_postclean( addoption ):
+def run_postclean( opt ):
     ""
-    vrun = vvtestRunner( addoption )
+    remove_results()
+
+    vrun = vvtestRunner( opt )
     assert vrun.num_pass == 4 and vrun.num_fail == 0
     tdir = vrun.testdir
 
@@ -572,7 +572,7 @@ def run_postclean( addoption ):
     assert len( glob.glob( tdir+'/ana/execute.log' ) ) == 1
     assert len( glob.glob( tdir+'/ana/anagen.txt' ) ) == 1
 
-    vrun = vvtestRunner( addoption+' -R -C' )
+    vrun = vvtestRunner( opt+' -R -C' )
     assert vrun.num_pass == 4 and vrun.num_fail == 0
     assert tdir == vrun.testdir
 
@@ -593,8 +593,6 @@ def run_postclean( addoption ):
     assert len( glob.glob( tdir+'/ana.P=2/ana.py' ) ) == 0
     assert len( glob.glob( tdir+'/ana/execute.log' ) ) == 1
     assert len( glob.glob( tdir+'/ana/anagen.txt' ) ) == 0
-
-    return vrun.platname
 
 
 ############################################################################
@@ -713,38 +711,39 @@ def force3():
     xok,out = run_cmd( vvtest + ' -n 1' )
     del os.environ['VVTEST_INTERRUPT_COUNT']
     del os.environ['VVTEST_SIGNAL']
-    
+
     # this one should fail
     xok,out = run_cmd( vvtest + ' -R' )
     assert not xok
     assert len( grep( out, 'rror.*another process' ) ) == 1
-    
+
     # this one should be forced to run
     xok,out = run_cmd( vvtest + ' -R --force' )
     assert xok
     assert len( grep( out, 'rror.*another process' ) ) == 0
 
-    platname = platform_name( out )
-    if platname in batchplatforms:
-        
-        remove_results()
-        
-        # using SIGKILL prevents the "finished" mark from getting placed
-        os.environ['VVTEST_INTERRUPT_BATCH'] = '1'
-        os.environ['VVTEST_SIGNAL_BATCH'] = 'SIGKILL'
-        xok,out = run_cmd( vvtest + ' --batch --qsub-limit 1 --qsub-length 1' )
-        del os.environ['VVTEST_INTERRUPT_BATCH']
-        del os.environ['VVTEST_SIGNAL_BATCH']
-        
-        # this one should fail
-        xok,out = run_cmd( vvtest + ' --batch -R' )
-        assert not xok
-        assert len( grep( out, 'rror.*another process' ) ) == 1
-        
-        # this one should be forced to run
-        xok,out = run_cmd( vvtest + ' --batch -R --force' )
-        assert xok
-        assert len( grep( out, 'rror.*another process' ) ) == 0
+    remove_results()
+
+    # using SIGKILL prevents the "finished" mark from getting placed
+    os.environ['VVTEST_INTERRUPT_BATCH'] = '1'
+    os.environ['VVTEST_SIGNAL_BATCH'] = 'SIGKILL'
+    cmd = vvtest + ' --plat '+core_platform_name() + \
+                   ' --batch --qsub-limit 1 --qsub-length 1'
+    xok,out = run_cmd( cmd )
+    del os.environ['VVTEST_INTERRUPT_BATCH']
+    del os.environ['VVTEST_SIGNAL_BATCH']
+
+    # this one should fail
+    xok,out = run_cmd( vvtest + ' --plat '+core_platform_name() + \
+                                ' --batch -R' )
+    assert not xok
+    assert len( grep( out, 'rror.*another process' ) ) == 1
+
+    # this one should be forced to run
+    xok,out = run_cmd( vvtest + ' --plat '+core_platform_name() + \
+                                ' --batch -R --force' )
+    assert xok
+    assert len( grep( out, 'rror.*another process' ) ) == 0
 
 
 ############################################################################
@@ -753,58 +752,47 @@ def batch1():
     """
     behavior of a batch job failing
     """
-    writefile( "null.xml", """
-        <rtest name="null">
+    writefile( "sleeper1.xml", """
+        <rtest name="sleeper1">
+            <timeout value="15"/>
+            <execute> sleep 5 </execute>
         </rtest>""" )
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    platname = platform_name( out )
-    remove_results()
-    os.remove( 'null.xml' )
+    writefile( "sleeper2.xml", """
+        <rtest name="sleeper2">
+            <timeout value="15"/>
+            <execute> sleep 5 </execute>
+        </rtest>""" )
+    writefile( "sleeper3.xml", """
+        <rtest name="sleeper3">
+            <timeout value="15"/>
+            <execute> sleep 5 </execute>
+        </rtest>""" )
+    writefile( "sleeper4.xml", """
+        <rtest name="sleeper4">
+            <timeout value="15"/>
+            <execute> sleep 5 </execute>
+        </rtest>""" )
 
-    if platname in batchplatforms:
+    # these four tests are run in two batch
+    # batch zero will be ok, while batch one will crash
+    # this should cause batch one to show "did not seem to finish"
 
-        writefile( "sleeper1.xml", """
-            <rtest name="sleeper1">
-                <timeout value="15"/>
-                <execute> sleep 5 </execute>
-            </rtest>""" )
-        writefile( "sleeper2.xml", """
-            <rtest name="sleeper2">
-                <timeout value="15"/>
-                <execute> sleep 5 </execute>
-            </rtest>""" )
-        writefile( "sleeper3.xml", """
-            <rtest name="sleeper3">
-                <timeout value="15"/>
-                <execute> sleep 5 </execute>
-            </rtest>""" )
-        writefile( "sleeper4.xml", """
-            <rtest name="sleeper4">
-                <timeout value="15"/>
-                <execute> sleep 5 </execute>
-            </rtest>""" )
-        
-        # these four tests are run in two batch
-        # batch zero will be ok, while batch one will crash
-        # this should cause batch one to show "did not seem to finish"
+    os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
+    os.environ['VVTEST_INTERRUPT_QID'] = '1'
+    cmd = vvtest + ' --plat '+core_platform_name() + \
+                   ' --batch --qsub-limit 1 --qsub-length 40'
+    xok,out = run_cmd( cmd )
+    del os.environ['VVTEST_INTERRUPT_COUNT']
+    del os.environ['VVTEST_INTERRUPT_QID']
 
-        os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
-        os.environ['VVTEST_INTERRUPT_QID'] = '1'
-        xok,out = run_cmd( vvtest + ' --batch --qsub-limit 1 --qsub-length 40' )
-        del os.environ['VVTEST_INTERRUPT_COUNT']
-        del os.environ['VVTEST_INTERRUPT_QID']
+    L = grep( out, 'did not seem to finish:' )
+    assert len(L) == 1
+    L2 = L[0].split(':')[-1].split()
+    L2 = [ int(s) for s in L2 ]
+    assert L2 == [1]
 
-        L = grep( out, 'did not seem to finish:' )
-        assert len(L) == 1
-        L2 = L[0].split(':')[-1].split()
-        L2 = [ int(s) for s in L2 ]
-        assert L2 == [1]
-
-        assert len( greptestlist( out, 'sleeper[1-4]' ) ) == 4
-        assert len( greptestlist( out, 'sleeper[1-4] .*pass' ) ) == 3
-
+    assert len( greptestlist( out, 'sleeper[1-4]' ) ) == 4
+    assert len( greptestlist( out, 'sleeper[1-4] .*pass' ) ) == 3
 
 
 ############################################################################

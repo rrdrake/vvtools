@@ -28,17 +28,18 @@ def main():
                   test21
                """.split()
 
-    # set these for the batch tests
-    os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-    os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
-    
     cwd = os.getcwd()
     for func in argL:
         os.chdir( cwd )
         rmallfiles()
         time.sleep(1)
         print3( '====> ', func )
+
+        # for batch tests
+        os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
+        os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
+        os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+
         eval( func+'()' )
 
 
@@ -159,7 +160,14 @@ def test04():
 
     os.mkdir( 'bin' )
 
-    out,np,nd,nf,nn = run_vvtest( '-j bin -o dbg' )
+    run_test04( '' )
+    run_test04( '--plat '+core_platform_name()+' --batch' )
+
+def run_test04( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt+' -j bin -o dbg' )
     tdir = results_dir()
     platname = platform_name( out )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
@@ -170,23 +178,6 @@ def test04():
     L = filegrep( tdir+'/hello.py/execute.log', "PROJECT =" )
     assert len(L) == 1
     assert L[0].split('=',1)[1].strip() == os.path.abspath('bin')
-    
-    if platname in batchplatforms:
-
-        # same thing in batch mode
-
-        remove_results()
-        
-        out,np,nd,nf,nn = run_vvtest( '--batch -j bin -o dbg' )
-        tdir = results_dir()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( greptestlist(out,'pass.*hello.py') ) == 1
-
-        assert len( filegrep( tdir+'/hello.py/execute.log',
-                              "hello from the python test script" ) ) == 1
-        L = filegrep( tdir+'/hello.py/execute.log', "PROJECT =" )
-        assert len(L) == 1
-        assert L[0].split('=',1)[1].strip() == os.path.abspath('bin')
 
 
 def test05():
@@ -212,18 +203,15 @@ def test05():
         myfunc()
         """ )
 
-    out,np,nd,nf,nn = run_vvtest()
+    run_test05( '' )
+    run_test05( '--plat '+core_platform_name()+' --batch' )
+
+def run_test05( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 1 and nd == 1 and nf == 1 and nn == 0
-    platname = platform_name( out )
-
-    if platname in batchplatforms:
-
-        # same thing in batch mode
-
-        remove_results()
-        
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 1 and nd == 1 and nf == 1 and nn == 0
 
 
 def test06():
@@ -238,9 +226,15 @@ def test06():
         print ( "hello from the "+vvt.NAME+" test" )
         """ )
 
-    out,np,nd,nf,nn = run_vvtest()
+    run_test06( '' )
+    run_test06( '--plat '+core_platform_name()+' --batch' )
+
+def run_test06( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt )
     tdir = results_dir()
-    platname = platform_name( out )
 
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     assert len( greptestlist(out,'pass.*multi') ) == 2
@@ -250,21 +244,6 @@ def test06():
                           "hello from the multi test" ) ) == 1
     assert len( filegrep( tdir+'/multi2/execute.log',
                           "hello from the multi2 test" ) ) == 1
-    
-    if platname in batchplatforms:
-
-        remove_results()
-        
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-        assert len( greptestlist(out,'pass.*multi') ) == 2
-        assert len( greptestlist(out,'pass.*multi2') ) == 1
-
-        assert len( filegrep( tdir+'/multi/execute.log',
-                              "hello from the multi test" ) ) == 1
-        assert len( filegrep( tdir+'/multi2/execute.log',
-                              "hello from the multi2 test" ) ) == 1
 
 
 def test07():
@@ -483,7 +462,7 @@ def test09():
     assert len( filegrep( tdir+'/shpass/execute.log', 'exiting diff' ) ) == 0
     assert len( filegrep( tdir+'/cshpass/execute.log', 'exiting diff' ) ) == 0
 
-    if platname in batchplatforms:
+    if platname in nonqueued_platform_names:
         remove_results()
         
         out,np,nd,nf,nn = run_vvtest( '--batch' )
@@ -711,33 +690,25 @@ def test13():
         assert filecmp.cmp( 'file2.txt', 'lfile2', shallow=False )
         assert filecmp.cmp( 'file3.txt', 'cfile3', shallow=False )
         """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
+
+    run_test13( '' )
+    run_test13( '--plat '+core_platform_name()+' --batch' )
+
+def run_test13( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
     platname = platform_name( out )
-    
-    if platname in batchplatforms:
-        remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
 
 def test14():
     """
     copy & link files with attribute specifications
     """
-    writescript( "null.vvt", """
-        #!/bin/sh
-        echo null
-        """ )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    platname = platform_name( out )
-    tdir = results_dir()
-    remove_results()
-    os.remove( 'null.vvt' )
+    platname = core_platform_name()
 
     writefile( 'file1.txt', """
         this is file one
@@ -784,28 +755,23 @@ def test14():
         assert os.path.exists( 'cfile5' )
         assert not os.path.islink( 'cfile5' )
         """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
+
+    run_test14( '--plat '+core_platform_name() )
+    run_test14( '--plat '+core_platform_name()+' --batch' )
+
+def run_test14( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( '-o dbg' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -o dbg' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     dbgdir = results_dir()
     assert os.path.exists( dbgdir+'/another/file3.txt' )
     assert not os.path.islink( dbgdir+'/another/file3.txt' )
-
-    if platname in batchplatforms:
-        remove_results()
-        
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        remove_results()
-        
-        out,np,nd,nf,nn = run_vvtest( '-o dbg --batch' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        assert os.path.exists( dbgdir+'/another/file3.txt' )
-        assert not os.path.islink( dbgdir+'/another/file3.txt' )
 
 
 ########################################################################
@@ -814,17 +780,7 @@ def test15():
     """
     using the vvtest system utility functions
     """
-    writescript( "null.vvt", """
-        #!/bin/sh
-        echo null
-        """ )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    platname = platform_name( out )
-    tdir = results_dir()
-    remove_results()
-    os.remove( 'null.vvt' )
+    platname = core_platform_name()
 
     writescript( 'pytest.vvt', """
         #!/usr/bin/env python
@@ -877,9 +833,17 @@ def test15():
             echo "option expr false"
         fi
         """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
+
+    run_test15( '--plat '+core_platform_name() )
+    run_test15( '--plat '+core_platform_name()+' --batch' )
+
+def run_test15( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
+    tdir = results_dir()
 
     assert len( filegrep( tdir+'/pytest.A=1/execute.log',
                           'with A=1 param expr true' ) ) == 1
@@ -909,7 +873,7 @@ def test15():
                           'option expr false' ) ) == 1
     
     remove_results()
-    out,np,nd,nf,nn = run_vvtest( '-o dbg' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -o dbg' )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
     assert len( filegrep( tdir+'/pytest.A=1/execute.log',
@@ -918,7 +882,7 @@ def test15():
                           'option expr true' ) ) == 1
     
     remove_results()
-    out,np,nd,nf,nn = run_vvtest( '-o dbg+intel' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -o dbg+intel' )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
     assert len( filegrep( tdir+'/pytest.A=1/execute.log',

@@ -26,17 +26,18 @@ def main():
                   test09
                """.split()
 
-    # set these for the batch tests
-    os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-    os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
-    
     savedir = os.getcwd()
     for func in argL:
         os.chdir( savedir )
         rmallfiles()
         time.sleep(1)
         print3( '====> ', func )
+
+        # for batch tests
+        os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
+        os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
+        os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+
         eval( func+'()' )
 
 
@@ -51,8 +52,15 @@ def test01():
           <parameterize np="1 4 8"/>
           <execute> echo "execute basic2 np = $np" </execute>
         </rtest>""" )
-    
-    out,np,nd,nf,nn = run_vvtest( '-p np<8 -P np=1 -N 10' )
+
+    run_test01( '' )
+    run_test01( '--plat '+core_platform_name()+' --batch --qsub-length 0' )
+
+def run_test01( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt+' -p np<8 -P np=1 -N 10' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
     platname = platform_name( out )
@@ -63,33 +71,14 @@ def test01():
     print "execute", L
     assert len(L) == 1 and L[0].strip() == 'execute basic2 np = 4'
     
-    out,np,nd,nf,nn = run_vvtest( '-p np<=8 -N 10' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -p np<=8 -N 10' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     
-    out,np,nd,nf,nn = run_vvtest( '-i' )
+    out,np,nd,nf,nn = run_vvtest( '--plat '+platname+' -i' )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
     
-    out,np,nd,nf,nn = run_vvtest( '-i -p np=4' )
+    out,np,nd,nf,nn = run_vvtest( '--plat '+platname+' -i -p np=4' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    
-    if platname in batchplatforms:
-      
-        # same thing in batch mode
-
-        remove_results()
-
-        out,np,nd,nf,nn = run_vvtest( '-p np<8 -P np=1 -N 10 --batch --qsub-length 0' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        
-        L = filegrep( tdir + '/basic.np=4/execute.log', 'execute basic2' )
-        print "execute", L
-        assert len(L) == 1 and L[0].strip() == 'execute basic2 np = 4'
-        
-        out,np,nd,nf,nn = run_vvtest( '-p np<=8 -N 10 --batch --qsub-length 0' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        
-        out,np,nd,nf,nn = run_vvtest( '-i -p np=4 -N 10' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
 
 def test02():
@@ -103,7 +92,14 @@ def test02():
           <execute> echo "execute basic np = $np dt = $dt" </execute>
         </rtest>""" )
 
-    out,np,nd,nf,nn = run_vvtest( '-N 10' )
+    run_test02( '' )
+    run_test02( '--plat '+core_platform_name()+' --batch --qsub-length 0' )
+
+def run_test02( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt+' -N 10' )
     assert np == 4 and nd == 0 and nf == 0 and nn == 0
 
     tdir = results_dir()
@@ -115,35 +111,15 @@ def test02():
 
     remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( '-p np=4 -N 10' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -p np=4 -N 10' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     L = filegrep( tdir + '/basic.dt=0.01.np=4/execute.log', 'execute basic' )
     assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.01'
     L = filegrep( tdir + '/basic.dt=0.1.np=4/execute.log', 'execute basic' )
     assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.1'
 
-    out,np,nd,nf,nn = run_vvtest()
+    out,np,nd,nf,nn = run_vvtest( opt+' -N 10' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-
-    if platname in batchplatforms:
-      
-        # same thing in batch mode
-
-        remove_results()
-
-        out,np,nd,nf,nn = run_vvtest( '-p np=4 -N 10 --batch --qsub-length 0' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = filegrep( tdir + '/basic.dt=0.01.np=4/execute.log', 'execute basic' )
-        assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.01'
-        L = filegrep( tdir + '/basic.dt=0.1.np=4/execute.log', 'execute basic' )
-        assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.1'
-        
-        out,np,nd,nf,nn = run_vvtest( '--batch -N 10 --qsub-length 0' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        
-        out,np,nd,nf,nn = run_vvtest( '-i' )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
 
 
 def test03():
@@ -296,11 +272,17 @@ def test07():
             echo "access PARAM_isize = $PARAM_isize"
           </analyze>
         </rtest> """)
-    
-    out,np,nd,nf,nn = run_vvtest( ['-p','isize<=2 or not isize'] )
+
+    run_test07( '' )
+    run_test07( '--plat '+core_platform_name()+' --batch' )
+
+def run_test07( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt.split()+['-p','isize<=2 or not isize'] )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
-    platname = platform_name( out )
     
     assert     os.path.exists( tdir+'/basic.isize=1' )
     assert     os.path.exists( tdir+'/basic.isize=2' )
@@ -309,26 +291,9 @@ def test07():
 
     cwd = os.getcwd()
     os.chdir( tdir+'/basic' )
-    out,np,nd,nf,nn = run_vvtest( '-R' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -R' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     os.chdir( cwd )
-
-    if platname in batchplatforms:
-        remove_results()
-
-        out,np,nd,nf,nn = run_vvtest( ['-p','isize<=2 or not isize',
-                                       '--batch'] )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        
-        assert     os.path.exists( tdir+'/basic.isize=1' )
-        assert     os.path.exists( tdir+'/basic.isize=2' )
-        assert not os.path.exists( tdir+'/basic.isize=4' )
-        assert     os.path.exists( tdir+'/basic' )
-
-        os.chdir( tdir+'/basic' )
-        out,np,nd,nf,nn = run_vvtest( '-R --batch' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        os.chdir( cwd )
 
 
 def test08():
@@ -343,8 +308,15 @@ def test08():
             echo "access PARAM_isize = $PARAM_isize"
           </analyze>
         </rtest> """ )
-    
-    out,np,nd,nf,nn = run_vvtest( ['-p','isize<=2 or not isize'] )
+
+    run_test08( '' )
+    run_test08( '--plat '+core_platform_name()+' --batch' )
+
+def run_test08( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt.split()+['-p','isize<=2 or not isize'] )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
     tdir = results_dir()
     platname = platform_name( out )
@@ -359,7 +331,7 @@ def test08():
 
     cwd = os.getcwd()
     os.chdir( tdir+'/basic' )
-    out,np,nd,nf,nn = run_vvtest( '-R' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -R' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     
     L = filegrep( 'execute.log', "access PARAM_isize" )
@@ -369,33 +341,6 @@ def test08():
     pL = ps.strip().split()
     assert pL == ['1', '2']
     os.chdir( cwd )
-    
-    if platname in batchplatforms:
-        remove_results()
-
-        out,np,nd,nf,nn = run_vvtest( ['-p','isize<=2 or not isize',
-                                       '--batch'] )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-
-        assert os.path.exists( tdir+'/basic' )
-        L = filegrep( tdir+'/basic/execute.log', "access PARAM_isize" )
-        assert len(L) == 1
-        s = L[0]
-        ps = L[0].split('=',1)[1]
-        pL = ps.strip().split()
-        assert pL == ['1', '2']
-
-        os.chdir( tdir+'/basic' )
-        out,np,nd,nf,nn = run_vvtest( '-R --batch' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        
-        L = filegrep( 'execute.log', "access PARAM_isize" )
-        assert len(L) == 1
-        s = L[0]
-        ps = L[0].split('=',1)[1]
-        pL = ps.strip().split()
-        assert pL == ['1', '2']
-        os.chdir( cwd )
 
 
 #####################################################################
@@ -431,7 +376,14 @@ def test09():
         print ( "hello from "+os.path.basename(os.getcwd()) )
         """ )
 
-    out,np,nd,nf,nn = run_vvtest()
+    run_test09( '' )
+    run_test09( '--plat '+core_platform_name()+' --batch' )
+
+def run_test09( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt )
     tdir = results_dir()
     platname = platform_name( out )
 
@@ -455,40 +407,14 @@ def test09():
                           "hello from params1.animal=dog" ) ) == 1
     assert len( filegrep( tdir+'/params1.animal=cat/execute.log',
                           "hello from params1.animal=cat" ) ) == 1
-    
-    out,np,nd,nf,nn = run_vvtest( '-ik animal' )
+
+    plat = '--plat '+platname
+    out,np,nd,nf,nn = run_vvtest( plat+' -ik animal' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    out,np,nd,nf,nn = run_vvtest( '-ik dog' )
+    out,np,nd,nf,nn = run_vvtest( plat+' -ik dog' )
     assert np == 0 and nd == 0 and nf == 0 and nn == 0
-    out,np,nd,nf,nn = run_vvtest( '-ik Z' )
+    out,np,nd,nf,nn = run_vvtest( plat+' -ik Z' )
     assert np == 4 and nd == 0 and nf == 0 and nn == 0
-    
-    if platname in batchplatforms:
-
-        remove_results()
-        
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 12 and nd == 0 and nf == 0 and nn == 0
-
-        assert len( greptestlist(out,'pass.*animal=dog') ) == 1
-        assert len( greptestlist(out,'pass.*animal=cat') ) == 1
-        assert len( greptestlist(out,'pass.*A=dog.V=carrot') ) == 1
-        assert len( greptestlist(out,'pass.*A=cat.V=carrot') ) == 1
-        assert len( greptestlist(out,'pass.*A=dog.V=celery') ) == 1
-        assert len( greptestlist(out,'pass.*A=cat.V=celery') ) == 1
-        assert len( greptestlist(out,'pass.*B=dog.X=carrot') ) == 1
-        assert len( greptestlist(out,'pass.*B=cat.X=celery') ) == 1
-        assert len( greptestlist(out,'pass.*B=cat.X=carrot') ) == 0
-        assert len( greptestlist(out,'pass.*B=dog.X=celery') ) == 0
-        assert len( greptestlist(out,'pass.*.C=1.Y=2.Z=3') ) == 1
-        assert len( greptestlist(out,'pass.*.C=4.Y=5.Z=6') ) == 1
-        assert len( greptestlist(out,'pass.*.C=7.Y=8.Z=9') ) == 1
-        assert len( greptestlist(out,'pass.*.C=10.Y=11.Z=12') ) == 1
-
-        assert len( filegrep( tdir+'/params1.animal=dog/execute.log',
-                              "hello from params1.animal=dog" ) ) == 1
-        assert len( filegrep( tdir+'/params1.animal=cat/execute.log',
-                              "hello from params1.animal=cat" ) ) == 1
 
 
 #####################################################################

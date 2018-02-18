@@ -41,11 +41,6 @@ def main():
                   test08 test09 test10
                """.split()
 
-    # set these for the batch tests
-    os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-    os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
-    
     savedir = os.getcwd()
     for func in argL:
         os.chdir( savedir )
@@ -57,6 +52,12 @@ def main():
         rmallfiles()
         time.sleep(1)
         print3( '====> ', func )
+
+        # for batch tests
+        os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
+        os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
+        os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+
         eval( func+'()' )
 
 
@@ -186,8 +187,18 @@ def test03():
         time.sleep(7)
         """ )
 
+    platname = run_test03( '' )
+    if platname in nonqueued_platform_names:
+        run_test03( '--batch' )
+
+def run_test03( opt ):
+    ""
+    remove_results()
+    if os.path.exists( 'timings' ):
+        os.remove( 'timings' )
+
     # without a runtimes available, all tests should run
-    out,np,nd,nf,nn = run_vvtest( '--tmax 6 tests' )
+    out,np,nd,nf,nn = run_vvtest( opt+' --tmax 6 tests' )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
     tdir = os.path.abspath( results_dir() )
@@ -202,36 +213,14 @@ def test03():
 
     # select tests based on the timings file
     remove_results()
-    out,np,nd,nf,nn = run_vvtest( '--tmax 6 tests' )
+    out,np,nd,nf,nn = run_vvtest( opt+' --tmax 6 tests' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     L = testlist( out )
     assert len(L) == 2
     assert L[0][0] == 'AA'
     assert L[1][0] == 'BB'
 
-    if platname in batchplatforms:
-        remove_results()
-        os.remove( 'timings' )
-
-        # without a runtimes available, all tests should run
-        out,np,nd,nf,nn = run_vvtest( '--batch --tmax 6 tests' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-
-        # create a timings file
-        run_cmd( resultspy + ' save', directory='tests' )
-        run_vvtest( '-i --save-results', directory=tdir )
-        resultsfname = glob.glob('results.*')[0]
-        ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
-        assert ok
-
-        # select tests based on the timings file
-        remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--batch --tmax 6 tests' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = testlist( out )
-        assert len(L) == 2
-        assert L[0][0] == 'AA'
-        assert L[1][0] == 'BB'
+    return platname
 
 
 def test04():
@@ -254,7 +243,17 @@ def test04():
         time.sleep(7)
         """ )
 
-    out,np,nd,nf,nn = run_vvtest( 'tests' )
+    platname = run_test04( '' )
+    if platname in nonqueued_platform_names:
+        run_test04( '--batch' )
+
+def run_test04( opt ):
+    ""
+    remove_results()
+    if os.path.exists( 'timings' ):
+        os.remove( 'timings' )
+
+    out,np,nd,nf,nn = run_vvtest( opt+' tests' )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
     tdir = os.path.abspath( results_dir() )
@@ -262,14 +261,14 @@ def test04():
 
     # create a timings file
     run_cmd( resultspy + ' save', directory='tests' )
-    run_vvtest( '-i --save-results', directory=tdir )
+    run_vvtest( '--plat '+platname+' -i --save-results', directory=tdir )
     resultsfname = glob.glob('results.*')[0]
     ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
     assert ok
 
     # select tests based on the timings file
     remove_results()
-    out,np,nd,nf,nn = run_vvtest( '--tmax 6 tests' )
+    out,np,nd,nf,nn = run_vvtest( opt+' --tmax 6 tests' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     L = testlist( out )
     assert len(L) == 2
@@ -280,50 +279,18 @@ def test04():
     # not be in the TestResults test list;  check this by running vvtest
     # inside the TestResults directory (test CC should never be run)
 
-    out,np,nd,nf,nn = run_vvtest( directory=tdir )
+    out,np,nd,nf,nn = run_vvtest( opt, directory=tdir )
     assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
     # if we force tests to rerun, only 2 should be run
-    out,np,nd,nf,nn = run_vvtest( '-R', directory=tdir )
+    out,np,nd,nf,nn = run_vvtest( opt+' -R', directory=tdir )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     L = testlist( out )
     assert len(L) == 2
     assert L[0][0] == 'AA'
     assert L[1][0] == 'BB'
 
-    if platname in batchplatforms:
-        remove_results()
-        os.remove( 'timings' )
-
-        out,np,nd,nf,nn = run_vvtest( '--batch tests' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-
-        # create a timings file
-        run_cmd( resultspy + ' save', directory='tests' )
-        run_vvtest( '-i --save-results', directory=tdir )
-        resultsfname = glob.glob('results.*')[0]
-        ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
-        assert ok
-
-        # select tests based on the timings file
-        remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--batch --tmax 6 tests' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = testlist( out )
-        assert len(L) == 2
-        assert L[0][0] == 'AA'
-        assert L[1][0] == 'BB'
-
-        out,np,nd,nf,nn = run_vvtest( '--batch', directory=tdir )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
-
-        # and if we force tests to rerun, only 2 should be run
-        out,np,nd,nf,nn = run_vvtest( '--batch -R', directory=tdir )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = testlist( out )
-        assert len(L) == 2
-        assert L[0][0] == 'AA'
-        assert L[1][0] == 'BB'
+    return platname
 
 
 def test05():
@@ -357,7 +324,17 @@ def test05():
         time.sleep(7)
         """ )
 
-    out,np,nd,nf,nn = run_vvtest( 'tests' )
+    platname = run_test05( '' )
+    if platname in nonqueued_platform_names:
+        run_test05( '--batch' )
+
+def run_test05( opt ):
+    ""
+    remove_results()
+    if os.path.exists( 'timings' ):
+        os.remove( 'timings' )
+
+    out,np,nd,nf,nn = run_vvtest( opt+' tests' )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
     tdir = os.path.abspath( results_dir() )
@@ -372,51 +349,22 @@ def test05():
 
     # none of the execute/analyze tests should have been selected
     remove_results()
-    out,np,nd,nf,nn = run_vvtest( '--tmax 6 tests' )
+    out,np,nd,nf,nn = run_vvtest( opt+' --tmax 6 tests' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     L = testlist( out )
     assert len(L) == 1
     assert L[0][-1].endswith( os.sep+'AA' )
 
-    out,np,nd,nf,nn = run_vvtest( directory=tdir )
+    out,np,nd,nf,nn = run_vvtest( opt, directory=tdir )
     assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-R', directory=tdir )
+    out,np,nd,nf,nn = run_vvtest( opt+' -R', directory=tdir )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     L = testlist( out )
     assert len(L) == 1
     assert L[0][-1] == 'AA'
 
-    if platname in batchplatforms:
-        remove_results()
-        os.remove( 'timings' )
-
-        out,np,nd,nf,nn = run_vvtest( '--batch tests' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-
-        # create a timings file
-        run_cmd( resultspy + ' save', directory='tests' )
-        run_vvtest( '-i --save-results', directory=tdir )
-        resultsfname = glob.glob('results.*')[0]
-        ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
-        assert ok
-
-        # none of the execute/analyze tests should have been selected
-        remove_results()
-        out,np,nd,nf,nn = run_vvtest( '--batch --tmax 6 tests' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        L = testlist( out )
-        assert len(L) == 1
-        assert L[0][-1].endswith( os.sep+'AA' )
-
-        out,np,nd,nf,nn = run_vvtest( '--batch', directory=tdir )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
-
-        out,np,nd,nf,nn = run_vvtest( '--batch -R', directory=tdir )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        L = testlist( out )
-        assert len(L) == 1
-        assert L[0][-1] == 'AA'
+    return platname
 
 
 def test06():
@@ -450,51 +398,35 @@ def test06():
         time.sleep(7)
         """ )
 
-    out,np,nd,nf,nn = run_vvtest( 'tests' )
+    run_test06( '' )
+    run_test06( '--plat '+core_platform_name()+' --batch' )
+
+def run_test06( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt+' tests' )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
     tdir = os.path.abspath( results_dir() )
     platname = platform_name(out)
 
-    out,np,nd,nf,nn = run_vvtest( '--tmin 3 tests' )
+    out,np,nd,nf,nn = run_vvtest( opt+' --tmin 3 tests' )
     assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
     # check that the test list in TestResults.* directory is intact
-    out,np,nd,nf,nn = run_vvtest( '-i', directory=tdir )
+    out,np,nd,nf,nn = run_vvtest( '--plat '+platname+' -i', directory=tdir )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-R --tmin 3 tests' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -R --tmin 3 tests' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
     L = testlist( out )
     assert len(L) == 1
     assert L[0][-1].endswith( os.sep+'CC' )
 
     # check that the test list in TestResults.* directory has old results
-    out,np,nd,nf,nn = run_vvtest( '-i', directory=tdir )
+    out,np,nd,nf,nn = run_vvtest( '--plat '+platname+' -i', directory=tdir )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
-
-    if platname in batchplatforms:
-        remove_results()
-
-        out,np,nd,nf,nn = run_vvtest( '--batch tests' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-
-        out,np,nd,nf,nn = run_vvtest( '--batch --tmin 3 tests' )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
-
-        # check that the test list in TestResults.* directory is intact
-        out,np,nd,nf,nn = run_vvtest( '-i', directory=tdir )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-
-        out,np,nd,nf,nn = run_vvtest( '--batch -R --tmin 3 tests' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        L = testlist( out )
-        assert len(L) == 1
-        assert L[0][-1].endswith( os.sep+'CC' )
-
-        # check that the test list in TestResults.* directory has old results
-        out,np,nd,nf,nn = run_vvtest( '-i', directory=tdir )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
 
 def test07():
@@ -580,13 +512,20 @@ def test08():
         time.sleep(2)
         """ )
 
-    out,np,nd,nf,nn = run_vvtest( '--tsum 7 tests' )
+    run_test08( '' )
+    run_test08( '--plat '+core_platform_name()+' --batch' )
+
+def run_test08( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt+' --tsum 7 tests' )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
     tdir = os.path.abspath( results_dir() )
     platname = platform_name(out)
 
-    out,np,nd,nf,nn = run_vvtest( '-R --tsum 7 tests' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -R --tsum 7 tests' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     L = testlist( out )
     assert len(L) == 2
@@ -594,25 +533,8 @@ def test08():
     assert L[1][-1].endswith( os.sep+'CC' )
 
     # check that the full list is still intact
-    out,np,nd,nf,nn = run_vvtest( '-R tests' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -R tests' )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
-
-    if platname in batchplatforms:
-        remove_results()
-
-        out,np,nd,nf,nn = run_vvtest( '--batch --tsum 7 tests' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-
-        out,np,nd,nf,nn = run_vvtest( '--batch -R --tsum 7 tests' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = testlist( out )
-        assert len(L) == 2
-        assert L[0][-1].endswith( os.sep+'AA' )
-        assert L[1][-1].endswith( os.sep+'CC' )
-
-        # check that the full list is still intact
-        out,np,nd,nf,nn = run_vvtest( '--batch -R tests' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
 
 def test09():
@@ -646,13 +568,20 @@ def test09():
         time.sleep(6)
         """ )
 
-    out,np,nd,nf,nn = run_vvtest( '--tsum 10 tests' )
+    run_test09( '' )
+    run_test09( '--plat '+core_platform_name()+' --batch' )
+
+def run_test09( opt ):
+    ""
+    remove_results()
+
+    out,np,nd,nf,nn = run_vvtest( opt+' --tsum 10 tests' )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
     tdir = os.path.abspath( results_dir() )
     platname = platform_name(out)
 
-    out,np,nd,nf,nn = run_vvtest( '-R --tsum 10 tests' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -R --tsum 10 tests' )
     assert np == 4 and nd == 0 and nf == 0 and nn == 0
     L = testlist( out )
     assert len(L) == 4
@@ -662,7 +591,7 @@ def test09():
     assert L[3][-1].endswith( os.sep+'BB.planet=venus' )
 
     # check that the full list is still intact
-    out,np,nd,nf,nn = run_vvtest( '-R tests' )
+    out,np,nd,nf,nn = run_vvtest( opt+' -R tests' )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
 
@@ -697,7 +626,17 @@ def test10():
         time.sleep(2)
         """ )
 
-    out,np,nd,nf,nn = run_vvtest( 'tests' )
+    platname = run_test10( '' )
+    if platname in nonqueued_platform_names:
+        run_test10( '--batch' )
+
+def run_test10( opt ):
+    ""
+    remove_results()
+    if os.path.exists( 'timings' ):
+        os.remove( 'timings' )
+
+    out,np,nd,nf,nn = run_vvtest( opt+' tests' )
     assert np == 6 and nd == 0 and nf == 0 and nn == 0
 
     tdir = os.path.abspath( results_dir() )
@@ -711,14 +650,14 @@ def test10():
     assert ok
 
     remove_results()
-    out,np,nd,nf,nn = run_vvtest( '--tsum 6 tests' )
+    out,np,nd,nf,nn = run_vvtest( opt+' --tsum 6 tests' )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     L = testlist( out )
     assert len(L) == 2
     assert L[0][-1].endswith( os.sep+'AA' )
     assert L[1][-1].endswith( os.sep+'CC' )
 
-    out,np,nd,nf,nn = run_vvtest( '-R', directory=tdir )
+    out,np,nd,nf,nn = run_vvtest( opt+' -R', directory=tdir )
     assert np == 2 and nd == 0 and nf == 0 and nn == 0
     L = testlist( out )
     assert len(L) == 2

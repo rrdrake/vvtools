@@ -175,7 +175,16 @@ def make_working_directory( test_filename ):
 
 ##########################################################################
 
-batchplatforms = [ 'ceelan', 'Linux', 'iDarwin', 'Darwin' ]
+nonqueued_platform_names = [ 'ceelan', 'Linux', 'iDarwin', 'Darwin' ]
+
+def core_platform_name():
+    """
+    Returns either Darwin or Linux, depending on the current platform.
+    """
+    if os.uname()[0].lower().startswith( 'darwin' ):
+        return 'Darwin'
+    else:
+        return 'Linux'
 
 
 def print3( *args ):

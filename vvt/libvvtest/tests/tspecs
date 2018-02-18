@@ -32,17 +32,18 @@ def main():
                   test09 test10 test11 test12 test13 test14 
                """.split()
 
-    # set these for the batch tests
-    os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-    os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
-    
     savedir = os.getcwd()
     for func in argL:
         os.chdir( savedir )
         rmallfiles()
         time.sleep(1)
         print3( '====> ', func )
+
+        # for the batch tests
+        os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
+        os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
+        os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+
         eval( func+'()' )
 
 
