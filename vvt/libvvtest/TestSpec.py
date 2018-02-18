@@ -57,13 +57,6 @@ class TestSpec:
         the test name and the test parameters, such as "some/dir/myname.np=4".
         """
         return self.xdir
-    
-    def getParent(self):
-        """
-        Returns the execution directory of the parent of this test, or None
-        if it has no parent.
-        """
-        return self.parent_xdir
 
     def getForm(self, key, *default):
         """
@@ -295,8 +288,6 @@ class TestSpec:
         self.rootpath = rootpath
         self.filepath = filepath
 
-        self.parent_xdir = None    # if child, this is the parent execute dir
-
         self.keywords = []         # list of strings
         self.params = {}           # name string to value string
         self.analyze = {}          # analyze script specifications
@@ -370,11 +361,6 @@ class TestSpec:
         """
         assert origin
         self.origin.append( origin )
-
-    def setParent(self, parent_xdir):
-        """
-        """
-        self.parent_xdir = parent_xdir
 
     def addEnablePlatformExpression(self, word_expression):
         ""

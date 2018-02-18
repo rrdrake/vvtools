@@ -1479,20 +1479,12 @@ def test12():
 
     tL = TestSpecCreator.createTestObjects( '.', 'ok39.xml', None, nofltr )
     assert len(tL) == 3
+    tL.sort()
     print "print with parameterize/analyze 4:", tL
-    if tL[0].getParent() == None:
-      assert tL[0].getAnalyze( 'scriptfrag' )
-      assert tL[1].getParent() != None
-      assert tL[2].getParent() != None
-    elif tL[1].getParent() == None:
-      assert tL[0].getParent() != None
-      assert tL[1].getAnalyze( 'scriptfrag' )
-      assert tL[2].getParent() != None
-    else:
-      assert tL[0].getParent() != None
-      assert tL[1].getParent() != None
-      assert tL[2].getParent() == None
-      assert tL[2].getAnalyze( 'scriptfrag' )
+    assert tL[0].isAnalyze()
+    assert tL[0].getAnalyze( 'scriptfrag' )
+    assert not tL[1].isAnalyze()
+    assert not tL[2].isAnalyze()
 
     writefile( 'ok43.xml', """
         <rtest name="atest">

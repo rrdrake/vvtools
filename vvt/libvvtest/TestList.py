@@ -14,13 +14,15 @@ class TestList:
     file and to read from a test XML file.
     """
     
-    version = '30'
+    version = '31'
     
     def __init__(self, runtime_config=None):
         
         self.filename = None
         self.datestamp = None
         self.finish = None
+
+        self.deps = {}  # xdir -> list of dependency xdir
 
         self.tspecs = {}  # TestSpec xdir -> TestSpec object
         self.active = {}  # TestSpec xdir -> TestSpec object
@@ -62,7 +64,30 @@ class TestList:
             fp.write( TestSpecCreator.toString(t) + os.linesep )
         
         fp.close()
-    
+
+    def writeDependencies(self, superset):
+        """
+        Write test dependency information to the file.  The given list of
+        TestSpec instances should be a superset of the tests in this list.
+        """
+        self._create_group_map()
+
+        fp = open( self.filename, 'a' )
+        try:
+            for t in superset:
+                if t.isAnalyze():
+                    key = ( t.getFilepath(), t.getName() )
+                    grpL = self.groups.get( key, None )
+                    if grpL != None:
+                        L = [ t.getExecuteDirectory() ]
+                        for gt in grpL:
+                            if not gt.isAnalyze():
+                                L.append( gt.getExecuteDirectory() )
+                        if len(L) > 1:
+                            fp.write( 'DEP: '+repr(L)+'\n' )
+        finally:
+            fp.close()
+
     def AddIncludeFile(self, include_file):
         """
         Appends the file 'filename' with a marker that causes the
@@ -124,24 +149,30 @@ class TestList:
         # record all the test lines in the file
         
         for line in lineL:
-          try:
-            t = TestSpecCreator.fromString(line)
-          except TestSpecCreator.TestSpecError, e:
-            print "WARNING: reading file", filename, "string", line + ":", e
-          else:
-            xdir = t.getExecuteDirectory()
-            if count_entries != None:
-              if xdir in count_entries: count_entries[xdir] += 1
-              else:                     count_entries[xdir] = 1
 
-            t2 = self.tspecs.get( xdir, None )
-            if t2 == None:
-                self.tspecs[xdir] = t
+            if line.startswith( 'DEP:' ):
+                L = eval( line.split( 'DEP:', 1 )[1].strip() )
+                self.deps[ L[0] ] = L[1:]
+                continue
+
+            try:
+                t = TestSpecCreator.fromString(line)
+            except TestSpecCreator.TestSpecError, e:
+                print "WARNING: reading file", filename, "string", line + ":", e
             else:
-                # just overwrite the attributes of the previous test object
-                for k,v in t.getAttrs().items():
-                    t2.setAttr(k,v)
-                t2.addOrigin( t.getOrigin()[-1] )
+                xdir = t.getExecuteDirectory()
+                if count_entries != None:
+                    if xdir in count_entries: count_entries[xdir] += 1
+                    else:                     count_entries[xdir] = 1
+
+                t2 = self.tspecs.get( xdir, None )
+                if t2 == None:
+                    self.tspecs[xdir] = t
+                else:
+                    # just overwrite the attributes of the previous test object
+                    for k,v in t.getAttrs().items():
+                        t2.setAttr(k,v)
+                    t2.addOrigin( t.getOrigin()[-1] )
 
     def getDateStamp(self, default=None):
         """
@@ -366,17 +397,6 @@ class TestList:
 
         return pruneL, cntmax
 
-    def _create_group_map(self):
-        ""
-        self.groups = {}
-        for xdir,t in self.tspecs.items():
-            key = ( t.getFilepath(), t.getName() )
-            L = self.groups.get( key, None )
-            if L == None:
-                L = []
-                self.groups[ key ] = L
-            L.append( t )
-
     def _apply_filters(self, xdir, tspec, subdir, analyze_only):
         """
         """
@@ -433,6 +453,17 @@ class TestList:
                 if xdir in self.tspecs and 'string' not in t.getOrigin():
                     self.tspecs.pop( xdir )
 
+    def _create_group_map(self):
+        ""
+        self.groups = {}
+        for xdir,t in self.tspecs.items():
+            key = ( t.getFilepath(), t.getName() )
+            L = self.groups.get( key, None )
+            if L == None:
+                L = []
+                self.groups[ key ] = L
+            L.append( t )
+
     def _test_group_has_analyze(self, grpL):
         ""
         for t in grpL:
@@ -461,6 +492,13 @@ class TestList:
         for t in grpL:
             if t != testobj and t.isAnalyze():
                 return True
+
+        testxdir = testobj.getExecuteDirectory()
+
+        for xdir,depxdirs in self.deps.items():
+            for depxdir in depxdirs:
+                if testxdir == depxdir:
+                    return True
 
         return False
 
@@ -647,8 +685,7 @@ class TestList:
 
           assert 'file' in t.getOrigin()
 
-          has_dependent = ( t.getParent() != None )
-          #has_dependent = self._has_dependent_test( t )
+          has_dependent = self._has_dependent_test( t )
 
           xt = TestExec.TestExec( t, perms, has_dependent )
           

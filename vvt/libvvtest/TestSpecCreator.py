@@ -285,11 +285,9 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
           # a test with no parameters but with an analyze script
           raise TestSpecError( 'an analyze requires at least one ' + \
                                'parameter to be defined' )
-        # create an analyze test, and make it the parent of each test
+        # create an analyze test
         parent = t.makeParent()
         parent.setParameterSet( paramset )
-        for t2 in testL:
-          t2.setParent( parent.getExecuteDirectory() )
         testL.append( parent )
 
     # parse and set the rest of the XML file for each test
@@ -340,11 +338,9 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
           # a test with no parameters but with an analyze script
           raise TestSpecError( 'an analyze requires at least one ' + \
                                'parameter to be defined' )
-        # create an analyze test, and make it the parent of each test
+        # create an analyze test
         parent = t.makeParent()
         parent.setParameterSet( paramset )
-        for t2 in testL:
-          t2.setParent( parent.getExecuteDirectory() )
         testL.append( parent )
 
     for t in testL:
@@ -499,11 +495,7 @@ def toString( tspec ):
     s = tspec.getName() + \
         ' "' + escape_file( tspec.getRootpath() ) + '" "' + \
                escape_file( tspec.getFilepath() ) + '"'
-    
-    pxdir = tspec.getParent()
-    if pxdir != None:
-      s = s + ' "_parent_=' + escape_file(pxdir) + '"'
-    
+
     L = tspec.getKeywords()
     if len(L) > 0:
       s = s + ' "_keywords_=' + string.join(L) + '"'
@@ -572,10 +564,10 @@ def fromString( strid ):
       if len(nvL) != 2 or len(nvL[0]) == 0 or len(nvL[1]) == 0:
         raise TestSpecError( \
                 "fromString(): corrupt or unknown string format: " + tok )
-      if nvL[0] == '_parent_':
-        tspec.setParent( nvL[1] )
-      elif nvL[0] == '_keywords_':
+      if nvL[0] == '_keywords_':
         tspec.setKeywords( string.split( nvL[1] ) )
+      elif nvL[0] == '_parent_':
+        pass  # backward compatibility; remove after a few months [Feb 2018]
       elif nvL[1][0] == 'I': tspec.setAttr( nvL[0], int(nvL[1][1:]) )
       elif nvL[1][0] == 'F': tspec.setAttr( nvL[0], float(nvL[1][1:]) )
       elif nvL[1][0] == 'N': tspec.setAttr( nvL[0], None )
