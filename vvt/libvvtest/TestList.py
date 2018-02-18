@@ -22,6 +22,7 @@ class TestList:
         self.datestamp = None
         self.finish = None
 
+        self.groups = {}  # (test filepath, test name) -> list of TestSpec
         self.deps = {}  # xdir -> list of dependency xdir
 
         self.tspecs = {}  # TestSpec xdir -> TestSpec object
@@ -70,21 +71,13 @@ class TestList:
         Write test dependency information to the file.  The given list of
         TestSpec instances should be a superset of the tests in this list.
         """
-        self._create_group_map()
+        self._create_parameterize_analyze_group_map()
 
         fp = open( self.filename, 'a' )
         try:
             for t in superset:
                 if t.isAnalyze():
-                    key = ( t.getFilepath(), t.getName() )
-                    grpL = self.groups.get( key, None )
-                    if grpL != None:
-                        L = [ t.getExecuteDirectory() ]
-                        for gt in grpL:
-                            if not gt.isAnalyze():
-                                L.append( gt.getExecuteDirectory() )
-                        if len(L) > 1:
-                            fp.write( 'DEP: '+repr(L)+'\n' )
+                    self._write_analyze_dependency( fp, t )
         finally:
             fp.close()
 
@@ -138,41 +131,48 @@ class TestList:
         contained in 'filename' will be loaded and set.
         """
         if not self.filename:
-          self.filename = os.path.normpath( filename )
+            self.filename = os.path.normpath( filename )
 
         vers,lineL = self._read_file_lines(filename)
-        
+
         if len(lineL) > 0 and vers < 12:
-          raise Exception( "invalid test list file format version, " + \
-                           str( vers ) + '; corrupt file? ' + filename )
-        
+            raise Exception( "invalid test list file format version, " + \
+                             str( vers ) + '; corrupt file? ' + filename )
+
         # record all the test lines in the file
-        
+
         for line in lineL:
 
-            if line.startswith( 'DEP:' ):
-                L = eval( line.split( 'DEP:', 1 )[1].strip() )
-                self.deps[ L[0] ] = L[1:]
-                continue
-
             try:
-                t = TestSpecCreator.fromString(line)
-            except TestSpecCreator.TestSpecError, e:
-                print "WARNING: reading file", filename, "string", line + ":", e
-            else:
-                xdir = t.getExecuteDirectory()
-                if count_entries != None:
-                    if xdir in count_entries: count_entries[xdir] += 1
-                    else:                     count_entries[xdir] = 1
+                if line.startswith( 'DEP:' ):
+                    L = eval( line.split( 'DEP:', 1 )[1].strip() )
+                    self.deps[ L[0] ] = L[1:]
 
-                t2 = self.tspecs.get( xdir, None )
-                if t2 == None:
-                    self.tspecs[xdir] = t
                 else:
-                    # just overwrite the attributes of the previous test object
-                    for k,v in t.getAttrs().items():
-                        t2.setAttr(k,v)
-                    t2.addOrigin( t.getOrigin()[-1] )
+                    self._create_test_from_string( line, count_entries )
+
+            except:
+                print3( 'WARNING: reading file', filename,
+                    'at line "'+line+'":', sys.exc_info()[1] )
+
+    def _create_test_from_string(self, line, count_entries):
+        ""
+        t = TestSpecCreator.fromString(line)
+
+        xdir = t.getExecuteDirectory()
+        if count_entries != None:
+            if xdir in count_entries: count_entries[xdir] += 1
+            else:                     count_entries[xdir] = 1
+
+        t2 = self.tspecs.get( xdir, None )
+        if t2 == None:
+            self.tspecs[xdir] = t
+
+        else:
+            # just overwrite the attributes of the previous test object
+            for k,v in t.getAttrs().items():
+                t2.setAttr(k,v)
+            t2.addOrigin( t.getOrigin()[-1] )
 
     def getDateStamp(self, default=None):
         """
@@ -213,12 +213,7 @@ class TestList:
         line = fp.readline()
         while line:
           line = line.strip()
-          if line[0:10] == "# Version ":
-            # TODO: an older format, remove after a few months [May 2016]
-            vers = int( line[10:].strip() )
-            line = fp.readline()
-            break
-          elif line.startswith( '#VVT: Version' ):
+          if line.startswith( '#VVT: Version' ):
             L = line.split( '=', 1 )
             if len(L) == 2:
               vers = int( L[1].strip() )
@@ -295,7 +290,7 @@ class TestList:
         """
         self.active = {}
 
-        self._create_group_map()
+        self._create_parameterize_analyze_group_map()
 
         subdir = None
         if filter_dir != None:
@@ -358,7 +353,6 @@ class TestList:
                 i += 1
             tL = None
             self._remove_tests( rmD )
-        rmD = None
 
         pruneL = []
         cntmax = 0
@@ -384,7 +378,7 @@ class TestList:
             # Remove tests that exceed the platform resources (num processors).
             # For execute/analyze, if an execute test exceeds the resources
             # then the entire test set is removed.
-            rmD = {}
+            rmD.clear()
             cntmax = 0
             for xdir,t in self.active.items():
                 np = int( t.getParameters().get( 'np', 1 ) )
@@ -393,7 +387,8 @@ class TestList:
                     rmD[xdir] = t
                     cntmax += 1
             self._remove_tests( rmD )
-            rmD = None
+
+        rmD = None
 
         return pruneL, cntmax
 
@@ -424,7 +419,6 @@ class TestList:
 
         return True
 
-
     def _remove_tests(self, removeD):
         """
         The 'removeD' should be a dict mapping xdir to TestSpec.  Those tests
@@ -439,6 +433,7 @@ class TestList:
             grpL = self.groups[key]
 
             if not self._test_group_has_analyze( grpL ):
+                # not a parameterize/analyze test, so just remove the test
                 grpL = [ t ]
 
             for grpt in grpL:
@@ -453,15 +448,21 @@ class TestList:
                 if xdir in self.tspecs and 'string' not in t.getOrigin():
                     self.tspecs.pop( xdir )
 
-    def _create_group_map(self):
+    def _create_parameterize_analyze_group_map(self):
         ""
-        self.groups = {}
+        self.groups.clear()
+
         for xdir,t in self.tspecs.items():
+
+            # this key is common to each test in a parameterize/analyze
+            # test group (including the analyze test)
             key = ( t.getFilepath(), t.getName() )
+
             L = self.groups.get( key, None )
             if L == None:
                 L = []
                 self.groups[ key ] = L
+
             L.append( t )
 
     def _test_group_has_analyze(self, grpL):
@@ -493,6 +494,8 @@ class TestList:
             if t != testobj and t.isAnalyze():
                 return True
 
+        # also check the dependency map for tests that depend on testobj
+
         testxdir = testobj.getExecuteDirectory()
 
         for xdir,depxdirs in self.deps.items():
@@ -501,6 +504,26 @@ class TestList:
                     return True
 
         return False
+
+    def _write_analyze_dependency(self, fp, testobj):
+        ""
+        key = ( testobj.getFilepath(), testobj.getName() )
+
+        grpL = self.groups.get( key, None )
+
+        # only write dependencies if at least one parameterize test is in
+        # the current list of tests
+
+        if grpL != None:
+
+            L = [ testobj.getExecuteDirectory() ]
+
+            for gt in grpL:
+                if not gt.isAnalyze():
+                    L.append( gt.getExecuteDirectory() )
+
+            if len(L) > 1:
+                fp.write( 'DEP: '+repr(L)+'\n' )
 
     def getActiveTests(self, sorting=''):
         """
@@ -876,3 +899,8 @@ def testruntime( testobj ):
     if tm == None or tm < 0:
         tm = testobj.getAttr( 'runtime', None )
     return tm
+
+def print3( *args ):
+    "A python 2 and 3 compatible print function"
+    sys.stdout.write( ' '.join( [ str(arg) for arg in args ] ) + '\n' )
+    sys.stdout.flush()

@@ -51,7 +51,7 @@ def createTestObjects( rootpath, relpath, force_params, rtconfig ):
     for t in tests:
 
         if t.isAnalyze():
-            # if parent test, filter the parameter set to the children
+            # if analyze test, filter the parameter set to the parameters
             # that would be included
             paramset = t.getParameterSet()
             paramset.applyParamFilter( rtconfig.evaluate_parameters )
@@ -79,7 +79,8 @@ def refreshTest( testobj, rtconfig ):
     reparse_test_object( testobj, evaluator )
 
     if testobj.isAnalyze():
-        # if parent test, filter parameterset
+        # if analyze test, filter the parameter set to the parameters
+        # that would be included
         paramset = testobj.getParameterSet()
         paramset.applyParamFilter( rtconfig.evaluate_parameters )
 
@@ -277,18 +278,21 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
             testL.append(t)
 
     if len(testL) > 0:
-      # check for execute/analyze
-      t = testL[0]
-      has_analyze = parseAnalyze( t, filedoc, evaluator )
-      if has_analyze:
-        if numparams == 0:
-          # a test with no parameters but with an analyze script
-          raise TestSpecError( 'an analyze requires at least one ' + \
-                               'parameter to be defined' )
-        # create an analyze test
-        parent = t.makeParent()
-        parent.setParameterSet( paramset )
-        testL.append( parent )
+        # check for parameterize/analyze
+
+        t = testL[0]
+
+        has_analyze = parseAnalyze( t, filedoc, evaluator )
+
+        if has_analyze:
+            if numparams == 0:
+                raise TestSpecError( 'an analyze requires at least one ' + \
+                                     'parameter to be defined' )
+
+            # create an analyze test
+            parent = t.makeParent()
+            parent.setParameterSet( paramset )
+            testL.append( parent )
 
     # parse and set the rest of the XML file for each test
     
@@ -330,18 +334,22 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
             testL.append(t)
     
     if len(testL) > 0:
-      # check for execute/analyze
-      t = testL[0]
-      has_analyze = parseAnalyze_scr( t, vspecs, evaluator )
-      if has_analyze:
-        if numparams == 0:
-          # a test with no parameters but with an analyze script
-          raise TestSpecError( 'an analyze requires at least one ' + \
-                               'parameter to be defined' )
-        # create an analyze test
-        parent = t.makeParent()
-        parent.setParameterSet( paramset )
-        testL.append( parent )
+        # check for parameterize/analyze
+
+        t = testL[0]
+
+        has_analyze = parseAnalyze_scr( t, vspecs, evaluator )
+
+        if has_analyze:
+
+            if numparams == 0:
+                raise TestSpecError( 'an analyze requires at least one ' + \
+                                     'parameter to be defined' )
+
+            # create an analyze test
+            parent = t.makeParent()
+            parent.setParameterSet( paramset )
+            testL.append( parent )
 
     for t in testL:
 
@@ -435,11 +443,15 @@ def reparse_test_object( testobj, evaluator ):
         testobj.setKeywords( keywords )
 
         has_analyze = parseAnalyze( testobj, filedoc, evaluator )
+
         if has_analyze and len( testobj.getParameters() ) == 0:
+
             paramset = parseTestParameters( filedoc, tname, evaluator, None )
+
             if len( paramset.getParameters() ) == 0:
                 raise TestSpecError( 'an analyze requires at least one ' + \
                                'parameter to be defined' )
+
             testobj.setParameterSet( paramset )
 
         parseFiles       ( testobj, filedoc, evaluator )
@@ -464,11 +476,15 @@ def reparse_test_object( testobj, evaluator ):
         testobj.setKeywords( keywords )
 
         has_analyze = parseAnalyze_scr( testobj, vspecs, evaluator )
+
         if has_analyze and len( testobj.getParameters() ) == 0:
+
             paramset = parseTestParameters_scr( vspecs, tname, evaluator, None )
+
             if len( paramset.getParameters() ) == 0:
                 raise TestSpecError( 'an analyze requires at least one ' + \
                                'parameter to be defined' )
+
             testobj.setParameterSet( paramset )
 
         parseFiles_scr    ( testobj, vspecs, evaluator )
