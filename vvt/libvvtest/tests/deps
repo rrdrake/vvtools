@@ -1,0 +1,110 @@
+#!/usr/bin/env python
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import unittest
+import time
+
+import testutils as util
+from testutils import print3
+
+import TestSpecCreator as creator
+from RuntimeConfig import RuntimeConfig
+
+
+class Parse_Dependencies( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_single_dependency(self):
+        ""
+        util.writefile( 'testX.py.vvt', """
+            #VVT: depends on : testY
+            """ )
+        time.sleep(1)
+
+        nofltr = RuntimeConfig()
+
+        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+
+        for ti in tL:
+            print ti
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 1
+        assert tL[0].getDependencies()[0] == 'testY'
+
+    def test_multiple_dependencies(self):
+        ""
+        util.writefile( 'testX.py.vvt', """
+            #VVT: depends on : testY testZ
+            """ )
+        time.sleep(1)
+
+        nofltr = RuntimeConfig()
+
+        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 1
+        assert tL[0].getDependencies()[0] == 'testY'
+
+    def test_parse_attributes(self):
+        ""
+        util.writefile( 'testX.py.vvt', """
+            #VVT: depends on (platforms="XBox") : testY
+            #VVT: depends on (platforms="not XBox") : testZ
+            """ )
+        time.sleep(1)
+
+        fltr = RuntimeConfig( platform_name='XBox' )
+
+        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, fltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 1
+        assert tL[0].getDependencies()[0] == 'testY'
+
+        fltr = RuntimeConfig( platform_name='PlayStation' )
+
+        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, fltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 1
+        assert tL[0].getDependencies()[0] == 'testZ'
+
+
+class Single_dependency_tests( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_the_dependency_should_run_first(self):
+        ""
+        util.writefile( 'testX.py.vvt', """
+            #VVT: depends on : testY
+            import os
+            import vvtest_util as vvt
+            assert len( vvt.deps ) == 1
+            Yfile = os.path.join( vvt.deps[0], 'Y.out' )
+            assert os.path.exists( Yfile )
+            """ )
+        util.writefile( 'testY.py.vvt', """
+            import time
+            time.sleep(4)  # make the dependency take awhile
+            fp = open( 'Y.out', 'w' )
+            fp.close()
+            """ )
+        time.sleep(1)
+
+        vrun = util.vvtestRunner( '-N 2' )
+
+        assert vrun.num_pass == 2
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
