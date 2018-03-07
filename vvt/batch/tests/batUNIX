@@ -1,0 +1,448 @@
+#!/usr/bin/env python
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import unittest
+import time
+import glob
+
+import testutils as util
+from testutils import print3
+
+import BatchUNIX as bu
+
+
+class Method_computeNumNodes:
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_with_default_cores_per_node(self):
+        ""
+        bat = self.makeBatchInterface()
+
+        assert bat.computeNumNodes( 1 ) == 1
+        assert bat.computeNumNodes( 0 ) == 1
+        assert bat.computeNumNodes( 2 ) == 1
+
+    def test_with_ppn_variant(self):
+        ""
+        bat = self.makeBatchInterface( 'ppn=2' )
+
+        assert bat.computeNumNodes( 0 ) == 1
+        assert bat.computeNumNodes( 1 ) == 1
+        assert bat.computeNumNodes( 2 ) == 1
+        assert bat.computeNumNodes( 3 ) == 2
+        assert bat.computeNumNodes( 4 ) == 2
+        assert bat.computeNumNodes( 5 ) == 3
+
+    def test_with_cores_per_node_given(self):
+        ""
+        bat = self.makeBatchInterface()
+        self.check_cores_per_node( bat )
+
+        bat = self.makeBatchInterface( 'ppn=2' )
+        self.check_cores_per_node( bat )
+
+    def check_cores_per_node(self, bat):
+        ""
+        assert bat.computeNumNodes( 1, 1 ) == 1
+        assert bat.computeNumNodes( 0, 1 ) == 1
+        assert bat.computeNumNodes( 2, 1 ) == 2
+
+        assert bat.computeNumNodes( 0, 2 ) == 1
+        assert bat.computeNumNodes( 1, 2 ) == 1
+        assert bat.computeNumNodes( 2, 2 ) == 1
+        assert bat.computeNumNodes( 3, 2 ) == 2
+        assert bat.computeNumNodes( 4, 2 ) == 2
+        assert bat.computeNumNodes( 5, 2 ) == 3
+
+
+class BatchUNIX_computeNumNodes( Method_computeNumNodes, unittest.TestCase ):
+
+    def makeBatchInterface(self, *args):
+        return bu.BatchUNIX( *args )
+
+
+class Batch_output_file( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_job_output_always_goes_to_a_file(self):
+        ""
+        job = bu.BatchJob()
+
+        out = run_batch_job_with_stdouterr_capture(
+                job,
+                'echo "grep for this statement"' )
+
+        assert 'grep for this statement' not in out
+
+        fL = glob.glob( 'batchjob_*.log' )
+        assert len(fL) == 1
+        L = util.filegrep( fL[0], 'grep for this statement' )
+        assert len(L) == 1
+
+    def test_specify_log_file(self):
+        ""
+        os.mkdir( 'odir' )
+        time.sleep(1)
+
+        job = bu.BatchJob()
+        job.setSpec( 'log file', 'odir/bat.log' )
+
+        out = run_batch_job_with_stdouterr_capture(
+                job,
+                'echo "grep for this statement"' )
+
+        assert 'grep for this statement' not in out
+
+        L = util.filegrep( 'odir/bat.log', 'grep for this statement' )
+        assert len(L) == 1
+
+    def test_default_log_file_uses_job_name(self):
+        ""
+        job = bu.BatchJob()
+        job.setSpec( 'name', 'foo' )
+
+        out = run_batch_job_with_stdouterr_capture(
+                job,
+                'echo "grep for this statement"' )
+
+        assert 'grep for this statement' not in out
+
+        L = util.filegrep( 'foo.log', 'grep for this statement' )
+        assert len(L) == 1
+
+
+class Batch_work_directory( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_default_work_dir_is_current_dir(self):
+        ""
+        os.mkdir( 'wdir' )
+        time.sleep(1)
+
+        curdir = os.getcwd()
+        os.chdir( 'wdir' )
+
+        job = bu.BatchJob()
+
+        out = run_batch_job_with_stdouterr_capture(
+                job,
+                'echo "mycwd=`pwd`"' )
+
+        fL = glob.glob( 'batchjob_*.log' )
+        assert len(fL) == 1
+        L = util.filegrep( fL[0], 'mycwd=' )
+        assert len(L) == 1
+        d = L[0].split('mycwd=',1)[1].strip()
+        assert os.path.samefile( curdir+'/wdir', d )
+
+    def test_setting_work_dir_explicitely(self):
+        ""
+        os.mkdir( 'wdir' )
+        time.sleep(1)
+
+        curdir = os.getcwd()
+
+        job = bu.BatchJob()
+        job.setSpec( 'work dir', 'wdir' )
+
+        out = run_batch_job_with_stdouterr_capture(
+                job,
+                'echo "mycwd=`pwd`"' )
+
+        os.path.samefile( curdir, os.getcwd() )
+        fL = glob.glob( 'batchjob_*.log' )
+        assert len(fL) == 1
+        L = util.filegrep( fL[0], 'mycwd=' )
+        assert len(L) == 1
+        d = L[0].split('mycwd=',1)[1].strip()
+        assert os.path.samefile( curdir+'/wdir', d )
+
+
+class Batch_submit( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_jobid_gets_defined(self):
+        ""
+        bat = bu.BatchUNIX()
+
+        job = bu.BatchJob()
+
+        write_and_submit_batch_job( bat, job )
+
+        jobid = job.getResult( 'jobid', None )
+
+        wait_on_job( bat, job, 5 )
+
+        # this also tests that the jobid is a string
+        assert jobid != None and jobid.strip()
+
+    def test_submit_stdout_stderr_gets_set(self):
+        ""
+        bat = bu.BatchUNIX()
+
+        job = bu.BatchJob()
+
+        write_and_submit_batch_job( bat, job )
+
+        subout = job.getResult( 'submit out', None )
+        suberr = job.getResult( 'submit err', None )
+
+        wait_on_job( bat, job, 5 )
+
+        assert subout.strip()
+        assert not suberr.strip()
+
+    def test_submit_date_gets_set(self):
+        ""
+        bat = bu.BatchUNIX()
+
+        job = bu.BatchJob()
+        curdate = time.time()
+
+        write_and_submit_batch_job( bat, job )
+
+        subdate = job.getResult( 'submit date', None )
+
+        wait_on_job( bat, job, 5 )
+
+        assert subdate
+        assert abs( curdate - subdate ) < 5
+
+
+class Batch_start_stop_dates( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_run_and_done_dates(self):
+        ""
+        bat = bu.BatchUNIX()
+
+        job = bu.BatchJob()
+
+        write_and_submit_batch_job( bat, job, 'sleep 5' )
+
+        rundate1 = job.getResult( 'run date', None )
+        donedate1 = job.getResult( 'done date', None )
+
+        wait_on_job( bat, job, 10 )
+
+        rundate2 = job.getResult( 'run date', None )
+        donedate2 = job.getResult( 'done date', None )
+
+        assert rundate1 and rundate2 and rundate1 == rundate2
+        assert donedate1 == None
+        assert donedate2
+        assert donedate2-rundate1 > 4 and donedate2-rundate1 < 10
+
+    def test_start_and_stop_dates(self):
+        ""
+        bat = bu.BatchUNIX()
+
+        job = bu.BatchJob()
+
+        write_and_submit_batch_job( bat, job, 'sleep 5' )
+
+        wait_on_job( bat, job, 10 )
+
+        startdate = job.getResult( 'start date', None )
+        stopdate = job.getResult( 'stop date', None )
+
+        assert startdate and stopdate
+        assert stopdate-startdate > 4 and stopdate-startdate < 10
+
+    def test_batch_failure_will_still_have_start_date(self):
+        ""
+        bat = bu.BatchUNIX()
+
+        job = bu.BatchJob()
+
+        write_and_submit_batch_job( bat, job,
+            'sleep 2',
+            'exit 1' )
+
+        wait_on_job( bat, job, 10 )
+
+        startdate = job.getResult( 'start date', None )
+
+        assert startdate
+        assert abs( startdate - time.time() ) < 10
+
+
+class Batch_queue_state( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_a_running_job_is_marked_running(self):
+        ""
+        bat = bu.BatchUNIX()
+
+        job = bu.BatchJob()
+
+        write_and_submit_batch_job( bat, job, 'sleep 2' )
+
+        time.sleep(1)
+        st = job.getResult( 'state', None )
+
+        wait_on_job( bat, job, 5 )
+
+        assert st == 'running'
+
+    def test_a_finished_job_is_marked_done(self):
+        ""
+        bat = bu.BatchUNIX()
+
+        job = bu.BatchJob()
+
+        write_and_submit_batch_job( bat, job, 'sleep 1' )
+
+        wait_on_job( bat, job, 5 )
+
+        st = job.getResult( 'state', None )
+        assert st == 'done'
+
+    def test_a_failed_job_is_still_marked_done(self):
+        ""
+        bat = bu.BatchUNIX()
+
+        job = bu.BatchJob()
+
+        write_and_submit_batch_job( bat, job,
+            'sleep 1',
+            'exit 1' )
+
+        wait_on_job( bat, job, 5 )
+
+        st = job.getResult( 'state', None )
+        assert st == 'done'
+
+
+class Batch_exit_values( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_exit_value_is_success_in_nominal_case(self):
+        ""
+        bat = bu.BatchUNIX()
+
+        job = bu.BatchJob()
+
+        write_and_submit_batch_job( bat, job, 'sleep 1' )
+
+        wait_on_job( bat, job, 5 )
+
+        x = job.getResult( 'exit', None )
+        assert x == 'success'
+
+    def test_failure_results_in_fail_exit(self):
+        ""
+        bat = bu.BatchUNIX()
+
+        job = bu.BatchJob()
+
+        write_and_submit_batch_job( bat, job,
+            'sleep 1',
+            'exit 1' )
+
+        wait_on_job( bat, job, 5 )
+
+        x = job.getResult( 'exit', None )
+        assert x == 'fail'
+
+    def test_a_running_job_does_not_have_an_exit_value(self):
+        ""
+        bat = bu.BatchUNIX()
+
+        job = bu.BatchJob()
+
+        write_and_submit_batch_job( bat, job,
+            'sleep 5',
+            'exit 1' )
+
+        time.sleep(1)
+        x = job.getResult( 'exit', None )
+
+        wait_on_job( bat, job, 5 )
+
+        assert x == None
+
+
+############################################################################
+
+def run_batch_job_with_stdouterr_capture( job, *lines ):
+    """
+    Create BatchUNIX object, write batch script with the given command lines,
+    submit the job, then wait on the job.  All output written to stdout and
+    stderr during submit and job wait is captured and returned as a string.
+    """
+    bat = bu.BatchUNIX()
+
+    job.setSpec( 'commands', '\n'.join(lines)+'\n' )
+
+    bat.writeBatchFile( job )
+
+    redir = util.Redirect( 'job.log' )
+    try:
+        bat.submit( job )
+        wait_on_job( bat, job, 5 )
+
+    finally:
+        redir.close()
+
+    fp = open( 'job.log', 'r' )
+    out = fp.read()
+    fp.close()
+
+    return out
+
+
+def write_and_submit_batch_job( batchobj, job, *lines ):
+    """
+    Write batch script and submit the job.
+    """
+    job.setSpec( 'commands', '\n'.join(lines)+'\n' )
+    batchobj.writeBatchFile( job )
+    batchobj.submit( job )
+
+
+def wait_on_job( batchobj, jobobj, maxwait=60 ):
+    ""
+    tstart = time.time()
+
+    while True:
+
+        batchobj.poll( [jobobj] )
+
+        if jobobj.getResult( 'state', None ) == 'done':
+            break
+
+        if time.time() - tstart > maxwait:
+            raise Exception( 'max wait time exceeded: '+str(maxwait) )
+
+        time.sleep(1)
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
