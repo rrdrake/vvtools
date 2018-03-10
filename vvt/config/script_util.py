@@ -21,8 +21,8 @@ def platform_expr( expr ):
     "Linux or Darwin" and would be true if the current platform
     name is "Linux" or if it is "Darwin".
     '''
-    import FilterExpressions
-    wx = FilterExpressions.WordExpression( expr )
+    import libvvtest.FilterExpressions as filt
+    wx = filt.WordExpression( expr )
     return wx.evaluate( lambda wrd: wrd == PLATFORM )
 
 def parameter_expr( expr ):
@@ -32,8 +32,8 @@ def parameter_expr( expr ):
     could be "dt<0.01 and dh=0.1" where dt and dh are parameters
     defined in the test.
     '''
-    import FilterExpressions
-    pf = FilterExpressions.ParamFilter( expr )
+    import libvvtest.FilterExpressions as filt
+    pf = filt.ParamFilter( expr )
     return pf.evaluate( PARAM_DICT )
 
 def option_expr( expr ):
@@ -43,8 +43,8 @@ def option_expr( expr ):
     could be "not dbg and not intel", which would be false if
     "-o dbg" or "-o intel" were given on the command line.
     '''
-    import FilterExpressions
-    wx = FilterExpressions.WordExpression( expr )
+    import libvvtest.FilterExpressions as filt
+    wx = filt.WordExpression( expr )
     return wx.evaluate( OPTIONS.count )
 
 ############################################################################
