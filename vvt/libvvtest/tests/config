@@ -250,14 +250,18 @@ def test04():
     """
     use a script util plugin from the config dir
     """
+    cfg = os.path.abspath('config')
     writescript( 'pytest.vvt', """
         #!/usr/bin/env python
+        import os
         from script_util_plugin import *
+        assert os.path.samefile( CONFIGDIR, '"""+cfg+"""' )
         special_function()
         """ )
     writescript( 'shtest.vvt', """
         #!/bin/sh
         source ./vvtest_util.sh
+        [ -e "$CONFIGDIR/script_util_plugin.sh" ] || exit 1
         special_function
         """ )
 
@@ -274,7 +278,14 @@ def test04():
         }
         """ )
 
-    vrun = vvtestRunner( '--config config' )
+    run_test04( '' )
+    run_test04( '--plat '+core_platform_name()+' --batch' )
+
+def run_test04( opt ):
+    ""
+    remove_results()
+
+    vrun = vvtestRunner( opt+' --config config' )
     assert vrun.num_pass == 2
 
     tdir = vrun.testdir

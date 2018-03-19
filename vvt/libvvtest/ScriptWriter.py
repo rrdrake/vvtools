@@ -41,13 +41,15 @@ def writeScript( testobj, filename, lang, config, plat ):
                'PLATFORM = "'+platname+'"',
                'COMPILER = "'+cplrname+'"',
                'VVTESTSRC = "'+tdir+'"',
-               'VVTESTLIB = "'+vvtlib+'"',
                'PROJECT = "'+projdir+'"',
                'OPTIONS = '+repr( onopts ),
                'OPTIONS_OFF = '+repr( offopts ),
-               'SRCDIR = "'+srcdir+'"',
-               '',
-               'sys.path.insert( 0, VVTESTLIB )' )
+               'SRCDIR = "'+srcdir+'"' )
+
+        if configdir:
+            w.add( 'CONFIGDIR = "'+configdir+'"' )
+        else:
+            w.add( 'CONFIGDIR = ""' )
 
         w.add( '',
                'diff_exit_status = 64',
@@ -80,7 +82,7 @@ def writeScript( testobj, filename, lang, config, plat ):
                     else:
                         n2 = '_'.join( n )
                         w.add( 'PARAM_'+n2+' = ' + repr(L) )
-        
+
         w.add( """
             # to avoid circular imports in python, the script_util.py
             # or the script_util_plugin.py must be imported by the
@@ -110,12 +112,16 @@ def writeScript( testobj, filename, lang, config, plat ):
                'PLATFORM="'+platname+'"',
                'COMPILER="'+cplrname+'"',
                'VVTESTSRC="'+tdir+'"',
-               'VVTESTLIB="'+vvtlib+'"',
                'PROJECT="'+projdir+'"',
                'OPTIONS="'+' '.join( onopts )+'"',
                'OPTIONS_OFF="'+' '.join( offopts )+'"',
                'SRCDIR="'+srcdir+'"',
                'PYTHONEXE="'+sys.executable+'"' )
+
+        if configdir:
+            w.add( 'CONFIGDIR="'+configdir+'"' )
+        else:
+            w.add( 'CONFIGDIR=""' )
 
         w.add( '',
                'diff_exit_status=64' )
@@ -155,7 +161,6 @@ def writeScript( testobj, filename, lang, config, plat ):
         # we can just source the utility scripts from here
         if configdir:
             w.add( """
-                CONFIGDIR='"""+configdir+"""'
                 if [ -e $CONFIGDIR/script_util_plugin.sh ]
                 then
                     source $CONFIGDIR/script_util_plugin.sh
@@ -177,12 +182,16 @@ def writeScript( testobj, filename, lang, config, plat ):
                'set PLATFORM="'+platname+'"',
                'set COMPILER="'+cplrname+'"',
                'set VVTESTSRC="'+tdir+'"',
-               'set VVTESTLIB="'+vvtlib+'"',
                'set PROJECT="'+projdir+'"',
                'set OPTIONS="'+' '.join( onopts )+'"',
                'set OPTIONS_OFF="'+' '.join( offopts )+'"',
                'set SRCDIR="'+srcdir+'"',
                'set PYTHONEXE="'+sys.executable+'"' )
+
+        if configdir:
+            w.add( 'set CONFIGDIR="'+configdir+'"' )
+        else:
+            w.add( 'set CONFIGDIR=""' )
 
         w.add( '',
                'set diff_exit_status=64' )

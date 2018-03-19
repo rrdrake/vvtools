@@ -2469,18 +2469,16 @@ if __name__ == '__main__':
   # get directory containing this script and the script name itself
   toolsdir, exeName = getExeDirAndName()
   
-  sys.path.insert( 1, toolsdir + '/libvvtest' )
-  
-  import platform
-  import TestSpec
-  import TestExec
-  import TestList
-  import batchutils
-  import TestSpecCreator
-  import FilterExpressions
-  from RuntimeConfig import RuntimeConfig
+  import libvvtest.vvplatform as vvplatform
+  import libvvtest.TestSpec as TestSpec
+  import libvvtest.TestExec as TestExec
+  import libvvtest.TestList as TestList
+  import libvvtest.batchutils as batchutils
+  import libvvtest.TestSpecCreator as TestSpecCreator
+  import libvvtest.FilterExpressions as FilterExpressions
+  from libvvtest.RuntimeConfig import RuntimeConfig
   import results
-  from PermissionSetter import PermissionSetter
+  from libvvtest.PermissionSetter import PermissionSetter
   
   keyword_expr = FilterExpressions.WordExpression()
 
@@ -2522,7 +2520,7 @@ if __name__ == '__main__':
     sys.exit(1)
   
   # construct platform
-  plat = platform.construct_Platform( toolsdir, optdict )
+  plat = vvplatform.construct_Platform( toolsdir, optdict )
   
   rtconfig = RuntimeConfig( \
                 param_expr_list=optdict.get('-p', None),

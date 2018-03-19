@@ -32,7 +32,7 @@ platform_expr() {
     # Returns 0 (zero) if the expression evaluates to true,
     # otherwise non-zero.
     
-    result=`"$PYTHONEXE" "$VVTESTLIB/FilterExpressions.py" -f "$1" "$PLATFORM"`
+    result=`"$PYTHONEXE" "$VVTESTSRC/libvvtest/FilterExpressions.py" -f "$1" "$PLATFORM"`
     xval=$?
     if [ $xval -ne 0 ]
     then
@@ -52,7 +52,7 @@ parameter_expr() {
     # Returns 0 (zero) if the expression evaluates to true,
     # otherwise non-zero.
     
-    result=`"$PYTHONEXE" "$VVTESTLIB/FilterExpressions.py" -p "$1" "$PARAM_DICT"`
+    result=`"$PYTHONEXE" "$VVTESTSRC/libvvtest/FilterExpressions.py" -p "$1" "$PARAM_DICT"`
     xval=$?
     if [ $xval -ne 0 ]
     then
@@ -72,7 +72,7 @@ option_expr() {
     # Returns 0 (zero) if the expression evaluates to true,
     # otherwise non-zero.
     
-    result=`"$PYTHONEXE" "$VVTESTLIB/FilterExpressions.py" -o "$1" "$OPTIONS"`
+    result=`"$PYTHONEXE" "$VVTESTSRC/libvvtest/FilterExpressions.py" -o "$1" "$OPTIONS"`
     xval=$?
     if [ $xval -ne 0 ]
     then

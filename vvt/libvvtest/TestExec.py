@@ -240,6 +240,7 @@ class TestExec:
                     pth += ':'+self.config.get('configdir')
                 d = self.config.get('toolsdir')
                 pth += ':'+os.path.join( d, 'config' )
+                pth += ':'+d
                 val = os.environ.get( 'PYTHONPATH', '' )
                 if val: os.environ['PYTHONPATH'] = pth + ':' + val
                 else:   os.environ['PYTHONPATH'] = pth
