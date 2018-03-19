@@ -21,3 +21,12 @@ essential.  Finally, version controlling all the automated scripts being used
 provides the team much needed communication and history.
 
 The `trigger` utilities are contained in the `trig` subdirectory.
+
+## The `vvtools` V&V testing utilities
+
+This is a collection of Exodus-based utilities for running verification analyses
+on simulation output. It has its origins in ALEGRA but is much more generally
+applicable. The main tools here are `exodus.py`, not to be confused with the 
+seacas file of the same name, and `vcomp`, a convergence analysis tool.
+
+The `vvtools` utilities are contained in the `tools` subdirectory. 
