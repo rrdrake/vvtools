@@ -1,0 +1,294 @@
+#!/usr/bin/env python
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import getopt
+import subprocess
+import time
+import glob
+
+
+help_string = """
+NAME
+    runtests - run the unit tests contained in this directory
+
+SYNOPSIS
+    1.  runtests { -h | --help }
+    2.  runtests [OPTIONS] [ testname ... ]
+
+DESCRIPTION
+    Runs the unit test scripts in a unique subdirectory name of the current
+working directory.  Without any arguments, all the test scripts are run.
+
+OPTIONS
+    -h, --help  : this help
+    -j <int>    : max concurrent tests (default is one)
+    -s          : pass -s to the unit tests that take the option (use real ssh)
+    -p <directory> : python version test; this triggers a loop over python
+                     installations under the given directory, and runs each
+                     test with using those versions; the python versions are
+                     chosen by globbing <directory>/*/bin/python
+    -v "sub1 sub2 ..." : the list of subdirectory names containing the python
+                         versions used with -p (instead of globbing)
+    -r          : for tests that accept a remote python version (option -r),
+                  iterate on a list of python versions and execute with -r
+"""
+
+
+###########################################################################
+
+def main():
+
+    optL,argL = getopt.getopt( sys.argv[1:], 'hsp:v:rj:', longopts=['help'] )
+
+    iterpy = ''
+    pydirs = None
+    realssh = False
+    remotepy = False
+    numconcurrent = 1
+
+    for n,v in optL:
+        if n == '-h' or n == '--help':
+            print3( help_string )
+            return
+        elif n == '-s':
+            realssh = True  # pass -s to test scripts
+        elif n == '-p':
+            iterpy = os.path.abspath( v )
+        elif n == '-v':
+            pydirs = v.strip().split()
+        elif n == '-r':
+            remotepy = True  # iterate remote python versions
+        elif n == '-j':
+            numconcurrent = int( v )
+            assert numconcurrent >= 1
+
+    if iterpy:
+        pyL = []
+        if pydirs == None:
+            for f in glob.glob( iterpy+'/*/bin/python' ):
+                if os.path.isfile(f):
+                    pyL.append(f)
+        else:
+            for d in pydirs:
+                pyL.append( os.path.join( iterpy, d, 'bin', 'python' ) )
+
+    tdir = makeTestDir()
+    print3( 'cd '+tdir )
+    os.chdir(tdir)
+
+    # collect the test commands to be run
+    cmdD = {}
+    for fname in glob.glob( mydir+'/*' ):
+
+        if is_test_file( fname ):
+
+            tname = os.path.basename( fname )
+            if len(argL) == 0 or tname in argL:
+
+                popt,sopt = get_test_runtime_options( fname )
+
+                tst = fname
+                if sopt and realssh:
+                    tst += ' -s'
+
+                if iterpy:
+                    # iterate python versions on the local (script) launch
+                    for i in range(len(pyL)):
+                        py = pyL[i]
+                        if popt and remotepy:
+                            # also iterate python versions on the remote side
+                            for j in range(len(pyL)):
+                                rpy = pyL[j]
+                                cmd = py + ' ' + tst + ' -r ' + rpy
+                                tid = tname+'_p'+str(i)+'_r'+str(j)
+                                cmdD[tid] = cmd
+                        else:
+                            cmd = py + ' ' + tst
+                            tid = tname+'_p'+str(i)
+                            cmdD[tid] = cmd
+
+                elif popt and remotepy:
+                    # iterate python versions only on the remote side
+                    for j in range(len(pyL)):
+                        rpy = pyL[j]
+                        cmd = sys.executable + ' ' + tst + ' -r ' + rpy
+                        tid = tname+'_r'+str(j)
+                        cmdD[tid] = cmd
+
+                else:
+                    cmd = sys.executable + ' ' + tst
+                    tid = tname
+                    cmdD[tid] = cmd
+
+    cwd = os.getcwd()
+    jobD = {}
+    for tid,cmd in cmdD.items():
+
+        # start job only if number of concurrent jobs is not exceeded
+        while True:
+            if poll_jobs( jobD ) < numconcurrent:
+                break
+            time.sleep(1)
+
+        jb = BackgroundJob( cwd, tid, cmd )
+        jobD[tid] = jb
+
+    # wait on all jobs
+    while True:
+        if poll_jobs( jobD ) == 0:
+            break
+        time.sleep(1)
+
+    # print results
+    nf = 0
+    for tid,jb in jobD.items():
+        if jb.x != 0:
+            print3( "FAIL:", tid+':', jb.cmd )
+            nf += 1
+    if nf == 0:
+        print3( "ALL TESTS PASSED" )
+
+
+###########################################################################
+
+class BackgroundJob:
+
+    def __init__(self, cwd, testid, cmd):
+        """
+        """
+        assert os.path.isabs( cwd )
+        self.cmd = cmd
+        os.chdir(cwd)
+
+        rdir = testid + '_dir'
+        os.mkdir( rdir )
+        os.chdir( rdir )
+
+        os.environ['TESTUTILS_RUNDIR'] = os.path.join( cwd, rdir )
+
+        log = os.path.join( cwd, testid+'.out' )
+        self.logfp = open( log, 'w' )
+        print3( "RUN: " + cmd )
+        self.proc = subprocess.Popen( cmd, shell=True,
+                                      stdout=self.logfp.fileno(),
+                                      stderr=subprocess.STDOUT )
+        self.logfp.close()
+        os.chdir(cwd)
+
+    def poll(self):
+        """
+        Checks on the sub process.  If done, returns exit status, else None.
+        """
+        if self.proc == None:
+            return self.x
+        x = self.proc.poll()
+        if x != None:
+            self.x = x
+            self.proc = None
+        return x
+
+
+def poll_jobs( jobD ):
+    """
+    Polls each job and returns the number of jobs still running.
+    """
+    nr = 0
+    for testid,jb in jobD.items():
+        x = jb.poll()
+        if x == None:
+            nr += 1
+    return nr
+
+
+def makeTestDir():
+    """
+    Creates and returns a unique absolute directory path under the current
+    working directory.
+    """
+    pid = os.getpid()
+    dname = "testdir." + str(pid)
+    if os.path.exists(dname):
+        # add additional numbers to make a unique name
+        for n in range(100):
+            if not os.path.exists( dname + '.' + str(n) ):
+                dname = dname + '.' + str(n)
+                break
+
+    os.mkdir(dname)
+
+    return os.path.abspath(dname)
+
+
+def print3( *args ):
+    """
+    Python 2 & 3 compatible print function.
+    """
+    sys.stdout.write( ' '.join( [ str(x) for x in args ] ) + '\n' )
+    sys.stdout.flush()
+
+
+def is_test_file( fname ):
+    """
+    Looks at the first few lines of the file to determine if it is a test file.
+    """
+    rtn = False
+    if not os.path.islink(fname) and os.path.isfile(fname):
+        lines = read_first_lines( fname, 4 )
+        for line in lines:
+            line = line.strip()
+            if len(line) > 0 and line[0] != '#':
+                break
+            if line.strip().startswith( '#RUNTEST:' ):
+                rtn = True
+                break
+    return rtn
+
+
+def read_first_lines( fname, numlines ):
+    """
+    Reads the first few lines of a file; returns them in a list.
+    """
+    L = []
+    fp = open( fname, 'r' )
+    try:
+        try:
+            i = 0
+            line = fp.readline()
+            while i < numlines and line:
+                L.append( line.rstrip() )
+                line = fp.readline()
+                i += 1
+        except:
+            pass  # just abort if error like read or unicode problem
+    finally:
+        fp.close()
+
+    return L
+
+def get_test_runtime_options( fname ):
+    """
+    """
+    popt = False
+    sopt = False
+
+    lines = read_first_lines( fname, 6 )
+    for line in lines:
+        line = line.strip()
+        if line.startswith( '#OPTION:' ):
+            for opt in line[8:].strip().split():
+                if opt.lower() == 'realssh':
+                    sopt = True
+                elif opt.lower() == 'remotepython':
+                    popt = True
+
+    return popt, sopt
+
+
+###########################################################################
+
+mydir = os.path.abspath( sys.path[0] )
+
+main()

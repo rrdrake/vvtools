@@ -65,7 +65,10 @@ class BatchSLURM:
                 try:
                     jobid = int(L[3])
                 except:
-                    jobid = None
+                    if L[3]:
+                        jobid = L[3]
+                    else:
+                        jobid = None
         
         if jobid == None:
             return cmd, out, None, "batch submission failed or could not parse " + \
@@ -107,7 +110,13 @@ class BatchSLURM:
             try:
                 L = line.split()
                 if len(L) > 0:
-                    jid = int(L[0])
+                    try:
+                        jid = int(L[0])
+                    except:
+                        if L[0]:
+                            jid = L[0]
+                        else:
+                            raise
                     st = L[1]
                     if stateD.has_key(jid):
                         if st in ['R']: st = 'running'
