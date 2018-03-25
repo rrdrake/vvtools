@@ -1,0 +1,340 @@
+#!/usr/bin/env python
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import glob
+import unittest
+
+import testutils as util
+from testutils import print3
+
+
+class parameterize_analyze_logic( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_analyze_with_dep_that_fails_then_passes(self):
+        ""
+        util.writefile( 'parentchild/good.xml', """
+            <rtest name="good">
+              <keywords> fast medium </keywords>
+              <parameterize timestep="1 2"/>
+              <execute>
+                touch afile.$timestep
+              </execute>
+              <analyze>
+                 ls ../good.timestep=1/afile.1 || exit 1
+                 ls ../good.timestep=2/afile.2 || exit 1
+              </analyze>
+            </rtest>""" )
+        time.sleep(1)
+
+        self.run_analyze_with_dep_that_fails_then_passes( '' )
+        self.run_analyze_with_dep_that_fails_then_passes(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_analyze_with_dep_that_fails_then_passes(self, opt):
+        ""
+        util.writefile( 'parentchild/bad.xml', """
+            <rtest name="bad">
+              <keywords> fast medium </keywords>
+              <parameterize timestep="1 2"/>
+              <execute>
+                if ( "$timestep" == 2 ) then
+                  echo "fake failure"
+                  exit 1
+                else
+                  touch bfile.$timestep
+                endif
+              </execute>
+              <analyze>
+                 ls ../bad.timestep=1/bfile.1 || exit 1
+                 ls ../bad.timestep=2/bfile.2 || exit 1
+              </analyze>
+            </rtest>""" )
+        time.sleep(1)
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -k bad parentchild' )
+        assert np == 1 and nd == 0 and nf == 1 and nn == 1
+
+        # "fix" the bad test
+        util.writefile( 'parentchild/bad.xml', """
+            <rtest name="bad">
+              <keywords> fast medium </keywords>
+              <parameterize timestep="1 2"/>
+              <execute>
+                touch bfile.$timestep
+              </execute>
+              <analyze>
+                 ls ../bad.timestep=1/bfile.1 || exit 1
+                 ls ../bad.timestep=2/bfile.2 || exit 1
+              </analyze>
+            </rtest>""" )
+        time.sleep(1)
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R -k notdone/notrun/fail ' + \
+                                          '-k bad parentchild' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+    def test_not_sure_what_this_tests(self):
+        ""
+        util.writefile( 'top/param_analyze.xml', """
+            <rtest name="param_analyze">
+              <keywords> fast medium </keywords>
+              <parameterize keywords="fast"     np="1"/>
+              <parameterize not_keywords="fast" np="2 4"/>
+              <link_files> $NAME.inp </link_files>
+              <execute>
+                 touch execute_file.np=$np || exit 1
+                 ls $NAME.inp || exit 1
+              </execute>
+              <analyze keywords="fast">
+                 ls ../param_analyze.np=1/execute_file.np=1 || exit 1
+              </analyze>
+              <analyze not_keywords="fast">
+                 ls ../param_analyze.np=2/execute_file.np=2 || exit 1
+                 ls ../param_analyze.np=4/execute_file.np=4 || exit 1
+              </analyze>
+            </rtest>""" )
+
+        util.writefile( 'top/param_analyze.inp', """
+            some sort of input deck
+            """ )
+
+        util.writefile( 'parentchild/good.xml', """
+            <rtest name="good">
+              <keywords> fast medium </keywords>
+              <parameterize timestep="1 2"/>
+              <execute>
+                touch afile.$timestep
+              </execute>
+              <analyze>
+                 ls ../good.timestep=1/afile.1 || exit 1
+                 ls ../good.timestep=2/afile.2 || exit 1
+              </analyze>
+            </rtest>""" )
+        time.sleep(1)
+
+        self.run_not_sure_what_this_tests( '' )
+        self.run_not_sure_what_this_tests(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_not_sure_what_this_tests(self, opt):
+        ""
+        util.writefile( 'parentchild/bad.xml', """
+            <rtest name="bad">
+              <keywords> fast medium </keywords>
+              <parameterize timestep="1 2"/>
+              <execute>
+                echo "fake failure"
+                exit 1
+              </execute>
+              <analyze>
+                 ls ../bad.timestep=1/bfile.1 || exit 1
+                 ls ../bad.timestep=2/bfile.2 || exit 1
+              </analyze>
+            </rtest>""" )
+        time.sleep(1)
+
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+" parentchild" )
+        assert np == 3 and nd == 0 and nf == 2 and nn == 1
+
+        # "fix" the bad test
+        util.writefile( 'parentchild/bad.xml', """
+            <rtest name="bad">
+              <keywords> fast medium </keywords>
+              <parameterize timestep="1 2"/>
+              <execute>
+                touch bfile.$timestep
+              </execute>
+              <analyze>
+                 ls ../bad.timestep=1/bfile.1 || exit 1
+                 ls ../bad.timestep=2/bfile.2 || exit 1
+              </analyze>
+            </rtest>""" )
+        time.sleep(1)
+
+        out,np,nd,nf,nn = util.run_vvtest(
+                            opt+' -R -k notdone/notrun/fail parentchild' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+    def test_a_test_with_analyze_must_have_parameterize(self):
+        ""
+        util.writefile( 'noparam.xml', """
+            <rtest name="noparam">
+              <keywords> fast medium </keywords>
+              <execute> echo "exec standard" </execute>
+              <analyze>
+                echo "exec analyze"
+              </analyze>
+            </rtest>""" )
+        time.sleep(1)
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.grep( out, 'skipping .*noparam'  ) ) == 1
+
+    def test_analyze_with_multiple_tests_in_one_file(self):
+        """
+        using testname filter with analyze
+        """
+        util.writefile( 'multi.xml', """
+            <rtest name="multi">
+              <rtest name="multi2"/>
+              <parameterize param="one two"/>
+              <execute> echo "exec test $NAME param $param" </execute>
+              <analyze testname="multi">
+                echo "analyze test $NAME (multi)"
+              </analyze>
+              <analyze testname="multi2">
+                echo "analyze test $NAME (multi2)"
+              </analyze>
+            </rtest>""" )
+        time.sleep(1)
+
+        self.run_analyze_with_multiple_tests_in_one_file( '' )
+        self.run_analyze_with_multiple_tests_in_one_file(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_analyze_with_multiple_tests_in_one_file(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+
+        fL = glob.glob( 'TestResults.*/multi.param=one/execute.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'exec test multi ' ) ) >= 1
+        fL = glob.glob( 'TestResults.*/multi.param=two/execute.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'exec test multi ' ) ) >= 1
+        fL = glob.glob( 'TestResults.*/multi/execute.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'analyze test multi ' ) ) >= 1
+
+        fL = glob.glob( 'TestResults.*/multi2.param=one/execute.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'exec test multi2 ' ) ) >= 1
+        fL = glob.glob( 'TestResults.*/multi2.param=two/execute.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'exec test multi2 ' ) ) >= 1
+        fL = glob.glob( 'TestResults.*/multi2/execute.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'analyze test multi2 ' ) ) >= 1
+
+    def test_mutiliple_testnames_only_one_with_analyze(self):
+        """
+        testname filter with analyze where one test does not have an analyze
+        """
+        util.writefile( 'multi.xml', """
+            <rtest name="multi">
+              <rtest name="multi2"/>
+              <parameterize param="one two"/>
+              <execute> echo "exec test $NAME param $param" </execute>
+              <analyze testname="multi2">
+                echo "analyze test $NAME (multi2)"
+              </analyze>
+            </rtest>""" )
+
+        self.run_mutiliple_testnames_only_one_with_analyze( '' )
+        self.run_mutiliple_testnames_only_one_with_analyze(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_mutiliple_testnames_only_one_with_analyze(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 5 and nd == 0 and nf == 0 and nn == 0
+        
+        fL = glob.glob( 'TestResults.*/multi.param=one/execute.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'exec test multi ' ) ) >= 1
+        fL = glob.glob( 'TestResults.*/multi.param=two/execute.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'exec test multi ' ) ) >= 1
+        fL = glob.glob( 'TestResults.*/multi/execute.log' )
+        assert len(fL) == 0
+        
+        fL = glob.glob( 'TestResults.*/multi2.param=one/execute.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'exec test multi2 ' ) ) >= 1
+        fL = glob.glob( 'TestResults.*/multi2.param=two/execute.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'exec test multi2 ' ) ) >= 1
+        fL = glob.glob( 'TestResults.*/multi2/execute.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'analyze test multi2 ' ) ) >= 1
+
+    def test_using_analyze_command_line_option(self):
+        ""    
+        util.writefile( 'atest.xml', """
+            <rtest name="atest">
+              <parameterize ival="1 2"/>
+              <execute>
+                echo "running touch"
+                touch afile.$ival
+              </execute>
+              <execute analyze="yes">
+                echo "running execute analyze"
+              </execute>
+              <analyze>
+                echo "running analyze"
+                ls ../atest.ival=1/afile.1 || exit 1
+                ls ../atest.ival=2/afile.2 || exit 1
+              </analyze>
+            </rtest>""" )
+
+        self.run_using_analyze_command_line_option( '' )
+        self.run_using_analyze_command_line_option(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_using_analyze_command_line_option(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        platname = util.platform_name( out )
+
+        assert len( util.filegrep( tdir+'/atest.ival=1/execute.log',
+                                   'running touch' ) ) == 1
+        assert len( util.filegrep( tdir+'/atest.ival=1/execute.log',
+                                   'running execute analyze' ) ) == 1
+        assert len( util.filegrep( tdir+'/atest.ival=2/execute.log',
+                                   'running touch' ) ) == 1
+        assert len( util.filegrep( tdir+'/atest.ival=2/execute.log',
+                                   'running execute analyze' ) ) == 1
+        assert len( util.filegrep( tdir+'/atest/execute.log',
+                                   'running analyze' ) ) == 1
+        assert len( util.filegrep( tdir+'/atest/execute.log',
+                                   'running touch' ) ) == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -Ra' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.filegrep( tdir+'/atest.ival=1/execute.log',
+                                   'running touch' ) ) == 0
+        assert len( util.filegrep( tdir+'/atest.ival=1/execute.log',
+                                   'running execute analyze' ) ) == 1
+        assert len( util.filegrep( tdir+'/atest.ival=2/execute.log',
+                                   'running touch' ) ) == 0
+        assert len( util.filegrep( tdir+'/atest.ival=2/execute.log',
+                                   'running execute analyze' ) ) == 1
+        assert len( util.filegrep( tdir+'/atest/execute.log',
+                                   'running analyze' ) ) == 1
+        assert len( util.filegrep( tdir+'/atest/execute.log',
+                                   'running touch' ) ) == 0
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

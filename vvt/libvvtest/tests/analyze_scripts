@@ -1,0 +1,300 @@
+#!/usr/bin/env python
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import glob
+import unittest
+
+import testutils as util
+from testutils import print3
+
+
+class parameterize_analyze_script_specs( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_simple_use_case(self):
+        ""
+        util.writescript( 'ana.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : V=a b
+            #VVT: analyze : -a
+            import os, sys
+            import script_util as vvt
+            if '-a' in sys.argv:
+                print ( 'running analyze' )
+            else:
+                print ( 'running execute' )
+            """ )
+        time.sleep(1)
+
+        self.run_simple_use_case( '' )
+        self.run_simple_use_case(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_simple_use_case(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        platname = util.platform_name( out )
+
+        assert len( glob.glob( tdir+'/ana*/execute.log' ) ) == 3
+        assert len( util.filegrep( tdir+'/ana.V=a/execute.log', 'running execute' ) ) == 1
+        assert len( util.filegrep( tdir+'/ana.V=b/execute.log', 'running execute' ) ) == 1
+        assert len( util.filegrep( tdir+'/ana/execute.log', 'running analyze' ) ) == 1
+
+    def test_analyze_with_only_one_parameterize_value(self):
+        ""
+        util.writescript( 'ana.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : V=a
+            #VVT: analyze : -a
+            import os, sys
+            import script_util as vvt
+            if '-a' in sys.argv:
+                print ( 'running analyze' )
+            else:
+                print ( 'running execute' )
+            """ )
+        time.sleep(1)
+
+        self.run_analyze_with_only_one_parameterize_value( '' )
+        self.run_analyze_with_only_one_parameterize_value(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_analyze_with_only_one_parameterize_value(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        platname = util.platform_name( out )
+
+        assert len( glob.glob( tdir+'/ana*/execute.log' ) ) == 2
+        assert len( util.filegrep( tdir+'/ana.V=a/execute.log', 'running execute' ) ) == 1
+        assert len( util.filegrep( tdir+'/ana/execute.log', 'running analyze' ) ) == 1
+
+    def test_analyze_is_a_separate_script(self):
+        ""    
+        util.writescript( 'ana.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : V=a b
+            #VVT: analyze : ana.sh
+            import os, sys
+            import script_util as vvt
+            print ( 'running execute with param '+vvt.V )
+            """ )
+        util.writescript( 'ana.sh', """
+            #!/bin/sh
+            source ./vvtest_util.sh
+            echo "running analyze"
+            echo "name is $NAME with children params $PARAM_V"
+            """ )
+        time.sleep(1)
+
+        self.run_analyze_is_a_separate_script( '' )
+        self.run_analyze_is_a_separate_script(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_analyze_is_a_separate_script(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        platname = util.platform_name( out )
+
+        assert len( glob.glob( tdir+'/ana*/execute.log' ) ) == 3
+        assert len( util.filegrep( tdir+'/ana.V=a/execute.log', 'running execute' ) ) == 1
+        assert len( util.filegrep( tdir+'/ana.V=a/execute.log', 'param a' ) ) == 1
+        assert len( util.filegrep( tdir+'/ana.V=b/execute.log', 'running execute' ) ) == 1
+        assert len( util.filegrep( tdir+'/ana.V=b/execute.log', 'param b' ) ) == 1
+        assert len( util.filegrep( tdir+'/ana/execute.log', 'running analyze' ) ) == 1
+        assert len( util.filegrep( tdir+'/ana/execute.log', 'params a b' ) ) == 1
+
+    def test_separate_analyze_script_is_forced_with_an_attribute(self):
+        ""    
+        util.writescript( 'ana1.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : V=a b
+            #VVT: analyze (file) : -ana.sh
+            import os, sys
+            import script_util as vvt
+            print ( 'running py execute' )
+            """ )
+        util.writescript( '-ana.sh', """
+            #!/bin/sh
+            source ./vvtest_util.sh
+            echo "running sh analyze"
+            """ )
+        util.writescript( 'ana2.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : V=a b
+            #VVT: analyze (argument) : yep
+            import os, sys
+            import script_util as vvt
+            if 'yep' in sys.argv[1:]:
+                print ( 'running analyze' )
+            else:
+                print ( 'running execute' )
+            """ )
+        time.sleep(1)
+
+        self.run_separate_analyze_script_is_forced_with_an_attribute( '' )
+        self.run_separate_analyze_script_is_forced_with_an_attribute(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_separate_analyze_script_is_forced_with_an_attribute(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        platname = util.platform_name( out )
+        
+        assert len( glob.glob( tdir+'/ana1*/execute.log' ) ) == 3
+        assert len( util.filegrep( tdir+'/ana1.V=a/execute.log', 'running py execute' ) ) == 1
+        assert len( util.filegrep( tdir+'/ana1.V=b/execute.log', 'running py execute' ) ) == 1
+        assert len( util.filegrep( tdir+'/ana1/execute.log', 'running sh analyze' ) ) == 1
+        assert len( glob.glob( tdir+'/ana2*/execute.log' ) ) == 3
+        assert len( util.filegrep( tdir+'/ana2.V=a/execute.log', 'running execute' ) ) == 1
+        assert len( util.filegrep( tdir+'/ana2.V=b/execute.log', 'running execute' ) ) == 1
+        assert len( util.filegrep( tdir+'/ana2/execute.log', 'running analyze' ) ) == 1
+
+    def test_parameterize_values_get_filtered_out(self):
+        """
+        execute/analyze where all but one parameter value is filtered out
+        """    
+        util.writescript( 'scr.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : V=a b
+            #VVT: analyze : -a
+            import os, sys
+            import script_util as vvt
+            if '-a' in sys.argv:
+                print ( 'running analyze with V='+repr(vvt.PARAM_V) )
+            else:
+                print ( 'running execute' )
+            """ )
+        time.sleep(1)
+
+        self.run_parameterize_values_get_filtered_out( [] )
+        self.run_parameterize_values_get_filtered_out(
+                ['--plat',util.core_platform_name(),'--batch'] )
+
+    def run_parameterize_values_get_filtered_out(self, optL):
+        ""
+        util.remove_results()
+
+        ok,out = util.run_cmd( [util.vvtest]+optL+['-p','V<b or !V'] )
+        assert ok
+        np,nd = util.numpass(out),util.numdiff(out)
+        nf,nn = util.numfail(out),util.numnotrun(out)
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        platname = util.platform_name( out )
+
+        assert len( glob.glob( tdir+'/scr*/execute.log' ) ) == 2
+        assert len( util.filegrep( tdir+'/scr.V=a/execute.log', 'running execute' ) ) == 1
+        assert not os.path.exists( tdir+'/scr.V=b/execute.log' )
+        assert len( util.filegrep( tdir+'/scr/execute.log', 'running analyze' ) ) == 1
+
+    def test_using_analyze_command_line_option(self):
+        """
+        using the -a or --analyze option with script test
+        """    
+        util.writescript( 'pytest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : ival = 1 2
+            #VVT: analyze : --analyze
+            import os
+            from script_util import *
+            if '--analyze' not in sys.argv[1:]:
+                if not analyze_only():
+                    print3( 'running touch' )
+                    fp = open( 'afile.'+ival, 'w' ) ; fp.close()
+                print3( 'running execute' )
+            else:
+                print3( "running analyze" )
+                assert os.path.exists( '../pytest.ival=1/afile.1' )
+                assert os.path.exists( '../pytest.ival=2/afile.2' )
+            """ )
+        util.writescript( 'shtest.vvt', """
+            #!/bin/sh
+            #VVT: parameterize : ival = 1 2
+            #VVT: analyze : --analyze
+            source ./vvtest_util.sh
+            if cmdline_option --analyze ;
+            then
+                echo "running analyze"
+                ls ../shtest.ival=1/afile.1 || exit 1
+                ls ../shtest.ival=2/afile.2 || exit 1
+            else
+                analyze_only || {
+                    echo "running touch"
+                    touch afile.$ival
+                }
+                echo "running execute"
+            fi
+            """ )
+        time.sleep(1)
+
+        self.run_using_analyze_command_line_option( '' )
+        self.run_using_analyze_command_line_option(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_using_analyze_command_line_option(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        platname = util.platform_name( out )
+        
+        for tname in ['pytest','shtest']:
+            assert len( util.filegrep( tdir+'/'+tname+'.ival=1/execute.log',
+                                       'running touch' ) ) == 1
+            assert len( util.filegrep( tdir+'/'+tname+'.ival=1/execute.log',
+                                       'running execute' ) ) == 1
+            assert len( util.filegrep( tdir+'/'+tname+'.ival=2/execute.log',
+                                       'running touch' ) ) == 1
+            assert len( util.filegrep( tdir+'/'+tname+'.ival=2/execute.log',
+                                       'running execute' ) ) == 1
+            assert len( util.filegrep( tdir+'/'+tname+'/execute.log',
+                                       'running analyze' ) ) == 1
+            assert len( util.filegrep( tdir+'/'+tname+'/execute.log',
+                                       'running touch' ) ) == 0
+        
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -Ra' )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+        
+        for tname in ['pytest','shtest']:
+            assert len( util.filegrep( tdir+'/'+tname+'.ival=1/execute.log',
+                                       'running touch' ) ) == 0
+            assert len( util.filegrep( tdir+'/'+tname+'.ival=1/execute.log',
+                                       'running execute' ) ) == 1
+            assert len( util.filegrep( tdir+'/'+tname+'.ival=2/execute.log',
+                                       'running touch' ) ) == 0
+            assert len( util.filegrep( tdir+'/'+tname+'.ival=2/execute.log',
+                                       'running execute' ) ) == 1
+            assert len( util.filegrep( tdir+'/'+tname+'/execute.log',
+                                       'running analyze' ) ) == 1
+            assert len( util.filegrep( tdir+'/'+tname+'/execute.log',
+                                       'running touch' ) ) == 0
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
