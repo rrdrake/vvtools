@@ -39,6 +39,10 @@ class TestExec:
         self.pid = 0
         self.xdir = None
         self.deps = []  # a list of runtime dependencies; items are TestExec
+
+        # constructing a TestExec object implies that it will be run, so
+        # mark the test state as notrun
+        self.atest.setAttr( 'state', "notrun" )
     
     def init(self, test_dir, platform, commondb, config ):
         """

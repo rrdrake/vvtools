@@ -850,28 +850,10 @@ class TestList:
                 i = 0
                 while i < N:
                     tx = tL[i]
-                    if self.getBlockingTestDependency( tx ) == None:
+                    if tx.getBlockingDependency() == None:
                         self._pop_test_exec( np, i )
                         return tx
                     i += 1
-        return None
-
-    def getBlockingTestDependency(self, tx):
-        """
-        If a dependency of the given test either did not run or ran but did
-        not pass or diff, then the test is returned.  Otherwise None.
-        """
-        if tx.hasDependency():
-
-            for deptx in tx.getDependencies():
-                cxdir = deptx.atest.getExecuteDirectory()
-                if cxdir not in self.stopped:
-                    return deptx
-
-            deptx = tx.getBlockingDependency()
-            if deptx != None:
-                return deptx
-
         return None
 
     def _pop_test_exec(self, np, i):
