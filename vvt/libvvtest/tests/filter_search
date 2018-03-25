@@ -1,0 +1,72 @@
+#!/usr/bin/env python
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import glob
+import unittest
+
+import testutils as util
+from testutils import print3
+
+
+class filter_and_search_searching( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_filter_tests_by_input_file_search(self):
+        ""
+        util.writefile( 'solar.inp', """
+            foo and bar
+            this and that
+            """ )
+        util.writefile( 'solar.xml', """
+            <rtest name="solar">
+              <execute> echo "solar ran" </execute>
+              <link_files> solar.inp </link_files>
+            </rtest>""" )
+        util.writescript( 'extrasolar.vvt', """
+            #!/usr/bin/env python
+            #VVT: link : solar.inp
+            import os
+            print ( "extrasolar ran" )
+            """ )
+
+        self.run_filter_tests_by_input_file_search( '' )
+        self.run_filter_tests_by_input_file_search(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_filter_tests_by_input_file_search(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( opt+' --search foo' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( opt+' --search aliensrock' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( opt+' --search foo' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R --search aliensrock' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R --search foo' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

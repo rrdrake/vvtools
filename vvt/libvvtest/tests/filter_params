@@ -1,0 +1,123 @@
+#!/usr/bin/env python
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import glob
+import unittest
+
+import testutils as util
+from testutils import print3
+
+
+class filter_and_parameters( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_filter_tests_by_parameter_names_and_values(self):
+        ""
+        util.writefile( 'atest.xml', """
+            <rtest name="atest">
+              <parameterize np="1 3 6"/>
+              <execute>
+                set echo
+                touch execute_file.np=$np || exit 1
+                unset echo
+              </execute>
+            </rtest>""" )
+
+        self.run_filter_tests_by_parameter_names_and_values( '' )
+        self.run_filter_tests_by_parameter_names_and_values(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_filter_tests_by_parameter_names_and_values(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -N 10' )
+        testdir = util.results_dir()
+        platname = util.platform_name( out )
+
+        out,np,nd,nf,nn = util.run_vvtest( '--plat '+platname+' -i' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -p np=1 -N 10' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        savedir = os.getcwd()
+
+        os.chdir( testdir ) ; print "cd", testdir
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        os.chdir( savedir ) ; print "cd .."
+
+        os.system( "ls -l" )
+        util.remove_results()
+        os.system( "ls -ltr" )
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+" -p np<=3 -N 10" )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.greptestlist(out,'pass.*np=1') ) == 1
+        assert len( util.greptestlist(out,'pass.*np=3') ) == 1
+        assert len( util.greptestlist(out,'pass.*np=6') ) == 0
+
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+" -p np!=3 -N 10" )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.greptestlist(out,'pass.*np=1') ) == 1
+        assert len( util.greptestlist(out,'pass.*np=3') ) == 0
+        assert len( util.greptestlist(out,'pass.*np=6') ) == 1
+
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+" -p np>=3 -N 10" )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.greptestlist(out,'pass.*np=1') ) == 0
+        assert len( util.greptestlist(out,'pass.*np=3') ) == 1
+        assert len( util.greptestlist(out,'pass.*np=6') ) == 1
+
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+" -p np>3 -N 10" )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.greptestlist(out,'pass.*np=1') ) == 0
+        assert len( util.greptestlist(out,'pass.*np=3') ) == 0
+        assert len( util.greptestlist(out,'pass.*np=6') ) == 1
+
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+" -p np<3 -N 10" )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.greptestlist(out,'pass.*np=1') ) == 1
+        assert len( util.greptestlist(out,'pass.*np=3') ) == 0
+        assert len( util.greptestlist(out,'pass.*np=6') ) == 0
+
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+" -p np=1/np=3 -N 10" )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.greptestlist(out,'pass.*np=1') ) == 1
+        assert len( util.greptestlist(out,'pass.*np=3') ) == 1
+        assert len( util.greptestlist(out,'pass.*np=6') ) == 0
+
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+" -p np>1 -p np<6 -N 10" )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.greptestlist(out,'pass.*np=1') ) == 0
+        assert len( util.greptestlist(out,'pass.*np=3') ) == 1
+        assert len( util.greptestlist(out,'pass.*np=6') ) == 0
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

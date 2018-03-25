@@ -1,0 +1,236 @@
+#!/usr/bin/env python
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import glob
+import unittest
+
+import testutils as util
+from testutils import print3
+
+
+class filter_and_num_processors( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_filter_out_tests_exceeding_max_num_procs(self):
+        ""
+        util.writescript( 'atest.vvt', """
+            #!/usr/bin/env python
+            import script_util as vvt
+            print ( 'executing test' )
+            """ )
+        util.writescript( 'btest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : np = 1 2 4
+            import script_util as vvt
+            print ( 'executing test, np='+str(vvt.np) )
+            """ )
+        util.writescript( 'ctest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : np = 1 2 4
+            #VVT: analyze : --analyze
+            import sys
+            import script_util as vvt
+            if '--analyze' in sys.argv:
+                print ( 'executing analyze, np='+str(vvt.PARAM_np) )
+            else:
+                print ( 'executing test, np='+str(vvt.np) )
+            """ )
+        util.writefile( 'xtest.xml', """
+            <rtest name="xtest">
+              <execute> echo "executing test" </execute>
+            </rtest>""" )
+        util.writefile( 'ytest.xml', """
+            <rtest name="ytest">
+              <parameterize np="1 2 4"/>
+              <execute> echo "executing test, np=$np" </execute>
+            </rtest>""" )
+        util.writefile( 'ztest.xml', """
+            <rtest name="ztest">
+              <parameterize np="1 2 4"/>
+              <execute> echo "executing test, np=$np" </execute>
+              <analyze> echo "executing analyze, np=$PARAM_np" </analyze>
+            </rtest>""" )
+        time.sleep(1)
+
+        self.run_filter_out_tests_exceeding_max_num_procs( '' )
+        self.run_filter_out_tests_exceeding_max_num_procs(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_filter_out_tests_exceeding_max_num_procs(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 16 and nd == 0 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+        tdir = util.results_dir()
+
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -n 1' )
+        assert np == 16 and nd == 0 and nf == 0 and nn == 0
+
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -N 2' )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+        assert len( glob.glob( tdir+'/atest*/execute.log' ) ) == 1
+        assert len( glob.glob( tdir+'/xtest*/execute.log' ) ) == 1
+        assert len( glob.glob( tdir+'/btest*/execute.log' ) ) == 2
+        assert len( glob.glob( tdir+'/ctest*/execute.log' ) ) == 0
+        assert len( glob.glob( tdir+'/ytest*/execute.log' ) ) == 2
+        assert len( glob.glob( tdir+'/ztest*/execute.log' ) ) == 0
+
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -n 1 -N 2' )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+        assert len( glob.glob( tdir+'/atest*/execute.log' ) ) == 1
+        assert len( glob.glob( tdir+'/xtest*/execute.log' ) ) == 1
+        assert len( glob.glob( tdir+'/btest*/execute.log' ) ) == 2
+        assert len( glob.glob( tdir+'/ctest*/execute.log' ) ) == 0
+        assert len( glob.glob( tdir+'/ytest*/execute.log' ) ) == 2
+        assert len( glob.glob( tdir+'/ztest*/execute.log' ) ) == 0
+
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -N 4' )
+        assert np == 16 and nd == 0 and nf == 0 and nn == 0
+
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( opt.split()+['-p', 'np<=2 or not np'] )
+        assert np == 12 and nd == 0 and nf == 0 and nn == 0
+        assert len( glob.glob( tdir+'/atest*/execute.log' ) ) == 1
+        assert len( glob.glob( tdir+'/xtest*/execute.log' ) ) == 1
+        assert len( glob.glob( tdir+'/btest*/execute.log' ) ) == 2
+        assert len( glob.glob( tdir+'/ctest*/execute.log' ) ) == 3
+        assert len( glob.glob( tdir+'/ytest*/execute.log' ) ) == 2
+        assert len( glob.glob( tdir+'/ztest*/execute.log' ) ) == 3
+
+    def test_batch_should_not_prune_based_on_max_procs(self):
+        ""
+        platname = util.core_platform_name()
+
+        # determine the max num procs for this platform
+        util.writescript( "null.vvt", """
+            #!/bin/sh
+            echo "null"
+            """ )
+        time.sleep(1)
+
+        out,np,nd,nf,nn = util.run_vvtest( '--plat '+platname )
+        tdir = util.results_dir()
+        os.remove( 'null.vvt' )
+        L = util.grep( out, 'max procs' )
+        assert len(L) == 1
+        maxprocs = L[0].split( 'max procs', 1 )[1].strip().lstrip('=').strip()
+        maxprocs = int( maxprocs )
+        assert maxprocs > 0
+
+        util.remove_results()
+
+        util.writescript( 'atest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : np=1
+            import script_util as vvt
+            print ( 'executing test, np='+str(vvt.np) )
+            """ )
+        util.writescript( 'btest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : np="""+str(maxprocs)+"""
+            import script_util as vvt
+            print ( 'executing test, np='+str(vvt.np) )
+            """ )
+        util.writescript( 'ctest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : np="""+str(maxprocs+1)+"""
+            import script_util as vvt
+            print ( 'executing test, np='+str(vvt.np) )
+            """ )
+        util.writescript( 'dtest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : np="""+str(maxprocs+2)+"""
+            import script_util as vvt
+            print ( 'executing test, np='+str(vvt.np) )
+            """ )
+        time.sleep(1)
+
+        cmd = '-N '+str(maxprocs+1)+' --batch --plat '+platname
+        out,np,nd,nf,nn = util.run_vvtest( cmd )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+        assert os.path.exists( tdir+'/atest.np=1/execute.log' )
+        assert os.path.exists( tdir+'/btest.np='+str(maxprocs)+'/execute.log' )
+        assert os.path.exists( tdir+'/ctest.np='+str(maxprocs+1)+'/execute.log' )
+        assert len( glob.glob( tdir+'/dtest.*/execute.log' ) ) == 0
+
+    def test_filter_out_tests_exceeding_max_procs_command_line_switch(self):
+        ""
+        util.writescript( 'btest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : np = 1 2 4
+            import script_util as vvt
+            print ( 'executing test, np='+str(vvt.np) )
+            """ )
+        util.writescript( 'ctest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : np = 1 3 4
+            #VVT: analyze : --analyze
+            import sys
+            import script_util as vvt
+            if '--analyze' in sys.argv:
+                print ( 'executing analyze, np='+str(vvt.PARAM_np) )
+            else:
+                print ( 'executing test, np='+str(vvt.np) )
+            """ )
+        time.sleep(1)
+
+        self.run_filter_out_tests_exceeding_max_procs_command_line_switch( '' )
+        self.run_filter_out_tests_exceeding_max_procs_command_line_switch(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_filter_out_tests_exceeding_max_procs_command_line_switch(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 7 and nd == 0 and nf == 0 and nn == 0
+
+        platname = util.platform_name( out )
+        tdir = util.results_dir()
+
+        # first check that -N 2 does not remove tests if they are already there
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R -N 2' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        L = util.testlist( out )
+        assert len(L) == 2
+        assert L[0][-1].endswith( os.sep+'btest.np=1' )
+        assert L[1][-1].endswith( os.sep+'btest.np=2' )
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R' )
+        assert np == 7 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R', directory=tdir )
+        assert np == 7 and nd == 0 and nf == 0 and nn == 0
+
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -N 2' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        L = util.testlist( out )
+        assert len(L) == 2
+        assert L[0][-1].endswith( os.sep+'btest.np=1' )
+        assert L[1][-1].endswith( os.sep+'btest.np=2' )
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R', directory=tdir )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        L = util.testlist( out )
+        assert len(L) == 2
+        assert L[0][-1] == 'btest.np=1'
+        assert L[1][-1] == 'btest.np=2'
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

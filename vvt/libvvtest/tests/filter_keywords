@@ -1,0 +1,238 @@
+#!/usr/bin/env python
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import glob
+import unittest
+
+import testutils as util
+from testutils import print3
+
+
+class filter_and_keywords( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_filter_by_testname_and_keyword_simultaneously(self):
+        ""
+        util.writefile( 'atest.xml', """
+            <rtest name="atest">
+              <parameterize nx="1 4"/>
+              <execute>
+                set echo
+                touch execute_file.np=$np || exit 1
+                if ( "$nx" == 4 ) then
+                  echo "exiting for nx 4"
+                  exit 1
+                endif
+                unset echo
+              </execute>
+            </rtest>""" )
+
+        util.writefile( 'btest.xml', """
+            <rtest name="btest">
+              <parameterize nx="1 4"/>
+              <execute>
+                set echo
+                touch execute_file.np=$np || exit 1
+                if ( "$nx" == 4 ) then
+                  echo "exiting for nx 4"
+                  exit 1
+                endif
+                unset echo
+              </execute>
+            </rtest>""" )
+        time.sleep(1)
+
+        self.run_filter_by_testname_and_keyword_simultaneously( '' )
+        self.run_filter_by_testname_and_keyword_simultaneously(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_filter_by_testname_and_keyword_simultaneously(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 2 and nd == 0 and nf == 2 and nn == 0
+        platname = util.platform_name( out )
+
+        assert len( util.greptestlist(out,'pass.*atest\.nx=1') ) == 1
+        assert len( util.greptestlist(out,'pass.*btest\.nx=1') ) == 1
+        assert len( util.greptestlist(out,'fail.*atest\.nx=4') ) == 1
+        assert len( util.greptestlist(out,'fail.*btest\.nx=4') ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -k atest/fail' )
+        assert np == 1 and nd == 0 and nf == 2 and nn == 0
+
+        assert len( util.greptestlist( out, 'atest.*pass.*\.nx=1' ) ) == 1
+        assert len( util.greptestlist( out, 'atest.*fail.*\.nx=4' ) ) == 1
+        assert len( util.greptestlist( out, 'btest.*pass.*\.nx='  ) ) == 0
+        assert len( util.greptestlist( out, 'btest.*fail.*\.nx=4' ) ) == 1
+
+    def test_xml_test_filter_by_keyword_expression(self):
+        """
+        filter tests out by command line keyword expression
+        """
+        util.writefile( 'solar.xml', """
+            <rtest name="solar">
+              <keywords> earth mars </keywords>
+              <execute> echo "solar ran" </execute>
+            </rtest>""" )
+
+        self.run_xml_test_filter_by_keyword_expression( '' )
+        self.run_xml_test_filter_by_keyword_expression(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_xml_test_filter_by_keyword_expression(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -k earth' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -K earth' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -k earth -K mars' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -k earth/mars' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -k venus/mars' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    def test_special_characters_in_keyword_handling(self):
+        ""
+        util.writefile( 'extra.xml', """
+            <rtest name="extra">
+              <keywords> blah-1 foo.2 bar+3 baz=4 mars#5 sun%6 pluto^7 venus:8
+                         jupiter~9 jupiter@0 </keywords>
+              <execute> echo "extra ran" </execute>
+            </rtest>""" )
+        time.sleep(1)
+
+        out,np,nd,nf,nn = util.run_vvtest( '-k blah-1' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        rdir = util.results_dir()
+        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -k foo.2' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -k bar+3' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -k baz=4' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -k mars#5' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -k sun%6' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -k pluto^7' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -k venus:8' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -k jupiter~9' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -k jupiter@0' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
+
+    def test_script_test_filter_by_keyword_expression(self):
+        """
+        script test, filter tests out by command line keyword expression
+        """
+        util.writescript( 'solar.vvt', """
+            #!/usr/bin/env python
+            #VVT: keywords : earth mars
+            print ( 'solar ran' )
+            """ )
+        time.sleep(1)
+
+        self.run_script_test_filter_by_keyword_expression( '' )
+        self.run_script_test_filter_by_keyword_expression(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_script_test_filter_by_keyword_expression(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -k earth' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -K earth' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -k earth -K mars' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -k earth/mars' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -k venus/mars' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    def test_script_test_filter_by_testname_and_keyword_simultaneously(self):
+        ""
+        util.writescript( 'atest.vvt', """
+            #!/usr/bin/env python
+            print ( 'executing test' )
+            """ )
+        util.writescript( 'btest.vvt', """
+            #!/usr/bin/env python
+            raise Exception( 'fake failure' )
+            """ )
+        util.writescript( 'ctest.vvt', """
+            #!/usr/bin/env python
+            print ( 'executing test' )
+            """ )
+        time.sleep(1)
+
+        self.run_script_test_filter_by_testname_and_keyword_simultaneously( '' )
+        self.run_script_test_filter_by_testname_and_keyword_simultaneously(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_script_test_filter_by_testname_and_keyword_simultaneously(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 2 and nd == 0 and nf == 1 and nn == 0
+        platname = util.platform_name( out )
+
+        assert len( util.greptestlist(out,'pass.*atest') ) == 1
+        assert len( util.greptestlist(out,'fail.*btest') ) == 1
+        assert len( util.greptestlist(out,'pass.*ctest') ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -k atest/fail' )
+        assert np == 1 and nd == 0 and nf == 1 and nn == 0
+
+        assert len( util.greptestlist(out,'pass.*atest') ) == 1
+        assert len( util.greptestlist(out,'fail.*btest') ) == 1
+        assert len( util.greptestlist(out,'pass.*ctest') ) == 0
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
