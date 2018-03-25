@@ -730,7 +730,7 @@ class TestList:
                 # this test has a parent; find the parent TestExec object
                 pxt = xtD.get( pxdir, None )
                 if pxt != None:
-                    pxt.addChild( xt )
+                    pxt.addDependency( xt )
 
     def sortTestExecList(self):
         """
@@ -850,27 +850,30 @@ class TestList:
                 i = 0
                 while i < N:
                     tx = tL[i]
-                    if self.getBadChild( tx ) == None:
+                    if self.getBlockingTestDependency( tx ) == None:
                         self._pop_test_exec( np, i )
                         return tx
                     i += 1
         return None
 
-    def getBadChild(self, tx):
+    def getBlockingTestDependency(self, tx):
         """
-        If a child of the given test either did not run or ran but did not
-        pass or diff, then the child is returned.  Otherwise None.
+        If a dependency of the given test either did not run or ran but did
+        not pass or diff, then the test is returned.  Otherwise None.
         """
-        if tx.hasChildren():
-            for childtx in tx.getChildren():
-                cxdir = childtx.atest.getExecuteDirectory()
+        if tx.hasDependency():
+
+            for deptx in tx.getDependencies():
+                cxdir = deptx.atest.getExecuteDirectory()
                 if cxdir not in self.stopped:
-                    return childtx
-            childtx = tx.badChild()
-            if childtx != None:
-                return childtx
+                    return deptx
+
+            deptx = tx.getBlockingDependency()
+            if deptx != None:
+                return deptx
+
         return None
-    
+
     def _pop_test_exec(self, np, i):
         """
         """

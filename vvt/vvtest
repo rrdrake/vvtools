@@ -994,7 +994,7 @@ def runTests( dirs, plat, rtconfig ):
         for pt,ct in pruneL:
             print3( '*** Warning: analyze test',
                     relative_execute_directory( pt, test_dir, os.getcwd() ),
-                    'will not be run due to child',
+                    'will not be run due to dependency',
                     relative_execute_directory( ct, test_dir, os.getcwd() ) )
     if cntmax > 0:
         print3()
@@ -1262,11 +1262,11 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
     if len(tL) > 0:
         print3()
     for tx in tL:
-        deptx = tx.badChild()
-        assert tx.hasChildren() and deptx != None
+        deptx = tx.getBlockingDependency()
+        assert tx.hasDependency() and deptx != None
         print3( '*** Warning: analyze test skipped for "' + \
                 tx.atest.getExecuteDirectory() + \
-                '" due to child "' + deptx.atest.getExecuteDirectory() + '"' )
+                '" due to dependency "' + deptx.atest.getExecuteDirectory() + '"' )
     
     do_html = ( '--qsub-id' not in optdict )
     do_junit = ''
@@ -1354,10 +1354,10 @@ def batchTestList( tlist, test_dir, plat, perms ):
       print3( "*** Warning: these batch numbers did not seem to finish:",
               ' '.join(NF) )
     for tx,deptx in nrL:
-        assert tx.hasChildren() and deptx != None
+        assert tx.hasDependency() and deptx != None
         print3( '*** Warning: analyze test skipped for "' + \
                 tx.atest.getExecuteDirectory() + \
-                '" due to child "' + deptx.atest.getExecuteDirectory() + '"' )
+                '" due to dependency "' + deptx.atest.getExecuteDirectory() + '"' )
     
     print3()
     do_junit = optdict.get( '--junit', '' )
@@ -1551,7 +1551,7 @@ class Batcher:
           grpL = []
           tsum = 0
           for rt,tx in xL:
-            if tx.hasChildren() or tx.atest.getAttr('timeout') < 1:
+            if tx.hasDependency() or tx.atest.getAttr('timeout') < 1:
               # analyze tests and those with no timeout get their own group
               qL.append( [ self.Tzero, len(qL), [tx] ] )
             else:
@@ -1782,7 +1782,7 @@ def restartTests( test_dir, plat, rtconfig ):
         for pt,ct in pruneL:
             print3( '*** Warning: analyze test',
                     relative_execute_directory( pt, test_dir, os.getcwd() ),
-                    'will not be run due to child',
+                    'will not be run due to dependency',
                     relative_execute_directory( ct, test_dir, os.getcwd() ) )
     if cntmax > 0:
         print3()

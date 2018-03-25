@@ -38,7 +38,7 @@ class TestExec:
         self.tzero = 0
         self.pid = 0
         self.xdir = None
-        self.children = None  # parent tests will have a list of their children
+        self.deps = []  # a list of runtime dependencies; items are TestExec
     
     def init(self, test_dir, platform, commondb, config ):
         """
@@ -357,34 +357,31 @@ class TestExec:
           time.sleep(5)
           self.poll()
     
-    def addChild(self, testexec):
+    def addDependency(self, testexec):
         """
         """
-        if self.children == None:
-          self.children = []
-        self.children.append( testexec )
+        self.deps.append( testexec )
     
-    def hasChildren(self):
+    def hasDependency(self):
         """
         """
-        return self.children != None
-    
-    def getChildren(self):
-        """
-        """
-        return self.children
+        return len(self.deps) > 0
 
-    def badChild(self):
+    def getDependencies(self):
         """
-        If this is a parent test and one of its children didn't run, didn't
-        finish, or failed, then that offending child is returned.  Otherwise,
-        None is returned.
         """
-        if self.children != None:
-          for tx in self.children:
+        return self.deps
+
+    def getBlockingDependency(self):
+        """
+        If one or more dependencies did not run, did not finish, or failed,
+        then that offending TestExec is returned.  Otherwise, None is returned.
+        """
+        for tx in self.deps:
             if tx.atest.getAttr('state') != 'done' or \
                tx.atest.getAttr('result') not in ['pass','diff']:
-              return tx
+                return tx
+
         return None
     
     def preclean(self):

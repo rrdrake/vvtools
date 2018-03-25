@@ -47,7 +47,7 @@ class BatchScheduler:
         """
         if self.accountant.numStarted() < self.maxjobs:
             for qid,bjob in self.accountant.getNotStarted():
-                if self.getBlockingChild( bjob ) == None:
+                if self.getBlockingDependency( bjob ) == None:
                     pin = self.namer.getBatchScriptName( qid )
                     jobid = self.plat.Qsubmit( self.test_dir, bjob.outfile, pin )
                     self.accountant.markJobStarted( qid, jobid )
@@ -186,7 +186,7 @@ class BatchScheduler:
         # the list of tests that were not run
         notrunL = []
         for qid,bjob in self.accountant.getNotStarted():
-            tx1 = self.getBlockingChild( bjob )
+            tx1 = self.getBlockingDependency( bjob )
             assert tx1 != None  # otherwise checkstart() should have ran it
             for tx0 in bjob.testL:
                 notrunL.append( (tx0,tx1) )
@@ -232,16 +232,16 @@ class BatchScheduler:
 
         return tL
 
-    def getBlockingChild(self, bjob):
+    def getBlockingDependency(self, bjob):
         """
-        If a child of any of the tests in the current list have not run or
-        ran but did not pass or diff, then that child is returned.  Otherwise
-        None is returned.
+        If a dependency of any of the tests in the current list have not run or
+        ran but did not pass or diff, then that dependency test is returned.
+        Otherwise None is returned.
         """
         for tx in bjob.testL:
-            childtx = self.tlist.getBadChild( tx )
-            if childtx != None:
-                return childtx
+            deptx = self.tlist.getBlockingTestDependency( tx )
+            if deptx != None:
+                return deptx
         return None
 
 
