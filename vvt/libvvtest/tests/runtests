@@ -163,11 +163,15 @@ class BackgroundJob:
         self.cmd = cmd
         os.chdir(cwd)
 
+        self.testid = testid
+
         rdir = testid + '_dir'
         os.mkdir( rdir )
         os.chdir( rdir )
 
         os.environ['TESTUTILS_RUNDIR'] = os.path.join( cwd, rdir )
+
+        self.tstart = time.time()
 
         log = os.path.join( cwd, testid+'.out' )
         self.logfp = open( log, 'w' )
@@ -176,6 +180,7 @@ class BackgroundJob:
                                       stdout=self.logfp.fileno(),
                                       stderr=subprocess.STDOUT )
         self.logfp.close()
+
         os.chdir(cwd)
 
     def poll(self):
@@ -188,6 +193,8 @@ class BackgroundJob:
         if x != None:
             self.x = x
             self.proc = None
+            secs = int( time.time() - self.tstart + 0.5 )
+            print3( 'DONE:', "%ds"%secs, self.testid )
         return x
 
 
