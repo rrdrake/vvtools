@@ -152,13 +152,21 @@ def get_TestCase_classes( test_module ):
     return tcD
 
 
-def setup_test():
+def setup_test( cleanout=True ):
     """
     """
     print3()
     os.chdir( working_directory )
-    rmallfiles()
-    time.sleep(1)
+
+    if cleanout:
+        rmallfiles()
+        time.sleep(1)
+
+    # for batch tests
+    os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
+    os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
+    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+
 
 
 def make_working_directory( test_filename ):
