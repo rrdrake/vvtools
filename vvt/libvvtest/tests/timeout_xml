@@ -1,0 +1,83 @@
+#!/usr/bin/env python
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import unittest
+
+import testutils as util
+from testutils import print3
+
+
+class Timeout_xml_specs( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_different_timeout_values(self):
+        ""
+        platname = util.core_platform_name()
+
+        # sleep1 should timeout
+        util.writefile( "sleep1.xml", '''
+            <rtest name="sleep1">
+              <keywords> fast </keywords>
+              <execute>
+            echo "sleep1 test is sleeping 10 seconds"
+            sleep 10
+              </execute>
+              <timeout value="3"/>
+            </rtest>''' )
+
+        # sleep2 should not timeout
+        util.writefile( "sleep2.xml", '''
+            <rtest name="sleep2">
+              <keywords> fast </keywords>
+              <execute>
+            echo "sleep2 test is sleeping 10 seconds"
+            sleep 10
+              </execute>
+              <timeout value="3"/>
+              <timeout platforms="'''+platname+'''" value="0"/>
+            </rtest>''' )
+
+        # sleep3 should not timeout
+        util.writefile( "sleep3.xml", '''
+            <rtest name="sleep3">
+              <keywords> fast </keywords>
+              <execute>
+            echo "sleep3 test is sleeping 10 seconds"
+            sleep 10
+              </execute>
+              <timeout value="3"/>
+              <timeout platforms="'''+platname+'''" value="15"/>
+            </rtest>''' )
+
+        time.sleep(1)
+
+        self.run_different_timeout_values( '--plat '+platname )
+        self.run_different_timeout_values( '--plat '+platname+' --batch' )
+
+    def run_different_timeout_values(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        assert util.numtimeout(out) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -wT 1.5' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        assert util.numtimeout(out) == 3
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -wT 20' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        assert util.numtimeout(out) == 0
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

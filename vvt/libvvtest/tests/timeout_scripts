@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import unittest
+
+import testutils as util
+from testutils import print3
+
+
+class Timeout_script_specs( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_different_timeout_values(self):
+        ""
+        platname = util.core_platform_name()
+
+        # sleep1 should timeout
+        util.writescript( 'sleep1.vvt', """
+            #!/bin/sh
+            #VVT: timeout : 3
+            echo "sleep1 is sleeping 10 seconds"
+            sleep 10
+            """ )
+
+        # sleep2 should not timeout
+        util.writescript( 'sleep2.vvt', """
+            #!/bin/sh
+            #VVT: timeout : 3
+            #VVT: timeout (platforms="""+platname+"""): 0
+            echo "sleep2 is sleeping 10 seconds"
+            sleep 10
+            """ )
+
+        # sleep3 should not timeout
+        util.writescript( 'sleep3.vvt', """
+            #!/bin/sh
+            #VVT: timeout : 3
+            #VVT: timeout ( platforms = """+platname+""" ): 15
+            echo "sleep3 is sleeping 10 seconds"
+            sleep 10
+            """ )
+
+        time.sleep(1)
+
+        self.run_different_timeout_values( '--plat '+platname )
+        self.run_different_timeout_values( '--plat '+platname+' --batch' )
+
+    def run_different_timeout_values(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        assert util.numtimeout(out) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -wT 1.5' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        assert util.numtimeout(out) == 3
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -wT 20' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        assert util.numtimeout(out) == 0
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
