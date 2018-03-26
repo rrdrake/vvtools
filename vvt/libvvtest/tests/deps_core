@@ -1,0 +1,252 @@
+#!/usr/bin/env python
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import glob
+import unittest
+import time
+
+import testutils as util
+from testutils import print3
+
+import TestSpecCreator as creator
+from RuntimeConfig import RuntimeConfig
+from TestList import DependencyPatternMap
+from TestSpec import TestSpec
+
+
+class Parse_Dependencies( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_simple_dependencies(self):
+        ""
+        util.writefile( 'testX.py.vvt', """
+            #VVT: depends on : testY
+            """ )
+        util.writefile( 'testA.py.vvt', """
+            #VVT: depends on : testC testB
+            """ )
+        time.sleep(1)
+
+        nofltr = RuntimeConfig()
+
+        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 1
+        name,wx = tL[0].getDependencies()[0]
+        assert name == 'testY'
+        assert wx == None
+
+        tL = creator.createTestObjects( '.', 'testA.py.vvt', None, nofltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 2
+        nameL = []
+        for name,wx in tL[0].getDependencies():
+            nameL.append( name )
+            assert wx == None
+        nameL.sort()
+        assert nameL == [ 'testB', 'testC' ]
+
+    def test_result_attribute_with_dependency(self):
+        ""
+        util.writefile( 'testX.py.vvt', """
+            #VVT: depends on (result=fail): testY testZ
+            """ )
+        util.writefile( 'testA.py.vvt', """
+            #VVT: depends on (result="fail or diff") : testB
+            """ )
+        time.sleep(1)
+
+        nofltr = RuntimeConfig()
+
+        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 2
+        nameL = []
+        for name,wx in tL[0].getDependencies():
+            nameL.append( name )
+            assert not wx.evaluate( lambda word: word == "pass" )
+            assert not wx.evaluate( lambda word: word == "diff" )
+            assert wx.evaluate( lambda word: word == "fail" )
+        nameL.sort()
+        assert nameL == [ 'testY', 'testZ' ]
+
+        tL = creator.createTestObjects( '.', 'testA.py.vvt', None, nofltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 1
+        name,wx = tL[0].getDependencies()[0]
+        assert name == 'testB'
+        assert not wx.evaluate( lambda word: word == "pass" )
+        assert wx.evaluate( lambda word: word == "diff" )
+        assert wx.evaluate( lambda word: word == "fail" )
+
+    def test_an_astrisk_result_attribute_means_match_anything(self):
+        ""
+        util.writefile( 'testX.py.vvt', """
+            #VVT: depends on (result="*"): testY testZ
+            """ )
+        time.sleep(1)
+
+        nofltr = RuntimeConfig()
+
+        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 2
+        nameL = []
+        for name,wx in tL[0].getDependencies():
+            nameL.append( name )
+            assert wx.evaluate( lambda word: word == "pass" )
+            assert wx.evaluate( lambda word: word == "diff" )
+            assert wx.evaluate( lambda word: word == "fail" )
+        nameL.sort()
+        assert nameL == [ 'testY', 'testZ' ]
+
+    def test_multiple_dependency_specifications(self):
+        ""
+        util.writefile( 'testX.py.vvt', """
+            #VVT: depends on (result=fail): testY testZ
+            #VVT: depends on (result="fail or diff") : testB
+            #VVT: depends on : testW
+            """ )
+        time.sleep(1)
+
+        nofltr = RuntimeConfig()
+
+        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 4
+        nameL = []
+        for name,wx in tL[0].getDependencies():
+            nameL.append( name )
+            if name == 'testY' or name == 'testZ':
+                assert not wx.evaluate( lambda word: word == "pass" )
+                assert not wx.evaluate( lambda word: word == "diff" )
+                assert wx.evaluate( lambda word: word == "fail" )
+            elif name == 'testB':
+                assert not wx.evaluate( lambda word: word == "pass" )
+                assert wx.evaluate( lambda word: word == "diff" )
+                assert wx.evaluate( lambda word: word == "fail" )
+            elif name == 'testW':
+                assert wx == None
+        nameL.sort()
+        assert nameL == [ 'testB', 'testW', 'testY', 'testZ' ]
+
+    def test_using_filter_attributes(self):
+        ""
+        util.writefile( 'testX.py.vvt', """
+            #VVT: depends on (platforms="XBox", result="fail") : testY
+            #VVT: depends on (platforms="not XBox") : testZ
+            """ )
+        time.sleep(1)
+
+        fltr = RuntimeConfig( platform_name='XBox' )
+
+        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, fltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 1
+        name,wx = tL[0].getDependencies()[0]
+        assert name == 'testY'
+        assert not wx.evaluate( lambda word: word == "pass" )
+        assert not wx.evaluate( lambda word: word == "diff" )
+        assert wx.evaluate( lambda word: word == "fail" )
+
+        fltr = RuntimeConfig( platform_name='PlayStation' )
+
+        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, fltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 1
+        name,wx = tL[0].getDependencies()[0]
+        assert name == 'testZ'
+        assert wx == None
+
+
+#######################################
+
+class MockTestExec:
+
+    def __init__(self, name, deps, subdir='.'):
+        ""
+        fn = os.path.normpath( os.path.join( subdir, name+'vvt' ) )
+        self.atest = TestSpec( name, os.getcwd(), fn )
+        for T in deps:
+            self.atest.addDependency( T[0], T[1] )
+
+
+#######################################
+
+
+class Class_DependencyPatternMap( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test( cleanout=False )
+
+    def test_empty_set(self):
+        ""
+        patmap = DependencyPatternMap( [] )
+        assert patmap.getMatchList( '*' ) == []
+
+    def test_a_direct_name_match(self):
+        ""
+        tL = [ MockTestExec( 'testX', [ ('testY',None) ] ),
+               MockTestExec( 'testY', [] ) ]
+
+        patmap = DependencyPatternMap( tL )
+
+        assert list( patmap.getMatchList('testY') ) == ['testY']
+
+    def test_a_wildcard_name_match(self):
+        ""
+        tL = [ MockTestExec( 'testX', [ ('t*Y',None) ] ),
+               MockTestExec( 'testY', [] ) ]
+
+        patmap = DependencyPatternMap( tL )
+
+        assert list( patmap.getMatchList('t*Y') ) == ['testY']
+
+    def test_a_dependency_from_a_subdir(self):
+        ""
+        tL = [ MockTestExec( 'testX', [ ('subdir/testY',None) ] ),
+               MockTestExec( 'testY', [], 'subdir' ) ]
+
+        patmap = DependencyPatternMap( tL )
+
+        mL = patmap.getMatchList('subdir/testY')
+        assert list( mL ) == ['subdir/testY']
+
+        tL = [ MockTestExec( 'testX', [ ('*testY',None) ] ),
+               MockTestExec( 'testY', [], 'subdir' ) ]
+
+        patmap = DependencyPatternMap( tL )
+
+        mL = patmap.getMatchList('*testY')
+        assert list( mL ) == ['subdir/testY']
+
+    def test_multiple_matches(self):
+        ""
+        tL = [ MockTestExec( 'testX', [ ('*testY*',None) ] ),
+               MockTestExec( 'testY', [], 'subdir' ),
+               MockTestExec( 'testYY', [], 'subdir' ) ]
+
+        patmap = DependencyPatternMap( tL )
+
+        mL = list( patmap.getMatchList('*testY*') )
+        mL.sort()
+        assert mL == ['subdir/testY', 'subdir/testYY']
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

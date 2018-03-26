@@ -1,0 +1,232 @@
+#!/usr/bin/env python
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import glob
+import unittest
+import time
+
+import testutils as util
+from testutils import print3
+
+import TestSpecCreator as creator
+from RuntimeConfig import RuntimeConfig
+from TestList import DependencyPatternMap
+from TestSpec import TestSpec
+
+
+class dependency_run_order( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_the_dependency_should_run_first(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testY
+            import os, sys, time
+            sys.stdout.write( 'time='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!/usr/bin/env python
+            import os, sys, time
+            sys.stdout.write( 'time1='+str(time.time())+os.linesep )
+            time.sleep(5)  # make the dependency take awhile
+            sys.stdout.write( 'time2='+str(time.time())+os.linesep )
+            """ )
+        time.sleep(1)
+
+        self.run_the_dependency_should_run_first( '' )
+        self.run_the_dependency_should_run_first(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_the_dependency_should_run_first(self, opt):
+        ""
+        util.remove_results()
+
+        vrun = util.vvtestRunner( opt+' -N 4' )
+
+        assert vrun.num_pass == 2
+
+        f = os.path.join( vrun.testdir, 'testY', 'execute.log' )
+        tY1 = float( util.filegrep(f,'time1=')[0].split('time1=')[1].strip() )
+        tY2 = float( util.filegrep(f,'time2=')[0].split('time2=')[1].strip() )
+
+        f = os.path.join( vrun.testdir, 'testX', 'execute.log' )
+        tX = float( util.filegrep(f,'time=')[0].split('time=')[1].strip() )
+
+        assert tX-tY1 > 4
+        assert not tX < tY2
+        assert tY2-tY1 > 4
+
+    def test_run_order_on_a_three_test_dependency_chain(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testY
+            import os, sys, time
+            sys.stdout.write( 'time='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testZ
+            import os, sys, time
+            sys.stdout.write( 'time1='+str(time.time())+os.linesep )
+            time.sleep(5)
+            sys.stdout.write( 'time2='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testZ.vvt', """
+            #!/usr/bin/env python
+            import os, sys, time
+            sys.stdout.write( 'time1='+str(time.time())+os.linesep )
+            time.sleep(5)
+            sys.stdout.write( 'time2='+str(time.time())+os.linesep )
+            """ )
+        time.sleep(1)
+
+        self.run_order_on_a_three_test_dependency_chain( '' )
+        self.run_order_on_a_three_test_dependency_chain(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_order_on_a_three_test_dependency_chain(self, opt):
+        ""
+        util.remove_results()
+
+        vrun = util.vvtestRunner( opt+' -N 4' )
+
+        assert vrun.num_pass == 3
+
+        f = os.path.join( vrun.testdir, 'testZ', 'execute.log' )
+        tZ1 = float( util.filegrep(f,'time1=')[0].split('time1=')[1].strip() )
+        tZ2 = float( util.filegrep(f,'time2=')[0].split('time2=')[1].strip() )
+
+        f = os.path.join( vrun.testdir, 'testY', 'execute.log' )
+        tY1 = float( util.filegrep(f,'time1=')[0].split('time1=')[1].strip() )
+        tY2 = float( util.filegrep(f,'time2=')[0].split('time2=')[1].strip() )
+
+        f = os.path.join( vrun.testdir, 'testX', 'execute.log' )
+        tX = float( util.filegrep(f,'time=')[0].split('time=')[1].strip() )
+
+        assert tX-tY1 > 4
+        assert not tX < tY2
+        assert tY2-tY1 > 4
+
+        assert tY2-tZ1 > 4
+        assert not tY2 < tZ2
+        assert tZ2-tZ1 > 4
+
+    def test_run_order_on_multiple_dependencies(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testY testZ
+            import os, sys, time
+            sys.stdout.write( 'time='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!/usr/bin/env python
+            import os, sys, time
+            sys.stdout.write( 'time1='+str(time.time())+os.linesep )
+            time.sleep(5)
+            sys.stdout.write( 'time2='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testZ.vvt', """
+            #!/usr/bin/env python
+            import os, sys, time
+            sys.stdout.write( 'time1='+str(time.time())+os.linesep )
+            time.sleep(5)
+            sys.stdout.write( 'time2='+str(time.time())+os.linesep )
+            """ )
+        time.sleep(1)
+
+        self.run_order_on_multiple_dependencies( '' )
+        self.run_order_on_multiple_dependencies(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_order_on_multiple_dependencies(self, opt):
+        ""
+        util.remove_results()
+
+        vrun = util.vvtestRunner( opt+' -N 4' )
+
+        assert vrun.num_pass == 3
+
+        f = os.path.join( vrun.testdir, 'testZ', 'execute.log' )
+        tZ1 = float( util.filegrep(f,'time1=')[0].split('time1=')[1].strip() )
+        tZ2 = float( util.filegrep(f,'time2=')[0].split('time2=')[1].strip() )
+
+        f = os.path.join( vrun.testdir, 'testY', 'execute.log' )
+        tY1 = float( util.filegrep(f,'time1=')[0].split('time1=')[1].strip() )
+        tY2 = float( util.filegrep(f,'time2=')[0].split('time2=')[1].strip() )
+
+        f = os.path.join( vrun.testdir, 'testX', 'execute.log' )
+        tX = float( util.filegrep(f,'time=')[0].split('time=')[1].strip() )
+
+        assert tX-tY1 > 4
+        assert not tX < tY2
+        assert tY2-tY1 > 4
+
+        assert tX-tZ1 > 4
+        assert not tX < tZ2
+        assert tZ2-tZ1 > 4
+
+    def test_multiple_tests_depending_on_the_same_test(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testZ
+            import os, sys, time
+            sys.stdout.write( 'time='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testZ
+            import os, sys, time
+            sys.stdout.write( 'time='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testZ.vvt', """
+            #!/usr/bin/env python
+            import os, sys, time
+            sys.stdout.write( 'time1='+str(time.time())+os.linesep )
+            time.sleep(5)
+            sys.stdout.write( 'time2='+str(time.time())+os.linesep )
+            """ )
+        time.sleep(1)
+
+        self.multiple_tests_depending_on_the_same_test( '' )
+        self.multiple_tests_depending_on_the_same_test(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def multiple_tests_depending_on_the_same_test(self, opt):
+        ""
+        util.remove_results()
+
+        vrun = util.vvtestRunner( opt+' -N 4' )
+
+        assert vrun.num_pass == 3
+
+        f = os.path.join( vrun.testdir, 'testZ', 'execute.log' )
+        tZ1 = float( util.filegrep(f,'time1=')[0].split('time1=')[1].strip() )
+        tZ2 = float( util.filegrep(f,'time2=')[0].split('time2=')[1].strip() )
+
+        f = os.path.join( vrun.testdir, 'testX', 'execute.log' )
+        tX = float( util.filegrep(f,'time=')[0].split('time=')[1].strip() )
+
+        f = os.path.join( vrun.testdir, 'testY', 'execute.log' )
+        tY = float( util.filegrep(f,'time=')[0].split('time=')[1].strip() )
+
+        assert tX-tZ1 > 4
+        assert not tX < tZ2
+        assert tZ2-tZ1 > 4
+
+        assert tY-tZ1 > 4
+        assert not tY < tZ2
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
