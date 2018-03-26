@@ -5,6 +5,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
+import glob
 import unittest
 import time
 
@@ -40,9 +41,7 @@ class Parse_Dependencies( unittest.TestCase ):
         assert len( tL[0].getDependencies() ) == 1
         name,wx = tL[0].getDependencies()[0]
         assert name == 'testY'
-        assert wx.evaluate( lambda word: word == "pass" )
-        assert wx.evaluate( lambda word: word == "diff" )
-        assert not wx.evaluate( lambda word: word == "fail" )
+        assert wx == None
 
         tL = creator.createTestObjects( '.', 'testA.py.vvt', None, nofltr )
 
@@ -51,9 +50,7 @@ class Parse_Dependencies( unittest.TestCase ):
         nameL = []
         for name,wx in tL[0].getDependencies():
             nameL.append( name )
-            assert wx.evaluate( lambda word: word == "pass" )
-            assert wx.evaluate( lambda word: word == "diff" )
-            assert not wx.evaluate( lambda word: word == "fail" )
+            assert wx == None
         nameL.sort()
         assert nameL == [ 'testB', 'testC' ]
 
@@ -92,6 +89,28 @@ class Parse_Dependencies( unittest.TestCase ):
         assert wx.evaluate( lambda word: word == "diff" )
         assert wx.evaluate( lambda word: word == "fail" )
 
+    def test_an_astrisk_result_attribute_means_match_anything(self):
+        ""
+        util.writefile( 'testX.py.vvt', """
+            #VVT: depends on (result="*"): testY testZ
+            """ )
+        time.sleep(1)
+
+        nofltr = RuntimeConfig()
+
+        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 2
+        nameL = []
+        for name,wx in tL[0].getDependencies():
+            nameL.append( name )
+            assert wx.evaluate( lambda word: word == "pass" )
+            assert wx.evaluate( lambda word: word == "diff" )
+            assert wx.evaluate( lambda word: word == "fail" )
+        nameL.sort()
+        assert nameL == [ 'testY', 'testZ' ]
+
     def test_multiple_dependency_specifications(self):
         ""
         util.writefile( 'testX.py.vvt', """
@@ -119,9 +138,7 @@ class Parse_Dependencies( unittest.TestCase ):
                 assert wx.evaluate( lambda word: word == "diff" )
                 assert wx.evaluate( lambda word: word == "fail" )
             elif name == 'testW':
-                assert wx.evaluate( lambda word: word == "pass" )
-                assert wx.evaluate( lambda word: word == "diff" )
-                assert not wx.evaluate( lambda word: word == "fail" )
+                assert wx == None
         nameL.sort()
         assert nameL == [ 'testB', 'testW', 'testY', 'testZ' ]
 
@@ -153,9 +170,7 @@ class Parse_Dependencies( unittest.TestCase ):
         assert len( tL[0].getDependencies() ) == 1
         name,wx = tL[0].getDependencies()[0]
         assert name == 'testZ'
-        assert wx.evaluate( lambda word: word == "pass" )
-        assert wx.evaluate( lambda word: word == "diff" )
-        assert not wx.evaluate( lambda word: word == "fail" )
+        assert wx == None
 
 
 #######################################
@@ -527,6 +542,103 @@ class dependency_tests( unittest.TestCase ):
         cmd = '--plat '+util.core_platform_name()+' --batch -N 4'
         vrun = util.vvtestRunner( cmd )
         assert vrun.num_pass == 3
+
+
+class dependency_result_expressions( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_by_default_failed_dependencies_stop_execution(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testY
+            import os, sys, time
+            sys.stdout.write( 'time='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!/usr/bin/env python
+            import os, sys, time
+            raise Exception( 'fake exception' )
+            """ )
+        time.sleep(1)
+
+        self.by_default_failed_dependencies_stop_execution( '' )
+        self.by_default_failed_dependencies_stop_execution(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def by_default_failed_dependencies_stop_execution(self, opt):
+        ""
+        util.remove_results()
+
+        vrun = util.vvtestRunner( opt+' -N 4' )
+
+        assert vrun.num_fail == 1 and vrun.num_notrun == 1
+        pat = os.path.join( vrun.testdir, 'testX', 'execute.log' )
+        assert len( glob.glob( pat ) ) == 0
+
+    def test_allow_dependent_to_run_even_if_dependency_fails(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on (result="pass or diff or fail"): testY
+            import os, sys, time
+            sys.stdout.write( 'time='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!/usr/bin/env python
+            import os, sys, time
+            raise Exception( 'fake exception' )
+            """ )
+        time.sleep(1)
+
+        self.allow_dependent_to_run_even_if_dependency_fails( '' )
+        self.allow_dependent_to_run_even_if_dependency_fails(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def allow_dependent_to_run_even_if_dependency_fails(self, opt):
+        ""
+        util.remove_results()
+
+        vrun = util.vvtestRunner( opt+' -N 4' )
+
+        assert vrun.num_fail == 1 and vrun.num_pass == 1
+        pat = os.path.join( vrun.testdir, 'testX', 'execute.log' )
+        fL = glob.glob( pat )
+        assert len( fL ) == 1
+        assert len( util.filegrep( fL[0], 'time=' ) ) == 1
+
+    def test_use_wildcard_value_to_ignore_dependency_result(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on (result="*"): testY
+            import os, sys, time
+            sys.stdout.write( 'time='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!/usr/bin/env python
+            import os, sys, time
+            raise Exception( 'fake exception' )
+            """ )
+        time.sleep(1)
+
+        self.use_wildcard_value_to_ignore_dependency_result( '' )
+        self.use_wildcard_value_to_ignore_dependency_result(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def use_wildcard_value_to_ignore_dependency_result(self, opt):
+        ""
+        util.remove_results()
+
+        vrun = util.vvtestRunner( opt+' -N 4' )
+
+        assert vrun.num_fail == 1 and vrun.num_pass == 1
+        pat = os.path.join( vrun.testdir, 'testX', 'execute.log' )
+        fL = glob.glob( pat )
+        assert len( fL ) == 1
+        assert len( util.filegrep( fL[0], 'time=' ) ) == 1
 
 
 ############################################################################

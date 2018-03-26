@@ -740,7 +740,7 @@ class TestList:
                 for dep_xdir in patmap.getMatchList( dep_pat ):
                     dep_xt = xtD.get( dep_xdir, None )
                     if dep_xt != None:
-                        xt.addDependency( dep_xt )
+                        xt.addDependency( dep_xt, expr )
 
     def sortTestExecList(self):
         """

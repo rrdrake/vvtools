@@ -38,7 +38,9 @@ class TestExec:
         self.tzero = 0
         self.pid = 0
         self.xdir = None
-        self.deps = []  # a list of runtime dependencies; items are TestExec
+
+        # a list of runtime dependencies; items are pairs (TestExec, expr)
+        self.deps = []  
 
         # constructing a TestExec object implies that it will be run, so
         # mark the test state as notrun
@@ -365,10 +367,10 @@ class TestExec:
           time.sleep(5)
           self.poll()
     
-    def addDependency(self, testexec):
+    def addDependency(self, testexec, expr=None):
         """
         """
-        self.deps.append( testexec )
+        self.deps.append( (testexec,expr) )
     
     def hasDependency(self):
         """
@@ -385,9 +387,18 @@ class TestExec:
         If one or more dependencies did not run, did not finish, or failed,
         then that offending TestExec is returned.  Otherwise, None is returned.
         """
-        for tx in self.deps:
-            if tx.atest.getAttr('state') != 'done' or \
-               tx.atest.getAttr('result') not in ['pass','diff']:
+        for tx,expr in self.deps:
+
+            if tx.atest.getAttr('state') != 'done':
+                return tx
+
+            result = tx.atest.getAttr('result')
+
+            if expr == None:
+                if result not in ['pass','diff']:
+                    return tx
+
+            elif not expr.evaluate( lambda word: word == result ):
                 return tx
 
         return None
@@ -395,7 +406,7 @@ class TestExec:
     def getDependencyDirectories(self):
         ""
         L = []
-        for tx in self.deps:
+        for tx,expr in self.deps:
             L.append( tx.atest.getExecuteDirectory() )
         return L
 

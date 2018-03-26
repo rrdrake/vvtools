@@ -1461,6 +1461,7 @@ def parseDependencies_scr( t, vspecs, evaluator ):
         #VVT: depends on : test_pattern
         #VVT: depends on (result=pass) : testname
         #VVT: depends on (result="pass or diff") : testname
+        #VVT: depends on (result="*") : testname
     """
     tname = t.getName()
     params = t.getParameters()
@@ -1468,11 +1469,13 @@ def parseDependencies_scr( t, vspecs, evaluator ):
     for spec in vspecs.getSpecList( 'depends on' ):
         if filterAttr_scr( spec.attrs, tname, params, evaluator, spec.lineno ):
 
-            result = "pass or diff"
+            wx = None
             if spec.attrs != None and 'result' in spec.attrs:
-                result = spec.attrs['result']
-
-            wx = FilterExpressions.WordExpression( result )
+                result = spec.attrs['result'].strip()
+                if result == '*':
+                    wx = FilterExpressions.WordExpression()
+                else:
+                    wx = FilterExpressions.WordExpression( result )
 
             for val in spec.value.strip().split():
                 t.addDependency( val, wx )
