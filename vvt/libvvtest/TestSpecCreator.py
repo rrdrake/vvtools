@@ -357,6 +357,7 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
         parseFiles_scr        ( t, vspecs, evaluator )
         parseTimeouts_scr     ( t, vspecs, evaluator )
         parseBaseline_scr     ( t, vspecs, evaluator )
+        parseDependencies_scr ( t, vspecs, evaluator )
         set_test_form         ( t, vspecs )
 
     return testL
@@ -1450,6 +1451,31 @@ def parseBaseline_scr( t, vspecs, evaluator ):
                 assert form == 'arg'
                 # set the arg here; the cmd and lang are set in set_test_form()
                 t.setBaseline( 'arg', sval )
+
+
+def parseDependencies_scr( t, vspecs, evaluator ):
+    """
+    Parse the test names that must run before this test can run.
+
+        #VVT: depends on : test1 test2
+        #VVT: depends on : test_pattern
+        #VVT: depends on (result=pass) : testname
+        #VVT: depends on (result="pass or diff") : testname
+    """
+    tname = t.getName()
+    params = t.getParameters()
+
+    for spec in vspecs.getSpecList( 'depends on' ):
+        if filterAttr_scr( spec.attrs, tname, params, evaluator, spec.lineno ):
+
+            result = "pass or diff"
+            if spec.attrs != None and 'result' in spec.attrs:
+                result = spec.attrs['result']
+
+            wx = FilterExpressions.WordExpression( result )
+
+            for val in spec.value.strip().split():
+                t.addDependency( val, wx )
 
 
 def testname_ok_scr( attrs, tname ):

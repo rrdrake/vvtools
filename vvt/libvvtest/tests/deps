@@ -20,27 +20,13 @@ class Parse_Dependencies( unittest.TestCase ):
     def setUp(self):
         util.setup_test()
 
-    def test_single_dependency(self):
+    def test_simple_dependencies(self):
         ""
         util.writefile( 'testX.py.vvt', """
             #VVT: depends on : testY
             """ )
-        time.sleep(1)
-
-        nofltr = RuntimeConfig()
-
-        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
-
-        for ti in tL:
-            print ti
-        assert len(tL) == 1
-        assert len( tL[0].getDependencies() ) == 1
-        assert tL[0].getDependencies()[0] == 'testY'
-
-    def test_multiple_dependencies(self):
-        ""
-        util.writefile( 'testX.py.vvt', """
-            #VVT: depends on : testY testZ
+        util.writefile( 'testA.py.vvt', """
+            #VVT: depends on : testC testB
             """ )
         time.sleep(1)
 
@@ -50,12 +36,97 @@ class Parse_Dependencies( unittest.TestCase ):
 
         assert len(tL) == 1
         assert len( tL[0].getDependencies() ) == 1
-        assert tL[0].getDependencies()[0] == 'testY'
+        name,wx = tL[0].getDependencies()[0]
+        assert name == 'testY'
+        assert wx.evaluate( lambda word: word == "pass" )
+        assert wx.evaluate( lambda word: word == "diff" )
+        assert not wx.evaluate( lambda word: word == "fail" )
 
-    def test_parse_attributes(self):
+        tL = creator.createTestObjects( '.', 'testA.py.vvt', None, nofltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 2
+        nameL = []
+        for name,wx in tL[0].getDependencies():
+            nameL.append( name )
+            assert wx.evaluate( lambda word: word == "pass" )
+            assert wx.evaluate( lambda word: word == "diff" )
+            assert not wx.evaluate( lambda word: word == "fail" )
+        nameL.sort()
+        assert nameL == [ 'testB', 'testC' ]
+
+    def test_result_attribute_with_dependency(self):
         ""
         util.writefile( 'testX.py.vvt', """
-            #VVT: depends on (platforms="XBox") : testY
+            #VVT: depends on (result=fail): testY testZ
+            """ )
+        util.writefile( 'testA.py.vvt', """
+            #VVT: depends on (result="fail or diff") : testB
+            """ )
+        time.sleep(1)
+
+        nofltr = RuntimeConfig()
+
+        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 2
+        nameL = []
+        for name,wx in tL[0].getDependencies():
+            nameL.append( name )
+            assert not wx.evaluate( lambda word: word == "pass" )
+            assert not wx.evaluate( lambda word: word == "diff" )
+            assert wx.evaluate( lambda word: word == "fail" )
+        nameL.sort()
+        assert nameL == [ 'testY', 'testZ' ]
+
+        tL = creator.createTestObjects( '.', 'testA.py.vvt', None, nofltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 1
+        name,wx = tL[0].getDependencies()[0]
+        assert name == 'testB'
+        assert not wx.evaluate( lambda word: word == "pass" )
+        assert wx.evaluate( lambda word: word == "diff" )
+        assert wx.evaluate( lambda word: word == "fail" )
+
+    def test_multiple_dependency_specifications(self):
+        ""
+        util.writefile( 'testX.py.vvt', """
+            #VVT: depends on (result=fail): testY testZ
+            #VVT: depends on (result="fail or diff") : testB
+            #VVT: depends on : testW
+            """ )
+        time.sleep(1)
+
+        nofltr = RuntimeConfig()
+
+        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+
+        assert len(tL) == 1
+        assert len( tL[0].getDependencies() ) == 4
+        nameL = []
+        for name,wx in tL[0].getDependencies():
+            nameL.append( name )
+            if name == 'testY' or name == 'testZ':
+                assert not wx.evaluate( lambda word: word == "pass" )
+                assert not wx.evaluate( lambda word: word == "diff" )
+                assert wx.evaluate( lambda word: word == "fail" )
+            elif name == 'testB':
+                assert not wx.evaluate( lambda word: word == "pass" )
+                assert wx.evaluate( lambda word: word == "diff" )
+                assert wx.evaluate( lambda word: word == "fail" )
+            elif name == 'testW':
+                assert wx.evaluate( lambda word: word == "pass" )
+                assert wx.evaluate( lambda word: word == "diff" )
+                assert not wx.evaluate( lambda word: word == "fail" )
+        nameL.sort()
+        assert nameL == [ 'testB', 'testW', 'testY', 'testZ' ]
+
+    def test_using_filter_attributes(self):
+        ""
+        util.writefile( 'testX.py.vvt', """
+            #VVT: depends on (platforms="XBox", result="fail") : testY
             #VVT: depends on (platforms="not XBox") : testZ
             """ )
         time.sleep(1)
@@ -66,7 +137,11 @@ class Parse_Dependencies( unittest.TestCase ):
 
         assert len(tL) == 1
         assert len( tL[0].getDependencies() ) == 1
-        assert tL[0].getDependencies()[0] == 'testY'
+        name,wx = tL[0].getDependencies()[0]
+        assert name == 'testY'
+        assert not wx.evaluate( lambda word: word == "pass" )
+        assert not wx.evaluate( lambda word: word == "diff" )
+        assert wx.evaluate( lambda word: word == "fail" )
 
         fltr = RuntimeConfig( platform_name='PlayStation' )
 
@@ -74,7 +149,11 @@ class Parse_Dependencies( unittest.TestCase ):
 
         assert len(tL) == 1
         assert len( tL[0].getDependencies() ) == 1
-        assert tL[0].getDependencies()[0] == 'testZ'
+        name,wx = tL[0].getDependencies()[0]
+        assert name == 'testZ'
+        assert wx.evaluate( lambda word: word == "pass" )
+        assert wx.evaluate( lambda word: word == "diff" )
+        assert not wx.evaluate( lambda word: word == "fail" )
 
 
 class Single_dependency_tests( unittest.TestCase ):

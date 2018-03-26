@@ -220,7 +220,22 @@ class TestSpec:
         where 'name' is None for raw fragments and 'exit status' is a string.
         """
         return [] + self.execL
-    
+
+    def getDependencies(self):
+        """
+        Returns a list of ( xdir pattern, result expression ) specifying
+        test dependencies and their expected results.
+
+        The xdir pattern should be matched against the execution directory
+        of the dependency test, for example "subdir/name*.np=8".
+
+        The result expression is a FilterExpressions.WordExpression object
+        and should be evaluated against the dependency test result.  For
+        example "pass or diff" or just "pass".  If the dependency result
+        expression is not true, then this test should not be run.
+        """
+        return [] + self.deps
+
     varname_chars = {}
     
     def setAttr(self, name, value):
@@ -301,6 +316,7 @@ class TestSpec:
         self.cpfiles = []          # list of (src name, test name)
         self.baseline = {}         # baseline specifications
         self.src_files = []        # extra source files listed by the test
+        self.deps = []             # list of (xdir pattern, result expr)
         self.attrs = {}            # maps name string to value string; the
                                    # allowed characters are restricted
         self.paramset = None       # for parent tests, this maps parameter
@@ -524,9 +540,13 @@ class TestSpec:
     def setSourceFiles(self, files):
         """
         A list of file names needed by this test (this is in addition to the
-        file to be copied, linked, and baselined.)
+        files to be copied, linked, and baselined.)
         """
         self.src_files = [] + files
+
+    def addDependency(self, xdir_pattern, result_word_expr):
+        ""
+        self.deps.append( (xdir_pattern, result_word_expr) )
 
     def __copy_list(self, L):
         newL = None
@@ -563,6 +583,7 @@ class TestSpec:
         ts.lnfiles = self.__copy_list(self.lnfiles)
         ts.cpfiles = self.__copy_list(self.cpfiles)
         ts.baseline = self.__copy_dictionary(self.baseline)
+        ts.deps = self.__copy_list( self.deps )
         ts.attrs = self.__copy_dictionary(self.attrs)
         return ts
 
