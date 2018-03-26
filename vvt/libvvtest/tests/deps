@@ -260,6 +260,8 @@ class dependency_tests( unittest.TestCase ):
 
     def run_the_dependency_should_run_first(self, opt):
         ""
+        util.remove_results()
+
         vrun = util.vvtestRunner( opt+' -N 4' )
 
         assert vrun.num_pass == 2
@@ -306,6 +308,8 @@ class dependency_tests( unittest.TestCase ):
 
     def run_order_on_a_three_test_dependency_chain(self, opt):
         ""
+        util.remove_results()
+
         vrun = util.vvtestRunner( opt+' -N 4' )
 
         assert vrun.num_pass == 3
@@ -359,6 +363,8 @@ class dependency_tests( unittest.TestCase ):
 
     def run_order_on_multiple_dependencies(self, opt):
         ""
+        util.remove_results()
+
         vrun = util.vvtestRunner( opt+' -N 4' )
 
         assert vrun.num_pass == 3
@@ -411,6 +417,8 @@ class dependency_tests( unittest.TestCase ):
 
     def multiple_tests_depending_on_the_same_test(self, opt):
         ""
+        util.remove_results()
+
         vrun = util.vvtestRunner( opt+' -N 4' )
 
         assert vrun.num_pass == 3
@@ -432,27 +440,93 @@ class dependency_tests( unittest.TestCase ):
         assert tY-tZ1 > 4
         assert not tY < tZ2
 
-    def test_fixme(self):
+    def test_the_dependency_dirs_are_available(self):
         ""
-        util.writefile( 'testX.py.vvt', """
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
             #VVT: depends on : testY
             import os
             import vvtest_util as vvt
-            assert len( vvt.deps ) == 1
-            Yfile = os.path.join( vvt.deps[0], 'Y.out' )
-            assert os.path.exists( Yfile )
+            assert len( vvt.DEPDIRS ) == 1
+            ydir = os.path.join( vvt.TESTROOT, vvt.DEPDIRS[0] )
+            yfile = os.path.join( ydir, 'Y.out' )
+            assert os.path.exists( yfile )
             """ )
-        util.writefile( 'testY.py.vvt', """
-            import time
-            time.sleep(4)  # make the dependency take awhile
+        util.writescript( 'testY.vvt', """
+            #!/usr/bin/env python
             fp = open( 'Y.out', 'w' )
             fp.close()
             """ )
         time.sleep(1)
 
         vrun = util.vvtestRunner( '-N 4' )
-
         assert vrun.num_pass == 2
+
+        util.remove_results()
+        cmd = '--plat '+util.core_platform_name()+' --batch -N 4'
+        vrun = util.vvtestRunner( cmd )
+        assert vrun.num_pass == 2
+
+    def test_deps_work_with_bash(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/bin/sh
+            #VVT: depends on : testY
+            source ./vvtest_util.sh
+            yfile="$TESTROOT/$DEPDIRS/Y.out"
+            touch $yfile
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!/bin/sh
+            touch Y.out
+            """ )
+        time.sleep(1)
+
+        vrun = util.vvtestRunner( '-N 4' )
+        assert vrun.num_pass == 2
+
+        util.remove_results()
+        cmd = '--plat '+util.core_platform_name()+' --batch -N 4'
+        vrun = util.vvtestRunner( cmd )
+        assert vrun.num_pass == 2
+
+    def test_multiple_depdirs(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testY
+            #VVT: depends on : testZ
+            import os, glob
+            import vvtest_util as vvt
+            assert len( vvt.DEPDIRS ) == 2
+
+            dir1 = os.path.join( vvt.TESTROOT, vvt.DEPDIRS[0] )
+            fL = glob.glob( os.path.join( dir1, '*.out' ) )
+            assert len(fL) == 1
+
+            dir2 = os.path.join( vvt.TESTROOT, vvt.DEPDIRS[1] )
+            fL = glob.glob( os.path.join( dir2, '*.out' ) )
+            assert len(fL) == 1
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!/usr/bin/env python
+            fp = open( 'Y.out', 'w' )
+            fp.close()
+            """ )
+        util.writescript( 'testZ.vvt', """
+            #!/usr/bin/env python
+            fp = open( 'Z.out', 'w' )
+            fp.close()
+            """ )
+        time.sleep(1)
+
+        vrun = util.vvtestRunner( '-N 4' )
+        assert vrun.num_pass == 3
+
+        util.remove_results()
+        cmd = '--plat '+util.core_platform_name()+' --batch -N 4'
+        vrun = util.vvtestRunner( cmd )
+        assert vrun.num_pass == 3
 
 
 ############################################################################

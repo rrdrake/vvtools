@@ -3,7 +3,8 @@
 import os, sys
 
 
-def writeScript( testobj, filename, lang, config, plat ):
+def writeScript( testobj, filename, lang, config, plat,
+                          test_dir, dep_list ):
     """
     Writes a helper script for the test.  The script language is based on
     the 'lang' argument.
@@ -41,6 +42,7 @@ def writeScript( testobj, filename, lang, config, plat ):
                'PLATFORM = "'+platname+'"',
                'COMPILER = "'+cplrname+'"',
                'VVTESTSRC = "'+tdir+'"',
+               'TESTROOT = "'+test_dir+'"',
                'PROJECT = "'+projdir+'"',
                'OPTIONS = '+repr( onopts ),
                'OPTIONS_OFF = '+repr( offopts ),
@@ -83,6 +85,8 @@ def writeScript( testobj, filename, lang, config, plat ):
                         n2 = '_'.join( n )
                         w.add( 'PARAM_'+n2+' = ' + repr(L) )
 
+        w.add( '', 'DEPDIRS = '+repr(dep_list) )
+
         w.add( """
             # to avoid circular imports in python, the script_util.py
             # or the script_util_plugin.py must be imported by the
@@ -112,6 +116,7 @@ def writeScript( testobj, filename, lang, config, plat ):
                'PLATFORM="'+platname+'"',
                'COMPILER="'+cplrname+'"',
                'VVTESTSRC="'+tdir+'"',
+               'TESTROOT="'+test_dir+'"',
                'PROJECT="'+projdir+'"',
                'OPTIONS="'+' '.join( onopts )+'"',
                'OPTIONS_OFF="'+' '.join( offopts )+'"',
@@ -157,6 +162,8 @@ def writeScript( testobj, filename, lang, config, plat ):
                     L2 = [ '/'.join( v ) for v in L ]
                     w.add( 'PARAM_'+n2+'="' + ' '.join(L2) + '"' )
 
+        w.add( '', 'DEPDIRS="'+' '.join(dep_list)+'"' )
+
         # for sh/bash, all variables go into a global namespace; therefore,
         # we can just source the utility scripts from here
         if configdir:
@@ -182,6 +189,7 @@ def writeScript( testobj, filename, lang, config, plat ):
                'set PLATFORM="'+platname+'"',
                'set COMPILER="'+cplrname+'"',
                'set VVTESTSRC="'+tdir+'"',
+               'set TESTROOT="'+test_dir+'"',
                'set PROJECT="'+projdir+'"',
                'set OPTIONS="'+' '.join( onopts )+'"',
                'set OPTIONS_OFF="'+' '.join( offopts )+'"',
@@ -221,7 +229,9 @@ def writeScript( testobj, filename, lang, config, plat ):
                     n2 = '_'.join( n )
                     L2 = [ '/'.join( v ) for v in L ]
                     w.add( 'set PARAM_'+n2+'="' + ' '.join(L2) + '"' )
-        
+
+        w.add( '', 'set DEPDIRS="'+' '.join(dep_list)+'"' )
+
         w.add(  """
                 set have_diff=0
                 alias set_have_diff 'set have_diff=1'

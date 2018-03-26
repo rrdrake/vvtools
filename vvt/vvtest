@@ -1758,6 +1758,8 @@ def restartTests( test_dir, plat, rtconfig ):
         # batch jobs have --qsub-id set and land here
         namer = batchutils.BatchFileNamer( test_dir, testlist_name )
         tfile = namer.getTestListName( qid )
+        # prevent the run scripts from being written again
+        config.set( 'refresh', False )
 
     tlist = TestList.TestList( rtconfig )
     tlist.readFile( tfile )

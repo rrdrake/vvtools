@@ -98,7 +98,9 @@ class TestExec:
               script_file = os.path.join( self.xdir, 'vvtest_util.'+lang )
               if config.get('refresh') or not os.path.exists( script_file ):
                   ScriptWriter.writeScript( self.atest, script_file,
-                                            lang, config, self.platform )
+                                            lang, config, self.platform,
+                                            test_dir,
+                                            self.getDependencyDirectories() )
                   if self.perms != None:
                       self.perms.set( os.path.abspath( script_file ) )
 
@@ -108,7 +110,9 @@ class TestExec:
               script_file = os.path.join( self.xdir, 'vvtest_util.'+blinelang )
               if config.get('refresh') or not os.path.exists( script_file ):
                   ScriptWriter.writeScript( self.atest, script_file,
-                                            blinelang, config, self.platform )
+                                            blinelang, config, self.platform,
+                                            test_dir,
+                                            self.getDependencyDirectories() )
                   if self.perms != None:
                       self.perms.set( os.path.abspath( script_file ) )
 
@@ -387,7 +391,14 @@ class TestExec:
                 return tx
 
         return None
-    
+
+    def getDependencyDirectories(self):
+        ""
+        L = []
+        for tx in self.deps:
+            L.append( tx.atest.getExecuteDirectory() )
+        return L
+
     def preclean(self):
         """
         Should only be run just prior to launching the test script.  It
