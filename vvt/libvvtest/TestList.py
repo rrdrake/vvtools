@@ -2,6 +2,7 @@
 
 import os, sys
 import time
+import fnmatch
 
 import TestSpec
 import TestExec
@@ -723,14 +724,23 @@ class TestList:
         # sort tests longest running first; 
         self.sortTestExecList()
         
-        # add children tests to parent tests
+        # add dependencies of analyze tests to TestExec objects
         for xt in self.getTestExecList():
-            pxdir = self._find_group_analyze_test( xt.atest )
-            if pxdir != None:
-                # this test has a parent; find the parent TestExec object
-                pxt = xtD.get( pxdir, None )
-                if pxt != None:
-                    pxt.addDependency( xt )
+            analyze_xdir = self._find_group_analyze_test( xt.atest )
+            if analyze_xdir != None:
+                # this test has an analyze dependent
+                analyze_xt = xtD.get( analyze_xdir, None )
+                if analyze_xt != None:
+                    analyze_xt.addDependency( xt )
+
+        # add general dependencies to TestExec objects
+        patmap = DependencyPatternMap( self.getTestExecList() )
+        for xt in self.getTestExecList():
+            for dep_pat,expr in xt.atest.getDependencies():
+                for dep_xdir in patmap.getMatchList( dep_pat ):
+                    dep_xt = xtD.get( dep_xdir, None )
+                    if dep_xt != None:
+                        xt.addDependency( dep_xt )
 
     def sortTestExecList(self):
         """
@@ -884,6 +894,49 @@ def testruntime( testobj ):
     if tm == None or tm < 0:
         tm = testobj.getAttr( 'runtime', None )
     return tm
+
+
+class DependencyPatternMap:
+    """
+    Determines and stores test dependency pattern matches.  All dependency
+    patterns are mapped to a list of execute directories.
+    """
+
+    def __init__(self, testexec_list):
+        ""
+        self.pattern_map = {}  # patterns -> python set of xdir
+
+        self._generate_dependency_pattern_map( testexec_list )
+
+    def getMatchList(self, pat):
+        ""
+        return self.pattern_map.get( pat, [] )
+
+    def _generate_dependency_pattern_map(self, testexec_list):
+        ""
+        # get a list of all dependency patterns
+        patL = []
+        for xt in testexec_list:
+            for pat,expr in xt.atest.getDependencies():
+                patL.append( pat )
+
+        # test for a match each pattern in the list against each xdir
+        for xt in testexec_list:
+            xdir = xt.atest.getExecuteDirectory()
+            for dep_pat in patL:
+                if self._is_pattern_match( dep_pat, xdir):
+                    matchset = self.pattern_map.get( dep_pat, None )
+                    if matchset == None:
+                        matchset = set()
+                        self.pattern_map[ dep_pat ] = matchset
+                    matchset.add( xdir )
+
+    def _is_pattern_match(self, pat, xdir):
+        ""
+        if fnmatch.fnmatch( xdir, pat ):
+            return True
+        return False
+
 
 def print3( *args ):
     "A python 2 and 3 compatible print function"

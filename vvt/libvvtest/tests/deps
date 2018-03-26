@@ -13,6 +13,8 @@ from testutils import print3
 
 import TestSpecCreator as creator
 from RuntimeConfig import RuntimeConfig
+from TestList import DependencyPatternMap
+from TestSpec import TestSpec
 
 
 class Parse_Dependencies( unittest.TestCase ):
@@ -156,12 +158,281 @@ class Parse_Dependencies( unittest.TestCase ):
         assert not wx.evaluate( lambda word: word == "fail" )
 
 
-class Single_dependency_tests( unittest.TestCase ):
+#######################################
+
+class MockTestExec:
+
+    def __init__(self, name, deps, subdir='.'):
+        ""
+        fn = os.path.normpath( os.path.join( subdir, name+'vvt' ) )
+        self.atest = TestSpec( name, os.getcwd(), fn )
+        for T in deps:
+            self.atest.addDependency( T[0], T[1] )
+
+
+#######################################
+
+
+class Class_DependencyPatternMap( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test( cleanout=False )
+
+    def test_empty_set(self):
+        ""
+        patmap = DependencyPatternMap( [] )
+        assert patmap.getMatchList( '*' ) == []
+
+    def test_a_direct_name_match(self):
+        ""
+        tL = [ MockTestExec( 'testX', [ ('testY',None) ] ),
+               MockTestExec( 'testY', [] ) ]
+
+        patmap = DependencyPatternMap( tL )
+
+        assert list( patmap.getMatchList('testY') ) == ['testY']
+
+    def test_a_wildcard_name_match(self):
+        ""
+        tL = [ MockTestExec( 'testX', [ ('t*Y',None) ] ),
+               MockTestExec( 'testY', [] ) ]
+
+        patmap = DependencyPatternMap( tL )
+
+        assert list( patmap.getMatchList('t*Y') ) == ['testY']
+
+    def test_a_dependency_from_a_subdir(self):
+        ""
+        tL = [ MockTestExec( 'testX', [ ('subdir/testY',None) ] ),
+               MockTestExec( 'testY', [], 'subdir' ) ]
+
+        patmap = DependencyPatternMap( tL )
+
+        mL = patmap.getMatchList('subdir/testY')
+        assert list( mL ) == ['subdir/testY']
+
+        tL = [ MockTestExec( 'testX', [ ('*testY',None) ] ),
+               MockTestExec( 'testY', [], 'subdir' ) ]
+
+        patmap = DependencyPatternMap( tL )
+
+        mL = patmap.getMatchList('*testY')
+        assert list( mL ) == ['subdir/testY']
+
+    def test_multiple_matches(self):
+        ""
+        tL = [ MockTestExec( 'testX', [ ('*testY*',None) ] ),
+               MockTestExec( 'testY', [], 'subdir' ),
+               MockTestExec( 'testYY', [], 'subdir' ) ]
+
+        patmap = DependencyPatternMap( tL )
+
+        mL = list( patmap.getMatchList('*testY*') )
+        mL.sort()
+        assert mL == ['subdir/testY', 'subdir/testYY']
+
+
+class dependency_tests( unittest.TestCase ):
 
     def setUp(self):
         util.setup_test()
 
     def test_the_dependency_should_run_first(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testY
+            import os, sys, time
+            sys.stdout.write( 'time='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!/usr/bin/env python
+            import os, sys, time
+            sys.stdout.write( 'time1='+str(time.time())+os.linesep )
+            time.sleep(5)  # make the dependency take awhile
+            sys.stdout.write( 'time2='+str(time.time())+os.linesep )
+            """ )
+        time.sleep(1)
+
+        self.run_the_dependency_should_run_first( '' )
+        self.run_the_dependency_should_run_first(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_the_dependency_should_run_first(self, opt):
+        ""
+        vrun = util.vvtestRunner( opt+' -N 4' )
+
+        assert vrun.num_pass == 2
+
+        f = os.path.join( vrun.testdir, 'testY', 'execute.log' )
+        tY1 = float( util.filegrep(f,'time1=')[0].split('time1=')[1].strip() )
+        tY2 = float( util.filegrep(f,'time2=')[0].split('time2=')[1].strip() )
+
+        f = os.path.join( vrun.testdir, 'testX', 'execute.log' )
+        tX = float( util.filegrep(f,'time=')[0].split('time=')[1].strip() )
+
+        assert tX-tY1 > 4
+        assert not tX < tY2
+        assert tY2-tY1 > 4
+
+    def test_run_order_on_a_three_test_dependency_chain(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testY
+            import os, sys, time
+            sys.stdout.write( 'time='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testZ
+            import os, sys, time
+            sys.stdout.write( 'time1='+str(time.time())+os.linesep )
+            time.sleep(5)
+            sys.stdout.write( 'time2='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testZ.vvt', """
+            #!/usr/bin/env python
+            import os, sys, time
+            sys.stdout.write( 'time1='+str(time.time())+os.linesep )
+            time.sleep(5)
+            sys.stdout.write( 'time2='+str(time.time())+os.linesep )
+            """ )
+        time.sleep(1)
+
+        self.run_order_on_a_three_test_dependency_chain( '' )
+        self.run_order_on_a_three_test_dependency_chain(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_order_on_a_three_test_dependency_chain(self, opt):
+        ""
+        vrun = util.vvtestRunner( opt+' -N 4' )
+
+        assert vrun.num_pass == 3
+
+        f = os.path.join( vrun.testdir, 'testZ', 'execute.log' )
+        tZ1 = float( util.filegrep(f,'time1=')[0].split('time1=')[1].strip() )
+        tZ2 = float( util.filegrep(f,'time2=')[0].split('time2=')[1].strip() )
+
+        f = os.path.join( vrun.testdir, 'testY', 'execute.log' )
+        tY1 = float( util.filegrep(f,'time1=')[0].split('time1=')[1].strip() )
+        tY2 = float( util.filegrep(f,'time2=')[0].split('time2=')[1].strip() )
+
+        f = os.path.join( vrun.testdir, 'testX', 'execute.log' )
+        tX = float( util.filegrep(f,'time=')[0].split('time=')[1].strip() )
+
+        assert tX-tY1 > 4
+        assert not tX < tY2
+        assert tY2-tY1 > 4
+
+        assert tY2-tZ1 > 4
+        assert not tY2 < tZ2
+        assert tZ2-tZ1 > 4
+
+    def test_run_order_on_multiple_dependencies(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testY testZ
+            import os, sys, time
+            sys.stdout.write( 'time='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!/usr/bin/env python
+            import os, sys, time
+            sys.stdout.write( 'time1='+str(time.time())+os.linesep )
+            time.sleep(5)
+            sys.stdout.write( 'time2='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testZ.vvt', """
+            #!/usr/bin/env python
+            import os, sys, time
+            sys.stdout.write( 'time1='+str(time.time())+os.linesep )
+            time.sleep(5)
+            sys.stdout.write( 'time2='+str(time.time())+os.linesep )
+            """ )
+        time.sleep(1)
+
+        self.run_order_on_multiple_dependencies( '' )
+        self.run_order_on_multiple_dependencies(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_order_on_multiple_dependencies(self, opt):
+        ""
+        vrun = util.vvtestRunner( opt+' -N 4' )
+
+        assert vrun.num_pass == 3
+
+        f = os.path.join( vrun.testdir, 'testZ', 'execute.log' )
+        tZ1 = float( util.filegrep(f,'time1=')[0].split('time1=')[1].strip() )
+        tZ2 = float( util.filegrep(f,'time2=')[0].split('time2=')[1].strip() )
+
+        f = os.path.join( vrun.testdir, 'testY', 'execute.log' )
+        tY1 = float( util.filegrep(f,'time1=')[0].split('time1=')[1].strip() )
+        tY2 = float( util.filegrep(f,'time2=')[0].split('time2=')[1].strip() )
+
+        f = os.path.join( vrun.testdir, 'testX', 'execute.log' )
+        tX = float( util.filegrep(f,'time=')[0].split('time=')[1].strip() )
+
+        assert tX-tY1 > 4
+        assert not tX < tY2
+        assert tY2-tY1 > 4
+
+        assert tX-tZ1 > 4
+        assert not tX < tZ2
+        assert tZ2-tZ1 > 4
+
+    def test_multiple_tests_depending_on_the_same_test(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testZ
+            import os, sys, time
+            sys.stdout.write( 'time='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testZ
+            import os, sys, time
+            sys.stdout.write( 'time='+str(time.time())+os.linesep )
+            """ )
+        util.writescript( 'testZ.vvt', """
+            #!/usr/bin/env python
+            import os, sys, time
+            sys.stdout.write( 'time1='+str(time.time())+os.linesep )
+            time.sleep(5)
+            sys.stdout.write( 'time2='+str(time.time())+os.linesep )
+            """ )
+        time.sleep(1)
+
+        self.multiple_tests_depending_on_the_same_test( '' )
+        self.multiple_tests_depending_on_the_same_test(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def multiple_tests_depending_on_the_same_test(self, opt):
+        ""
+        vrun = util.vvtestRunner( opt+' -N 4' )
+
+        assert vrun.num_pass == 3
+
+        f = os.path.join( vrun.testdir, 'testZ', 'execute.log' )
+        tZ1 = float( util.filegrep(f,'time1=')[0].split('time1=')[1].strip() )
+        tZ2 = float( util.filegrep(f,'time2=')[0].split('time2=')[1].strip() )
+
+        f = os.path.join( vrun.testdir, 'testX', 'execute.log' )
+        tX = float( util.filegrep(f,'time=')[0].split('time=')[1].strip() )
+
+        f = os.path.join( vrun.testdir, 'testY', 'execute.log' )
+        tY = float( util.filegrep(f,'time=')[0].split('time=')[1].strip() )
+
+        assert tX-tZ1 > 4
+        assert not tX < tZ2
+        assert tZ2-tZ1 > 4
+
+        assert tY-tZ1 > 4
+        assert not tY < tZ2
+
+    def test_fixme(self):
         ""
         util.writefile( 'testX.py.vvt', """
             #VVT: depends on : testY
@@ -179,7 +450,7 @@ class Single_dependency_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.vvtestRunner( '-N 2' )
+        vrun = util.vvtestRunner( '-N 4' )
 
         assert vrun.num_pass == 2
 
