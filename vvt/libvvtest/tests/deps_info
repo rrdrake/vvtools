@@ -111,6 +111,58 @@ class dependency_information( unittest.TestCase ):
         vrun = util.vvtestRunner( cmd )
         assert vrun.num_pass == 3
 
+    def test_depdirs_in_subdirs(self):
+        ""
+        util.writescript( 'tsrc/testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : sub1/testY
+            #VVT: depends on : sub2/testZ
+            import os, glob
+            import vvtest_util as vvt
+            assert len( vvt.DEPDIRS ) == 2
+
+            dir1 = os.path.join( vvt.TESTROOT, vvt.DEPDIRS[0] )
+            fL = glob.glob( os.path.join( dir1, '*.out' ) )
+            assert len(fL) == 1
+
+            dir2 = os.path.join( vvt.TESTROOT, vvt.DEPDIRS[1] )
+            fL = glob.glob( os.path.join( dir2, '*.out' ) )
+            assert len(fL) == 1
+            """ )
+        util.writescript( 'tsrc/sub1/testY.vvt', """
+            #!/usr/bin/env python
+            fp = open( 'Y.out', 'w' )
+            fp.close()
+            """ )
+        util.writescript( 'tsrc/sub2/testZ.vvt', """
+            #!/usr/bin/env python
+            fp = open( 'Z.out', 'w' )
+            fp.close()
+            """ )
+        os.mkdir( 'rdir1' )
+        os.mkdir( 'rdir2' )
+        time.sleep(1)
+
+        opt = '--plat '+util.core_platform_name() + ' '
+
+        vrun = util.vvtestRunner( opt+'-N 4 ../tsrc', directory='rdir1' )
+        assert vrun.num_pass == 3
+
+        tdir = vrun.testdir
+
+        cmd = opt+' --batch -N 4 ../tsrc'
+        vrun = util.vvtestRunner( cmd, directory='rdir2' )
+        assert vrun.num_pass == 3
+        testrootdir2 = os.path.join( 'rdir2', vrun.testdir )
+
+        vrun = util.vvtestRunner( opt+'-R -N 4', directory='rdir2/'+tdir )
+        assert vrun.num_pass == 3
+        testrootdir1 = vrun.testdir
+
+        cmd = opt+' -R --batch -N 4'
+        vrun = util.vvtestRunner( cmd, directory='rdir1/'+tdir )
+        assert vrun.num_pass == 3
+
 
 ############################################################################
 

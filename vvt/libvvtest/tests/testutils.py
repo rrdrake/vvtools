@@ -486,8 +486,7 @@ def platform_name( test_out ):
                 L2 = L[2].split('.')
                 if len(L2) >= 2:
                     platname = L2[1]
-    if platname == None:
-        raise Exception( "Could not determine the platform name from output" )
+
     return platname
 
 

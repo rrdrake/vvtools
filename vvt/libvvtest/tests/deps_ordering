@@ -40,23 +40,31 @@ class dependency_run_order( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.run_the_dependency_should_run_first( '' )
-        self.run_the_dependency_should_run_first(
+        self.the_dependency_should_run_first( '' )
+        self.the_dependency_should_run_first(
                 '--plat '+util.core_platform_name()+' --batch' )
 
-    def run_the_dependency_should_run_first(self, opt):
+    def the_dependency_should_run_first(self, opt):
         ""
         util.remove_results()
 
         vrun = util.vvtestRunner( opt+' -N 4' )
-
         assert vrun.num_pass == 2
+        tdir = vrun.testdir
+        self.time_check( vrun, tdir )
 
-        f = os.path.join( vrun.testdir, 'testY', 'execute.log' )
+        # also check rerunning from withing the test results directory
+        vrun2 = util.vvtestRunner( opt+' -R -N 4', directory=vrun.testdir )
+        assert vrun2.num_pass == 2
+        self.time_check( vrun2, tdir )
+
+    def time_check(self, vrun, tdir):
+        ""
+        f = os.path.join( tdir, 'testY', 'execute.log' )
         tY1 = float( util.filegrep(f,'time1=')[0].split('time1=')[1].strip() )
         tY2 = float( util.filegrep(f,'time2=')[0].split('time2=')[1].strip() )
 
-        f = os.path.join( vrun.testdir, 'testX', 'execute.log' )
+        f = os.path.join( tdir, 'testX', 'execute.log' )
         tX = float( util.filegrep(f,'time=')[0].split('time=')[1].strip() )
 
         assert tX-tY1 > 4

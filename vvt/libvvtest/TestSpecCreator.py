@@ -358,6 +358,7 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
         parseTimeouts_scr     ( t, vspecs, evaluator )
         parseBaseline_scr     ( t, vspecs, evaluator )
         parseDependencies_scr ( t, vspecs, evaluator )
+
         set_test_form         ( t, vspecs )
 
     return testL
@@ -491,6 +492,7 @@ def reparse_test_object( testobj, evaluator ):
         parseFiles_scr    ( testobj, vspecs, evaluator )
         parseTimeouts_scr ( testobj, vspecs, evaluator )
         parseBaseline_scr ( testobj, vspecs, evaluator )
+        parseDependencies_scr ( testobj, vspecs, evaluator )
         
         set_test_form( testobj, vspecs )
 
