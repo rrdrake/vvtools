@@ -85,7 +85,13 @@ def writeScript( testobj, filename, lang, config, plat,
                         n2 = '_'.join( n )
                         w.add( 'PARAM_'+n2+' = ' + repr(L) )
 
-        w.add( '', 'DEPDIRS = '+repr(dep_list) )
+        L = [ os.path.join( test_dir, T[1] ) for T in dep_list ]
+        w.add( '', 'DEPDIRS = '+repr(L) )
+
+        D = {}
+        for T in dep_list:
+            D[ T[0] ] = os.path.join( test_dir, T[1] )
+        w.add( '', 'DEPDIRMAP = '+repr(D) )
 
         w.add( """
             # to avoid circular imports in python, the script_util.py
@@ -162,7 +168,8 @@ def writeScript( testobj, filename, lang, config, plat,
                     L2 = [ '/'.join( v ) for v in L ]
                     w.add( 'PARAM_'+n2+'="' + ' '.join(L2) + '"' )
 
-        w.add( '', 'DEPDIRS="'+' '.join(dep_list)+'"' )
+        L = [ os.path.join( test_dir, T[1] ) for T in dep_list ]
+        w.add( '', 'DEPDIRS="'+' '.join(L)+'"' )
 
         # for sh/bash, all variables go into a global namespace; therefore,
         # we can just source the utility scripts from here
@@ -230,7 +237,8 @@ def writeScript( testobj, filename, lang, config, plat,
                     L2 = [ '/'.join( v ) for v in L ]
                     w.add( 'set PARAM_'+n2+'="' + ' '.join(L2) + '"' )
 
-        w.add( '', 'set DEPDIRS="'+' '.join(dep_list)+'"' )
+        L = [ os.path.join( test_dir, T[1] ) for T in dep_list ]
+        w.add( '', 'set DEPDIRS="'+' '.join(L)+'"' )
 
         w.add(  """
                 set have_diff=0

@@ -17,6 +17,10 @@ from RuntimeConfig import RuntimeConfig
 from TestList import DependencyPatternMap
 from TestSpec import TestSpec
 
+# magic: if the dependencies already ran and you just want to run the
+#        analyze test again, the DEPDIRS is not going to be correct
+#  question: would you want to apply the blocking check against the deps
+#            again?
 
 class dependency_information( unittest.TestCase ):
 
@@ -30,9 +34,9 @@ class dependency_information( unittest.TestCase ):
             #VVT: depends on : testY
             import os
             import vvtest_util as vvt
+            assert os.path.isdir( vvt.TESTROOT )
             assert len( vvt.DEPDIRS ) == 1
-            ydir = os.path.join( vvt.TESTROOT, vvt.DEPDIRS[0] )
-            yfile = os.path.join( ydir, 'Y.out' )
+            yfile = os.path.join( vvt.DEPDIRS[0], 'Y.out' )
             assert os.path.exists( yfile )
             """ )
         util.writescript( 'testY.vvt', """
@@ -56,8 +60,9 @@ class dependency_information( unittest.TestCase ):
             #!/bin/sh
             #VVT: depends on : testY
             source ./vvtest_util.sh
-            yfile="$TESTROOT/$DEPDIRS/Y.out"
-            touch $yfile
+            [ -e $TESTROOT ] || exit 1
+            yfile="$DEPDIRS/Y.out"
+            cat $yfile || exit 1
             """ )
         util.writescript( 'testY.vvt', """
             #!/bin/sh
@@ -77,19 +82,25 @@ class dependency_information( unittest.TestCase ):
         ""
         util.writescript( 'testX.vvt', """
             #!/usr/bin/env python
-            #VVT: depends on : testY
-            #VVT: depends on : testZ
+            #VVT: depends on : te*Y
+            #VVT: depends on : t*tZ
             import os, glob
             import vvtest_util as vvt
             assert len( vvt.DEPDIRS ) == 2
 
-            dir1 = os.path.join( vvt.TESTROOT, vvt.DEPDIRS[0] )
-            fL = glob.glob( os.path.join( dir1, '*.out' ) )
-            assert len(fL) == 1
+            fL1 = glob.glob( os.path.join( vvt.DEPDIRS[0], '*.out' ) )
+            assert len(fL1) == 1
 
-            dir2 = os.path.join( vvt.TESTROOT, vvt.DEPDIRS[1] )
-            fL = glob.glob( os.path.join( dir2, '*.out' ) )
-            assert len(fL) == 1
+            fL2 = glob.glob( os.path.join( vvt.DEPDIRS[1], '*.out' ) )
+            assert len(fL2) == 1
+
+            assert len( vvt.DEPDIRS ) == 2
+            if 'testY' in vvt.DEPDIRS[0]:
+                vvt.DEPDIRMAP['te*Y'] == vvt.DEPDIRS[0]
+                vvt.DEPDIRMAP['t*tZ'] == vvt.DEPDIRS[1]
+            else:
+                vvt.DEPDIRMAP['te*Y'] == vvt.DEPDIRS[1]
+                vvt.DEPDIRMAP['t*tZ'] == vvt.DEPDIRS[0]
             """ )
         util.writescript( 'testY.vvt', """
             #!/usr/bin/env python
@@ -121,12 +132,10 @@ class dependency_information( unittest.TestCase ):
             import vvtest_util as vvt
             assert len( vvt.DEPDIRS ) == 2
 
-            dir1 = os.path.join( vvt.TESTROOT, vvt.DEPDIRS[0] )
-            fL = glob.glob( os.path.join( dir1, '*.out' ) )
+            fL = glob.glob( os.path.join( vvt.DEPDIRS[0], '*.out' ) )
             assert len(fL) == 1
 
-            dir2 = os.path.join( vvt.TESTROOT, vvt.DEPDIRS[1] )
-            fL = glob.glob( os.path.join( dir2, '*.out' ) )
+            fL = glob.glob( os.path.join( vvt.DEPDIRS[1], '*.out' ) )
             assert len(fL) == 1
             """ )
         util.writescript( 'tsrc/sub1/testY.vvt', """
@@ -161,6 +170,39 @@ class dependency_information( unittest.TestCase ):
 
         cmd = opt+' -R --batch -N 4'
         vrun = util.vvtestRunner( cmd, directory='rdir1/'+tdir )
+        assert vrun.num_pass == 3
+
+    def test_depdirs_in_subdirs_of_a_subdir(self):
+        ""
+        util.writescript( 'tsrc/topdir/testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : sub1/testY
+            #VVT: depends on : sub2/testZ
+            import os, glob
+            import vvtest_util as vvt
+            assert len( vvt.DEPDIRS ) == 2
+
+            fL = glob.glob( os.path.join( vvt.DEPDIRS[0], '*.out' ) )
+            assert len(fL) == 1
+
+            fL = glob.glob( os.path.join( vvt.DEPDIRS[1], '*.out' ) )
+            assert len(fL) == 1
+            """ )
+        util.writescript( 'tsrc/topdir/sub1/testY.vvt', """
+            #!/usr/bin/env python
+            fp = open( 'Y.out', 'w' )
+            fp.close()
+            """ )
+        util.writescript( 'tsrc/topdir/sub2/testZ.vvt', """
+            #!/usr/bin/env python
+            fp = open( 'Z.out', 'w' )
+            fp.close()
+            """ )
+        time.sleep(1)
+
+        opt = '--plat '+util.core_platform_name() + ' '
+
+        vrun = util.vvtestRunner( opt+'-N 4 tsrc' )
         assert vrun.num_pass == 3
 
 

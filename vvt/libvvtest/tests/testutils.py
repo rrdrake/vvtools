@@ -421,11 +421,11 @@ class vvtestRunner:
         self.testdir = ''
         self.platname = ''
 
+        ignore = kwargs.get( 'ignore_errors', False )
+
         if 'directory' in kwargs:
             curdir = os.getcwd()
             os.chdir( kwargs['directory'] )
-
-            ignore = kwargs.get( 'ignore_errors', False )
 
         try:
             ok,out = run_cmd( cmd )

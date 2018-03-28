@@ -39,7 +39,8 @@ class TestExec:
         self.pid = 0
         self.xdir = None
 
-        # a list of runtime dependencies; items are pairs (TestExec, expr)
+        # a list of runtime dependencies; items are tuples
+        #    (TestExec, match pattern, word expr)
         self.deps = []  
 
         # constructing a TestExec object implies that it will be run, so
@@ -367,10 +368,10 @@ class TestExec:
           time.sleep(5)
           self.poll()
     
-    def addDependency(self, testexec, expr=None):
+    def addDependency(self, testexec, match_pattern=None, expr=None):
         """
         """
-        self.deps.append( (testexec,expr) )
+        self.deps.append( (testexec,match_pattern,expr) )
     
     def hasDependency(self):
         """
@@ -387,7 +388,7 @@ class TestExec:
         If one or more dependencies did not run, did not finish, or failed,
         then that offending TestExec is returned.  Otherwise, None is returned.
         """
-        for tx,expr in self.deps:
+        for tx,pat,expr in self.deps:
 
             if tx.atest.getAttr('state') != 'done':
                 return tx
@@ -406,8 +407,8 @@ class TestExec:
     def getDependencyDirectories(self):
         ""
         L = []
-        for tx,expr in self.deps:
-            L.append( tx.atest.getExecuteDirectory() )
+        for tx,pat,expr in self.deps:
+            L.append( (pat,tx.atest.getExecuteDirectory()) )
         return L
 
     def preclean(self):
