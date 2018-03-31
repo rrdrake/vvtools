@@ -88,9 +88,17 @@ def writeScript( testobj, filename, lang, config, plat,
         L = [ os.path.join( test_dir, T[1] ) for T in dep_list ]
         w.add( '', 'DEPDIRS = '+repr(L) )
 
+        # generate a multi-valued map of the dependencies
         D = {}
         for T in dep_list:
-            D[ T[0] ] = os.path.join( test_dir, T[1] )
+            S = D.get( T[0], None )
+            if S == None:
+                S = set()
+                D[ T[0] ] = S
+            S.add( os.path.join( test_dir, T[1] ) )
+        for k,S in D.items():
+            D[ k ] = list( S )
+            D[ k ].sort()
         w.add( '', 'DEPDIRMAP = '+repr(D) )
 
         w.add( """

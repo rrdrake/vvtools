@@ -78,25 +78,26 @@ class dependency_information( unittest.TestCase ):
         ""
         util.writescript( 'testX.vvt', """
             #!/usr/bin/env python
-            #VVT: depends on : te*Y
-            #VVT: depends on : t*tZ
+            #VVT: depends on : te*Y t*tZ
             import os, glob
             import vvtest_util as vvt
-            assert len( vvt.DEPDIRS ) == 2
-
-            fL1 = glob.glob( os.path.join( vvt.DEPDIRS[0], '*.out' ) )
-            assert len(fL1) == 1
-
-            fL2 = glob.glob( os.path.join( vvt.DEPDIRS[1], '*.out' ) )
-            assert len(fL2) == 1
 
             assert len( vvt.DEPDIRS ) == 2
-            if 'testY' in vvt.DEPDIRS[0]:
-                vvt.DEPDIRMAP['te*Y'] == vvt.DEPDIRS[0]
-                vvt.DEPDIRMAP['t*tZ'] == vvt.DEPDIRS[1]
-            else:
-                vvt.DEPDIRMAP['te*Y'] == vvt.DEPDIRS[1]
-                vvt.DEPDIRMAP['t*tZ'] == vvt.DEPDIRS[0]
+            assert vvt.DEPDIRS[0].endswith( 'testY' )
+            assert vvt.DEPDIRS[1].endswith( 'testZ' )
+
+            pat = os.path.join( vvt.DEPDIRS[0], 'Y.out' )
+            assert len( glob.glob( pat ) ) == 1
+
+            pat = os.path.join( vvt.DEPDIRS[1], 'Z.out' )
+            assert len( glob.glob( pat ) ) == 1
+
+            assert len( vvt.DEPDIRMAP ) == 2
+            assert len( vvt.DEPDIRMAP['te*Y'] ) == 1
+            assert len( vvt.DEPDIRMAP['t*tZ'] ) == 1
+
+            assert vvt.DEPDIRMAP['te*Y'][0] == vvt.DEPDIRS[0]
+            assert vvt.DEPDIRMAP['t*tZ'][0] == vvt.DEPDIRS[1]
             """ )
         util.writescript( 'testY.vvt', """
             #!/usr/bin/env python
@@ -106,6 +107,46 @@ class dependency_information( unittest.TestCase ):
         util.writescript( 'testZ.vvt', """
             #!/usr/bin/env python
             fp = open( 'Z.out', 'w' )
+            fp.close()
+            """ )
+        time.sleep(1)
+
+        vrun = util.vvtestRunner( '-N 4' )
+        assert vrun.num_pass == 3
+
+        util.remove_results()
+        cmd = '--plat '+util.core_platform_name()+' --batch'
+        vrun = util.vvtestRunner( cmd )
+        assert vrun.num_pass == 3
+
+    def test_multiple_dep_matches(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testY
+            import os, glob
+            import vvtest_util as vvt
+            assert len( vvt.DEPDIRS ) == 2
+
+            assert len( vvt.DEPDIRMAP ) == 1
+            assert len( vvt.DEPDIRMAP['testY'] ) == 2
+            assert vvt.DEPDIRMAP['testY'][0].endswith( '/sub1/testY' )
+            assert vvt.DEPDIRMAP['testY'][1].endswith( '/sub2/testY' )
+
+            pat = os.path.join( vvt.DEPDIRMAP['testY'][0], 'Y1.out' )
+            assert len( glob.glob( pat ) ) == 1
+
+            pat = os.path.join( vvt.DEPDIRMAP['testY'][1], 'Y2.out' )
+            assert len( glob.glob( pat ) ) == 1
+            """ )
+        util.writescript( 'sub1/testY.vvt', """
+            #!/usr/bin/env python
+            fp = open( 'Y1.out', 'w' )
+            fp.close()
+            """ )
+        util.writescript( 'sub2/testY.vvt', """
+            #!/usr/bin/env python
+            fp = open( 'Y2.out', 'w' )
             fp.close()
             """ )
         time.sleep(1)
