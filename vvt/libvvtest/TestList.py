@@ -723,24 +723,38 @@ class TestList:
         
         # sort tests longest running first; 
         self.sortTestExecList()
-        
-        # add dependencies of analyze tests to TestExec objects
+
+        self._add_analyze_dependencies( xtD )
+        self._add_general_dependencies( xtD )
+
+    def _add_analyze_dependencies(self, xdir2testexec):
+        """
+        add dependencies of analyze tests to TestExec objects
+        """
         for xt in self.getTestExecList():
             analyze_xdir = self._find_group_analyze_test( xt.atest )
             if analyze_xdir != None:
                 # this test has an analyze dependent
-                analyze_xt = xtD.get( analyze_xdir, None )
+                analyze_xt = xdir2testexec.get( analyze_xdir, None )
                 if analyze_xt != None:
                     analyze_xt.addDependency( xt )
 
-        # add general dependencies to TestExec objects
-        patmap = DependencyPatternMap( self.getTestExecList() )
+    def _add_general_dependencies(self, xdir2testexec):
+        """
+        add general dependencies to TestExec objects
+        """
+        xdirlist = self.tspecs.keys()
         for xt in self.getTestExecList():
+            xdir = xt.atest.getExecuteDirectory()
             for dep_pat,expr in xt.atest.getDependencies():
-                for dep_xdir in patmap.getMatchList( dep_pat ):
-                    dep_xt = xtD.get( dep_xdir, None )
-                    if dep_xt != None:
-                        xt.addDependency( dep_xt, dep_pat, expr )
+                depL = find_tests_by_execute_directory_match(
+                                                xdir, dep_pat, xdirlist )
+                for dep_xdir in depL:
+                    dep_obj = xdir2testexec.get(
+                                    dep_xdir,
+                                    self.tspecs.get( dep_xdir, None ) )
+                    if dep_obj != None:
+                        xt.addDependency( dep_obj, dep_pat, expr )
 
     def sortTestExecList(self):
         """
@@ -896,46 +910,48 @@ def testruntime( testobj ):
     return tm
 
 
-class DependencyPatternMap:
+def find_tests_by_execute_directory_match( xdir, pattern, xdir_list ):
     """
-    Determines and stores test dependency pattern matches.  All dependency
-    patterns are mapped to a list of execute directories.
+    Given 'xdir' dependent execute directory, the shell glob 'pattern' is
+    matched against the execute directories in the 'xdir_list', in this order:
+
+        1. basename(xdir)/pat
+        2. basename(xdir)/*/pat
+        3. pat
+        4. *pat
+
+    The first of these that matches at least test will be returned.
+
+    A python set of xdir is returned.
     """
+    tbase = os.path.dirname( xdir )
+    if tbase == '.':
+        tbase = ''
+    elif tbase:
+        tbase += '/'
 
-    def __init__(self, testexec_list):
-        ""
-        self.pattern_map = {}  # patterns -> python set of xdir
+    L1 = [] ; L2 = [] ; L3 = [] ; L4 = []
 
-        self._generate_dependency_pattern_map( testexec_list )
+    for xdir in xdir_list:
 
-    def getMatchList(self, pat):
-        ""
-        return self.pattern_map.get( pat, [] )
+        p1 = os.path.normpath( tbase+pattern )
+        if fnmatch.fnmatch( xdir, p1 ):
+            L1.append( xdir )
 
-    def _generate_dependency_pattern_map(self, testexec_list):
-        ""
-        # get a list of all dependency patterns
-        patL = []
-        for xt in testexec_list:
-            for pat,expr in xt.atest.getDependencies():
-                patL.append( pat )
+        if fnmatch.fnmatch( xdir, tbase+'*/'+pattern ):
+            L2.append( xdir )
 
-        # test for a match each pattern in the list against each xdir
-        for xt in testexec_list:
-            xdir = xt.atest.getExecuteDirectory()
-            for dep_pat in patL:
-                if self._is_pattern_match( dep_pat, xdir):
-                    matchset = self.pattern_map.get( dep_pat, None )
-                    if matchset == None:
-                        matchset = set()
-                        self.pattern_map[ dep_pat ] = matchset
-                    matchset.add( xdir )
+        if fnmatch.fnmatch( xdir, pattern ):
+            L3.append( xdir )
 
-    def _is_pattern_match(self, pat, xdir):
-        ""
-        if fnmatch.fnmatch( xdir, pat ):
-            return True
-        return False
+        if fnmatch.fnmatch( xdir, '*'+pattern ):
+            L4.append( xdir )
+
+    for L in [ L1, L2, L3, L4 ]:
+        if len(L) > 0:
+            return set(L)
+
+    return set()
 
 
 def print3( *args ):

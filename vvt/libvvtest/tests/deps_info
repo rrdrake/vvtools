@@ -14,13 +14,9 @@ from testutils import print3
 
 import TestSpecCreator as creator
 from RuntimeConfig import RuntimeConfig
-from TestList import DependencyPatternMap
+from TestList import find_tests_by_execute_directory_match
 from TestSpec import TestSpec
 
-# magic: if the dependencies already ran and you just want to run the
-#        analyze test again, the DEPDIRS is not going to be correct
-#  question: would you want to apply the blocking check against the deps
-#            again?
 
 class dependency_information( unittest.TestCase ):
 
@@ -50,7 +46,7 @@ class dependency_information( unittest.TestCase ):
         assert vrun.num_pass == 2
 
         util.remove_results()
-        cmd = '--plat '+util.core_platform_name()+' --batch -N 4'
+        cmd = '--plat '+util.core_platform_name()+' --batch'
         vrun = util.vvtestRunner( cmd )
         assert vrun.num_pass == 2
 
@@ -74,7 +70,7 @@ class dependency_information( unittest.TestCase ):
         assert vrun.num_pass == 2
 
         util.remove_results()
-        cmd = '--plat '+util.core_platform_name()+' --batch -N 4'
+        cmd = '--plat '+util.core_platform_name()+' --batch'
         vrun = util.vvtestRunner( cmd )
         assert vrun.num_pass == 2
 
@@ -118,7 +114,7 @@ class dependency_information( unittest.TestCase ):
         assert vrun.num_pass == 3
 
         util.remove_results()
-        cmd = '--plat '+util.core_platform_name()+' --batch -N 4'
+        cmd = '--plat '+util.core_platform_name()+' --batch'
         vrun = util.vvtestRunner( cmd )
         assert vrun.num_pass == 3
 
@@ -159,7 +155,7 @@ class dependency_information( unittest.TestCase ):
 
         tdir = vrun.testdir
 
-        cmd = opt+' --batch -N 4 ../tsrc'
+        cmd = opt+' --batch ../tsrc'
         vrun = util.vvtestRunner( cmd, directory='rdir2' )
         assert vrun.num_pass == 3
         testrootdir2 = os.path.join( 'rdir2', vrun.testdir )
@@ -168,7 +164,7 @@ class dependency_information( unittest.TestCase ):
         assert vrun.num_pass == 3
         testrootdir1 = vrun.testdir
 
-        cmd = opt+' -R --batch -N 4'
+        cmd = opt+' -R --batch'
         vrun = util.vvtestRunner( cmd, directory='rdir1/'+tdir )
         assert vrun.num_pass == 3
 
@@ -204,6 +200,133 @@ class dependency_information( unittest.TestCase ):
 
         vrun = util.vvtestRunner( opt+'-N 4 tsrc' )
         assert vrun.num_pass == 3
+
+    def test_analyze_only_restart(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testY testZ
+            import os, glob
+            import vvtest_util as vvt
+            assert len( vvt.DEPDIRS ) == 2
+
+            fL = glob.glob( os.path.join( vvt.DEPDIRS[0], '*.out' ) )
+            assert len(fL) == 1
+
+            fL = glob.glob( os.path.join( vvt.DEPDIRS[1], '*.out' ) )
+            assert len(fL) == 1
+            """ )
+        util.writescript( 'sub1/testY.vvt', """
+            #!/usr/bin/env python
+            fp = open( 'Y.out', 'w' )
+            fp.close()
+            """ )
+        util.writescript( 'sub2/testZ.vvt', """
+            #!/usr/bin/env python
+            fp = open( 'Z.out', 'w' )
+            fp.close()
+            """ )
+        time.sleep(1)
+
+        opt = '--plat '+util.core_platform_name()
+
+        self.analyze_only_restart( opt+' -N 4 ' )
+        self.analyze_only_restart( opt+' --batch ' )
+
+    def analyze_only_restart(self, opt):
+        ""
+        util.remove_results()
+
+        vrun = util.vvtestRunner( opt )
+        assert vrun.num_total == 3
+        assert vrun.num_pass == 3
+
+        vrun = util.vvtestRunner( opt+'-R -k testX', directory=vrun.testdir )
+        assert vrun.num_total == 1
+        assert vrun.num_pass == 1
+
+    def test_restart_dependent_and_one_dependency(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testY testZ
+            import os, glob
+            import vvtest_util as vvt
+            assert len( vvt.DEPDIRS ) == 2
+
+            vvt.DEPDIRS.sort()
+
+            fL = glob.glob( os.path.join( vvt.DEPDIRS[0], '*.out' ) )
+            assert len(fL) == 1
+            fp = open( fL[0], 'r' ) ; Yout = fp.read() ; fp.close()
+            assert 'testY says hello' in Yout
+
+            fL = glob.glob( os.path.join( vvt.DEPDIRS[1], '*.out' ) )
+            assert len(fL) == 1
+            fp = open( fL[0], 'r' ) ; Zout = fp.read() ; fp.close()
+            assert 'testZ says goodbye' in Zout
+            """ )
+        util.writescript( 'sub1/testY.vvt', """
+            #!/usr/bin/env python
+            import os, time
+            import script_util as su
+            time.sleep(3)
+            fp = open( 'Y.out', 'w' )
+            fp.write( 'testY does not say the right thing'+os.linesep )
+            fp.close()
+            su.exit_diff()
+            """ )
+        util.writescript( 'sub2/testZ.vvt', """
+            #!/usr/bin/env python
+            import os, time
+            time.sleep(3)
+            fp = open( 'Z.out', 'w' )
+            fp.write( 'testZ says goodbye'+os.linesep )
+            fp.close()
+            """ )
+        time.sleep(1)
+
+        opt = '--plat '+util.core_platform_name()
+
+        self.restart_dependent_and_one_dependency( opt+' -N 4 ' )
+        self.restart_dependent_and_one_dependency( opt+' --batch ' )
+
+    def restart_dependent_and_one_dependency(self, opt):
+        ""
+        util.writescript( 'sub1/testY.vvt', """
+            #!/usr/bin/env python
+            import os, time
+            import script_util as su
+            time.sleep(3)
+            fp = open( 'Y.out', 'w' )
+            fp.write( 'testY does not say the right thing'+os.linesep )
+            fp.close()
+            su.exit_diff()
+            """ )
+        util.remove_results()
+        time.sleep(1)
+
+        vrun = util.vvtestRunner( opt )
+        assert vrun.num_total == 3
+        assert vrun.num_pass == 1
+        assert vrun.num_diff == 1
+        assert vrun.num_fail == 1
+        assert vrun.num_notrun == 0
+
+        # "fix" the test
+        util.writescript( 'sub1/testY.vvt', """
+            #!/usr/bin/env python
+            import os, time
+            fp = open( 'Y.out', 'w' )
+            fp.write( 'testY says hello'+os.linesep )
+            fp.close()
+            """ )
+        time.sleep(1)
+
+        vrun = util.vvtestRunner( opt+'-R -k fail/diff',
+                                  directory=vrun.testdir )
+        assert vrun.num_total == 2
+        assert vrun.num_pass == 2
 
 
 ############################################################################

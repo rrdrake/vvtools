@@ -40,7 +40,7 @@ class TestExec:
         self.xdir = None
 
         # a list of runtime dependencies; items are tuples
-        #    (TestExec, match pattern, word expr)
+        #    (TestExec or TestSpec, match pattern, word expr)
         self.deps = []  
 
         # constructing a TestExec object implies that it will be run, so
@@ -370,6 +370,7 @@ class TestExec:
     
     def addDependency(self, testexec, match_pattern=None, expr=None):
         """
+        A dependency can be either a TestExec object or a TestSpec object.
         """
         self.deps.append( (testexec,match_pattern,expr) )
     
@@ -390,25 +391,33 @@ class TestExec:
         """
         for tx,pat,expr in self.deps:
 
-            if tx.atest.getAttr('state') != 'done':
-                return tx
+            if isinstance( tx, TestExec ):
 
-            result = tx.atest.getAttr('result')
-
-            if expr == None:
-                if result not in ['pass','diff']:
+                if tx.atest.getAttr('state') != 'done':
                     return tx
 
-            elif not expr.evaluate( lambda word: word == result ):
-                return tx
+                result = tx.atest.getAttr('result')
+
+                if expr == None:
+                    if result not in ['pass','diff']:
+                        return tx
+
+                elif not expr.evaluate( lambda word: word == result ):
+                    return tx
 
         return None
 
     def getDependencyDirectories(self):
         ""
         L = []
+
         for tx,pat,expr in self.deps:
-            L.append( (pat,tx.atest.getExecuteDirectory()) )
+
+            if isinstance( tx, TestExec ):
+                L.append( (pat,tx.atest.getExecuteDirectory()) )
+            else:
+                L.append( (pat,tx.getExecuteDirectory()) )
+
         return L
 
     def preclean(self):

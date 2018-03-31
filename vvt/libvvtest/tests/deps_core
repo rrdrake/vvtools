@@ -14,7 +14,7 @@ from testutils import print3
 
 import TestSpecCreator as creator
 from RuntimeConfig import RuntimeConfig
-from TestList import DependencyPatternMap
+from TestList import find_tests_by_execute_directory_match
 from TestSpec import TestSpec
 
 
@@ -175,76 +175,108 @@ class Parse_Dependencies( unittest.TestCase ):
 
 #######################################
 
-class MockTestExec:
-
-    def __init__(self, name, deps, subdir='.'):
-        ""
-        fn = os.path.normpath( os.path.join( subdir, name+'vvt' ) )
-        self.atest = TestSpec( name, os.getcwd(), fn )
-        for T in deps:
-            self.atest.addDependency( T[0], T[1] )
-
-
-#######################################
-
-
-class Class_DependencyPatternMap( unittest.TestCase ):
+class Function_find_tests_by_execute_directory_match( unittest.TestCase ):
 
     def setUp(self):
         util.setup_test( cleanout=False )
 
-    def test_empty_set(self):
+    def test_base_match(self):
         ""
-        patmap = DependencyPatternMap( [] )
-        assert patmap.getMatchList( '*' ) == []
+        xL = [ 'subdir/testB', 'subdir/testC' ]
+        S = find_tests_by_execute_directory_match( 'subdir/testA', 'testB', xL )
+        assert has_same_values( S, ['subdir/testB'] )
 
-    def test_a_direct_name_match(self):
+        xL = [ 'subdir/testC', 'subdir1/testB', 'subdir2/testB' ]
+        S = find_tests_by_execute_directory_match( 'subdir2/testA', 'testB', xL )
+        assert has_same_values( S, ['subdir2/testB'] )
+
+        xL = [ 'subdir/testC', 'subdir1/testB', 'subdir2/testB' ]
+        S = find_tests_by_execute_directory_match( 'subdir1/testA', 'testB', xL )
+        assert has_same_values( S, ['subdir1/testB'] )
+
+        xL = [ 'subdir/testB', 'subdir/testC', 'subdir/down/testB' ]
+        S = find_tests_by_execute_directory_match( 'subdir/testA', 'testB', xL )
+        assert has_same_values( S, ['subdir/testB'] )
+
+        xL = [ 'testB', 'testC' ]
+        S = find_tests_by_execute_directory_match( 'testA', 'testB', xL )
+        assert has_same_values( S, ['testB'] )
+
+        xL = [ 'testB', 'testC', 'down/testB' ]
+        S = find_tests_by_execute_directory_match( 'subdir/testA', 'testB', xL )
+        assert has_same_values( S, ['testB'] )
+
+    def test_subdir_match(self):
         ""
-        tL = [ MockTestExec( 'testX', [ ('testY',None) ] ),
-               MockTestExec( 'testY', [] ) ]
+        xL = [ 'subdir/testB' ]
+        S = find_tests_by_execute_directory_match( 'testA', 'testB', xL )
+        assert has_same_values( S, ['subdir/testB'] )
 
-        patmap = DependencyPatternMap( tL )
+        xL = [ 'top/subdir/testB' ]
+        S = find_tests_by_execute_directory_match( 'top/testA', 'testB', xL )
+        assert has_same_values( S, ['top/subdir/testB'] )
 
-        assert list( patmap.getMatchList('testY') ) == ['testY']
+        xL = [ 'subdir/testB', 'subdir/deep/testB' ]
+        S = find_tests_by_execute_directory_match( 'testA', 'testB', xL )
+        assert has_same_values( S, ['subdir/deep/testB','subdir/testB'] )
 
-    def test_a_wildcard_name_match(self):
+        xL = [ 'top/subdir/testB', 'top/subdir/deep/testB' ]
+        S = find_tests_by_execute_directory_match( 'top/testA', 'testB', xL )
+        assert has_same_values( S, ['top/subdir/deep/testB','top/subdir/testB'] )
+
+        xL = [ 'subdir/testB', 'subdir/deep/testB' ]
+        S = find_tests_by_execute_directory_match( 'testA', 't*B', xL )
+        assert has_same_values( S, ['subdir/deep/testB','subdir/testB'] )
+
+        xL = [ 'subdir1/deep2/testB', 'subdir1/deep1/testB', 'subdir2/testB' ]
+        S = find_tests_by_execute_directory_match( 'subdir1/testA', 'testB', xL )
+        assert has_same_values( S, ['subdir1/deep1/testB','subdir1/deep2/testB'] )
+
+        xL = [ 'subdir1/deep2/testB', 'subdir1/deep1/testB', 'subdir2/testB' ]
+        S = find_tests_by_execute_directory_match( 'subdir1/testA', 't*B', xL )
+        assert has_same_values( S, ['subdir1/deep1/testB','subdir1/deep2/testB'] )
+
+    def test_absolute_path_pattern(self):
         ""
-        tL = [ MockTestExec( 'testX', [ ('t*Y',None) ] ),
-               MockTestExec( 'testY', [] ) ]
+        xL = [ 'subdir1/testB', 'subdir2/testB' ]
+        S = find_tests_by_execute_directory_match(
+                            'subdir1/testA', 'subdir2/testB', xL )
+        assert has_same_values( S, ['subdir2/testB'] )
 
-        patmap = DependencyPatternMap( tL )
+        xL = [ 'subdir1/testB', 'subdir2/subdir1/testB' ]
+        S = find_tests_by_execute_directory_match(
+                            'subdir1/testA', 'subdir1/testB', xL )
+        assert has_same_values( S, ['subdir1/testB'] )
 
-        assert list( patmap.getMatchList('t*Y') ) == ['testY']
-
-    def test_a_dependency_from_a_subdir(self):
+    def test_general_pattern(self):
         ""
-        tL = [ MockTestExec( 'testX', [ ('subdir/testY',None) ] ),
-               MockTestExec( 'testY', [], 'subdir' ) ]
+        xL = [ 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' ]
+        S = find_tests_by_execute_directory_match(
+                            'subdir3/testA', 't*B', xL )
+        assert has_same_values( S, ['subdir1/testB', 'subdir2/testB'] )
 
-        patmap = DependencyPatternMap( tL )
-
-        mL = patmap.getMatchList('subdir/testY')
-        assert list( mL ) == ['subdir/testY']
-
-        tL = [ MockTestExec( 'testX', [ ('*testY',None) ] ),
-               MockTestExec( 'testY', [], 'subdir' ) ]
-
-        patmap = DependencyPatternMap( tL )
-
-        mL = patmap.getMatchList('*testY')
-        assert list( mL ) == ['subdir/testY']
-
-    def test_multiple_matches(self):
+    def test_relative_directory_test_location(self):
         ""
-        tL = [ MockTestExec( 'testX', [ ('*testY*',None) ] ),
-               MockTestExec( 'testY', [], 'subdir' ),
-               MockTestExec( 'testYY', [], 'subdir' ) ]
+        xL = [ 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' ]
+        S = find_tests_by_execute_directory_match(
+                            'subdir3/testA', '../subdir1/*B', xL )
+        assert has_same_values( S, ['subdir1/testB'] )
 
-        patmap = DependencyPatternMap( tL )
+        xL = [ 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' ]
+        S = find_tests_by_execute_directory_match(
+                            'subdir3/testA', '../sub*/*B', xL )
+        assert has_same_values( S, ['subdir1/testB','subdir2/testB'] )
 
-        mL = list( patmap.getMatchList('*testY*') )
-        mL.sort()
-        assert mL == ['subdir/testY', 'subdir/testYY']
+
+def has_same_values( container1, container2 ):
+    ""
+    L1 = list(container1)
+    L1.sort()
+
+    L2 = list(container2)
+    L2.sort()
+
+    return L1 == L2
 
 
 ############################################################################
