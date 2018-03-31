@@ -413,6 +413,7 @@ class vvtestRunner:
     def run(self, cmd, **kwargs):
         ""
         self.out = ''
+        self.num_total = 0
         self.num_pass = 0
         self.num_fail = 0
         self.num_diff = 0
@@ -435,6 +436,7 @@ class vvtestRunner:
                 raise Exception( 'vvtest command failed: '+cmd )
 
             self.out         = out
+            self.num_total   = numtotal( out )
             self.num_pass    = numpass( out )
             self.num_fail    = numfail( out )
             self.num_diff    = numdiff( out )
@@ -538,6 +540,24 @@ def check_fail(L): return len(L) >= 5 and L[2][:4] == 'fail'
 def check_diff(L): return len(L) >= 5 and L[2] == 'diff'
 def check_notrun(L): return len(L) >= 3 and L[1] == 'NotRun'
 def check_timeout(L): return len(L) >= 5 and L[1] == 'TimeOut'
+
+def numtotal(out):
+    ""
+    cnt = 0
+    mark = 0
+    for line in out.split( os.linesep ):
+        if mark:
+            if line[:10] == "==========":
+                mark = 0
+            else:
+                L = line.split()
+                if len(L) > 2:
+                    cnt += 1
+        elif line[:10] == "==========":
+            mark = 1
+            cnt = 0  # reset count so only the last cluster is considered
+
+    return cnt
 
 def numpass(out):
     cnt = 0
