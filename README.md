@@ -1,4 +1,4 @@
-The __vvtools__ project is currently used to store and share a few software
+The __vvtools__ project is currently used to store and share some software
 development utilities.  The Wiki has more documentation.
 
 ## The `vvtest` test harness
