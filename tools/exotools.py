@@ -1,5 +1,9 @@
 # $Id: exotools.py,v 1.13 2010/03/18 18:15:24 vgweirs Exp $
 
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
 import array # numpy would be better, grumble grumble...
 import multiprocessing
 

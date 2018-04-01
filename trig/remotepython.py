@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
 """
 The remotepython module uses ssh to connect to a remote machine and run python
 commands.  The commands are issued on the local side but executed on the remote

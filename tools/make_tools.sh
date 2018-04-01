@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
 echo " Source files located in" $SRC_DIR
 if ([ -z $SRC_DIR ]); then
 echo "missing SRC_DIR (path to the scidev/tools source) - please specify this variable"

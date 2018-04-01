@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
 # ElemData2.py is associated with and used by anpy. It is almost the same
 # as the ElemData.py associated with and used by tampa and TampaDSTKTools.py
 # and will eventually superseed it.
