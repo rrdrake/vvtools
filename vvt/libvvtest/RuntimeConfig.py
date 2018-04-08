@@ -78,15 +78,7 @@ class RuntimeConfig:
           expr = self.attrs['keyword_expr']
           return expr.evaluate( keyword_list.count )
         return 1
-    
-    def satisfies_nonresults_keywords(self, keyword_list):
-        """
-        """
-        if self.attrs.has_key('keyword_expr'):
-          expr = self.attrs['keyword_expr']
-          return expr.evaluate_nonresults( keyword_list.count )
-        return 1
-    
+
     def evaluate_parameters(self, paramD):
         pf = self.attrs.get( 'param_filter', None )
         if pf == None: return 1

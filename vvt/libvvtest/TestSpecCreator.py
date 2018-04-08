@@ -60,7 +60,7 @@ def createTestObjects( rootpath, relpath, force_params, rtconfig ):
             paramset = t.getParameterSet()
             paramset.applyParamFilter( rtconfig.evaluate_parameters )
 
-        if test_is_active( t, rtconfig, results_keywords=False ):
+        if test_is_active( t, rtconfig ):
             tL.append( t )
 
     return tL
@@ -90,18 +90,15 @@ def refreshTest( testobj, rtconfig ):
 
     keep = True
     filt = not rtconfig.getAttr( 'include_all', False )
-    if filt and not test_is_active( testobj, rtconfig, results_keywords=True ):
+    if filt and not test_is_active( testobj, rtconfig ):
         keep = False
 
     return keep
 
 
-def test_is_active( testobj, rtconfig, results_keywords ):
+def test_is_active( testobj, rtconfig ):
     """
-    Uses the given filter to test whether the test is active (enabled).  The
-    'results_keywords' boolean should be True when refreshing a test, but
-    False when creating a test.  (Yeah, I would like to avoid that logic, but
-    not sure how to do it yet.)
+    Uses the given filter to test whether the test is active (enabled).
     """
     pev = PlatformEvaluator( testobj.getPlatformEnableExpressions() )
     if not rtconfig.evaluate_platform_include( pev.satisfies_platform ):
@@ -111,12 +108,8 @@ def test_is_active( testobj, rtconfig, results_keywords ):
         if not rtconfig.evaluate_option_expr( opexpr ):
             return False
 
-    if results_keywords:
-        if not rtconfig.satisfies_keywords( testobj.getKeywords(True) ):
-            return False
-    else:
-        if not rtconfig.satisfies_nonresults_keywords( testobj.getKeywords() ):
-            return False
+    if not rtconfig.satisfies_keywords( testobj.getKeywords(True) ):
+        return False
 
     if not rtconfig.getAttr( 'include_tdd', False ) and \
        'TDD' in testobj.getKeywords():

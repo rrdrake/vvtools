@@ -51,7 +51,6 @@ class WordExpression:
         Throws a ValueError if the first argument is an invalid expression.
         """
         self.expr = None
-        self.nr_expr = None
         
         # TODO: when keyword expressions are deprecated, will wordL be
         #       needed anymore ??
@@ -103,12 +102,9 @@ class WordExpression:
                 if altS: altS += ' and '
                 altS += '( ' + string.join(altL,' or ') + ' )'
             expr = string.join( S.split() )
-            nr_expr = string.join( altS.split() )
           
           else:
             expr = string.join( expr.split() )
-            # results keywords are not removed from plain string expressions
-            nr_expr = string.join( expr.split() )
           
           # note that empty expressions or subexpressions evaluate to false;
           # however, for non-results expressions or subexpressions they
@@ -132,38 +128,17 @@ class WordExpression:
               # empty expressions evaluate to false so no point in
               # combining the two expressions
               expr = ''
-          
-          if self.nr_expr and nr_expr:
-            if len(nr_expr.split()) == 1:
-              nr_expr = self.nr_expr+' ' + operator + ' '+nr_expr
-            else:
-              nr_expr = self.nr_expr+' ' + operator + ' ('+nr_expr+')'
-          elif self.nr_expr:
-            nr_expr = self.nr_expr
-          elif not nr_expr:
-            nr_expr = None
-          
+
           # parse both expressions
           self.expr = expr
           self.evalexpr = self._parse( expr, self.wordL )
-          self.nr_expr = nr_expr
-          self.nr_evalexpr = self._parse( nr_expr, [] )
     
     def getWordList(self):
         """
         Returns a list containing the words in the current expression.
         """
         return [] + self.wordL
-    
-    def getNonResultsExpression(self):
-        """
-        A second expression is computed during construction or append that
-        ignores any test result keywords, such as "pass" or "diff".  Note that
-        this only occurs when the constructor or append() method is given a
-        k-format list (rather than a string expression).
-        """
-        return self.nr_expr
-    
+
     def containsResultsKeywords(self):
         """
         """
@@ -191,24 +166,7 @@ class WordExpression:
         r = eval( self.evalexpr )
         
         return r
-    
-    def evaluate_nonresults(self, evaluator_func):
-        """
-        Evaluates the nonresults expression from left to right using the given
-        'evaluator_func' to evaluate each value string.  If the original
-        expression string is empty, false is returned.  If no expression was
-        set in this object, true is returned.
-        """
-        if self.nr_expr == None: return 1
-        if not self.nr_expr: return 0
-        
-        def evalfunc(tok):
-          if evaluator_func(tok): return 1
-          return 0
-        r = eval( self.nr_evalexpr )
-        
-        return r
-    
+
     def __repr__(self):
         if self.expr == None:return 'WordExpression=None'
         return 'WordExpression="' + self.expr + '"'

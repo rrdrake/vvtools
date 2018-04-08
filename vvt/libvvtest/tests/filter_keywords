@@ -71,7 +71,47 @@ class filter_and_keywords( unittest.TestCase ):
         assert len( util.greptestlist(out,'fail.*atest\.nx=4') ) == 1
         assert len( util.greptestlist(out,'fail.*btest\.nx=4') ) == 1
 
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -k pass/fail' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+
+        assert len( util.greptestlist(out,'pass.*atest\.nx=1') ) == 0
+        assert len( util.greptestlist(out,'pass.*btest\.nx=1') ) == 0
+        assert len( util.greptestlist(out,'fail.*atest\.nx=4') ) == 0
+        assert len( util.greptestlist(out,'fail.*btest\.nx=4') ) == 0
+
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -k atest/notrun' )
+        assert np == 2 and nd == 0 and nf == 2 and nn == 0
+        platname = util.platform_name( out )
+
+        assert len( util.greptestlist(out,'pass.*atest\.nx=1') ) == 1
+        assert len( util.greptestlist(out,'pass.*btest\.nx=1') ) == 1
+        assert len( util.greptestlist(out,'fail.*atest\.nx=4') ) == 1
+        assert len( util.greptestlist(out,'fail.*btest\.nx=4') ) == 1
+
         out,np,nd,nf,nn = util.run_vvtest( opt+' -k atest/fail' )
+        assert np == 1 and nd == 0 and nf == 2 and nn == 0
+
+        assert len( util.greptestlist( out, 'atest.*pass.*\.nx=1' ) ) == 1
+        assert len( util.greptestlist( out, 'atest.*fail.*\.nx=4' ) ) == 1
+        assert len( util.greptestlist( out, 'btest.*pass.*\.nx='  ) ) == 0
+        assert len( util.greptestlist( out, 'btest.*fail.*\.nx=4' ) ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -k btest -K fail' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        assert len( util.greptestlist( out, 'atest.*pass.*\.nx=1' ) ) == 0
+        assert len( util.greptestlist( out, 'atest.*fail.*\.nx=4' ) ) == 0
+        assert len( util.greptestlist( out, 'btest.*pass.*\.nx='  ) ) == 1
+        assert len( util.greptestlist( out, 'btest.*fail.*\.nx=4' ) ) == 0
+
+        tdir = util.results_dir()
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -k atest/fail',
+                                           directory=tdir )
         assert np == 1 and nd == 0 and nf == 2 and nn == 0
 
         assert len( util.greptestlist( out, 'atest.*pass.*\.nx=1' ) ) == 1
