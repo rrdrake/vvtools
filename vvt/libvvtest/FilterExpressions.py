@@ -51,9 +51,7 @@ class WordExpression:
         Throws a ValueError if the first argument is an invalid expression.
         """
         self.expr = None
-        
-        # TODO: when keyword expressions are deprecated, will wordL be
-        #       needed anymore ??
+
         self.wordL = []   # list of the words in the expression
         
         self.has_results_keywords = 0
