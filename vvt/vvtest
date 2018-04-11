@@ -868,18 +868,13 @@ def readCommandInfo():
     then open that file for information.  The test results directory is
     returned, or None if not in a TestRestults directory.
     """
-    test_dir = None
-    
-    d = os.getcwd()
+    # an environment variable is used to identify vvtest run recursion
+    troot = os.environ.get( 'VVTEST_TEST_ROOT', None )
 
-    while d != '/':
-      test_cache = os.path.join(d,'test.cache')
-      if os.path.exists( test_cache ):
-        test_dir = d
-        break
-      d = os.path.dirname(d)
-    
-    if test_dir != None:
+    test_cache = misc.find_vvtest_test_root_file(
+                                        os.getcwd(), troot, 'test.cache' )
+
+    if test_cache != None:
       
       if optdict.has_key('-o') or optdict.has_key('-O') or \
          optdict.has_key('-g'):
@@ -932,8 +927,10 @@ def readCommandInfo():
         elif kvpair[0] == 'CHECK':
           optdict['--check'] = string.split( kvpair[1] )
       fp.close()
-    
-    return test_dir
+
+    if test_cache != None:
+        return os.path.dirname( test_cache )
+    return None
 
 
 def runTests( dirs, plat, rtconfig ):
@@ -944,7 +941,7 @@ def runTests( dirs, plat, rtconfig ):
     testdirname = testResultsDir( plat.getName() )
     test_dir = os.path.join( os.getcwd(), testdirname )
     tfile = os.path.join( test_dir, testlist_name )
-    
+
     if os.path.exists( tfile ):
         tl = TestList.TestList()
         tl.scanFile( tfile )
@@ -953,7 +950,10 @@ def runTests( dirs, plat, rtconfig ):
             print '    (or a previous run crashed); use --force to run anyway'
             sys.exit(1)
         tl = None
-    
+
+    # this variable allows vvtest tests to run vvtest (ie, allows recursion)
+    os.environ['VVTEST_TEST_ROOT'] = os.path.normpath( os.path.abspath( test_dir ) )
+
     perms = None
     if '--perms' in optdict:
       perms = PermissionSetter( test_dir, optdict['--perms'] )
@@ -1750,9 +1750,12 @@ def saveResults( tlist, plat, test_dir, inprogress=False ):
 
 
 def restartTests( test_dir, plat, rtconfig ):
-    
+    ""
     assert test_dir != None
-    
+
+    # this variable allows vvtest tests to run vvtest (ie, allows recursion)
+    os.environ['VVTEST_TEST_ROOT'] = os.path.normpath( os.path.abspath( test_dir ) )
+
     path_filter = os.getcwd()
     
     qid = optdict.get( '--qsub-id', None )
@@ -2476,6 +2479,7 @@ if __name__ == '__main__':
   toolsdir, exeName = getExeDirAndName()
   
   import libvvtest.vvplatform as vvplatform
+  import libvvtest.misc as misc
   import libvvtest.TestSpec as TestSpec
   import libvvtest.TestExec as TestExec
   import libvvtest.TestList as TestList
