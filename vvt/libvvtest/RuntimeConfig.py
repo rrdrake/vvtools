@@ -74,7 +74,7 @@ class RuntimeConfig:
     def satisfies_keywords(self, keyword_list):
         """
         """
-        if self.attrs.has_key('keyword_expr'):
+        if 'keyword_expr' in self.attrs:
           expr = self.attrs['keyword_expr']
           return expr.evaluate( keyword_list.count )
         return 1
@@ -158,7 +158,7 @@ class RuntimeConfig:
                   fp.close()
                   if p.search(s):
                     return 1
-                except IOError, e:
+                except IOError:
                   pass
         
         return 0
@@ -201,7 +201,7 @@ def expand_variables(s, vardict):
           if m != None:
             p = m.span()
             varname = s[ p[0]+2 : p[1]-1 ]
-            if vardict.has_key(varname):
+            if varname in vardict:
               varval = vardict[varname]
               s = s[:p[0]] + varval + s[p[1]:]
               idx = p[0] + len(varval)
@@ -216,7 +216,7 @@ def expand_variables(s, vardict):
           if m != None:
             p = m.span()
             varname = s[ p[0]+1 : p[1] ]
-            if vardict.has_key(varname):
+            if varname in vardict:
               varval = vardict[varname]
               s = s[:p[0]] + varval + s[p[1]:]
               idx = p[0] + len(varval)

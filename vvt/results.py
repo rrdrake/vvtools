@@ -10,8 +10,6 @@ sys.excepthook = sys.__excepthook__
 import os
 import string
 import time
-import types
-import StringIO
 import glob
 import re
 
@@ -226,8 +224,8 @@ def merge_main( argv ):
     try:
         optL,argL = getopt.getopt( argv[1:], "xwd:o:O:t:T:p:P:g:",
                                              longopts=['plat='] )
-    except getopt.error, e:
-        print3( "*** error:", e )
+    except getopt.error:
+        print3( "*** error:", sys.exc_info()[1] )
         sys.exit(1)
     
     optD = {}
@@ -254,8 +252,8 @@ def save_main( argv ):
     import getopt
     try:
         optL,argL = getopt.getopt( argv[1:], "w" )
-    except getopt.error, e:
-        print3( "*** error:", e )
+    except getopt.error:
+        print3( "*** error:", sys.exc_info()[1] )
         sys.exit(1)
     
     optD = {}
@@ -273,8 +271,9 @@ def list_main( argv ):
     
     try:
       optL,argL = getopt.getopt( sys.argv[2:], "p" )
-    except getopt.error, e:
-      sys.stderr.write( "*** results.py error: " + str(e) + os.linesep )
+    except getopt.error:
+      sys.stderr.write( "*** results.py error: " + \
+                        str(sys.exc_info()[1]) + os.linesep )
       sys.exit(1)
     
     optD = {}
@@ -295,8 +294,9 @@ def clean_main( argv ):
     
     try:
       optL,argL = getopt.getopt( sys.argv[2:], "p:" )
-    except getopt.error, e:
-      sys.stderr.write( "*** results.py error: " + str(e) + os.linesep )
+    except getopt.error:
+      sys.stderr.write( "*** results.py error: " + \
+                        str(sys.exc_info()[1]) + os.linesep )
       sys.exit(1)
     
     optD = {}
@@ -309,11 +309,12 @@ def clean_main( argv ):
       sys.exit(1)
     try:
       warnings = results_clean( argL[0], optD )
-    except Exception, e:
-      sys.stderr.write( "*** Results clean failed: " + str(e) + os.linesep )
+    except:
+      sys.stderr.write( "*** Results clean failed: " + \
+                        str(sys.exc_info()[1]) + os.linesep )
       sys.exit(1)
     for s in warnings:
-      print "*** " + s
+      print3( "*** " + s )
 
 
 def report_main( argv ):
@@ -323,8 +324,8 @@ def report_main( argv ):
     try:
         optL,argL = getopt.getopt( argv[1:], "d:D:r:o:O:t:T:p:P:g:G:",
                         longopts=['plat=','html=','config=','webloc='] )
-    except getopt.error, e:
-        print3( "*** error:", e )
+    except getopt.error:
+        print3( "*** error:", sys.exc_info()[1] )
         sys.exit(1)
     
     optD = {}
@@ -388,7 +389,7 @@ class MultiResults:
         Return a sorted list of root-relative directories stored in the
         database.
         """
-        dL = self.dataD.keys()
+        dL = list( self.dataD.keys() )
         dL.sort()
         return dL
     
@@ -398,7 +399,7 @@ class MultiResults:
         keys contained in that directory.
         """
         tD = self.dataD.get( rootrel, {} )
-        tL = tD.keys()
+        tL = list( tD.keys() )
         tL.sort()
         return tL
     
@@ -409,7 +410,7 @@ class MultiResults:
         """
         tD = self.dataD.get( rootrel, {} )
         pD = tD.get( testkey, {} )
-        pL = pD.keys()
+        pL = list( pD.keys() )
         pL.sort()
         return pL
     
@@ -642,7 +643,7 @@ class MultiResults:
         """
         Writes/overwrites the given filename with the contents of this object.
         """
-        fp = open( filename, 'wb' )
+        fp = open( filename, 'w' )
         fp.write( 'FILE_VERSION=multi' + str(self.vers) + os.linesep )
         
         fp.write( os.linesep )
@@ -673,7 +674,7 @@ class MultiResults:
           raise Exception( "File format is not a multi-platform test " + \
                            "results format: " + filename )
         
-        fp = open( filename, 'rb' )
+        fp = open( filename, 'r' )
         n = 0
         d = None
         line = fp.readline()
@@ -749,7 +750,7 @@ def _direct_rootrel(tdir):
       tdir = d
     if len(dirL) == 0 or dirL[0] != "Benchmarks":
       return None
-    return string.join( dirL, '/' )
+    return '/'.join( dirL )
 
 def _file_rootrel(tdir):
     """
@@ -850,7 +851,7 @@ def _svn_rootrel(tdir):
       if len(dL) >= 2 and \
          dL[0] == 'trunk' and \
          dL[1] in ['Benchmarks','nevada','alegra']:
-        return string.join( dL[1:], '/' )
+        return '/'.join( dL[1:] )
     
     return None
 
@@ -955,7 +956,7 @@ class TestResults:
         Return a sorted list of root-relative directories stored in the
         database.
         """
-        dL = self.dataD.keys()
+        dL = list( self.dataD.keys() )
         dL.sort()
         return dL
     
@@ -965,7 +966,7 @@ class TestResults:
         keys contained in that directory.
         """
         tD = self.dataD.get( rootrel, {} )
-        tL = tD.keys()
+        tL = list( tD.keys() )
         tL.sort()
         return tL
     
@@ -1084,7 +1085,7 @@ class TestResults:
         directory in which the tests were run, the platform name, and the
         compiler name.
         """
-        fp = open( filename, 'wb' )
+        fp = open( filename, 'w' )
         
         fp.write( 'FILE_VERSION=results' + str(self.vers) + os.linesep )
         fp.write( 'PLATFORM=' + str(plat_name) + os.linesep )
@@ -1096,11 +1097,11 @@ class TestResults:
             fp.write( 'IN_PROGRESS=True' + os.linesep )
 
         fp.write( os.linesep )
-        dL = self.dataD.keys()
+        dL = list( self.dataD.keys() )
         dL.sort()
         for d in dL:
           tD = self.dataD[d]
-          tL = tD.keys()
+          tL = list( tD.keys() )
           tL.sort()
           for tn in tL:
             aD = tD[tn]
@@ -1125,7 +1126,7 @@ class TestResults:
           raise Exception( "File format is not a single platform test " + \
                            "results format: " + filename )
         
-        fp = open( filename, 'rb' )
+        fp = open( filename, 'r' )
         n = 0
         d = None
         line = fp.readline()
@@ -1165,7 +1166,7 @@ class TestResults:
         
         filename = os.path.join( dirname, runtimes_filename )
         
-        fp = open( filename, 'wb' )
+        fp = open( filename, 'w' )
         fp.write( 'FILE_VERSION=results' + str(self.vers) + os.linesep )
         
         if rootrel == None:
@@ -1175,13 +1176,13 @@ class TestResults:
         rrlen = len(rrL)
         
         fp.write( os.linesep )
-        dL = self.dataD.keys()
+        dL = list( self.dataD.keys() )
         dL.sort()
         for d in dL:
             # skip 'd' if it is not equal to or a subdirectory of rootrel
             if d.split('/')[:rrlen] == rrL:
                 tD = self.dataD[d]
-                tL = tD.keys()
+                tL = list( tD.keys() )
                 tL.sort()
                 for tn in tL:
                     aD = tD[tn]
@@ -1206,7 +1207,7 @@ class TestResults:
               raise Exception( "File format is not a single platform test " + \
                                "results format: " + filename )
             
-            fp = open( filename, 'rb' )
+            fp = open( filename, 'r' )
             n = 0
             d = None
             line = fp.readline()
@@ -1257,7 +1258,7 @@ def make_attr_string( attrD ):
     s = ''
     v = attrD.get('xdate',None)
     if v != None and v > 0:
-      s = s + ' ' + string.join( time.ctime(v).split(), '_' )
+      s = s + ' ' + '_'.join( time.ctime(v).split() )
     v = attrD.get('xtime',None)
     if v != None:
       s = s + ' xtime=' + str(v)
@@ -1270,7 +1271,7 @@ def make_attr_string( attrD ):
           s = s + ' ' + rs
     if 'TDD' in attrD:
         s += ' TDD'
-    return string.strip(s)
+    return s.strip()
 
 
 def read_attrs( attrL ):
@@ -1320,7 +1321,7 @@ def read_file_header( filename ):
     of header data in the file.
     """
     if type(filename) == type(''):
-      fp = open( filename, 'rb' )
+      fp = open( filename, 'r' )
     else:
       fp = filename  # assume a file object
     
@@ -1394,9 +1395,9 @@ def multiplatform_merge( optD, fileL ):
     for f in fileL:
         try:
             fmt,vers,hdr,nskip = read_file_header( f )
-        except Exception, e:
+        except:
             warnL.append( "skipping results file: " + f + \
-                          ", Exception = " + str(e) )
+                          ", Exception = " + str(sys.exc_info()[1]) )
         else:
             
             if fmt and fmt == 'results':
@@ -1423,9 +1424,9 @@ def merge_multi_file( multi, filename, warnL, dcut, xopt, wopt ):
     tr = MultiResults()
     try:
         tr.readFile( filename )
-    except Exception, e:
+    except:
         warnL.append( "skipping multi-platform results file " + \
-                      filename + ": Exception = " + str(e) )
+                      filename + ": Exception = " + str(sys.exc_info()[1]) )
         tr = None
     
     newtest = False
@@ -1448,9 +1449,9 @@ def merge_results_file( multi, filename, warnL, dcut, xopt, wopt ):
     tr = TestResults()
     try:
         tr.readResults( filename )
-    except Exception, e:
+    except:
         warnL.append( "skipping results file " + filename + \
-                      ": Exception = " + str(e) )
+                      ": Exception = " + str(sys.exc_info()[1]) )
         tr = None
     
     newtest = False
@@ -1741,17 +1742,17 @@ def write_runtimes( optD, fileL ):
     for srcf in fileL:
       try:
         fmt,vers,hdr,nskip = read_file_header( srcf )
-      except Exception, e:
+      except:
         warnL.append( "Warning: skipping results file: " + srcf + \
-                     ", Exception = " + str(e) )
+                     ", Exception = " + str(sys.exc_info()[1]) )
       else:
         if fmt and fmt == 'results':
           src = TestResults()
           try:
             src.readResults(srcf)
-          except Exception, e:
+          except:
             warnL.append( "Warning: skipping results file: " + srcf + \
-                         ", Exception = " + str(e) )
+                         ", Exception = " + str(sys.exc_info()[1]) )
           else:
             for d in src.dirList():
               if d.split('/')[:rrlen] == rrdirL:
@@ -1759,15 +1760,15 @@ def write_runtimes( optD, fileL ):
                   aD = src.testAttrs( d, tn )
                   if aD.get('result','') in ['pass','diff']:
                     k = (d,tn)
-                    if testD.has_key(k): testD[k].append(aD)
-                    else:                testD[k] = [aD]
+                    if k in testD: testD[k].append(aD)
+                    else:          testD[k] = [aD]
         elif fmt and fmt == 'multi':
           src = MultiResults()
           try:
             src.readFile(srcf)
-          except Exception, e:
+          except:
             warnL.append( "Warning: skipping results file: " + srcf + \
-                         ", Exception = " + str(e) )
+                         ", Exception = " + str(sys.exc_info()[1]) )
           else:
             for d in src.dirList():
               if d.split('/')[:rrlen] == rrdirL:
@@ -1776,8 +1777,8 @@ def write_runtimes( optD, fileL ):
                     aD = src.testAttrs( d, tn, pc )
                     if aD.get('result','') in ['pass','diff']:
                       k = (d,tn)
-                      if testD.has_key(k): testD[k].append(aD)
-                      else:                testD[k] = [aD]
+                      if k in testD: testD[k].append(aD)
+                      else:          testD[k] = [aD]
         else:
           warnL.append( "Warning: skipping results source file due to error: " + \
                        srcf + ", corrupt or unknown format" )
@@ -1795,7 +1796,7 @@ def write_runtimes( optD, fileL ):
           tsum += t
           tnum += 1
           # use the attributes of the test with the most recent date
-          if aD.has_key( 'xdate' ):
+          if 'xdate' in aD:
             if save_aD == None or save_aD['xdate'] < aD['xdate']:
               save_aD = aD
       if save_aD != None:
@@ -1815,9 +1816,9 @@ def write_runtimes( optD, fileL ):
           fmt,vers,hdr,nskip = read_file_header( rtf )
           rr = hdr.get( 'ROOT_RELATIVE', None )
           trs.mergeRuntimes(rtf)
-        except Exception, e:
+        except:
           msgs.append( "Warning: skipping existing runtimes file due to " + \
-                       "error: " + rtf + ", Exception = " + str(e) )
+                       "error: " + rtf + ", Exception = " + str(sys.exc_info()[1]) )
         else:
           if rr == None:
             msgs.append( "Warning: skipping existing runtimes file " + \
@@ -1827,7 +1828,7 @@ def write_runtimes( optD, fileL ):
             rtD[dirname] = rr
     os.path.walk( cwd, read_src_dir, (tr,rtdirD,warnL) )
     
-    if optD.has_key('-w'):
+    if '-w' in optD:
       # the -w option means don't merge
       tr = TestResults()
     
@@ -1858,29 +1859,29 @@ def results_listing( fname, optD ):
       src = TestResults()
       src.readResults(fname)
       
-      if optD.has_key('-p'):
+      if '-p' in optD:
         p = hdr.get( 'PLATFORM', '' )
         c = hdr.get( 'COMPILER', '' )
         if p or c:
-          print p+'/'+c
+          print3( p+'/'+c )
       
       else:
         tL = []
         for d in src.dirList():
           for tn in src.testList(d):
             aD = src.testAttrs(d,tn)
-            if aD.has_key('xdate'):
+            if 'xdate' in aD:
               tL.append( ( aD['xdate'], tn, d, aD ) )
         tL.sort()
         tL.reverse()
         for xdate,tn,d,aD in tL:
-          print make_attr_string(aD), d+'/'+tn
+          print3( make_attr_string(aD), d+'/'+tn )
     
     elif fmt and fmt == 'multi':
       src = MultiResults()
       src.readFile(fname)
       
-      if optD.has_key('-p'):
+      if '-p' in optD:
         pcD = {}
         for d in src.dirList():
           for tn in src.testList(d):
@@ -1889,7 +1890,7 @@ def results_listing( fname, optD ):
         pcL = pcD.keys()
         pcL.sort()
         for pc in pcL:
-          print pc
+          print3( pc )
       
       else:
         tL = []
@@ -1897,12 +1898,12 @@ def results_listing( fname, optD ):
           for tn in src.testList(d):
             for pc in src.platformList(d,tn):
               aD = src.testAttrs(d,tn,pc)
-              if aD.has_key('xdate'):
+              if 'xdate' in aD:
                 tL.append( ( aD['xdate'], tn, d, pc, aD ) )
         tL.sort()
         tL.reverse()
         for xdate,tn,d,pc,aD in tL:
-          print make_attr_string(aD), pc, d+'/'+tn
+          print3( make_attr_string(aD), pc, d+'/'+tn )
     
     else:
       sys.stderr.write( "Cannot list due to unknown file format: " + \
@@ -1929,18 +1930,18 @@ def results_clean( path, optD ):
         raise Exception( "Specified directory does not contain a " + \
                          "test source tree runtimes file: " + path )
     
-    if not optD.has_key('-p'):
+    if '-p' not in optD:
       msgL.append( "Warning: nothing to do without the -p option " + \
                    "(currently)" )
     
     fmt,vers,hdr,nskip = read_file_header( path )
     if fmt and fmt == 'results':
-      if optD.has_key('-p'):
+      if '-p' in optD:
         msgL.append( "Warning: the -p option has no effect on results files" )
       else:
         pass
     elif fmt and fmt == 'multi':
-      if optD.has_key('-p'):
+      if '-p' in optD:
         xpc = optD['-p']
         mr = MultiResults()
         src = MultiResults()
@@ -2288,9 +2289,9 @@ def read_results_file( filename, warnL ):
         # the file header contains the platform & compiler names
         assert tr.platform() != None and tr.compiler() != None
     
-    except Exception, e:
+    except:
         warnL.append( "skipping results file: " + filename + \
-                                ", Exception = " + str(e) )
+                                ", Exception = " + str(sys.exc_info()[1]) )
         return None,None,None
     
     results_key = plat
@@ -3133,7 +3134,7 @@ class LookupCache:
           # look for runtimes in the test source tree
           
           d = testspec.getDirectory()
-          if not self.srcdirs.has_key(d):
+          if d not in self.srcdirs:
             
             while tlen == None:
               f = os.path.join( d, runtimes_filename )
@@ -3148,7 +3149,7 @@ class LookupCache:
                   break
               
               nd = os.path.dirname(d)
-              if d == nd or not nd or nd == '/' or self.srcdirs.has_key(nd):
+              if d == nd or not nd or nd == '/' or nd in self.srcdirs:
                 break
               d = nd
           

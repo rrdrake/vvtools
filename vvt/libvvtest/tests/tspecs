@@ -178,7 +178,7 @@ def test01():
 
     tL = TestSpecCreator.createTestObjects( '.', 'atest.xml', None, nofltr )
     for ti in tL:
-      print ti
+      print3( ti )
     assert len(tL) == 6
 
 
@@ -194,7 +194,7 @@ def test02():
         </rtest>""" )
 
     try: TestSpecCreator.createTestObjects( '.', 'bad1.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'bad2.xml', """
@@ -204,7 +204,7 @@ def test02():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad2.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'bad3.xml', """
@@ -213,7 +213,7 @@ def test02():
         </rtest>""" )
 
     try: TestSpecCreator.createTestObjects( '.', 'bad3.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'ok1.xml', """
@@ -225,7 +225,7 @@ def test02():
     assert len(tL) == 1
     kL = tL[0].getKeywords()
     kL.sort()
-    print "keywords", kL
+    print3( "keywords", kL )
     assert len(kL) == 3
     assert kL[0] == 'atest' and kL[1] == 'junk1' and kL[2] == 'junk2'
 
@@ -240,7 +240,7 @@ def test02():
     assert len(tL) == 1
     kL = tL[0].getKeywords()
     kL.sort()
-    print "keywords", kL
+    print3( "keywords", kL )
     assert len(kL) == 4
     assert kL[0] == 'atest' and kL[1] == 'exename'
     assert kL[2] == 'junk1' and kL[3] == 'junk2'
@@ -268,7 +268,7 @@ def test03():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad5.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected an exception" )
 
     writefile( 'bad6.xml', """
@@ -277,7 +277,7 @@ def test03():
         </rtest>""" )
 
     try: TestSpecCreator.createTestObjects( '.', 'bad6.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'bad7.xml', """
@@ -287,7 +287,7 @@ def test03():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad7.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'ok3.xml', """
@@ -313,7 +313,7 @@ def test03():
       for (n,v) in parms.items():
         pL.append( n+'='+v )
     pL.sort()
-    print "param list", pL
+    print3( "param list", pL )
     assert pL[0] == 'pname=val1' and pL[1] == 'pname=val2'
 
     writefile( 'ok4.xml', """
@@ -325,7 +325,7 @@ def test03():
     tL = TestSpecCreator.createTestObjects( '.', 'ok4.xml', None, nofltr )
     assert len(tL) == 1
     pL = paramGather(tL)
-    print "param list", pL
+    print3( "param list", pL )
     assert pL[0] == 'parm=valA.pname=val1'
 
     writefile( 'ok5.xml', """
@@ -337,7 +337,7 @@ def test03():
     tL = TestSpecCreator.createTestObjects( '.', 'ok5.xml', None, nofltr )
     assert len(tL) == 6
     pL = paramGather(tL)
-    print "param list", pL
+    print3( "param list", pL )
     assert pL[0] == 'parm=valA.pname=val1' and pL[1] == 'parm=valA.pname=val2'
     assert pL[2] == 'parm=valB.pname=val1' and pL[3] == 'parm=valB.pname=val2'
     assert pL[4] == 'parm=valC.pname=val1' and pL[5] == 'parm=valC.pname=val2'
@@ -351,7 +351,7 @@ def test03():
     tL = TestSpecCreator.createTestObjects( '.', 'ok6.xml', None, nofltr )
     assert len(tL) == 2
     pL = paramGather(tL)
-    print "param list", pL
+    print3( "param list", pL )
     assert pL[0] == 'parm=valA.pname=val1' and pL[1] == 'parm=valA.pname=val2'
 
     writefile( 'ok6b.xml', """
@@ -362,7 +362,7 @@ def test03():
     tL = TestSpecCreator.createTestObjects( '.', 'ok6b.xml', None, nofltr )
     assert len(tL) == 2
     pL = paramGather(tL)
-    print "param list", pL
+    print3( "param list", pL )
     assert pL[0] == 'paramA=A1.paramB=B1' and pL[1] == 'paramA=A2.paramB=B2'
 
     writefile( 'ok6c.xml', """
@@ -373,7 +373,7 @@ def test03():
     tL = TestSpecCreator.createTestObjects( '.', 'ok6c.xml', None, nofltr )
     assert len(tL) == 1
     pL = paramGather(tL)
-    print "param list", pL
+    print3( "param list", pL )
     assert pL[0] == 'paramA=A1.paramB=B1'
 
     writefile( 'ok6d.xml', """
@@ -385,7 +385,7 @@ def test03():
     tL = TestSpecCreator.createTestObjects( '.', 'ok6d.xml', None, nofltr )
     assert len(tL) == 4
     pL = paramGather(tL)
-    print "param list", pL
+    print3( "param list", pL )
     assert pL[0] == 'paramA=A1.paramB=B1.paramC=C1'
     assert pL[1] == 'paramA=A1.paramB=B1.paramC=C2'
     assert pL[2] == 'paramA=A2.paramB=B2.paramC=C1'
@@ -400,7 +400,7 @@ def test03():
     tL = TestSpecCreator.createTestObjects( '.', 'ok6e.xml', None, nofltr )
     assert len(tL) == 2
     pL = paramGather(tL)
-    print "param list", pL
+    print3( "param list", pL )
     assert pL[0] == 'paramA=A1.paramB=B1.paramC=C1'
     assert pL[1] == 'paramA=A1.paramB=B1.paramC=C2'
 
@@ -410,7 +410,7 @@ def test03():
         </rtest>""" )
 
     try: TestSpecCreator.createTestObjects( '.', 'bad7b.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'bad7c.xml', """
@@ -419,7 +419,7 @@ def test03():
         </rtest>""" )
 
     try: TestSpecCreator.createTestObjects( '.', 'bad7c.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'ok6f.xml', """
@@ -432,7 +432,7 @@ def test03():
     wx = FilterExpressions.WordExpression(['fast'])
     uf = RuntimeConfig( keyword_expr=wx )
     try: tL = TestSpecCreator.createTestObjects( '.', 'ok6f.xml', None, uf )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     # duplicate parameterize blocks
@@ -445,7 +445,7 @@ def test03():
     tL = TestSpecCreator.createTestObjects( '.', 'ok6h.xml', None, nofltr )
     assert len(tL) == 2
     pL = paramGather(tL)
-    print "param list", pL
+    print3( "param list", pL )
     assert pL[0] == 'paramA=A1.paramB=B1'
     assert pL[1] == 'paramA=A2.paramB=B2'
 
@@ -458,7 +458,7 @@ def test03():
     tL = TestSpecCreator.createTestObjects( '.', 'ok6i.xml', None, nofltr )
     assert len(tL) == 1
     pL = paramGather(tL)
-    print "param list", pL
+    print3( "param list", pL )
     assert pL[0] == 'paramA=A1.paramB=B1'
 
 
@@ -475,7 +475,7 @@ def test04():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad10.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'bad11.xml', """
@@ -485,7 +485,7 @@ def test04():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad11.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'bad12.xml', """
@@ -496,7 +496,7 @@ def test04():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad12.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'ok7.xml', """
@@ -861,7 +861,7 @@ def test05():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad16.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'bad17.xml', """
@@ -871,7 +871,7 @@ def test05():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad17.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'bad18.xml', """
@@ -881,7 +881,7 @@ def test05():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad18.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'ok20.xml', """
@@ -922,7 +922,7 @@ def test06():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad22.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'ok25.xml', """
@@ -953,7 +953,7 @@ def test06():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad22a.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'bad22b.xml', """
@@ -963,7 +963,7 @@ def test06():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad22b.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'bad22c.xml', """
@@ -973,7 +973,7 @@ def test06():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad22c.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'ok25a.xml', """
@@ -984,7 +984,7 @@ def test06():
     tL = TestSpecCreator.createTestObjects( '.', 'ok25a.xml', None, nofltr )
     assert len(tL) == 1
     t = tL[0]
-    print t.getExecutionList()
+    print3( t.getExecutionList() )
     assert len( t.getExecutionList() ) == 0, \
            "VNAME should have to be in the environment"
     os.environ[ 'VNAME' ] = "somevalue"
@@ -1008,7 +1008,7 @@ def test07():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad23.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'bad24.xml', """
@@ -1018,7 +1018,7 @@ def test07():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad24.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'bad24b.xml', """
@@ -1028,7 +1028,7 @@ def test07():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad24b.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'bad24c.xml', """
@@ -1038,7 +1038,7 @@ def test07():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad24c.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'bad24d.xml', """
@@ -1048,7 +1048,7 @@ def test07():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad24d.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     # this section tests using test_name attribute for backward compatibility
@@ -1062,13 +1062,13 @@ def test07():
     assert len(tL) == 1
     cpL = tL[0].getCopyFiles()
     cpL.sort()
-    print "copy files", cpL
+    print3( "copy files", cpL )
     assert len(cpL) == 2
     assert cpL[0] == ("file1", None)
     assert cpL[1] == ("file2", None)
     lnL = tL[0].getLinkFiles()
     lnL.sort()
-    print "link files", lnL
+    print3( "link files", lnL )
     assert len(lnL) == 2
     assert lnL[0] == ("file3", "file3.in")
     assert lnL[1] == ("ok26b.xml", None)
@@ -1083,13 +1083,13 @@ def test07():
     assert len(tL) == 1
     cpL = tL[0].getCopyFiles()
     cpL.sort()
-    print "copy files", cpL
+    print3( "copy files", cpL )
     assert len(cpL) == 2
     assert cpL[0] == ("file1", None)
     assert cpL[1] == ("file2", None)
     lnL = tL[0].getLinkFiles()
     lnL.sort()
-    print "link files", lnL
+    print3( "link files", lnL )
     assert len(lnL) == 2
     assert lnL[0] == ("file3", "file3.in")
     assert lnL[1] == ("ok26.xml", None)
@@ -1107,7 +1107,7 @@ def test07():
       if t.getParameterValue('np') == '1':
         assert len( t.getCopyFiles() ) == 0
         lnL = t.getLinkFiles()
-        print "np=1 linked files", lnL
+        print3( "np=1 linked files", lnL )
         assert len(lnL) == 2
         lnL.sort()
         assert lnL[0] == ("file.1", "file")
@@ -1116,7 +1116,7 @@ def test07():
         assert t.getParameterValue('np') == '4'
         assert len( t.getCopyFiles() ) == 0
         lnL = t.getLinkFiles()
-        print "np=2 linked files", lnL
+        print3( "np=2 linked files", lnL )
         assert len(lnL) == 2
         lnL.sort()
         assert lnL[0] == ("file.4", "file")
@@ -1135,14 +1135,14 @@ def test07():
       if t.getParameterValue('np') == '1':
         assert len( t.getLinkFiles() ) == 1
         cpL = t.getCopyFiles()
-        print "np=1 copied files", cpL
+        print3( "np=1 copied files", cpL )
         assert len(cpL) == 1
         assert cpL[0] == ("file.1", "file")
       else:
         assert t.getParameterValue('np') == '4'
         assert len( t.getLinkFiles() ) == 1
         cpL = t.getCopyFiles()
-        print "np=2 copied files", cpL
+        print3( "np=2 copied files", cpL )
         assert len(cpL) == 1
         assert cpL[0] == ("file.4", "file")
 
@@ -1160,7 +1160,7 @@ def test08():
 
     try:
       TestSpecCreator.createTestObjects( '.', 'bad25.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'ok29.xml', """
@@ -1318,7 +1318,7 @@ def test09():
 
     for t in tL:
       try: TestSpecCreator.refreshTest( t, RuntimeConfig() )
-      except TestSpecCreator.TestSpecError, e: print e
+      except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
       else: raise Exception( "expected a TestSpecError exception" )
 
     writefile( 'ok34.xml', """
@@ -1336,7 +1336,7 @@ def test09():
     tL = TestSpecCreator.createTestObjects( '.', 'ok34.xml', None, uf )
     assert len(tL) == 2
     for t in tL:
-      print t
+      print3( t )
       kL = t.getKeywords()
       kL.sort()
       assert kL == ["alegra", "atest", "key1", "key2", "np"]
@@ -1355,7 +1355,7 @@ def test09():
       lnL.sort()
       assert lnL[0] == ("lnfile","file")
       assert lnL[1] == ("ok34.xml",None)
-    print "==========="
+    print3( "===========" )
     writefile( 'ok34.xml', """
         <rtest name="atest">
           <keywords> key3 key1 key2 </keywords>
@@ -1370,7 +1370,7 @@ def test09():
     tL = TestSpecCreator.createTestObjects( '.', 'ok34.xml', None, uf )
     for t in tL:
       TestSpecCreator.refreshTest( t, uf )
-      print t
+      print3( t )
       kL = t.getKeywords()
       kL.sort()
       assert kL == ["atest", "key1", "key2", "key3", "np"]
@@ -1402,11 +1402,11 @@ def test10():
     assert ts.getAttr("noexist", "defval") == "defval"
     try:
       ts.getAttr("noexist")
-    except KeyError, e: print "*** KeyError: 'noexist'"
+    except KeyError: print3( "*** KeyError: 'noexist'" )
     else: raise Exception( "*** expected an error" )
     try:
       ts.setAttr("a space", "a value")
-    except ValueError, e: print e
+    except ValueError: print3( sys.exc_info()[1] )
     else: raise Exception( "*** expected an error" )
     ts.setAttr("aname1", "a value")
     ts.setAttr("aname2", "a"+os.linesep+"value")
@@ -1419,7 +1419,7 @@ def test10():
     ts.setParameters( { 'np':'4' } )
 
     sid = TestSpecCreator.toString(ts)
-    print "test string id", sid
+    print3( "test string id", sid )
     ts2 = TestSpecCreator.fromString(sid)
     assert ts.getName() == ts2.getName()
     assert ts.getRootpath() == ts2.getRootpath()
@@ -1486,7 +1486,7 @@ def test12():
     tL = TestSpecCreator.createTestObjects( '.', 'ok39.xml', None, nofltr )
     assert len(tL) == 3
     tL.sort()
-    print "print with parameterize/analyze 4:", tL
+    print3( "print3( with parameterize/analyze 4:", tL )
     assert tL[0].isAnalyze()
     assert tL[0].getAnalyze( 'scriptfrag' )
     assert not tL[1].isAnalyze()
@@ -1529,7 +1529,7 @@ def test13():
                         search_patterns=['One'] )
     tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
     assert len(tL) == 2
-    print tL[0]
+    print3( tL[0] )
     uf = RuntimeConfig( search_file_globs=['*.txt'],
                         search_patterns=['three'] )
     tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
@@ -1581,7 +1581,7 @@ def test13():
                         search_patterns=['One'] )
     tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
     assert len(tL) == 2
-    print tL[0]
+    print3( tL[0] )
     uf = RuntimeConfig( search_file_globs=['*.txt'],
                         search_patterns=['three'] )
     tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
@@ -1644,7 +1644,7 @@ def test13():
                         search_patterns=['One'] )
     tL = TestSpecCreator.createTestObjects( '.', 'ok49.xml', None, uf )
     assert len(tL) == 2
-    print tL[0]
+    print3( tL[0] )
 
     writefile( 'ok50.xml', """
         <rtest name="regex">
@@ -1656,7 +1656,7 @@ def test13():
                         search_patterns=['One'] )
     tL = TestSpecCreator.createTestObjects( '.', 'ok50.xml', None, uf )
     assert len(tL) == 2
-    print tL[0]
+    print3( tL[0] )
 
 
 def test14():
@@ -1728,7 +1728,7 @@ def test14():
         </rtest>""" )
 
     try: TestSpecCreator.createTestObjects( '.', 'bad31.xml', None, nofltr )
-    except TestSpecCreator.TestSpecError, e: print e
+    except TestSpecCreator.TestSpecError: print3( sys.exc_info()[1] )
     else: raise Exception( "expected a TestSpecError exception" )
 
 

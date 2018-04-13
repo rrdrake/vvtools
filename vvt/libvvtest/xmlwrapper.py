@@ -53,7 +53,7 @@ class XmlNode:
 
     def hasAttr(self, name):
         "Returns true if the XML node has an attribute with the given name."
-        return self.attrs.has_key(name)
+        return name in self.attrs
 
     def getAttr(self, name, *args):
         """

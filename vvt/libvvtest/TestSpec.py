@@ -5,7 +5,6 @@
 # Government retains certain rights in this software.
 
 import os
-import string
 import types
 
 results_keywords = [ 'notrun', 'notdone',
@@ -87,8 +86,8 @@ class TestSpec:
         """
         kL = [] + self.keywords
         if result_attrs:
-          if self.attrs.has_key('state'): kL.append( self.attrs['state'] )
-          if self.attrs.has_key('result'): kL.append( self.attrs['result'] )
+          if 'state' in self.attrs: kL.append( self.attrs['state'] )
+          if 'result' in self.attrs: kL.append( self.attrs['result'] )
         return kL
     
     def hasKeyword(self, keyword):
@@ -247,12 +246,12 @@ class TestSpec:
         Set a name to value pair.  The name can only contain a-zA-Z0-9 and _.
         """
         for c in name:
-          if not TestSpec.varname_chars.has_key(c):
+          if c not in TestSpec.varname_chars:
             raise ValueError( "character '" + c + "' not allowed in name" )
         self.attrs[name] = value
     
     def hasAttr(self, name):
-        return self.attrs.has_key(name)
+        return name in self.attrs
     
     def getAttr(self, name, *args):
         """
@@ -284,7 +283,7 @@ class TestSpec:
         for f,tf in self.getCopyFiles(): D[f] = None
         for tf,f in self.getBaselineFiles(): D[f] = None
         for f in self.src_files: D[f] = None
-        return D.keys()
+        return list( D.keys() )
     
     ##########################################################
     
@@ -345,6 +344,14 @@ class TestSpec:
         if   self.xdir < rhs.xdir: return -1
         elif self.xdir > rhs.xdir: return  1
         return 0
+    
+    def __lt__(self, rhs):
+        if rhs == None: return False  # None objects are always less
+        if   self.name < rhs.name: return True
+        elif self.name > rhs.name: return False
+        if   self.xdir < rhs.xdir: return True
+        elif self.xdir > rhs.xdir: return False
+        return False
     
     def __repr__(self):
         return 'TestSpec(name=' + str(self.name) + ', xdir=' + self.xdir + ')'
@@ -422,7 +429,7 @@ class TestSpec:
           for n,v in self.params.items():
             L.append( n + '=' + v )
           L.sort()
-          b = b + '.' + string.join(L,'.')
+          b = b + '.' + '.'.join(L)
         
         d = os.path.dirname( self.getFilepath() )
         
@@ -475,7 +482,7 @@ class TestSpec:
         'exit_status' is any string.
         """
         assert name
-        s = string.join( string.split(content) )  # remove embedded newlines
+        s = ' '.join( content.split() )  # remove embedded newlines
         self.execL.append( (name, s, exit_status, False) )
    
     def addLinkFile(self, srcname, destname=None):
@@ -558,7 +565,7 @@ class TestSpec:
           newL = []
           uniq = {}
           for i in L:
-            if not uniq.has_key(i):
+            if i not in uniq:
               newL.append(i)
               uniq[i] = None
         return newL

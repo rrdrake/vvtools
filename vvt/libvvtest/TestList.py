@@ -661,8 +661,8 @@ class TestList:
           testL = TestSpecCreator.createTestObjects(
                         basepath, relfile, force_params, self.rtconfig )
         except TestSpecCreator.TestSpecError:
-          print "*** skipping file " + os.path.join( basepath, relfile ) + \
-                ": " + str( sys.exc_info()[1] )
+          print3( "*** skipping file " + os.path.join( basepath, relfile ) + \
+                  ": " + str( sys.exc_info()[1] ) )
           testL = []
         
         for t in testL:
@@ -718,7 +718,7 @@ class TestList:
           xt = TestExec.TestExec( t, perms, has_dependent )
           
           np = int( t.getParameters().get('np', 0) )
-          if self.xtlist.has_key(np):
+          if np in self.xtlist:
             self.xtlist[np].append(xt)
           else:
             self.xtlist[np] = [xt]
@@ -959,6 +959,5 @@ def find_tests_by_execute_directory_match( xdir, pattern, xdir_list ):
 
 
 def print3( *args ):
-    "A python 2 and 3 compatible print function"
     sys.stdout.write( ' '.join( [ str(arg) for arg in args ] ) + '\n' )
     sys.stdout.flush()

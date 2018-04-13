@@ -23,8 +23,8 @@ def platform( opts ):
     cluster = os.environ.get('SNLCLUSTER','')
 
     if debug:
-        print 'idplatform.platform: uname =', osname, nodename, osrelease, machine
-        print 'idplatform.platform: pbshost, cluster', pbshost, cluster
+        print3( 'idplatform.platform: uname =', osname, nodename, osrelease, machine )
+        print3( 'idplatform.platform: pbshost, cluster', pbshost, cluster )
 
     if base_match( [nodename,pbshost],
                    ['ci-fe','ci-login','ci-vizlogin','mzlogin'] ) or \
@@ -77,7 +77,7 @@ def platform( opts ):
         return 'ceelan'
 
     if debug:
-        print 'idplatform.platform: returning'
+        print3( 'idplatform.platform: returning' )
 
 
 def CEELAN():
@@ -144,6 +144,11 @@ def shell_match( namelist, matchlist ):
 
 #######################################################################
 
+def print3( *args ):
+    sys.stdout.write( ' '.join( [ str(arg) for arg in args ] ) + '\n' )
+    sys.stdout.flush()
+
+
 if __name__ == "__main__":
     """
     Can execute this script as a quick check of the logic and results.
@@ -154,4 +159,4 @@ if __name__ == "__main__":
     for n,v in optL:
         optD[n] = v
     p = platform( optD )
-    print p
+    print3( p )

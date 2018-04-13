@@ -278,7 +278,10 @@ def run_cmd( cmd, directory=None ):
     while 1:
         buf = os.read(pread, 1024)
         if len(buf) == 0: break;
-        out = out + buf
+        if sys.version_info[0] < 3:
+            out = out + buf
+        else:
+            out = out + buf.decode()
     os.close(pread)  # free up file descriptor
     pid,x = os.waitpid(pid,0)
     print3( out )

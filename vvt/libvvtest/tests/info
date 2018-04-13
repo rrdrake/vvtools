@@ -53,7 +53,7 @@ def extract_keywords( out ):
     D = {}
     for k in kL:
       D[k] = None
-    L = D.keys()
+    L = list( D.keys() )
     L.sort()
     return L
 
@@ -63,7 +63,7 @@ def extract_files( out, rootd ):
       line = line.strip()
       if line and line[0] == '/':
         D[line] = None
-    fL = D.keys()
+    fL = list( D.keys() )
     lend = len(rootd)
     for i in range(len(fL)):
       fL[i] = fL[i][lend+1:]
@@ -154,39 +154,39 @@ def test01():
 
     out,np,nd,nf,nn = run_vvtest( '--keys' )
     L = extract_keywords(out)
-    print "keywords", L
+    print3( "keywords", L )
     assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
 
     out,np,nd,nf,nn = run_vvtest( '--files' )
     L = extract_files(out, rootd)
-    print "files", L
+    print3( "files", L )
     assert L == [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml', \
                   'param.xml', 'sdir/skeys.xml']
 
     out,np,nd,nf,nn = run_vvtest( '-k fast --files' )
     L = extract_files(out, rootd)
-    print "files", L
+    print3( "files", L )
     assert L == [ 'sdir/skeys.xml']
 
     out,np,nd,nf,nn = run_vvtest( '-K fast -K medium -K long --files' )
     L = extract_files(out, rootd)
-    print "files", L
+    print3( "files", L )
     assert L == [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml', 'param.xml']
 
     out,np,nd,nf,nn = run_vvtest()
     out,np,nd,nf,nn = run_vvtest( '-R --keys' )
     L = extract_keywords(out)
-    print "keywords", L
+    print3( "keywords", L )
     assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
 
     out,np,nd,nf,nn = run_vvtest( '-i --keys' )
     L = extract_keywords(out)
-    print "keywords", L
+    print3( "keywords", L )
     assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
 
     out,np,nd,nf,nn = run_vvtest( '-i --files' )
     L = extract_files(out, rootd)
-    print "files", L
+    print3( "files", L )
     assert L == [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml', \
                   'param.xml', 'sdir/skeys.xml']
 
@@ -194,17 +194,17 @@ def test01():
 
     out,np,nd,nf,nn = run_vvtest( '-R --keys' )
     L = extract_keywords(out)
-    print "keywords", L
+    print3( "keywords", L )
     assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
 
     out,np,nd,nf,nn = run_vvtest( '-i --keys' )
     L = extract_keywords(out)
-    print "keywords", L
+    print3( "keywords", L )
     assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
 
     out,np,nd,nf,nn = run_vvtest( '-i --files' )
     L = extract_files(out, rootd)
-    print "files", L
+    print3( "files", L )
     assert L == [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml', \
                   'param.xml', 'sdir/skeys.xml']
 
@@ -215,17 +215,17 @@ def test01():
 
     out,np,nd,nf,nn = run_vvtest( '-R --keys' )
     L = extract_keywords(out)
-    print "keywords", L
+    print3( "keywords", L )
     assert L == ['fast', 'jupiter', 'mars']
 
     out,np,nd,nf,nn = run_vvtest( '-i --keys' )
     L = extract_keywords(out)
-    print "keywords", L
+    print3( "keywords", L )
     assert L == ['fast', 'jupiter', 'mars']
 
     out,np,nd,nf,nn = run_vvtest( '-i --files' )
     L = extract_files(out, rootd)
-    print "files", L
+    print3( "files", L )
     assert L == ['sdir/skeys.xml']
 
 
@@ -317,22 +317,22 @@ def test03():
 
     out,np,nd,nf,nn = run_vvtest( '--files' )
     L = extract_files( out, cwd )
-    print "files", L
+    print3( "files", L )
     assert len(L) == 1
 
     out,np,nd,nf,nn = run_vvtest( '--files -k stripes' )
     L = extract_files( out, cwd )
-    print "files", L
+    print3( "files", L )
     assert len(L) == 1
 
     out,np,nd,nf,nn = run_vvtest( '--files -k patchwork' )
     L = extract_files( out, cwd )
-    print "files", L
+    print3( "files", L )
     assert len(L) == 1
 
     out,np,nd,nf,nn = run_vvtest( '--files -k stripes -k patchwork' )
     L = extract_files( out, cwd )
-    print "files", L
+    print3( "files", L )
     assert len(L) == 0
 
 
@@ -353,22 +353,22 @@ def test04():
 
     out,np,nd,nf,nn = run_vvtest( '--files' )
     L = extract_files( out, cwd )
-    print "files", L
+    print3( "files", L )
     assert len(L) == 1
 
     out,np,nd,nf,nn = run_vvtest( '--files -k stripes' )
     L = extract_files( out, cwd )
-    print "files", L
+    print3( "files", L )
     assert len(L) == 1
 
     out,np,nd,nf,nn = run_vvtest( '--files -k patchwork' )
     L = extract_files( out, cwd )
-    print "files", L
+    print3( "files", L )
     assert len(L) == 1
 
     out,np,nd,nf,nn = run_vvtest( '--files -k stripes -k patchwork' )
     L = extract_files( out, cwd )
-    print "files", L
+    print3( "files", L )
     assert len(L) == 0
 
 
@@ -422,7 +422,7 @@ def test05():
 
     out,np,nd,nf,nn = run_vvtest( '--files' )
     L = extract_files( out, rootd )
-    print "files", L
+    print3( "files", L )
     assert L == [ 'atest.vvt', 'btest.vvt']
 
 ########################################################################

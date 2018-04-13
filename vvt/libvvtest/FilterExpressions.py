@@ -5,8 +5,7 @@
 # Government retains certain rights in this software.
 
 import os, sys
-import string, re
-import types
+import re
 import fnmatch
 
 import TestSpec
@@ -28,8 +27,7 @@ for c in extra_chars:
 
 def allowableKeyword(s):
     for c in s:
-      if not alphanum_chars_dict.has_key(c) and \
-         not extra_chars_dict.has_key(c):
+      if c not in alphanum_chars_dict and c not in extra_chars_dict:
         return 0
     return 1
 
@@ -73,13 +71,13 @@ class WordExpression:
         
         if expr != None:
           
-          if type(expr) == types.ListType:
+          if type(expr) == type([]):
             # convert from k-format
             S = '' ; altS = ''
             for grp in expr:
               L = [] ; altL = []
               for k in grp.split('/'):
-                k = string.strip(k)
+                k = k.strip()
                 bang = ''
                 while k[:1] == '!':
                   k = k[1:].strip()
@@ -95,14 +93,14 @@ class WordExpression:
                   pass  # should be an error but is currently ignored
               if len(L) > 0:
                 if S: S += ' and '
-                S += '( ' + string.join(L,' or ') + ' )'
+                S += '( ' + ' or '.join(L) + ' )'
               if len(altL) > 0:
                 if altS: altS += ' and '
-                altS += '( ' + string.join(altL,' or ') + ' )'
-            expr = string.join( S.split() )
+                altS += '( ' + ' or '.join(altL) + ' )'
+            expr = ' '.join( S.split() )
           
           else:
-            expr = string.join( expr.split() )
+            expr = ' '.join( expr.split() )
           
           # note that empty expressions or subexpressions evaluate to false;
           # however, for non-results expressions or subexpressions they
@@ -191,23 +189,25 @@ class WordExpression:
                 else:
                   wordL.append( tok3 )
                   L3.append( '(evalfunc("'+tok3+'")==1)' )
-              L2.append( string.join( L3, ')' ) )
-            L1.append( string.join( L2, '(' ) )
+              L2.append( ')'.join( L3 ) )
+            L1.append( '('.join( L2 ) )
           
           if len(L1) == 0:
             raise ValueError( 'invalid option expression: <empty expression>' )
           
-          s = string.join( L1 )
+          s = ' '.join( L1 )
           
           # evaluate the expression to test validity
           try:
             def evalfunc(tok): return 1
             v = eval( s )
-            if hasattr(types, 'BooleanType'):
-              assert type(v) == types.BooleanType
-            else:
-              assert type(v) == types.IntType
-          except Exception, e:
+            #print ( 'magic: v type', type(v) )
+            assert type(v) == type(False)
+            # if hasattr(types, 'BooleanType'):
+            #   assert type(v) == types.BooleanType
+            # else:
+            #   assert type(v) == type(2)
+          except:
             raise ValueError( 'invalid option expression: "' + expr + '"' )
           
           expr = s
@@ -252,16 +252,16 @@ class ParamFilter:
         
         Raises a ValueError if the expression contains a syntax error.
         """
-        if type(expr) == types.ListType:
+        if type(expr) == type([]):
           # 'expr' is a list of strings that are AND'ed together
           self.wexpr = WordExpression()
           for ors in expr:
             # the divide character is used as an OR operator
             L = []
-            for s in string.split(ors,'/'):
-              if string.strip(s):
+            for s in ors.split('/'):
+              if s.strip():
                 L.append(s)
-            x = string.join( L, ' or ' )
+            x = ' or '.join( L )
             self.wexpr.append(x, 'and')
         else:
           self.wexpr = WordExpression(expr)
@@ -307,22 +307,22 @@ class ParamFilter:
             return ParamFilter.EvalLE(f.p, f.v)
           if isinstance(f, ParamFilter.EvalEQ):
             return ParamFilter.EvalNE(f.p, f.v)
-        L = string.split( word, '<=', 1 )
+        L = word.split( '<=', 1 )
         if len(L) > 1:
           return ParamFilter.EvalLE( L[0], L[1] )
-        L = string.split( word, '>=', 1 )
+        L = word.split( '>=', 1 )
         if len(L) > 1:
           return ParamFilter.EvalGE( L[0], L[1] )
-        L = string.split( word, '!=', 1 )
+        L = word.split( '!=', 1 )
         if len(L) > 1:
           return ParamFilter.EvalNE( L[0], L[1] )
-        L = string.split( word, '<', 1 )
+        L = word.split( '<', 1 )
         if len(L) > 1:
           return ParamFilter.EvalLT( L[0], L[1] )
-        L = string.split( word, '>', 1 )
+        L = word.split( '>', 1 )
         if len(L) > 1:
           return ParamFilter.EvalGT( L[0], L[1] )
-        L = string.split( word, '=', 1 )
+        L = word.split( '=', 1 )
         if len(L) > 1:
           return ParamFilter.EvalEQ( L[0], L[1] )
         return ParamFilter.EvalEQ( word, '' )
@@ -335,8 +335,8 @@ class ParamFilter:
             v = paramD.get(self.p,None)
             if self.v:
               if v == None: return 0  # paramD does not have the parameter
-              if type(v) == types.IntType: return v == int(self.v)
-              elif type(v) == types.FloatType: return v == float(self.v)
+              if type(v) == type(2): return v == int(self.v)
+              elif type(v) == type(2.2): return v == float(self.v)
               if v == self.v: return 1
               try:
                 if int(v) == int(self.v): return 1
@@ -355,8 +355,8 @@ class ParamFilter:
             v = paramD.get(self.p,None)
             if self.v:
               if v == None: return 0  # paramD does not have the parameter
-              if type(v) == types.IntType: return v != int(self.v)
-              elif type(v) == types.FloatType: return v != float(self.v)
+              if type(v) == type(2): return v != int(self.v)
+              elif type(v) == type(2.2): return v != float(self.v)
               if v == self.v: return 0
               try:
                 if int(v) == int(self.v): return 0
@@ -375,8 +375,8 @@ class ParamFilter:
         def evaluate(self, paramD):
             v = paramD.get(self.p,None)
             if v == None: return 0
-            if type(v) == types.IntType: return v <= int(self.v)
-            elif type(v) == types.FloatType: return v <= float(self.v)
+            if type(v) == type(2): return v <= int(self.v)
+            elif type(v) == type(2.2): return v <= float(self.v)
             if v == self.v: return 1
             try:
               if int(v) > int(self.v): return 0
@@ -396,8 +396,8 @@ class ParamFilter:
         def evaluate(self, paramD):
             v = paramD.get(self.p,None)
             if v == None: return 0
-            if type(v) == types.IntType: return v >= int(self.v)
-            elif type(v) == types.FloatType: return v >= float(self.v)
+            if type(v) == type(2): return v >= int(self.v)
+            elif type(v) == type(2.2): return v >= float(self.v)
             if v == self.v: return 1
             try:
               if int(v) < int(self.v): return 0
@@ -417,8 +417,8 @@ class ParamFilter:
         def evaluate(self, paramD):
             v = paramD.get(self.p,None)
             if v == None: return 0
-            if type(v) == types.IntType: return v < int(self.v)
-            elif type(v) == types.FloatType: return v < float(self.v)
+            if type(v) == type(2): return v < int(self.v)
+            elif type(v) == type(2.2): return v < float(self.v)
             if v == self.v: return 0
             try:
               if int(v) >= int(self.v): return 0
@@ -438,8 +438,8 @@ class ParamFilter:
         def evaluate(self, paramD):
             v = paramD.get(self.p,None)
             if v == None: return 0
-            if type(v) == types.IntType: return v > int(self.v)
-            elif type(v) == types.FloatType: return v > float(self.v)
+            if type(v) == type(2): return v > int(self.v)
+            elif type(v) == type(2.2): return v > float(self.v)
             if v == self.v: return 0
             try:
               if int(v) <= int(self.v): return 0

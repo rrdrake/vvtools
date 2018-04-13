@@ -107,9 +107,9 @@ def writeScript( tspec, xdb, plat, \
       line_list.append( 'set PROJECT =' )
     line_list.extend( [ \
       'echo "PROJECT = $PROJECT"',
-      'set ON = "'  + string.join(onopts,'+') + '"',
+      'set ON = "'  + '+'.join(onopts) + '"',
       'echo ON = "$ON"',
-      'set OFF = "' + string.join(offopts,'+') + '"',
+      'set OFF = "' + '+'.join(offopts) + '"',
       'echo OFF = "$OFF"',
       'set np = ' + str(tspec.getParameters().get('np',0)),
       'set SRCDIR = "' + srcdir + '"',
@@ -147,7 +147,7 @@ def writeScript( tspec, xdb, plat, \
         paths = varL[1][0]
         flags = varL[1][1]
         line_list.extend( [ \
-          'foreach p (' + string.join(paths) + ')',
+          'foreach p (' + ' '.join(paths) + ')',
           '  if ( -e $p ) then',
           '    set ' + vname + ' = "$p ' + flags + '"',
           '    break',
@@ -263,7 +263,7 @@ def writeScript( tspec, xdb, plat, \
                   line_list.append( 'echo "PARAM_'+n2+' = $PARAM_'+n2+'"' )
               line_list.append('')
 
-      line_list.extend( string.split( tspec.getAnalyze('scriptfrag'), os.linesep ) )
+      line_list.extend( tspec.getAnalyze('scriptfrag').split( os.linesep ) )
       line_list.append('')
       line_list.append('################ end analyze script')
       line_list.append('')

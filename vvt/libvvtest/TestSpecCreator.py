@@ -5,8 +5,8 @@
 # Government retains certain rights in this software.
 
 import os, sys
-import string, re
-import types
+import re
+import string
 
 import xmlwrapper
 import TestSpec
@@ -514,31 +514,31 @@ def toString( tspec ):
 
     L = tspec.getKeywords()
     if len(L) > 0:
-      s = s + ' "_keywords_=' + string.join(L) + '"'
+      s = s + ' "_keywords_=' + ' '.join(L) + '"'
     
-    L = tspec.getParameters().items()
+    L = list( tspec.getParameters().items() )
     L.sort()
     for n,v in L:
       s = s + ' ' + n + '=' + v
     
-    L = tspec.getAttrs().keys()
+    L = list( tspec.getAttrs().keys() )
     L.sort()
     for n in L:
       v = tspec.getAttr(n)
-      if type(v) == types.StringType:
+      if type(v) == type(''):
         v1 = ''
         for c in v:
           v1 = v1 + inout_chars.get(c,' ')
         s = s + ' "' + n + '=S' + v1 + '"'
-      elif type(v) == types.IntType:
+      elif type(v) == type(2):
         s = s + ' "' + n + '=I' + str(v) + '"'
-      elif type(v) == types.FloatType:
+      elif type(v) == type(2.2):
         s = s + ' "' + n + '=F' + str(v) + '"'
       elif type(v) == type(True):
         s = s + ' "' + n + '=B'
         if v: s += '1"'
         else: s += '0"'
-      elif type(v) == types.NoneType:
+      elif v == None:
         s = s + ' "' + n + '=N"'
       else:
         raise ValueError( "unsupported attribute value type for " + \
@@ -568,7 +568,7 @@ def fromString( strid ):
     if len(toks) > 0:
       params = {}
       for tok in toks:
-        L = string.split( tok, '=', 1 )
+        L = tok.split( '=', 1 )
         if len(L) != 2:
           raise TestSpecError( \
                   "fromString(): corrupt or unknown string format: " + tok )
@@ -576,12 +576,12 @@ def fromString( strid ):
       tspec.setParameters( params )
     
     for tok in qtoks:
-      nvL = string.split( tok, '=', 1 )
+      nvL = tok.split( '=', 1 )
       if len(nvL) != 2 or len(nvL[0]) == 0 or len(nvL[1]) == 0:
         raise TestSpecError( \
                 "fromString(): corrupt or unknown string format: " + tok )
       if nvL[0] == '_keywords_':
-        tspec.setKeywords( string.split( nvL[1] ) )
+        tspec.setKeywords( nvL[1].split() )
       elif nvL[0] == '_parent_':
         pass  # backward compatibility; remove after a few months [Feb 2018]
       elif nvL[1][0] == 'I': tspec.setAttr( nvL[0], int(nvL[1][1:]) )
@@ -1059,7 +1059,7 @@ def parseKeywords_scr( vspecs, tname ):
             for k in [ n.strip() for n in L[0].strip().split(',') ]:
                 keyD[k] = None
 
-    L = keyD.keys()
+    L = list( keyD.keys() )
     L.sort()
     return L
 
@@ -1596,9 +1596,9 @@ def filterAttr( attrname, attrvalue, testname, paramD, evaluator, lineno ):
         pf = FilterExpressions.ParamFilter(attrvalue)
         return True, pf.evaluate( paramD )
     
-    except ValueError, e:
+    except ValueError:
       raise TestSpecError( "bad " + attrname + " expression, line " + \
-                           lineno + ": " + str(e) )
+                           lineno + ": " + str(sys.exc_info()[1]) )
     
     return False, False
 
@@ -1675,7 +1675,7 @@ def parseTestParameters( filedoc, tname, evaluator, force_params ):
           raise TestSpecError( 'bad parameter name: "' + n + '", line ' + \
                                str(nd.getLineNumber()) )
         
-        vals = string.split(v)
+        vals = v.split()
         if len(vals) == 0:
           raise TestSpecError( "expected one or more values separated by " + \
                                "spaces, line " + str(nd.getLineNumber()) )
@@ -1738,7 +1738,7 @@ def parseKeywords( filedoc, tname ):
       if not testname_ok( nd, tname ):
         # skip this keyword set (filtered out based on test name)
         continue
-      for key in string.split( nd.getContent() ):
+      for key in nd.getContent().split():
         if allowableString(key):
           keyD[key] = None
         else:
@@ -1762,7 +1762,7 @@ def parseKeywords( filedoc, tname ):
         if n != None:
           keyD[ str(n) ] = None
 
-    L = keyD.keys()
+    L = list( keyD.keys() )
     L.sort()
     return L
 
@@ -1936,7 +1936,7 @@ def parseTimeouts( t, filedoc, evaluator ):
         
         to = None
         if nd.hasAttr('value'):
-          val = string.strip( nd.getAttr("value") )
+          val = nd.getAttr("value").strip()
           try: to = int(val)
           except:
             raise TestSpecError( 'timeout value must be an integer: "' + \
@@ -1981,13 +1981,13 @@ def parseExecuteList( t, filedoc, evaluator ):
           break
       
       if nd.hasAttr('ifdef'):
-        L = string.split( nd.getAttr('ifdef') )
+        L = nd.getAttr('ifdef').split()
         for n in L:
           if not allowableVariable(n):
             raise TestSpecError( 'invalid environment variable name: "' + \
                                  n + '"' + ', line ' + str(nd.getLineNumber()) )
         for n in L:
-          if not os.environ.has_key(n):
+          if n not in os.environ:
             skip = 1
             break
       
@@ -1997,7 +1997,7 @@ def parseExecuteList( t, filedoc, evaluator ):
         
         analyze = False
         if xname == None:
-          if string.lower( string.strip( nd.getAttr('analyze','') ) ) == 'yes':
+          if nd.getAttr('analyze','').strip().lower() == 'yes':
             analyze = True
         else:
           if not xname or not allowableString(xname):
@@ -2008,7 +2008,7 @@ def parseExecuteList( t, filedoc, evaluator ):
         
         content = nd.getContent()
         if content == None: content = ''
-        else:               content = string.strip(content)
+        else:               content = content.strip()
         
         if xname == None:
           t.appendExecutionFragment( content, xstatus, analyze )
@@ -2037,11 +2037,11 @@ def variableExpansion( tname, platname, paramD, fL ):
       # substitute parameter values for $PARAM, ${PARAM}, and {$PARAM} patterns;
       # also replace the special NAME variable with the name of the test and
       # PLATFORM with the name of the current platform
-      for n,v in paramD.items() + [('NAME',tname)] + [('PLATFORM',platname)]:
+      for n,v in list(paramD.items()) + [('NAME',tname)] + [('PLATFORM',platname)]:
         pat1 = re.compile( '[{](?<![\\\\])[$]' + n + '[}]' )
         pat2 = re.compile( '(?<![\\\\])[$][{]' + n + '[}]' )
         pat3 = re.compile( '(?<![\\\\])[$]' + n + '(?![_a-zA-Z0-9])' )
-        if type(fL[0]) == types.ListType:
+        if type(fL[0]) == type([]):
           for fpair in fL:
             f,t = fpair
             f,n = pat1.subn( v, f )
@@ -2064,7 +2064,7 @@ def variableExpansion( tname, platname, paramD, fL ):
       
       # replace escaped dollar with just a dollar
       patD = re.compile( '[\\\\][$]' )
-      if type(fL[0]) == types.ListType:
+      if type(fL[0]) == type([]):
         for fpair in fL:
           f,t = fpair
           f,n = patD.subn( '$', f )
@@ -2095,7 +2095,7 @@ def collectFileNames( nd, flist, tname, paramD, evaluator ):
     Returns a list of (source filename, link filename).
     """
     
-    fileL = string.split( nd.getContent() )
+    fileL = nd.getContent().split()
     if len(fileL) > 0:
       
       skip = 0
@@ -2235,7 +2235,7 @@ def parseFiles( t, filedoc, evaluator ):
     fL = []
     for nd in filedoc.matchNodes(["source_files$"]):
       globFileNames( nd, fL, t, evaluator, 1 )
-    t.setSourceFiles( map( lambda T: T[0], fL ) )
+    t.setSourceFiles( list( T[0] for T in fL ) )
 
 
 def parseBaseline( t, filedoc, evaluator ):
@@ -2269,7 +2269,7 @@ def parseBaseline( t, filedoc, evaluator ):
         
         fname = nd.getAttr('file',None)
         if fname != None:
-          fname = string.split( fname )
+          fname = fname.split()
           fdest = nd.getAttr('destination',None)
           if fdest == None:
             for f in fname:
@@ -2277,7 +2277,7 @@ def parseBaseline( t, filedoc, evaluator ):
               fL.append( [f,f] )
             
           else:
-            fdest = string.split(fdest)
+            fdest = fdest.split()
             if len(fname) != len(fdest):
               raise TestSpecError( 'the number of file names in the ' + \
                '"file" attribute must equal the number of names in ' + \
@@ -2293,7 +2293,7 @@ def parseBaseline( t, filedoc, evaluator ):
         for f,d in fL:
           t.addBaselineFile( str(f), str(d) )
         
-        script = string.strip( nd.getContent() )
+        script = nd.getContent().strip()
         if script:
           t.addBaselineFragment( script )
 
@@ -2311,7 +2311,7 @@ for c in allowable_chars:
 
 def allowableString(s):
     for c in s:
-      if not allowable_chars_dict.has_key(c):
+      if c not in allowable_chars_dict:
         return 0
     return 1
 
@@ -2323,7 +2323,7 @@ def allowableVariable(s):
     if s[:1] in ['0','1','2','3','4','5','6','7','8','9','_']:
       return 0
     for c in s:
-      if not alphanum_chars_dict.has_key(c):
+      if c not in alphanum_chars_dict:
         return 0
     return 1
 

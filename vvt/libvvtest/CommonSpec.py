@@ -8,7 +8,6 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
-import string
 
 
 class CommonSpecError(Exception):
@@ -256,7 +255,7 @@ def scanCommonSpecs( filedoc, common_db ):
               'more than one "clear" block not allowed, line ' + \
               str(ndL[-1].getLineNumber()) )
     if len(ndL) == 1:
-      common_db.addClear( string.strip( ndL[0].getContent() ) )
+      common_db.addClear( ndL[0].getContent().strip() )
     
     for nd in filedoc.getSubNodes():
       
@@ -264,9 +263,9 @@ def scanCommonSpecs( filedoc, common_db ):
         D = {}
         for snd in nd.getSubNodes():
           if snd.getName() == "default":
-            D[''] = string.strip( snd.getContent() )
+            D[''] = snd.getContent().strip()
           else:
-            D[snd.getName()] = string.strip( snd.getContent() )
+            D[snd.getName()] = snd.getContent().strip()
         if len(D) > 0:
           cs = CommonSpec()
           cs.setDefinition(D)
@@ -298,7 +297,7 @@ def scanCommonSpecs( filedoc, common_db ):
               if locnd.hasAttr( "search" ):
                 if varname != None:
                   flags = locnd.getAttr( "flags", "" )
-                  searchL = string.split( locnd.getAttr( "search" ) )
+                  searchL = locnd.getAttr( "search" ).split()
                   defineD[k] = ( searchL, flags )
                 else:
                   raise CommonSpecError( \
@@ -306,11 +305,11 @@ def scanCommonSpecs( filedoc, common_db ):
                     'when the <execute> block does not have a "variable" ' + \
                     'attribute, ' + str(locnd.getLineNumber()) )
               else:
-                defineD[k] = ( string.strip(locnd.getContent()), )
+                defineD[k] = ( locnd.getContent().strip(), )
             
             scrL = snd.matchNodes( ['script'] )
             if len(scrL) > 0:
-              scriptD[k] = string.strip( scrL[0].getContent() )
+              scriptD[k] = scrL[0].getContent().strip()
           
           cs = CommonSpec()
           
@@ -320,7 +319,7 @@ def scanCommonSpecs( filedoc, common_db ):
           if xname != None:
             cs.setContent(xname, scriptD)
           
-          if string.strip( nd.getAttr('analyze','') ) in ['yes','YES','Yes']:
+          if nd.getAttr('analyze','').strip() in ['yes','YES','Yes']:
             cs.setAnalyze()
           
           common_db.addSpec(cs)
@@ -354,18 +353,3 @@ def loadCommonSpec( specdir, configdir ):
                 raise
     
     return xdb
-
-
-###########################################################################
-
-if __name__ == "__main__":
-    
-    import sys
-    sys.path.append( os.path.abspath( '../makemflib' ) )
-    import xmlwrapper
-    docreader = xmlwrapper.XmlDocReader()
-    filedoc = docreader.readDoc( "exeDB.xml" )
-    common_db = CommonSpecDB()
-    scanCommonSpecs( filedoc, common_db )
-    for cs in common_db.specs:
-      print cs

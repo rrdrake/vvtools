@@ -45,7 +45,7 @@ class Platform:
         if self.nprocs > 0:
             s += ", num procs = " + str(self.nprocs)
         s += ", max procs = " + str(self.maxprocs)
-        print s
+        print3( s )
     
     def getEnvironment(self):
         """
@@ -143,9 +143,9 @@ class Platform:
         cmd, out, jobid, err = \
                 self.batch.submit( scriptname, workdir, outfile, q, acnt )
         if err:
-            print cmd + os.linesep + out + os.linesep + err
+            print3( cmd + os.linesep + out + os.linesep + err )
         else:
-            print "Job script", scriptname, "submitted with id", jobid
+            print3( "Job script", scriptname, "submitted with id", jobid )
         
         return jobid
     
@@ -154,7 +154,7 @@ class Platform:
         """
         cmd, out, err, jobD = self.batch.query( jobidL )
         if err:
-            print cmd + os.linesep + out + os.linesep + err
+            print3( cmd + os.linesep + out + os.linesep + err )
         return jobD
         
         return jobD
@@ -205,7 +205,7 @@ class Platform:
         """
         if np <= 0: np = 1
 
-        if self.optdict.has_key( '--qsub-id' ):
+        if '--qsub-id' in self.optdict:
             assert self.nfree > 0
             self.nfree = 0
         else:
@@ -240,7 +240,7 @@ class Platform:
         np = job_info.np
         assert np > 0
 
-        if self.optdict.has_key( '--qsub-id' ):
+        if '--qsub-id' in self.optdict:
             assert self.nfree == 0
             self.nfree = 1
         else:
@@ -288,7 +288,7 @@ def construct_Platform( toolsdir, optdict, **kwargs ):
     assert os.path.isdir( toolsdir )
     
     if 'debug' in kwargs:
-        print 'construct_Platform A:', toolsdir, optdict
+        print3( 'construct_Platform A:', toolsdir, optdict )
 
     plat = Platform( toolsdir, optdict )
 
@@ -300,7 +300,7 @@ def construct_Platform( toolsdir, optdict, **kwargs ):
         plat.platname = os.uname()[0]
         plat.cplrname = 'gcc'
         if 'debug' in kwargs:
-            print 'construct_Platform B:', plat.platname, plat.cplrname
+            print3( 'construct_Platform B:', plat.platname, plat.cplrname )
     else:
         if 'debug' in kwargs:
             idplatform.debug = True
@@ -320,7 +320,7 @@ def construct_Platform( toolsdir, optdict, **kwargs ):
             plat.cplrname = 'gcc'
         
         if 'debug' in kwargs:
-            print 'construct_Platform C:', plat.platname, plat.cplrname
+            print3( 'construct_Platform C:', plat.platname, plat.cplrname )
             idplatform.debug = False
 
     platopts = optdict.get( '--platopt', {} )
@@ -403,13 +403,16 @@ def probe_max_processors():
 ##########################################################################
 
 # determine the directory containing the current file
-
 mydir = None
 if __name__ == "__main__":
   mydir = os.path.abspath( sys.path[0] )
 else:
   mydir = os.path.dirname( os.path.abspath( __file__ ) )
 
+
+def print3( *args ):
+    sys.stdout.write( ' '.join( [ str(arg) for arg in args ] ) + '\n' )
+    sys.stdout.flush()
 
 ###############################################################################
 

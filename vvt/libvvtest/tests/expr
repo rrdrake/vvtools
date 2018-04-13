@@ -10,9 +10,11 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
-import re, string
+import re
 
 import testutils as util
+from testutils import print3
+
 optD,argL = util.initialize( sys.argv )
 if 'TESTUTILS_RUNDIR' not in os.environ:
     os.chdir( util.working_directory )
@@ -31,73 +33,73 @@ class AList:
     def inlist(self, item):
         return item in self.L
 
-print "1111111111111111111111111111111111111"
+print3( "1111111111111111111111111111111111111" )
 
 ex = FilterExpressions.WordExpression()
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression=None'
 assert ex.evaluate( AList().inlist )
 
 ex.append(None)
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression=None'
 assert ex.evaluate( AList().inlist )
 
 ex = FilterExpressions.WordExpression('')
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression=""'
 assert not ex.evaluate( AList().inlist )
 
 ex.append('')
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression=""'
 assert not ex.evaluate( AList().inlist )
 
 ex.append("")
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression=""'
 assert not ex.evaluate( AList().inlist )
 
 ex.append(" ")
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression=""'
 assert not ex.evaluate( AList().inlist )
 
 ex = FilterExpressions.WordExpression(" ")
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression=""'
 assert not ex.evaluate( AList().inlist )
 
 ex = FilterExpressions.WordExpression(" hello  ")
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression="hello"'
 assert not ex.evaluate( AList().inlist )
 assert ex.evaluate( AList(['hello']).inlist )
 assert not ex.evaluate( AList(['world']).inlist )
 
 ex.append(None)
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression="hello"'
 assert not ex.evaluate( AList().inlist )
 assert ex.evaluate( AList(['hello']).inlist )
 assert not ex.evaluate( AList(['world']).inlist )
 
 ex.append("")
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression="hello"'
 assert not ex.evaluate( AList().inlist )
 assert ex.evaluate( AList(['hello']).inlist )
 assert not ex.evaluate( AList(['world']).inlist )
 
 ex.append("  ")
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression="hello"'
 assert not ex.evaluate( AList().inlist )
 assert ex.evaluate( AList(['hello']).inlist )
 assert not ex.evaluate( AList(['world']).inlist )
 
 ex.append("world")
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression="hello or world"'
 assert not ex.evaluate( AList().inlist )
 assert ex.evaluate( AList(['hello']).inlist )
@@ -106,7 +108,7 @@ assert ex.evaluate( AList(['hello','world']).inlist )
 assert not ex.evaluate( AList(['the','next']).inlist )
 
 ex.append( "period", operator="and" )
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression="hello or world and period"'
 assert not ex.evaluate( AList().inlist )
 assert     ex.evaluate( AList(['hello']).inlist )
@@ -118,143 +120,143 @@ assert     ex.evaluate( AList(['hello','period']).inlist )
 assert     ex.evaluate( AList(['world','period']).inlist )
 assert     ex.evaluate( AList(['hello','world','period']).inlist )
 
-print "22222222222222222222222222222222222222222222222"
+print3( "22222222222222222222222222222222222222222222222" )
 
 # check 'and' and 'or' precedence
 ex = FilterExpressions.WordExpression("hello and world or period")
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression="hello and world or period"'
 assert     ex.evaluate( AList(['period']).inlist )
 
 ex = FilterExpressions.WordExpression("(hello and world) or period")
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression="(hello and world) or period"'
 assert     ex.evaluate( AList(['period']).inlist )
 
 ex = FilterExpressions.WordExpression("hello or world and period")
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression="hello or world and period"'
 assert     ex.evaluate( AList(['hello']).inlist )
 
 ex = FilterExpressions.WordExpression("hello or (world and period)")
-print ex
+print3( ex )
 assert str(ex) == 'WordExpression="hello or (world and period)"'
 assert     ex.evaluate( AList(['hello']).inlist )
 
-print "333333333333333333333333333333333333333333333333"
+print3( "333333333333333333333333333333333333333333333333" )
 
 ex = FilterExpressions.WordExpression(None)
 try: ex.append("aword","xor")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("aword1) word2")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("word1 not word2")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("word1 word2")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("word1 and")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("word1 or")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("(word or)")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("(word and)")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("word and ()")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("()")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("word1 and and word2")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("word1 and or word2")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("word1 or and word2")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("word1 or not or word2")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("word1 and not and word2")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("and word1")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("or word1")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("word1 word2")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("word and")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
 try: ex = FilterExpressions.WordExpression("word or")
-except ValueError, e: print str(e)
+except ValueError: print3( str( sys.exc_info()[1] ) )
 else: raise Exception("expected a ValueError")
 
-print "4444444444444444444444444444444444444444444444444444444"
+print3( "4444444444444444444444444444444444444444444444444444444" )
 
 ex = FilterExpressions.WordExpression("( word1 and word2 ) or (word3 and word4)")
-print ex
+print3( ex )
 assert     ex.evaluate( AList(['word1','word2']).inlist )
 assert     ex.evaluate( AList(['word3','word4']).inlist )
 assert not ex.evaluate( AList(['word1','word3']).inlist )
 assert not ex.evaluate( AList(['word2','word4']).inlist )
 
 ex = FilterExpressions.WordExpression("( word1 and not (word2 or word3) ) or word4")
-print ex
+print3( ex )
 assert     ex.evaluate( AList(['word4']).inlist )
 assert     ex.evaluate( AList(['word1']).inlist )
 assert not ex.evaluate( AList(['word1','word2']).inlist )
 assert not ex.evaluate( AList(['word1','word3']).inlist )
 
 ex = FilterExpressions.WordExpression("word1 and not (word2 or word3) or word4")
-print ex
+print3( ex )
 assert     ex.evaluate( AList(['word4']).inlist )
 assert     ex.evaluate( AList(['word1']).inlist )
 assert not ex.evaluate( AList(['word1','word2']).inlist )
 assert not ex.evaluate( AList(['word1','word3']).inlist )
 
 ex = FilterExpressions.WordExpression("word4 or word1 and not (word2 or word3)")
-print ex
+print3( ex )
 assert     ex.evaluate( AList(['word4']).inlist )
 assert     ex.evaluate( AList(['word1']).inlist )
 assert not ex.evaluate( AList(['word1','word2']).inlist )
 assert not ex.evaluate( AList(['word1','word3']).inlist )
 
-print "555555555555555555555555555555555555555555555555555555555555555"
+print3( "555555555555555555555555555555555555555555555555555555555555555" )
 
 # with ParamFilters, the param type determines the casting; first try with
 # python integers in the param types

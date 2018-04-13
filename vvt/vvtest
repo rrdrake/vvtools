@@ -565,7 +565,7 @@ def generateTestList( dirs, plat, rtconfig ):
     if perms != None:
         perms.set( os.path.abspath( tf ) )
     
-    print "Test directory:", testdirname
+    print3( "Test directory:", testdirname )
 
 
 def extractTestFiles( dirs, plat, target_dir, rtconfig ):
@@ -626,7 +626,7 @@ def extractTestFiles( dirs, plat, target_dir, rtconfig ):
         os.makedirs( to_dir )
       tof = os.path.join( target_dir, t.getFilepath() )
       
-      if not uniqD.has_key(tof):
+      if tof not in uniqD:
         uniqD[tof] = None
         try: shutil.copy2( t.getFilename(), tof )
         except IOError, e: pass
@@ -648,7 +648,7 @@ def extractTestFiles( dirs, plat, target_dir, rtconfig ):
             fromf = os.path.join( from_dir, f )
             tof = os.path.join( to_dir, f )
             tod = os.path.dirname(tof)
-            if not uniqD.has_key(tof):
+            if tof not in uniqD:
               uniqD[tof] = None
               if not os.path.exists(tod):
                 os.makedirs(tod)
@@ -668,8 +668,8 @@ def extractTestFiles( dirs, plat, target_dir, rtconfig ):
 
 def keywordInformation(tlist):
     
-    if optdict.has_key('--keys'):
-      print "\nresults keywords: " + string.join( TestSpec.results_keywords )
+    if '--keys' in optdict:
+      print3( "\nresults keywords: " + string.join( TestSpec.results_keywords ) )
       kd = {}
       for t in tlist.getActiveTests():
         for k in t.getKeywords():
@@ -677,16 +677,16 @@ def keywordInformation(tlist):
             kd[k] = None
       L = kd.keys()
       L.sort()
-      print "\ntest keywords: "
+      print3( "\ntest keywords: " )
       while len(L) > 0:
         k1 = L.pop(0)
         if len(L) > 0: k2 = L.pop(0)
         else:          k2 = ''
         if len(L) > 0: k3 = L.pop(0)
         else:          k3 = ''
-        print "  %-20s %-20s %-20s" % (k1,k2,k3)
+        print3( "  %-20s %-20s %-20s" % (k1,k2,k3) )
     else:
-      assert optdict.has_key('--files')
+      assert '--files' in optdict
       D = {}
       for t in tlist.getActiveTests():
         d = os.path.normpath( t.getFilename() )
@@ -694,7 +694,7 @@ def keywordInformation(tlist):
       L = D.keys()
       L.sort()
       for d in L:
-        print d
+        print3( d )
 
 ##############################################################################
 
@@ -829,31 +829,31 @@ def writeCommandInfo( test_dir, plat, perms ):
       fp = open( f, "w" )
       fp.write( 'VERSION=' + str(version) + '\n' )
       fp.write( 'DIR=' + os.getcwd() + '\n' )
-      if optdict.has_key('--plat'):
+      if '--plat' in optdict:
         fp.write( 'PLATFORM=' + string.strip(optdict['--plat']) + '\n' )
       else:
         fp.write( 'PLATFORM=' + plat.getName() + '\n' )
-      if optdict.has_key('-p'):
+      if '-p' in optdict:
         fp.write( 'PARAMETERS=' + str( optdict['-p'] ) + '\n' )
       if config.get('exepath'):
         fp.write( \
             'PROJECT=' + os.path.abspath( config.get('exepath') ) + '\n' )
-      if optdict.has_key('-o'):
+      if '-o' in optdict:
         fp.write( 'ONOPTS=' + string.join(optdict['-o'], '+') + '\n' )
-      if optdict.has_key('-O'):
+      if '-O' in optdict:
         fp.write( 'OFFOPTS=' + string.join(optdict['-O'], '+') + '\n' )
-      if optdict.has_key('-T'):
+      if '-T' in optdict:
         fp.write( 'TIMEOUT=' + string.strip( str(optdict['-T']) ) + '\n' )
-      if optdict.has_key('--timeout-multiplier'):
+      if '--timeout-multiplier' in optdict:
         fp.write( 'TIMEOUT_MULTIPLIER=' + \
              string.strip( str(optdict['--timeout-multiplier']) ) + '\n' )
-      if optdict.has_key('-e'):
+      if '-e' in optdict:
         fp.write( 'USE_ENV=1\n' )
-      if optdict.has_key('-A'):
+      if '-A' in optdict:
         fp.write( 'ALL_PLATFORMS=1\n' )
       if '--include-tdd' in optdict:
         fp.write( 'INCLUDE_TDD=True\n' )
-      if optdict.has_key('--check'):
+      if '--check' in optdict:
         fp.write( 'CHECK=' + string.join( optdict['--check'] ) + '\n' )
       fp.close()
 
@@ -876,8 +876,7 @@ def readCommandInfo():
 
     if test_cache != None:
       
-      if optdict.has_key('-o') or optdict.has_key('-O') or \
-         optdict.has_key('-g'):
+      if '-o' in optdict or '-O' in optdict or '-g' in optdict:
         sys.stderr.write('*** ' + exeName + \
             ': error: the -g, -o, and -O options are not allowed ' + \
             'in a TestResults directory\n')
@@ -896,11 +895,11 @@ def readCommandInfo():
           optdict['--plat'] = kvpair[1]
         elif kvpair[0] == 'PARAMETERS':
           L = eval( kvpair[1] )
-          if optdict.has_key('-p'): optdict['-p'].extend(L)
-          else:                     optdict['-p'] = L
+          if '-p' in optdict: optdict['-p'].extend(L)
+          else:               optdict['-p'] = L
         elif kvpair[0] == 'PROJECT':
           # do not replace if the command line contains -j
-          if not optdict.has_key('-j'):
+          if '-j' not in optdict:
             optdict['-j'] = kvpair[1]
             config.set( 'exepath', kvpair[1] )
         elif kvpair[0] == 'ONOPTS':
@@ -911,11 +910,11 @@ def readCommandInfo():
           config.set( 'offopts', optdict['-O'] )
         elif kvpair[0] == 'TIMEOUT':
           # do not replace if the command line contains -T
-          if not optdict.has_key('-T'):
+          if '-T' not in optdict:
             optdict['-T'] = float(kvpair[1])
             config.set( 'timeout', optdict['-T'] )
         elif kvpair[0] == 'TIMEOUT_MULTIPLIER':
-          if not optdict.has_key('--timeout-multiplier'):
+          if '--timeout-multiplier' not in optdict:
             optdict['--timeout-multiplier'] = float(kvpair[1])
             config.set( 'multiplier', optdict['--timeout-multiplier'] )
         elif kvpair[0] == 'USE_ENV':
@@ -946,8 +945,8 @@ def runTests( dirs, plat, rtconfig ):
         tl = TestList.TestList()
         tl.scanFile( tfile )
         if tl.getFinishDate() == None and '--force' not in optdict:
-            print '*** error: tests are currently running in another process'
-            print '    (or a previous run crashed); use --force to run anyway'
+            print3( '*** error: tests are currently running in another process' )
+            print3( '    (or a previous run crashed); use --force to run anyway' )
             sys.exit(1)
         tl = None
 
@@ -960,8 +959,8 @@ def runTests( dirs, plat, rtconfig ):
     
     createTestDir( testdirname, perms )
     
-    if optdict.has_key('-w'):
-      print '/bin/rm -rf ' + testdirname + '/*'
+    if '-w' in optdict:
+      print3( '/bin/rm -rf ' + testdirname + '/*' )
       for f in os.listdir(testdirname):
         df = os.path.join( testdirname, f )
         if os.path.isdir(df):
@@ -990,7 +989,7 @@ def runTests( dirs, plat, rtconfig ):
     loadRunTimes( tlist, plat )
 
     pruneL,cntmax = tlist.loadAndFilter( plat.getMaxProcs(),
-                                         analyze_only=optdict.has_key('-a'),
+                                         analyze_only='-a' in optdict,
                                          prune=True )
     
     if len(pruneL) > 0:
@@ -1021,10 +1020,10 @@ def runTests( dirs, plat, rtconfig ):
 
           tlist.createTestExecs( test_dir, plat, config, perms )
           
-          if optdict.has_key('--save-results'):
+          if '--save-results' in optdict:
             saveResults( tlist, plat, test_dir, inprogress=True )
 
-          if not optdict.has_key('--batch'):
+          if '--batch' not in optdict:
             executeTestList( tlist, test_dir, plat, perms, tfile )
           
           else:
@@ -1032,11 +1031,11 @@ def runTests( dirs, plat, rtconfig ):
         
           print3( "Test directory:", testdirname )
           
-          if optdict.has_key('--save-results'):
+          if '--save-results' in optdict:
             saveResults( tlist, plat, test_dir )
         
         else:
-          print "\n--------- no tests to run -----------\n"
+          print3( "\n--------- no tests to run -----------\n" )
     
     except:
         tlist.writeFinished()
@@ -1127,20 +1126,20 @@ def printHTMLResults( sumstr, test_dir, perms,
     fp.write( "  <ul>\n" )
     fp.write( "  <li> Directory: " + test_dir + "\n" )
     fp.write( "  <li> Options: " )
-    if optdict.has_key('-o'):
+    if '-o' in optdict:
       fp.write( ' -o ' + string.join(optdict['-o'],'+') )
-    if optdict.has_key('-O'):
+    if '-O' in optdict:
       fp.write( ' -O ' + string.join(optdict['-O'],'+') )
-    if optdict.has_key('-j'):
+    if '-j' in optdict:
       fp.write( ' -j ' + optdict['-j'] )
-    if optdict.has_key('--plat'):
+    if '--plat' in optdict:
       fp.write( ' --plat ' + optdict['--plat'] )
-    if optdict.has_key('-T'):
+    if '-T' in optdict:
       fp.write( ' -T ' + str(optdict['-T']) )
-    if optdict.has_key('--timeout-multiplier'):
+    if '--timeout-multiplier' in optdict:
       fp.write( ' --timeout-multiplier ' + \
                         str(optdict['--timeout-multiplier']) )
-    if optdict.has_key('-e'):
+    if '-e' in optdict:
       fp.write( ' -e ' )
     fp.write( "  </li>\n" )
     fp.write( "  <li> " + sumstr + "</li>\n" )
@@ -1303,7 +1302,7 @@ def batchTestList( tlist, test_dir, plat, perms ):
     print3( 'Total number of batch jobs: ' + str(numjobs) + \
             ', maximum concurrent jobs: ' + str(qsublimit) )
 
-    if optdict.has_key('-g'):
+    if '-g' in optdict:
       return
     
     schedule = batch.getScheduler()
@@ -1772,8 +1771,8 @@ def restartTests( test_dir, plat, rtconfig ):
     tlist.readFile( tfile )
 
     if tlist.getFinishDate() == None and '--force' not in optdict:
-        print '*** error: tests are currently running in another process'
-        print '    (or a previous run crashed); use --force to run anyway'
+        print3( '*** error: tests are currently running in another process' )
+        print3( '    (or a previous run crashed); use --force to run anyway' )
         sys.exit(1)
 
     if qid == None:
@@ -1783,7 +1782,7 @@ def restartTests( test_dir, plat, rtconfig ):
     
     pruneL,cntmax = tlist.loadAndFilter( plat.getMaxProcs(),
                                          filter_dir=reld,
-                                         analyze_only=optdict.has_key('-a'),
+                                         analyze_only='-a' in optdict,
                                          prune=True )
     
     if len(pruneL) > 0:
@@ -1815,7 +1814,7 @@ def restartTests( test_dir, plat, rtconfig ):
           printResults( tlist, test_dir, perms, short=True )
           print3()
           
-          if optdict.has_key('--save-results'):
+          if '--save-results' in optdict:
             saveResults( tlist, plat, test_dir, inprogress=True )
           
           if '--batch' not in optdict:
@@ -1826,7 +1825,7 @@ def restartTests( test_dir, plat, rtconfig ):
             tlist.createTestExecs( test_dir, plat, config, perms )
             batchTestList( tlist, test_dir, plat, perms )
         
-          if optdict.has_key('--save-results'):
+          if '--save-results' in optdict:
             saveResults( tlist, plat, test_dir )
         
         else:
@@ -1868,7 +1867,7 @@ def baselineTests( test_dir, plat, rtconfig ):
     
     if len(tlist.active) > 0:
       
-      print "Baselining these tests:"
+      print3( "Baselining these tests:" )
       printResults( tlist, test_dir, None, short=False )
       
       perms = None
@@ -1902,10 +1901,10 @@ def baselineTests( test_dir, plat, rtconfig ):
           sys.stdout.flush()
       
       if failures:
-        print "\n\n !!!!!!!!!!!!!!  THERE WERE FAILURES  !!!!!!!!!!!!! \n\n"
+        print3( "\n\n !!!!!!!!!!!!!!  THERE WERE FAILURES  !!!!!!!!!!!!! \n\n" )
     
     else:
-      print "\n--------- no tests to baseline -----------\n"
+      print3( "\n--------- no tests to baseline -----------\n" )
 
 
 ###########################################################################
@@ -2067,47 +2066,47 @@ def parseOptionsAndGenerateOptionDictionary():
             optdict[n] = optpair[1]
         elif n == '--junit':
             optdict[n] = os.path.abspath( optpair[1] )
-        elif not optdict.has_key(n):
+        elif n not in optdict:
             optdict[n] = [optpair[1]]
         else:
             optdict[n].append(optpair[1])
     
-    if optdict.has_key('-h'): return []
-    if optdict.has_key('-H'): return []
+    if '-h' in optdict: return []
+    if '-H' in optdict: return []
     
-    if optdict.has_key('-v') or optdict.has_key('--version'):
-      print version
+    if '-v' in optdict or '--version' in optdict:
+      print3( version )
       sys.exit(0)
     
-    if optdict.has_key('-G'):
+    if '-G' in optdict:
       # the -g and -G options changed into the same thing (now just -g)
       optdict['-g'] = None
     
-    if optdict.has_key('-g') and ( optdict.has_key('--plat') or \
-                                   optdict.has_key('-i') or \
-                                   optdict.has_key('-b') or \
-                                   optdict.has_key('-n') or \
-                                   optdict.has_key('-m') or \
-                                   optdict.has_key('-L') ):
+    if '-g' in optdict and ( '--plat' in optdict or \
+                             '-i' in optdict or \
+                             '-b' in optdict or \
+                             '-n' in optdict or \
+                             '-m' in optdict or \
+                             '-L' in optdict ):
       sys.stderr.write('*** ' + exeName + \
             ': error: the only options allowed with -g are -oOMfkKpPS\n')
       sys.exit(1)
     
-    if optdict.has_key('-i') and ( optdict.has_key('-L') or \
-                                   optdict.has_key('-g') or \
-                                   optdict.has_key('-R') or \
-                                   optdict.has_key('-w') or \
-                                   optdict.has_key('-S') or \
-                                   optdict.has_key('-b') ):
+    if '-i' in optdict and ( '-L' in optdict or \
+                             '-g' in optdict or \
+                             '-R' in optdict or \
+                             '-w' in optdict or \
+                             '-S' in optdict or \
+                             '-b' in optdict ):
       sys.stderr.write('*** ' + exeName + \
             ': error: the options -fLgbRSF cannot be used with -i\n')
       sys.exit(1)
     
-    if optdict.has_key('-b') and ( optdict.has_key('-A') or \
-                                   optdict.has_key('-g') or \
-                                   optdict.has_key('-w') or \
-                                   optdict.has_key('-S') or \
-                                   optdict.has_key('-M') ):
+    if '-b' in optdict and ( '-A' in optdict or \
+                             '-g' in optdict or \
+                             '-w' in optdict or \
+                             '-S' in optdict or \
+                             '-M' in optdict ):
       sys.stderr.write('*** ' + exeName + \
             ': error: the options -glfMARS cannot be used with -b\n')
       sys.exit(1)
@@ -2115,7 +2114,7 @@ def parseOptionsAndGenerateOptionDictionary():
     # parse -k & -K options into two convenient objects
     
     keywL = []
-    if optdict.has_key('-k'):
+    if '-k' in optdict:
       keywL.extend( optdict['-k'] )
     
     # change -K into -k expressions by using the '!' operator
@@ -2140,7 +2139,7 @@ def parseOptionsAndGenerateOptionDictionary():
             ': error: in -P specification: ' + str(e) + '\n')
       sys.exit(1)
     
-    if optdict.has_key('-P'):
+    if '-P' in optdict:
       # convert -P values into -p values
       for s in optdict['-P']:
         s = string.strip(s)
@@ -2150,12 +2149,12 @@ def parseOptionsAndGenerateOptionDictionary():
             k = string.strip(k)
             if k:
               orL.append( '!' + k )
-          if not optdict.has_key('-p'):
+          if '-p' not in optdict:
             optdict['-p'] = []
           optdict['-p'].append( string.join( orL, '/' ) )
       del optdict['-P']
     
-    if optdict.has_key('-X'):
+    if '-X' in optdict:
       for s in optdict['-X']:
         s = string.strip(s)
         if s:
@@ -2164,11 +2163,11 @@ def parseOptionsAndGenerateOptionDictionary():
             p = string.strip(p)
             if p:
               orL.append( '!' + p )
-          if not optdict.has_key('-x'):
+          if '-x' not in optdict:
             optdict['-x'] = []
           optdict['-x'].append( string.join( orL, '/' ) )
     
-    if optdict.has_key('-s'):
+    if '-s' in optdict:
       for pat in optdict['-s']:
         try:
           c = re.compile(pat)
@@ -2177,7 +2176,7 @@ def parseOptionsAndGenerateOptionDictionary():
                             'specified an invalid regular expression: ' + pat )
           sys.exit(1)
     
-    if optdict.has_key('-S'):
+    if '-S' in optdict:
       # -S should be a list of param=value strings, which we convert into
       # a dictionary of param name -> list of values
       sdict = {}
@@ -2187,8 +2186,8 @@ def parseOptionsAndGenerateOptionDictionary():
           sys.stderr.write('*** ' + exeName + \
               ': error: -S option values must be "param=value"\n')
           sys.exit(1)
-        if sdict.has_key(L[0]): sdict[L[0]].extend( string.split(L[1]) )
-        else:                   sdict[L[0]] = string.split( L[1] )
+        if L[0] in sdict: sdict[L[0]].extend( string.split(L[1]) )
+        else:             sdict[L[0]] = string.split( L[1] )
       optdict['-S'] = sdict
     
     if '--sort' in optdict:
@@ -2200,14 +2199,14 @@ def parseOptionsAndGenerateOptionDictionary():
                 sys.exit(1)
         optdict[ '--sort' ] = val
 
-    if optdict.has_key('--plat'):
+    if '--plat' in optdict:
       if len(optdict['--plat']) > 1:
         sys.stderr.write('*** ' + exeName + \
               ': error: only one --plat option allowed\n')
         sys.exit(1)
       optdict['--plat'] = optdict['--plat'][0]
     
-    if optdict.has_key('--platopt'):
+    if '--platopt' in optdict:
       # create a dictionary storing option->value pairs
       popts = {}
       for po in optdict['--platopt']:
@@ -2217,11 +2216,11 @@ def parseOptionsAndGenerateOptionDictionary():
       # reset the platopt option with the dictionary
       optdict['--platopt'] = popts
     
-    if optdict.has_key('--qsub-id'):
+    if '--qsub-id' in optdict:
       assert len( optdict['--qsub-id'] ) == 1
       optdict['--qsub-id'] = optdict['--qsub-id'][0]
     
-    if optdict.has_key('--qsub-limit'):
+    if '--qsub-limit' in optdict:
       if len(optdict['--qsub-limit']) > 1:
         sys.stderr.write('*** ' + exeName + \
               ': error: only one --qsub-limit option allowed\n')
@@ -2237,7 +2236,7 @@ def parseOptionsAndGenerateOptionDictionary():
           sys.exit(1)
       optdict['--qsub-limit'] = val
     
-    if optdict.has_key('--qsub-length'):
+    if '--qsub-length' in optdict:
       if len(optdict['--qsub-length']) > 1:
         sys.stderr.write('*** ' + exeName + \
               ': error: only one --qsub-length option allowed\n')
@@ -2255,7 +2254,7 @@ def parseOptionsAndGenerateOptionDictionary():
     
     # clean up option strings
     
-    if optdict.has_key('-o'):
+    if '-o' in optdict:
       on = {}
       for o1 in optdict.get('-o',[]):
         for o2 in string.split( o1, '+' ):
@@ -2266,7 +2265,7 @@ def parseOptionsAndGenerateOptionDictionary():
       optdict['-o'] = on
       config.set( 'onopts', on )
     
-    if optdict.has_key('-O'):
+    if '-O' in optdict:
       off = {}
       for o1 in optdict.get('-O'):
         for o2 in string.split( o1, '+' ):
@@ -2277,17 +2276,17 @@ def parseOptionsAndGenerateOptionDictionary():
       optdict['-O'] = off
       config.set( 'offopts', off )
     
-    if optdict.has_key('-j') and len(optdict['-j']) > 1:
+    if '-j' in optdict and len(optdict['-j']) > 1:
       sys.stderr.write('*** ' + exeName + \
             ': error: only one -j option allowed\n')
       sys.exit(1)
     
-    if optdict.has_key('-M') and len(optdict['-M']) > 1:
+    if '-M' in optdict and len(optdict['-M']) > 1:
       sys.stderr.write('*** ' + exeName + \
             ': error: only one -M option allowed\n')
       sys.exit(1)
     
-    if optdict.has_key('-n'):
+    if '-n' in optdict:
       if len(optdict['-n']) > 1:
           sys.stderr.write('*** ' + exeName + \
                 ': error: only one -n option is allowed\n')
@@ -2302,7 +2301,7 @@ def parseOptionsAndGenerateOptionDictionary():
               ': error: the -n option must specify a positive integer\n')
         sys.exit(1);
      
-    if optdict.has_key('-N'):
+    if '-N' in optdict:
       if len(optdict['-N']) > 1:
           sys.stderr.write('*** ' + exeName + \
                 ': error: only one -N option is allowed\n')
@@ -2317,7 +2316,7 @@ def parseOptionsAndGenerateOptionDictionary():
               ': error: the -N option must specify a positive integer\n')
         sys.exit(1);
      
-    if optdict.has_key('-T'):
+    if '-T' in optdict:
       if len(optdict['-T']) > 1:
           sys.stderr.write('*** ' + exeName + \
                 ': error: only one -T option is allowed\n')
@@ -2330,7 +2329,7 @@ def parseOptionsAndGenerateOptionDictionary():
       if val < 0.0: optdict['-T'] = 0.0
       else:         optdict['-T'] = val
     
-    if optdict.has_key('--timeout-multiplier'):
+    if '--timeout-multiplier' in optdict:
       if len(optdict['--timeout-multiplier']) > 1:
           sys.stderr.write('*** ' + exeName + \
                 ': error: only one --timeout-multiplier option is allowed\n')
@@ -2385,7 +2384,7 @@ def parseOptionsAndGenerateOptionDictionary():
      
     # collapse the list of length one for single argument options
     
-    if optdict.has_key('-j'):
+    if '-j' in optdict:
       d = optdict['-j'][0]
       if not os.path.exists(d):
         sys.stderr.write('*** ' + exeName + ': error: project directory ' + \
@@ -2395,15 +2394,15 @@ def parseOptionsAndGenerateOptionDictionary():
       optdict['-j'] = d
       config.set( 'exepath', d )
     
-    if optdict.has_key('-M'):
+    if '-M' in optdict:
       optdict['-M'] = optdict['-M'][0]
     
-    if optdict.has_key('-n'):
+    if '-n' in optdict:
       optdict['-n'] = int( optdict['-n'][0] )
-    if optdict.has_key('-N'):
+    if '-N' in optdict:
       optdict['-N'] = int( optdict['-N'][0] )
     
-    if optdict.has_key('--extract'):
+    if '--extract' in optdict:
       optdict['--extract'] = optdict['--extract'][-1]
 
     if '--config' in optdict:
@@ -2414,15 +2413,15 @@ def parseOptionsAndGenerateOptionDictionary():
             d = os.path.join( config.get('toolsdir'), 'config' )
         config.set( 'configdir', os.path.abspath(d) )
 
-    config.set( 'refresh', not optdict.has_key('-m') )
-    config.set( 'postclean', optdict.has_key('-C') )
-    if optdict.has_key('-T'):
+    config.set( 'refresh', '-m' not in optdict )
+    config.set( 'postclean', '-C' in optdict )
+    if '-T' in optdict:
       config.set( 'timeout', optdict['-T'] )
-    if optdict.has_key('--timeout-multiplier'):
+    if '--timeout-multiplier' in optdict:
       config.set( 'multiplier', optdict['--timeout-multiplier'] )
-    config.set( 'preclean', not optdict.has_key('-m') )
-    config.set( 'analyze', optdict.has_key('-a') )
-    config.set( 'logfile', not optdict.has_key('-L') )
+    config.set( 'preclean', '-m' not in optdict )
+    config.set( 'analyze', '-a' in optdict )
+    config.set( 'logfile', '-L' not in optdict )
     
     return dirs
 
@@ -2504,29 +2503,29 @@ if __name__ == '__main__':
   insert_configdir_into_sys_path( toolsdir, config )
   
   # the help option quits immediately
-  if optdict.has_key('-h'):
-    print usagepage
+  if '-h' in optdict:
+    print3( usagepage )
     sys.exit(0)
-  if optdict.has_key('-H'):
-    print manpage
+  if '-H' in optdict:
+    print3( manpage )
     sys.exit(0)
   
   # 'test_dir' non-None only if the CWD is in a TestResults.* directory
   test_dir = readCommandInfo()
   
-  if optdict.has_key( '--check' ):
+  if '--check' in optdict:
     for n in optdict['--check']:
       os.environ[ 'CHECK_' + string.upper(n) ] = ''
   
-  if optdict.has_key( '--vg' ):
+  if '--vg' in optdict:
     os.environ[ 'CHECK_VALGRIND' ] = ''
   
-  if test_dir and optdict.has_key('-S'):
-    print "*** error: cannot use -S in a TestResults directory"
+  if test_dir and '-S' in optdict:
+    print3( "*** error: cannot use -S in a TestResults directory" )
     sys.exit(1)
   
-  if test_dir and optdict.has_key('-g'):
-    print "*** error: cannot use -g in a TestResults directory"
+  if test_dir and '-g' in optdict:
+    print3( "*** error: cannot use -g in a TestResults directory" )
     sys.exit(1)
   
   # construct platform
@@ -2537,7 +2536,7 @@ if __name__ == '__main__':
                 keyword_expr=keyword_expr,
                 option_list=optdict.get('-o', []) + [plat.getCompiler()],
                 platform_name=plat.getName(),
-                ignore_platforms=optdict.has_key('-A'),
+                ignore_platforms='-A' in optdict,
                 platform_expr_list=optdict.get('-x', None),
                 search_file_globs=search_fnmatch,
                 search_patterns=optdict.get('-s',None),
@@ -2545,14 +2544,14 @@ if __name__ == '__main__':
                 runtime_range=[optdict.get('--tmin',None),
                                optdict.get('--tmax',None)],
                 runtime_sum=optdict.get( '--tsum', None ) )
-  if optdict.has_key('--qsub-id'):
+  if '--qsub-id' in optdict:
     rtconfig.setAttr( 'include_all', True )
   
-  info = ( optdict.has_key('-i') or \
-           optdict.has_key('--files') or \
-           optdict.has_key('--keys') )
+  info = ( '-i' in optdict or \
+           '--files' in optdict or \
+           '--keys' in optdict )
   
-  if optdict.has_key('-g') and not info:
+  if '-g' in optdict and not info:
     assert test_dir == None
     generateTestList( dirs, plat, rtconfig )
   
@@ -2570,7 +2569,7 @@ if __name__ == '__main__':
       rtconfig.setAttr( 'include_tdd', True )  # always include tdd with -i
       tlist.readFile( tfile )
       tlist.loadAndFilter( plat.getMaxProcs() )
-    elif optdict.has_key('--keys') or optdict.has_key('--files'):
+    elif '--keys' in optdict or '--files' in optdict:
       if len(dirs) == 0:
         dirs = ['.']
       for d in dirs:
@@ -2578,13 +2577,13 @@ if __name__ == '__main__':
           tlist.scanDirectory( d, optdict.get('-S',None) )
       tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
     else:
-      print "*** warning: previous TestResults directory not found"
+      print3( "*** warning: previous TestResults directory not found" )
       test_dir = os.path.join( os.getcwd(), testResultsDir(plat.getName()) )
       tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
     
-    if optdict.has_key('--keys') or optdict.has_key('--files'):
+    if '--keys' in optdict or '--files' in optdict:
         keywordInformation(tlist)
-    elif optdict.has_key('--save-results'):
+    elif '--save-results' in optdict:
         saveResults( tlist, plat, test_dir )
     else:
         do_stdout = True
@@ -2595,15 +2594,15 @@ if __name__ == '__main__':
         printResults( tlist, test_dir, None,
                       tostdout=do_stdout, tohtml=do_html, tojunit=do_junit )
  
-  elif optdict.has_key('-b'):
+  elif '-b' in optdict:
     
     if '-R' in optdict or '-w' in optdict:
-      print "*** error: cannot use -R or -w with -b (baseline)"
+      print3( "*** error: cannot use -R or -w with -b (baseline)" )
       sys.exit(1)
     
     baselineTests( test_dir, plat, rtconfig )
   
-  elif optdict.has_key('--extract'):
+  elif '--extract' in optdict:
     extractTestFiles( dirs, plat, optdict['--extract'], rtconfig )
   
   else:

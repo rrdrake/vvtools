@@ -126,7 +126,7 @@ class BatchMOAB:
                 if len(L) >= 4:
                     jid = L[0]
                     st = L[2]
-                    if stateD.has_key(jid):
+                    if jid in stateD:
                         if st in ['Running']: st = 'running'
                         elif st in ['Deferred','Idle']: st = 'pending'
                         else: st = ''
@@ -158,12 +158,12 @@ class BatchMOAB:
         return str(nhrs) + ':' + nmin + ':' + nsec
 
 
+########################################################################
+
 def print3( *args ):
-    s = ' '.join( [ str(arg) for arg in args ] )
-    sys.stdout.write( s + '\n' )
+    sys.stdout.write( ' '.join( [ str(arg) for arg in args ] ) + '\n' )
     sys.stdout.flush()
 
-########################################################################
 
 if __name__ == "__main__":
     

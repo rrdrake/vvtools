@@ -234,7 +234,7 @@ class TestExec:
                 
                 # turn off X11 forwarding by unsetting the DISPLAY env variable
                 # (should eliminate X authorization errors)
-                if os.environ.has_key('DISPLAY'):
+                if 'DISPLAY' in os.environ:
                   del os.environ['DISPLAY']
                 
                 safecmd = ''
@@ -656,7 +656,7 @@ class TestExec:
               else:
                 # skip the init process
                 if ppid > 1:
-                  if psdict.has_key( ppid ):
+                  if ppid in psdict:
                     psdict[ppid].append(cpid)
                   else:
                     psdict[ppid] = [cpid]

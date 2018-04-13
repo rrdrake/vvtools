@@ -118,7 +118,7 @@ class BatchCrayPBS:
                 if len(L) >= 4:
                     jid = L[0]
                     st = L[2]
-                    if stateD.has_key(jid):
+                    if jid in stateD:
                         if st in ['Running']: st = 'running'
                         elif st in ['Deferred','Idle']: st = 'pending'
                         else: st = ''
@@ -152,6 +152,11 @@ class BatchCrayPBS:
 
 ########################################################################
 
+def print3( *args ):
+    sys.stdout.write( ' '.join( [ str(x) for x in args ] ) + '\n' )
+    sys.stdout.flush()
+
+
 if __name__ == "__main__":
     
     bat = BatchCrayPBS()
@@ -164,19 +169,19 @@ if __name__ == "__main__":
               'sleep 5' + os.linesep )
     fp.close()
     cmd, out, jobid, err = bat.submit( 'tmp.sub', os.getcwd(), 'tmp.out', confirm=1 )
-    print cmd
-    print out
-    print 'jobid', jobid
+    print3( cmd )
+    print3( out )
+    print3( 'jobid', jobid )
     if err:
-        print 'error:', err
+        print3( 'error:', err )
     time.sleep(2)
     while 1:
         cmd, out, err, stateD = bat.query([jobid])
         if err:
-            print cmd
-            print out
-            print err
-        print "state", stateD[jobid]
+            print3( cmd )
+            print3( out )
+            print3( err )
+        print3( "state", stateD[jobid] )
         if not stateD[jobid]:
             break
         time.sleep(1)
