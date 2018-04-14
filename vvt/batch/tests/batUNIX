@@ -36,7 +36,8 @@ class Method_computeNumNodes:
 
     def test_with_ppn_variant(self):
         ""
-        bat = self.makeBatchInterface( 'ppn=2' )
+        bat = self.makeBatchInterface()
+        bat.setAttr( 'ppn', 2 )
 
         assert bat.computeNumNodes( 0 ) == 1
         assert bat.computeNumNodes( 1 ) == 1
@@ -50,7 +51,8 @@ class Method_computeNumNodes:
         bat = self.makeBatchInterface()
         self.check_cores_per_node( bat )
 
-        bat = self.makeBatchInterface( 'ppn=2' )
+        bat = self.makeBatchInterface()
+        bat.setAttr( 'ppn', 2 )
         self.check_cores_per_node( bat )
 
     def check_cores_per_node(self, bat):
@@ -69,8 +71,8 @@ class Method_computeNumNodes:
 
 class BatchUNIX_computeNumNodes( Method_computeNumNodes, unittest.TestCase ):
 
-    def makeBatchInterface(self, *args):
-        return bu.BatchUNIX( *args )
+    def makeBatchInterface(self):
+        return bu.BatchUNIX()
 
 
 class Batch_output_file( unittest.TestCase ):
@@ -244,6 +246,9 @@ class Batch_start_stop_dates( unittest.TestCase ):
 
         write_and_submit_batch_job( bat, job, 'sleep 5' )
 
+        time.sleep(1)
+        bat.poll()
+
         rundate1 = job.getResult( 'run date', None )
         donedate1 = job.getResult( 'done date', None )
 
@@ -306,6 +311,8 @@ class Batch_queue_state( unittest.TestCase ):
         write_and_submit_batch_job( bat, job, 'sleep 2' )
 
         time.sleep(1)
+        bat.poll()
+
         st = job.getResult( 'state', None )
 
         wait_on_job( bat, job, 5 )
@@ -437,7 +444,7 @@ def wait_on_job( batchobj, jobobj, maxwait=60 ):
 
     while True:
 
-        batchobj.poll( [jobobj] )
+        batchobj.poll()
 
         if jobobj.getResult( 'state', None ) == 'done':
             break

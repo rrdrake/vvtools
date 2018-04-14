@@ -41,7 +41,7 @@ class BatchJob:
         name       : the name of the job
         num nodes  : the requested number of compute nodes
         batch file : the batch script file name to write, submit, and run
-        work dir   : the work directory in which to run the batch file
+        work dir   : the working directory in which to run the batch file
         commands   : bash commands to run (a string, newline separated)
         log file   : stdout and stderr is redirected to this file
         time       : requested time for the allocation
@@ -135,6 +135,20 @@ class BatchInterface:
     Interface for submitting and managing jobs in a batch queue.
     """
 
+    def __init__(self):
+        ""
+        self.attrs = {}
+
+    def setAttr(self, name, value):
+        ""
+        self.attrs[ name ] = value
+
+    def getAttr(self, name, *default):
+        ""
+        if len(default) > 0:
+            return self.attrs.get( name, default[0] )
+        return self.attrs[ name ]
+
     def computeNumNodes(self, num_cores, cores_per_node=None):
         ""
         raise NotImplementedError( "Method computeNumNodes()" )
@@ -148,7 +162,7 @@ class BatchInterface:
         """
         raise NotImplementedError( "Method submit()" )
 
-    def poll(self, job_list=None):
+    def poll(self):
         """
         """
         raise NotImplementedError( "Method poll()" )

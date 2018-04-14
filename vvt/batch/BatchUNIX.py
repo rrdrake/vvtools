@@ -20,23 +20,21 @@ from batchinterface import construct_batch_filename
 from batchinterface import construct_log_filename
 from batchinterface import parse_date_string
 
+import scriptrunner
+
 
 class BatchUNIX( BatchInterface ):
 
-    def __init__(self, variant=''):
+    def __init__(self):
         ""
-        self.attrs = parse_variant( variant )
+        BatchInterface.__init__(self)
 
-        if 'ppn' in self.attrs:
-            ppn = int( self.attrs['ppn'] )
-            assert ppn > 0
-            self.attrs['ppn'] = ppn
-
-        self.subprocs = {}
+        self.runq = scriptrunner.ScriptRunQueue()
+        self.jobs = []
 
     def computeNumNodes(self, num_cores, cores_per_node=None):
         ""
-        ppn = self.attrs.get( 'ppn', 2**31 )
+        ppn = int( self.attrs.get( 'ppn', 2**31 ) )
         return compute_num_nodes( num_cores, cores_per_node, ppn )
 
     def writeBatchFile(self, job):
@@ -56,36 +54,52 @@ class BatchUNIX( BatchInterface ):
         """
         """
         batname = construct_batch_filename( job )
-        self._submitJob( job, batname )
+        logname = construct_log_filename( job )
+        jobid = self.runq.submit( batname, redirect=logname )
+        job.setResult( 'jobid', jobid )
+        job.setResult( 'submit date', time.time() )
+        self.jobs.append( [ job, logname ] )
 
-    def poll(self, job_list=None):
+    def poll(self):
         """
         """
-        doneL = []
+        self.runq.poll()
 
-        for jobid,L in self.subprocs.items():
+        L = []
+        for job,logname in self.jobs:
 
-            proc,job = L
+            jobid = job.getResult('jobid')
 
-            self._parse_log_file( job )
+            st,x = self.runq.getStatusPair( jobid )
 
-            x = proc.poll()
-
-            if x != None:
-                job.setResult( 'state', 'C' )
-                job.setResult( 'done date', time.time() )
+            # <empty> : the run() method has not been called
+            # running : the subprocess was launched
+            # timeout : the subprocess timed out and was killed
+            # killed  : the terminate() method was called
+            # exit    : the subprocess completed on its own
+            if not st:
+                job.setResult( 'state', 'queue' )
+            elif st == 'running':
+                job.setResult( 'state', 'running' )
+                self._parse_log_file( job, logname )
+            else:
                 job.setResult( 'state', 'done' )
-                doneL.append( (jobid,x) )
+                self._parse_log_file( job, logname )
 
-                if x == 0:
-                    job.setResult( 'exit', 'success' )
-                else:
-                    job.setResult( 'exit', 'fail' )
+            if x == None:
+                L.append( [ job, logname ] )
+            elif x == 0:
+                job.setResult( 'exit', 'success' )
+            else:
+                job.setResult( 'exit', 'fail' )
 
-        for jobid,x in doneL:
-            self.subprocs.pop( jobid )
+            trun,tdone = self.runq.getStartStopTimes( jobid )
+            if trun != None:
+                job.setResult( 'run date', trun )
+            if tdone != None:
+                job.setResult( 'done date', tdone )
 
-        return doneL
+        self.jobs = L
 
     def cancel(self, job_list=None):
         ""
@@ -98,11 +112,14 @@ class BatchUNIX( BatchInterface ):
         """
         lineprint( fileobj,
             'echo "BATCH START DATE: `date`"',
-            'env' )
+            'env',
+            'echo "UNAME: `uname -a`"' )
 
         wdir = job.getSpec( 'work dir', None )
         if wdir:
-            lineprint( fileobj, 'cd '+wdir+' || exit 1' )
+            lineprint( fileobj,
+                'echo "cd '+wdir+'"',
+                'cd "'+wdir+'" || exit 1' )
 
         lineprint( fileobj, '' )
 
@@ -113,40 +130,11 @@ class BatchUNIX( BatchInterface ):
             '',
             'echo "BATCH STOP DATE: `date`"' )
 
-    def _submitJob(self, job, script_filename):
-        """
-        """
-        logname = construct_log_filename( job )
-        job.setResult( '_logname', logname )
-
-        fp = open( logname, 'w' )
-        try:
-            proc = sub.Popen( ['/bin/bash', script_filename ],
-                              stdout=fp, stderr=sub.STDOUT )
-
-            jobid = proc.pid
-            job.setResult( 'jobid', str(jobid) )
-            self.subprocs[ jobid ] = [ proc, job ]
-
-            job.setResult( 'submit out', 'Submitted subprocess '+str(jobid) )
-            job.setResult( 'submit err', '' )
-
-            tm = time.time()
-            job.setResult( 'submit date', tm )
-            job.setResult( 'run date', tm )
-
-            job.setResult( 'state', 'running' )
-
-        finally:
-            fp.close()
-
-    def _parse_log_file(self, job):
+    def _parse_log_file(self, job, logname):
         ""
-        fn = job.getResult( '_logname' )
+        if os.path.exists( logname ):
 
-        if os.path.exists( fn ):
-
-            fp = open( fn, 'r' )
+            fp = open( logname, 'r' )
             try:
                 started = False
                 line = fp.readline()
