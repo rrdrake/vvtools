@@ -1,0 +1,449 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import unittest
+import time
+import threading
+
+
+import testutils as util
+from testutils import print3
+
+import scriptrunner as srmod
+
+
+class Class_ScriptProcess( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_unique_process_ids_are_created(self):
+        ""
+        ps1 = srmod.ScriptProcess( None )
+        id1 = ps1.getId()
+
+        ps2 = srmod.ScriptProcess( None )
+        id2 = ps2.getId()
+
+        assert id1 != id2
+
+    def test_run_script(self):
+        ""
+        util.writefile( 'runme', """
+            cd """+os.getcwd()+"""
+            touch hello.txt
+            """ )
+        time.sleep(1)
+
+        ps = srmod.ScriptProcess( 'runme' )
+
+        t0,t1 = ps.getDates()
+        assert t0 == None and t1 == None
+
+        ps.run()
+        time.sleep(1)
+
+        wait_on_script_process( ps, 5 )
+
+        st,rt,x = get_results_values( ps )
+
+        assert x == 0
+        assert st == 'exit'
+        assert os.path.exists( 'hello.txt' )
+        assert rt != None and rt > 0
+
+        t0,t1 = ps.getDates()
+        assert t0 != None and t1 != None and t0 <= t1
+
+    def test_failed_script_exit_status(self):
+        ""
+        util.writefile( 'runme', """
+            exit 1
+            """ )
+        time.sleep(1)
+
+        ps = srmod.ScriptProcess( 'runme' )
+        ps.run()
+        wait_on_script_process( ps, 5 )
+
+        st,rt,x = get_results_values( ps )
+
+        assert st == 'exit'
+        assert x != None and x != 0
+        assert rt != None and rt > 1
+
+        t0,t1 = ps.getDates()
+        assert t0 != None and t1 != None and t0 <= t1
+
+    def test_timeout_waiting_on_script(self):
+        ""
+        util.writefile( 'runme', """
+            sleep 5
+            """ )
+        time.sleep(1)
+
+        ps = srmod.ScriptProcess( 'runme' )
+        ps.run()
+        wait_on_script_process( ps, 2 )
+
+        st1,rt1,x1 = get_results_values( ps )
+        t0,t1 = ps.getDates()
+        assert t0 != None and t1 == None
+
+        wait_on_script_process( ps, 5 )
+        st2,rt2,x2 = get_results_values( ps )
+        t0,t1 = ps.getDates()
+        assert t0 != None and t1 != None and t1-t0 > 4
+
+        assert st1 == 'running'
+        assert st2 == 'exit'
+        assert x1 == None
+        assert x2 != None and x2 == 0
+        assert rt1 == None
+        assert rt2 != None and rt2 > 2
+
+    def test_get_runtime_before_and_after_completion(self):
+        ""
+        util.writefile( 'runme', """
+            sleep 3
+            """ )
+        time.sleep(1)
+
+        ps = srmod.ScriptProcess( 'runme' )
+        ps.run()
+
+        time.sleep(1)
+        ps.poll()
+        st1,rt1,x1 = get_results_values( ps )
+
+        time.sleep(4)
+        ps.poll()
+        st2,rt2,x2 = get_results_values( ps )
+
+        assert st1 == 'running'
+        assert st2 == 'exit'
+        assert x1 == None
+        assert x2 == 0
+        assert rt1 == None
+        assert rt2 >= 3 and rt2 < 8
+
+    def test_script_that_times_out(self):
+        ""
+        util.writefile( 'runme', """
+            sleep 10
+            """ )
+        time.sleep(1)
+
+        ps = srmod.ScriptProcess( 'runme', timeout=3 )
+        ps.run()
+
+        script_process_sleep_and_poll( ps, 5 )
+        st,rt,x = get_results_values( ps )
+
+        assert st == 'timeout'
+        assert x != None and x != 0
+        assert rt >= 3 and rt < 9
+
+        t0,t1 = ps.getDates()
+        assert t0 != None and t1 != None and t1-t0 > 2
+
+    def test_a_script_that_times_out_but_doesnt_die(self):
+        ""
+        util.writefile( 'runme', """
+            trap "sleep 5" SIGTERM
+            sleep 5
+            """ )
+        time.sleep(1)
+
+        ps = srmod.ScriptProcess( 'runme', timeout=3 )
+        ps.run()
+
+        script_process_sleep_and_poll( ps, 6 )
+
+        # if the trap worked, the process should still be alive
+        st1,rt1,x1 = get_results_values( ps )
+
+        script_process_sleep_and_poll( ps, 6 )
+
+        # by now both sleeps should be finished
+        st2,rt2,x2 = get_results_values( ps )
+
+        assert st1 == 'timeout'
+        assert st2 == 'timeout'
+        assert x1 == None
+        assert x2 == 0
+        assert rt1 == None
+        assert rt2 != None and rt2 > 5 and rt2 < 12
+
+    def test_kill_a_script_while_its_running(self):
+        ""
+        util.writefile( 'runme', """
+            sleep 10
+            """ )
+        time.sleep(1)
+
+        ps = srmod.ScriptProcess( 'runme' )
+        ps.run()
+
+        script_process_sleep_and_poll( ps, 2 )
+
+        ps.kill()
+
+        script_process_sleep_and_poll( ps, 2 )
+
+        st,rt,x = get_results_values( ps )
+        assert st == 'killed'
+        assert x != None and x != 0
+        assert rt >= 2 and rt < 9
+
+    def test_killing_a_script_but_it_doesnt_die(self):
+        ""
+        util.writefile( 'runme', """
+            trap "sleep 5" SIGTERM
+            sleep 5
+            """ )
+        time.sleep(1)
+
+        ps = srmod.ScriptProcess( 'runme' )
+        ps.run()
+
+        script_process_sleep_and_poll( ps, 2 )
+
+        ps.kill()
+        time.sleep(1)
+        ps.poll()
+
+        # if the trap worked, the process should still be alive
+        st1,rt1,x1 = get_results_values( ps )
+
+        for i in range(10):
+            ps.poll()
+            if srmod.get_exit_status( ps.getResults() ) != None:
+                break
+            time.sleep(1)
+
+        st2,rt2,x2 = get_results_values( ps )
+
+        assert st1 == 'killed'
+        assert st2 == 'killed'
+        assert x1 == None
+        assert x2 == 0
+        assert rt1 == None
+        assert rt2 != None and rt2 > 5 and rt2 < 12
+
+    def test_redirect_script_output(self):
+        ""
+        util.writefile( 'runme', """
+            echo hello
+            echo world 1>&2
+            sleep 1
+            """ )
+        time.sleep(1)
+        outfile = os.path.abspath( 'out.txt' )
+
+        ps = srmod.ScriptProcess( 'runme', redirect=outfile )
+        ps.run()
+
+        wait_on_script_process( ps, 5 )
+        time.sleep(1)
+
+        st,rt,x = get_results_values( ps )
+        assert st == 'exit'
+        assert x == 0
+        assert len( util.filegrep( outfile, 'hello' ) ) == 1
+        assert len( util.filegrep( outfile, 'world' ) ) == 1
+
+    def test_thread_locking(self):
+        ""
+        ps = srmod.ScriptProcess( 'junk' )
+
+        # start thread that acquires lock then sleeps 5 seconds
+        thr = threading.Thread( target=ps.testThreadLock, args=(5,) )
+        thr.start()
+        time.sleep(1)
+
+        t0 = time.time()
+        ps.isDone()  # this call should have to wait for the lock
+        t1 = time.time()
+
+        thr.join()
+
+        assert t1-t0 > 3
+
+
+class Class_ScriptRunner( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_run_a_script(self):
+        ""
+        util.writefile( 'script.sh', """
+            cd """+os.getcwd()+"""
+            touch hello.txt
+            """ )
+        time.sleep(1)
+
+        srun = srmod.ScriptRunner()
+        ps = srun.submit( 'script.sh' )
+
+        wait_on_script_process_via_script_queue( srun, ps, 5 )
+
+        time.sleep(1)
+        st,x = ps.getStatus()
+        assert x == 0
+        assert os.path.isfile( 'hello.txt' )
+
+    def test_run_two_scripts(self):
+        ""
+        util.writefile( 'script1.sh', """
+            cd """+os.getcwd()+"""
+            touch hello1.txt
+            """ )
+        util.writefile( 'script2.sh', """
+            cd """+os.getcwd()+"""
+            touch hello2.txt
+            """ )
+        time.sleep(1)
+
+        srun = srmod.ScriptRunner()
+        ps1 = srun.submit( 'script1.sh' )
+        ps2 = srun.submit( 'script2.sh' )
+        srun.poll()
+
+        wait_on_script_process_via_script_queue( srun, ps1, 5 )
+        wait_on_script_process_via_script_queue( srun, ps2, 5 )
+
+        time.sleep(1)
+        st1,x1 = ps1.getStatus()
+        st2,x2 = ps2.getStatus()
+        assert x1 == 0 and x2 == 0
+        assert os.path.isfile( 'hello1.txt' )
+        assert os.path.isfile( 'hello2.txt' )
+
+    def test_prove_concurrency(self):
+        ""
+        util.writefile( 'script.sh', """
+            """+sys.executable+""" -c "import time; print ( time.time() )"
+            sleep 5
+            """+sys.executable+""" -c "import time; print ( time.time() )"
+            """ )
+        time.sleep(1)
+
+        srun = srmod.ScriptRunner()
+        ps1 = srun.submit( 'script.sh', redirect='out1.txt' )
+        ps2 = srun.submit( 'script.sh', redirect='out2.txt' )
+        srun.poll()
+
+        wait_on_script_process_via_script_queue( srun, ps1, 10 )
+        wait_on_script_process_via_script_queue( srun, ps2, 5 )
+
+        time.sleep(1)
+        ts1,te1 = parse_time_seconds_from_file( 'out1.txt' )
+        assert te1-ts1 > 4
+
+        ts2,te2 = parse_time_seconds_from_file( 'out2.txt' )
+        assert te2-ts2 > 4
+
+        assert abs( ts1-ts2 ) < 4
+        assert abs( te1-te2 ) < 4
+
+    def test_script_with_run_delay(self):
+        ""
+        util.writefile( 'script.sh', """
+            """+sys.executable+""" -c "import time; print ( time.time() )"
+            """ )
+        time.sleep(1)
+
+        srun = srmod.ScriptRunner()
+        ps1 = srun.submit( 'script.sh', redirect='out1.txt', delay=4 )
+        ps2 = srun.submit( 'script.sh', redirect='out2.txt' )
+        srun.poll()
+
+        wait_on_script_process_via_script_queue( srun, ps1, 10 )
+
+        time.sleep(1)
+        t1 = parse_time_seconds_from_file( 'out1.txt' )
+        t2 = parse_time_seconds_from_file( 'out2.txt' )
+        assert t1-t2 > 2
+
+
+def parse_time_seconds_from_file( filename ):
+    ""
+    L = util.filegrep( filename, '[0-9]+' )
+
+    rtn = []
+    for line in L:
+        rtn.append( parse_seconds( line ) )
+    
+    if len(rtn) == 0:
+        return None
+    elif len(rtn) == 1:
+        return rtn[0]
+    else:
+        return rtn
+
+def parse_seconds( tstring ):
+    ""
+    s = tstring.strip().strip( '(' ).strip( ')' ).strip()
+    s = s.strip('"').strip("'")
+    return float(s)
+
+
+############################################################################
+
+def get_results_values( runner ):
+    """
+    Return ( state as string, runtime, exit status ) from a ScriptProcess.
+    """
+    L = runner.getResults()
+    return srmod.get_state(L), srmod.get_runtime(L), srmod.get_exit_status(L)
+
+
+def script_process_sleep_and_poll( script_ps, loop_length ):
+    ""
+    for i in range( loop_length ):
+        time.sleep(1)
+        script_ps.poll()
+
+
+def wait_on_script_process( runner, wait_limit=None ):
+    ""
+    tenter = time.time()
+
+    while not runner.isDone():
+
+        runner.poll()
+
+        if wait_limit != None and time.time()-tenter > wait_limit:
+            break
+
+        time.sleep(1)
+
+
+def wait_on_script_process_via_script_queue( srun, ps, wait_limit=None ):
+    ""
+    tenter = time.time()
+
+    while not ps.isDone():
+
+        if wait_limit != None and time.time()-tenter > wait_limit:
+            break
+
+        srun.poll()
+        time.sleep(1)
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

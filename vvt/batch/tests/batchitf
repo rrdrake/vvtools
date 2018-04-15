@@ -22,96 +22,14 @@ import testutils as util
 from testutils import print3
 
 import batchinterface as bat
-
-
-class Class_BatchJob_tests( unittest.TestCase ):
-
-    def setUp(self):
-        ""
-        util.setup_test( False )
-
-    def test_known_spec_names(self):
-        """
-        make sure these names align with the doc string
-        """
-        job = bat.BatchJob()
-
-        job.setSpec( 'name',       'foo' )
-        job.setSpec( 'num nodes',  2 )
-        job.setSpec( 'batch file', 'foo' )
-        job.setSpec( 'work dir',   'foo' )
-        job.setSpec( 'commands',   'foo' )
-        job.setSpec( 'log file',   'foo' )
-        job.setSpec( 'time',       300 )
-        job.setSpec( 'queue',      'foo,bar' )
-        job.setSpec( 'account',    'foo' )
-
-        self.assertRaises( ValueError, job.setSpec, 'junk', 'value' )
-
-    def test_known_result_names(self):
-        """
-        make sure these names align with the doc string
-        """
-        job = bat.BatchJob()
-
-        job.setResult( 'jobid', 'foo' )
-
-        job.setResult( 'submit out', 'foo' )
-        job.setResult( 'submit err', '' )
-
-        job.setResult( 'submit date', time.time() )
-        job.setResult( 'run date',    time.time() )
-        job.setResult( 'done date',   time.time() )
-        job.setResult( 'start date',  time.time() )
-        job.setResult( 'stop date',   time.time() )
-
-        job.setResult( 'state', 'foo' )
-        job.setResult( 'exit',  'foo' )
-
-        self.assertRaises( ValueError, job.setResult, 'junk', 'value' )
-
-    def test_set_get_spec(self):
-        ""
-        job = bat.BatchJob()
-
-        job.setSpec( 'name', 'foo' )
-
-        assert job.getSpec( 'name' ) == 'foo'
-        assert job.getSpec( 'name', None ) == 'foo'
-        assert job.getSpec( 'name', 'junk' ) == 'foo'
-
-        assert job.getSpec( 'queue', 'junk' ) == 'junk'
-
-    def test_set_get_result(self):
-        ""
-        job = bat.BatchJob()
-
-        job.setResult( 'jobid', 'foo' )
-
-        assert job.getResult( 'jobid' ) == 'foo'
-        assert job.getResult( 'jobid', None ) == 'foo'
-        assert job.getResult( 'jobid', 'junk' ) == 'foo'
-
-        assert job.getResult( 'run time', 'junk' ) == 'junk'
-
-    def test_underscore_attrs_are_not_checked(self):
-        ""
-        job = bat.BatchJob()
-
-        self.assertRaises( ValueError, job.setSpec, 'junk', 'value' )
-        job.setSpec( '_junk', 'value' )
-        assert job.getSpec( '_junk' ) == 'value'
-
-        self.assertRaises( ValueError, job.setResult, 'junk', 'value' )
-        job.setResult( '_junk', 'value' )
-        assert job.getResult( '_junk' ) == 'value'
+from BatchJob import BatchJob
 
 
 class Function_parse_variant( unittest.TestCase ):
 
     def setUp(self):
         ""
-        util.setup_test( False )
+        util.setup_test( cleanout=False )
 
     def test_empty(self):
         ""
@@ -141,7 +59,7 @@ class Function_lineprint( unittest.TestCase ):
 
     def setUp(self):
         ""
-        util.setup_test( False )
+        util.setup_test( cleanout=False )
 
     def test_empty_print(self):
         ""
@@ -166,7 +84,7 @@ class Function_compute_num_nodes( unittest.TestCase ):
 
     def setUp(self):
         ""
-        util.setup_test( False )
+        util.setup_test( cleanout=False )
 
     def test_platform_ppn_is_one(self):
         ""
@@ -199,112 +117,11 @@ class Function_compute_num_nodes( unittest.TestCase ):
         assert bat.compute_num_nodes( 5, 2, 8 ) == 3
 
 
-class Function_construct_batch_filename( unittest.TestCase ):
-
-    def setUp(self):
-        ""
-        util.setup_test( False )
-
-    def test_default_batch_name(self):
-        ""
-        job = bat.BatchJob()
-
-        fn = bat.construct_batch_filename( job )
-        d,b = os.path.split( fn )
-        assert d == os.getcwd()
-        assert b.startswith( 'batchjob_' )
-        assert b.endswith( '.bat' )
-
-    def test_with_job_name_specified(self):
-        ""
-        job = bat.BatchJob()
-        job.setSpec( 'name', 'blah' )
-
-        fn = bat.construct_batch_filename( job )
-        assert fn == os.path.abspath( 'blah.bat' )
-
-    def test_with_batch_filename_defined(self):
-        ""
-        job = bat.BatchJob()
-        job.setSpec( 'batch file', 'bat.sh' )
-
-        fn = bat.construct_batch_filename( job )
-        assert fn == os.path.abspath( 'bat.sh' )
-
-    def test_relative_batch_filename(self):
-        ""
-        job = bat.BatchJob()
-        job.setSpec( 'batch file', 'adir/bat.sh' )
-
-        fn = bat.construct_batch_filename( job )
-        assert fn == os.path.abspath( 'adir/bat.sh' )
-
-    def test_absolute_batch_filename(self):
-        ""
-        job = bat.BatchJob()
-        job.setSpec( 'batch file', '/some/dir/bat.sh' )
-
-        fn = bat.construct_batch_filename( job )
-        assert fn == '/some/dir/bat.sh'
-
-
-class Function_construct_log_filename( unittest.TestCase ):
-
-    def setUp(self):
-        ""
-        util.setup_test( False )
-
-    def test_default_log_name(self):
-        ""
-        job = bat.BatchJob()
-
-        fn = bat.construct_log_filename( job )
-        d,b = os.path.split( fn )
-        assert d == os.getcwd()
-        assert b.startswith( 'batchjob_' )
-        assert b.endswith( '.log' )
-
-    def test_with_job_name_defined(self):
-        ""
-        job = bat.BatchJob()
-        job.setSpec( 'name', 'blah' )
-
-        fn = bat.construct_log_filename( job )
-        assert fn == os.path.abspath( 'blah.log' )
-
-    def test_job_name_with_absolute_batch_dir(self):
-        ""
-        job = bat.BatchJob()
-        job.setSpec( 'name', 'blah' )
-        job.setSpec( 'batch file', '/foo/bar/scriptname.sh' )
-
-        fn = bat.construct_log_filename( job )
-        assert fn == '/foo/bar/blah.log'
-
-    def test_with_log_file_defined(self):
-        ""
-        job = bat.BatchJob()
-        job.setSpec( 'log file', 'blah.log' )
-        job.setSpec( 'batch file', '/foo/bar/scriptname.sh' )
-
-        fn = bat.construct_log_filename( job )
-        assert fn == '/foo/bar/blah.log'
-
-    def test_with_absolute_log_file_defined(self):
-        ""
-        job = bat.BatchJob()
-        job.setSpec( 'log file', '/some/dir/blah.log' )
-        job.setSpec( 'batch file', '/foo/bar/scriptname.sh' )
-
-        fn = bat.construct_log_filename( job )
-        assert fn == '/some/dir/blah.log'
-
-
 class Function_parse_date_string( unittest.TestCase ):
 
     def setUp(self):
         ""
-        util.setup_test( False )
+        util.setup_test( cleanout=False )
 
     def test_invalid_form(self):
         ""

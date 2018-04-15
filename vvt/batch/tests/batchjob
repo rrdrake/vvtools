@@ -1,0 +1,225 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import unittest
+import time
+import threading
+
+import testutils as util
+from testutils import print3
+
+import BatchJob as BJ
+
+
+class BatchJob_defaults( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_default_specification_values(self):
+        ""
+        job = BJ.BatchJob()
+
+        assert job.getName() and type( job.getName() ) == type('')
+        assert job.getNumNodes() > 0
+        assert job.getBatchFileName() and \
+               type( job.getBatchFileName() ) == type('')
+        assert type( job.getRunDirectory() ) == type('')
+        assert type( job.getRunCommands() ) == type('')
+        assert job.getLogFileName() and \
+               type( job.getLogFileName() ) == type('')
+        assert job.getRunTime() > 0
+
+    def test_default_result_values(self):
+        ""
+        job = BJ.BatchJob()
+
+        assert job.getJobId() == None
+
+        out,err = job.getSubmitOutput()
+        assert not out and not err
+
+        sub,run,done = job.getQueueDates()
+        assert not sub and not run and not done
+
+        start,stop = job.getRunDates()
+        assert not start and not stop
+
+        state,exit = job.getStatus()
+        assert not state and not exit
+
+
+class BatchJob_specifications( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_job_name(self):
+        ""
+        job = BJ.BatchJob()
+        job.setName( 'foobar' )
+        assert job.getName() == 'foobar'
+
+    def test_num_nodes(self):
+        ""
+        job = BJ.BatchJob()
+        job.setNumNodes( 2 )
+        assert job.getNumNodes() == 2
+
+    def test_batch_file_name(self):
+        ""
+        job = BJ.BatchJob()
+        job.setBatchFileName( 'bname' )
+        assert job.getBatchFileName() == 'bname'
+
+    def test_run_directory(self):
+        ""
+        job = BJ.BatchJob()
+        job.setRunDirectory( 'some/dir' )
+        assert job.getRunDirectory() == 'some/dir'
+
+    def test_run_commands(self):
+        ""
+        job = BJ.BatchJob()
+        job.setRunCommands( 'cmd1\ncmd2\n' )
+        assert job.getRunCommands() == 'cmd1\ncmd2\n'
+
+    def test_log_file_name(self):
+        ""
+        job = BJ.BatchJob()
+        job.setLogFileName( 'yepper' )
+        assert job.getLogFileName() == 'yepper'
+
+    def test_run_time(self):
+        ""
+        job = BJ.BatchJob()
+        job.setRunTime( 60 )
+        assert job.getRunTime() == 60
+
+    def test_queue_name(self):
+        ""
+        job = BJ.BatchJob()
+        job.setQueueName( 'superfast' )
+        assert job.getQueueName() == 'superfast'
+
+    def test_account(self):
+        ""
+        job = BJ.BatchJob()
+        job.setAccount( 'blahblah' )
+        assert job.getAccount() == 'blahblah'
+
+
+class BatchJob_results( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_job_id(self):
+        ""
+        job = BJ.BatchJob()
+        job.setJobId( 'foobar' )
+        assert job.getJobId() == 'foobar'
+
+    def test_submit_output(self):
+        ""
+        job = BJ.BatchJob()
+
+        job.setSubmitOutput( out='foobar' )
+        out,err = job.getSubmitOutput()
+        assert out == 'foobar' and not err
+
+        job.setSubmitOutput( out='foo', err='bar' )
+        out,err = job.getSubmitOutput()
+        assert out == 'foo' and err == 'bar'
+
+    def test_queue_dates(self):
+        ""
+        job = BJ.BatchJob()
+
+        job.setQueueDates( sub=1 )
+        sub,run,done = job.getQueueDates()
+        assert sub == 1 and not run and not done
+
+        job.setQueueDates( run=2 )
+        sub,run,done = job.getQueueDates()
+        assert sub == 1 and run == 2 and not done
+
+        job.setQueueDates( done=3 )
+        sub,run,done = job.getQueueDates()
+        assert sub == 1 and run == 2 and done == 3
+
+    def test_run_dates(self):
+        ""
+        job = BJ.BatchJob()
+
+        job.setRunDates( start=1 )
+        start,stop = job.getRunDates()
+        assert start == 1 and not stop
+
+        job.setRunDates( stop=2 )
+        start,stop = job.getRunDates()
+        assert start == 1 and stop == 2
+
+    def test_status(self):
+        ""
+        job = BJ.BatchJob()
+
+        job.setStatus( state='foo' )
+        state,exit = job.getStatus()
+        assert state == 'foo' and not exit
+
+        job.setStatus( exit='bar' )
+        state,exit = job.getStatus()
+        assert state == 'foo' and exit == 'bar'
+
+    def test_thread_locking_with_a_getter(self):
+        ""
+        job = BJ.BatchJob()
+
+        # start thread that acquires lock then sleeps 5 seconds
+        thr = threading.Thread( target=job.testThreadLock, args=(5,) )
+        thr.start()
+        time.sleep(1)
+
+        t0 = time.time()
+        job.getJobId()    # this call should have to wait for the lock
+        t1 = time.time()
+
+        thr.join()
+
+        assert t1-t0 > 3
+
+    def test_thread_locking_with_a_setter(self):
+        ""
+        job = BJ.BatchJob()
+
+        # start thread that acquires lock then sleeps 5 seconds
+        thr = threading.Thread( target=job.testThreadLock, args=(5,) )
+        thr.start()
+        time.sleep(1)
+
+        t0 = time.time()
+        # this call should have to wait for the lock
+        job.setStatus( 'foo', 'bar' )
+        t1 = time.time()
+
+        thr.join()
+
+        assert t1-t0 > 3
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
