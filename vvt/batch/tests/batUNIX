@@ -17,7 +17,7 @@ import glob
 import testutils as util
 from testutils import print3
 
-import BatchUNIX as bu
+from batchscripts import BatchUNIX
 from batchjob import BatchJob
 
 
@@ -73,7 +73,7 @@ class Method_computeNumNodes:
 class BatchUNIX_computeNumNodes( Method_computeNumNodes, unittest.TestCase ):
 
     def makeBatchInterface(self):
-        return bu.BatchUNIX()
+        return BatchUNIX()
 
 
 class Batch_output_file( unittest.TestCase ):
@@ -173,7 +173,7 @@ class Batch_submit( unittest.TestCase ):
 
     def test_jobid_gets_defined(self):
         ""
-        bat = bu.BatchUNIX()
+        bat = BatchUNIX()
         job = BatchJob()
 
         write_and_submit_batch_job( bat, job )
@@ -187,7 +187,7 @@ class Batch_submit( unittest.TestCase ):
 
     def test_submit_stdout_stderr_gets_set(self):
         ""
-        bat = bu.BatchUNIX()
+        bat = BatchUNIX()
         job = BatchJob()
 
         write_and_submit_batch_job( bat, job )
@@ -201,7 +201,7 @@ class Batch_submit( unittest.TestCase ):
 
     def test_submit_date_gets_set(self):
         ""
-        bat = bu.BatchUNIX()
+        bat = BatchUNIX()
         job = BatchJob()
         curdate = time.time()
 
@@ -224,7 +224,7 @@ class Batch_submit( unittest.TestCase ):
 
     def test_batch_failure_will_still_have_done_date(self):
         ""
-        bat = bu.BatchUNIX()
+        bat = BatchUNIX()
         job = BatchJob()
 
         write_and_submit_batch_job( bat, job,
@@ -247,7 +247,7 @@ class Batch_start_stop_dates( unittest.TestCase ):
 
     def test_queue_run_and_done_dates(self):
         ""
-        bat = bu.BatchUNIX()
+        bat = BatchUNIX()
         job = BatchJob()
 
         write_and_submit_batch_job( bat, job, 'sleep 5' )
@@ -269,7 +269,7 @@ class Batch_start_stop_dates( unittest.TestCase ):
 
     def test_run_start_and_stop_dates(self):
         ""
-        bat = bu.BatchUNIX()
+        bat = BatchUNIX()
         job = BatchJob()
 
         write_and_submit_batch_job( bat, job, 'sleep 5' )
@@ -283,7 +283,7 @@ class Batch_start_stop_dates( unittest.TestCase ):
 
     def test_batch_failure_will_still_have_start_date(self):
         ""
-        bat = bu.BatchUNIX()
+        bat = BatchUNIX()
         job = BatchJob()
 
         write_and_submit_batch_job( bat, job,
@@ -306,7 +306,7 @@ class Batch_job_status( unittest.TestCase ):
 
     def test_a_running_job_is_marked_running(self):
         ""
-        bat = bu.BatchUNIX()
+        bat = BatchUNIX()
         job = BatchJob()
 
         write_and_submit_batch_job( bat, job, 'sleep 4' )
@@ -323,7 +323,7 @@ class Batch_job_status( unittest.TestCase ):
 
     def test_a_finished_job_is_marked_done(self):
         ""
-        bat = bu.BatchUNIX()
+        bat = BatchUNIX()
         job = BatchJob()
 
         write_and_submit_batch_job( bat, job, 'sleep 1' )
@@ -335,7 +335,7 @@ class Batch_job_status( unittest.TestCase ):
 
     def test_a_failed_job_is_still_marked_done(self):
         ""
-        bat = bu.BatchUNIX()
+        bat = BatchUNIX()
         job = BatchJob()
 
         write_and_submit_batch_job( bat, job,
@@ -356,7 +356,7 @@ class Batch_exit_values( unittest.TestCase ):
 
     def test_exit_value_is_ok_in_nominal_case(self):
         ""
-        bat = bu.BatchUNIX()
+        bat = BatchUNIX()
         job = BatchJob()
 
         write_and_submit_batch_job( bat, job, 'sleep 1' )
@@ -368,7 +368,7 @@ class Batch_exit_values( unittest.TestCase ):
 
     def test_script_exit_results_in_a_fail_exit_value(self):
         ""
-        bat = bu.BatchUNIX()
+        bat = BatchUNIX()
         job = BatchJob()
 
         write_and_submit_batch_job( bat, job,
@@ -382,7 +382,7 @@ class Batch_exit_values( unittest.TestCase ):
 
     def test_a_running_job_does_not_have_an_exit_value(self):
         ""
-        bat = bu.BatchUNIX()
+        bat = BatchUNIX()
         job = BatchJob()
 
         write_and_submit_batch_job( bat, job,
@@ -410,7 +410,7 @@ def run_batch_job_with_stdouterr_capture( job, *lines ):
     submit the job, then wait on the job.  All output written to stdout and
     stderr during submit and job wait is captured and returned as a string.
     """
-    bat = bu.BatchUNIX()
+    bat = BatchUNIX()
 
     job.setRunCommands( '\n'.join(lines)+'\n' )
 
