@@ -11,16 +11,16 @@ import os
 import time
 import subprocess as sub
 
-import batchinterface as base
+import batchitf
 
 from scriptrunner import ScriptRunner
 
 
-class BatchUNIX( base.BatchInterface ):
+class BatchUNIX( batchitf.BatchInterface ):
 
     def __init__(self):
         ""
-        base.BatchInterface.__init__(self)
+        batchitf.BatchInterface.__init__(self)
 
         self.runr = ScriptRunner()
         self.jobs = []
@@ -28,7 +28,7 @@ class BatchUNIX( base.BatchInterface ):
     def computeNumNodes(self, num_cores, cores_per_node=None):
         ""
         ppn = int( self.attrs.get( 'ppn', 2**31 ) )
-        return base.compute_num_nodes( num_cores, cores_per_node, ppn )
+        return batchitf.compute_num_nodes( num_cores, cores_per_node, ppn )
 
     def writeBatchFile(self, job):
         ""
@@ -99,23 +99,23 @@ class BatchUNIX( base.BatchInterface ):
     def _writeHeader(self, job, fileobj):
         """
         """
-        base.lineprint( fileobj,
+        batchitf.lineprint( fileobj,
             'echo "BATCH START DATE: `date`"',
             'env',
             'echo "UNAME: `uname -a`"' )
 
         rdir = job.getRunDirectory()
         if rdir:
-            base.lineprint( fileobj,
+            batchitf.lineprint( fileobj,
                 'echo "cd '+rdir+'"',
                 'cd "'+rdir+'" || exit 1' )
 
-        base.lineprint( fileobj, '' )
+        batchitf.lineprint( fileobj, '' )
 
     def _writeTail(self, job, fileobj):
         """
         """
-        base.lineprint( fileobj,
+        batchitf.lineprint( fileobj,
             '',
             'echo "BATCH STOP DATE: `date`"' )
 
@@ -135,14 +135,14 @@ class BatchUNIX( base.BatchInterface ):
                     if not started:
                         L = line.split( 'BATCH START DATE:', 1 )
                         if len(L) == 2:
-                            tm = base.parse_date_string( L[1].strip() )
+                            tm = batchitf.parse_date_string( L[1].strip() )
                             if tm:
                                 start = tm
                             started = True
 
                     L = line.split( 'BATCH STOP DATE:', 1 )
                     if len(L) == 2:
-                        tm = base.parse_date_string( L[1].strip() )
+                        tm = batchitf.parse_date_string( L[1].strip() )
                         if tm:
                             stop = tm
 
