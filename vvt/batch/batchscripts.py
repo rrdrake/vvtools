@@ -9,14 +9,13 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
-import subprocess as sub
 
 import batchitf
 
 from scriptrunner import ScriptRunner
 
 
-class BatchUNIX( batchitf.BatchInterface ):
+class BatchScripts( batchitf.BatchInterface ):
 
     def __init__(self):
         ""
@@ -77,9 +76,9 @@ class BatchUNIX( batchitf.BatchInterface ):
 
             assert st
             if st == 'running':
-                job.setStatus( state='running', exit=x )
+                job.setStatus( state='running' )
             elif st:
-                job.setStatus( state='done', exit=x )
+                job.setStatus( state='done' )
 
             if x == None:
                 L.append( [ job, sproc, logname ] )

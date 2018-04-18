@@ -31,9 +31,6 @@ A job script file is composed like this:
 #############################################################################
 
 class BatchInterface:
-    """
-    Interface for submitting and managing jobs in a batch queue.
-    """
 
     def __init__(self):
         ""

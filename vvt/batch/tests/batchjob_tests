@@ -190,6 +190,8 @@ class BatchJob_results( unittest.TestCase ):
 
         # start thread that acquires lock then sleeps 5 seconds
         thr = threading.Thread( target=job.testThreadLock, args=(5,) )
+        if hasattr( thr, 'setDaemon' ): thr.setDaemon( True )
+        else: thr.daemon = True
         thr.start()
         time.sleep(1)
 
@@ -207,6 +209,8 @@ class BatchJob_results( unittest.TestCase ):
 
         # start thread that acquires lock then sleeps 5 seconds
         thr = threading.Thread( target=job.testThreadLock, args=(5,) )
+        if hasattr( thr, 'setDaemon' ): thr.setDaemon( True )
+        else: thr.daemon = True
         thr.start()
         time.sleep(1)
 
