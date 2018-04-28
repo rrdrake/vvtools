@@ -36,6 +36,20 @@ class Class_ScriptProcess( unittest.TestCase ):
 
         assert id1 != id2
 
+    def test_optional_args_checking(self):
+        ""
+        ps = srmod.ScriptProcess( None, redirect=None, timeout=None )
+
+        self.assertRaises( Exception,
+            srmod.ScriptProcess, None, redirect=3, timeout=None )
+
+        ps = srmod.ScriptProcess( None, redirect=None, timeout=3 )
+
+        ps = srmod.ScriptProcess( None, redirect=None, timeout=3.3 )
+
+        self.assertRaises( Exception,
+            srmod.ScriptProcess, None, redirect=None, timeout='3' )
+
     def test_run_script(self):
         ""
         util.writefile( 'runme', """

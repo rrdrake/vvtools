@@ -68,6 +68,12 @@ class ScriptProcess:
 
         self.script = script_filename
 
+        if redirect != None and type(redirect) != type(''):
+            raise ValueError( 'redirect must be None or a string' )
+        if timeout != None and \
+           ( type(timeout) != type(2) and type(timeout) != type(2.2) ):
+            raise ValueError( 'timeout must be None or a number' )
+
         self.redirect = redirect
         self.timeout = timeout
 
