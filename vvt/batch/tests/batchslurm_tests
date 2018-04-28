@@ -1,0 +1,225 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import unittest
+import time
+import glob
+import shlex
+from getopt import getopt
+
+import testutils as util
+from testutils import print3
+
+from FakeSLURM import parse_sbatch_options
+from FakeSLURM import format_elapsed_time
+from FakeSLURM import format_date
+from FakeSLURM import pending_job_line
+from FakeSLURM import running_job_line
+from FakeSLURM import completed_job_line
+from scriptrunner import ScriptProcess
+
+from batchSLURM import parse_queue_table_output
+from batchSLURM import BatchSLURM
+from batchjob import BatchJob
+
+from common_tests import Method_computeNumNodes
+from common_tests import Batch_output_file
+from common_tests import Batch_work_directory
+from common_tests import Batch_submit
+from common_tests import Batch_start_stop_dates
+from common_tests import Batch_job_status
+from common_tests import Batch_exit_values
+
+
+class FakeSLURM_tests( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_the_parse_sbatch_options_function(self):
+        ""
+        util.writefile( 'batfile', """
+            #SBATCH --nodes=4
+            #SBATCH --time=1:10:04
+            #SBATCH --output=bat.log
+            #SBATCH --partition=short,batch
+            #SBATCH --account=bigshot
+            date
+            """ )
+        util.writefile( 'oops1', """
+            #SBATCH --nodes=4
+            #SBATCH =1:10:04
+            date
+            """ )
+        util.writefile( 'oops2', """
+            #SBATCH --nodes=4
+            #SBATCH 1:10:04
+            date
+            """ )
+        time.sleep(1)
+
+        optD = parse_sbatch_options( 'batfile' )
+        assert len(optD) == 5
+        assert optD['--nodes']     == '4'
+        assert optD['--time']      == '1:10:04'
+        assert optD['--output']    == 'bat.log'
+        assert optD['--partition'] == 'short,batch'
+        assert optD['--account']   == 'bigshot'
+
+        self.assertRaises( Exception, parse_sbatch_options, 'oops1' )
+        self.assertRaises( Exception, parse_sbatch_options, 'oops2' )
+
+    def test_slurm_format_date_function(self):
+        ""
+        s = format_date( 1524417005.457964 )
+        tz = time.timezone
+        if tz == 7:
+            assert s == '2018-04-22T11:10:05'
+        else:
+            # the above check assumes US mountain time; skip hour check here
+            assert s.startswith( '2018-04-22T' )
+            assert s.endswith( ':10:05' )
+
+    def test_slurm_format_elapsed_time_function(self):
+        ""
+        assert format_elapsed_time( 45 ) == '0:45'
+        assert format_elapsed_time( 67 ) == '1:07'
+        assert format_elapsed_time( 4*60*60 + 4*60 + 4 ) == '4:04:04'
+        s = format_elapsed_time( 4*24*60*60 + 4*60*60 + 4*60 + 4 )
+        assert s == '4-04:04:04'
+
+    def test_create_table_then_parse(self):
+        ""
+        tm = time.time()
+
+        proc1 = ScriptProcess( 'dummy' )
+        proc1.setResults( state='running', start=tm-5 )
+        jid1 = str( proc1.getId() )
+
+        proc2 = ScriptProcess( 'dummy' )
+        proc2.setResults( state='exit', start=tm-10, stop=tm-5, exit=0 )
+        jid2 = str( proc2.getId() )
+
+        proc3 = ScriptProcess( 'dummy' )  # this one is pending
+        jid3 = str( proc3.getId() )
+
+        out = running_job_line( proc1, tm-20 ) + '\n'
+        out += completed_job_line( proc2, tm-15 ) + '\n'
+        out += pending_job_line( proc3, tm-4 ) + '\n'
+
+        tab = parse_queue_table_output( out, '' )
+
+        assert len(tab) == 3
+
+        pL = tab[jid1]
+        assert len(pL) == 4
+        assert pL[0] == 'R'
+        assert time.ctime(pL[1]) == time.ctime(tm-20)
+        assert time.ctime(pL[2]) == time.ctime(tm-5)
+        assert abs( pL[3] - 5 ) < 2
+
+        pL = tab[jid2]
+        assert len(pL) == 4
+        assert pL[0] == 'CD'
+        assert time.ctime(pL[1]) == time.ctime(tm-15)
+        assert time.ctime(pL[2]) == time.ctime(tm-10)
+        assert abs( pL[3] - 5 ) < 2
+
+        pL = tab[jid3]
+        assert len(pL) == 4
+        assert pL[0] == 'PD'
+        assert time.ctime(pL[1]) == time.ctime(tm-4)
+        assert pL[2] == None
+        assert pL[3] == None or abs( pL[3] ) < 1
+
+
+class BatchSLURM_computeNumNodes( Method_computeNumNodes, unittest.TestCase ):
+
+    def makeBatchInterface(self):
+        bat = BatchSLURM()
+        bat.setProcessorsPerNode( 36 )
+        return bat
+
+    # inherit the tests from Method_computeNumNodes, but add the following
+
+    def test_ppn_must_be_set(self):
+        ""
+        bat = BatchSLURM()
+
+        # there is no default processors-per-node for batch systems
+        self.assertRaises( Exception, bat.computeNumNodes, 1 )
+
+
+class BatchSLURM_output_file( Batch_output_file, unittest.TestCase ):
+
+    def makeBatchInterface(self):
+        ""
+        bat = BatchSLURM()
+        engine = FakeSLURM()
+        bat.setBatchCommandRunner( engine.runcmd )
+        return bat
+
+
+class BatchSLURM_work_directory( Batch_work_directory, unittest.TestCase ):
+
+    def makeBatchInterface(self):
+        ""
+        bat = BatchSLURM()
+        engine = FakeSLURM()
+        bat.setBatchCommandRunner( engine.runcmd )
+        return bat
+
+
+class BatchSLURM_submit( Batch_submit, unittest.TestCase ):
+
+    def makeBatchInterface(self):
+        ""
+        bat = BatchSLURM()
+        engine = FakeSLURM()
+        bat.setBatchCommandRunner( engine.runcmd )
+        return bat
+
+
+class BatchSLURM_start_stop_dates( Batch_start_stop_dates, unittest.TestCase ):
+
+    def makeBatchInterface(self):
+        ""
+        bat = BatchSLURM()
+        engine = FakeSLURM()
+        bat.setBatchCommandRunner( engine.runcmd )
+        return bat
+
+
+class BatchSLURM_job_status( Batch_job_status, unittest.TestCase ):
+
+    def makeBatchInterface(self):
+        ""
+        bat = BatchSLURM()
+        engine = FakeSLURM()
+        bat.setBatchCommandRunner( engine.runcmd )
+        return bat
+
+
+class BatchSLURM_exit_values( Batch_exit_values, unittest.TestCase ):
+
+    def makeBatchInterface(self):
+        ""
+        bat = BatchSLURM()
+        engine = FakeSLURM()
+        bat.setBatchCommandRunner( engine.runcmd )
+        return bat
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
