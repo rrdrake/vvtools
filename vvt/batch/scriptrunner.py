@@ -214,25 +214,3 @@ class ScriptProcess:
         Only used for testing, this function acquires the lock then sleeps.
         """
         time.sleep( num_seconds )
-
-
-def get_state( results_tuple ):
-    ""
-    return results_tuple[0]
-
-
-def get_runtime( results_tuple ):
-    ""
-    rtn = None
-
-    tstop = results_tuple[2]
-    if tstop != None:
-        tstart = results_tuple[1]
-        rtn = tstop-tstart
-
-    return rtn
-
-
-def get_exit_status( results_tuple ):
-    ""
-    return results_tuple[3]

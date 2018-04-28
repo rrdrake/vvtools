@@ -227,7 +227,8 @@ class Class_ScriptProcess( unittest.TestCase ):
 
         for i in range(10):
             ps.poll()
-            if srmod.get_exit_status( ps.getResults() ) != None:
+            st,x = ps.getStatus()
+            if x != None:
                 break
             time.sleep(1)
 
@@ -402,12 +403,20 @@ def parse_seconds( tstring ):
 
 ############################################################################
 
+def get_runtime( runner ):
+    ""
+    tstart,tstop = runner.getDates()
+    if tstop != None:
+        return tstop-tstart
+    return None
+
+
 def get_results_values( runner ):
     """
     Return ( state as string, runtime, exit status ) from a ScriptProcess.
     """
-    L = runner.getResults()
-    return srmod.get_state(L), srmod.get_runtime(L), srmod.get_exit_status(L)
+    st,x = runner.getStatus()
+    return st, get_runtime(runner), x
 
 
 def script_process_sleep_and_poll( script_ps, loop_length ):

@@ -53,7 +53,7 @@ class BatchJob:
 
         exit  : job exit status; can be
                     ok      : script ran and completed
-                    fail    : script ran but failed to complete
+                    fail    : script ran but failed to complete (no stop date)
                     missing : time expired waiting for the job to show up in
                               the queue, or for the log file to be created
                     killed  : the batch interface was told to kill/cancel the job
@@ -68,10 +68,10 @@ class BatchJob:
         ""
         self.name = 'job'
         self.nnodes = 1
-        self.fname = self.name+'_'+str(id(self))+'.sh'
+        self.fname = os.path.abspath( self.name+'_'+str(id(self))+'.sh' )
         self.rundir = '.'
         self.cmds = '\n'
-        self.logfname = self.name+'_'+str(id(self))+'.log'
+        self.logfname = os.path.abspath( self.name+'_'+str(id(self))+'.log' )
         self.rtime = 60*60
         self.qname = None
         self.account = None
@@ -97,16 +97,16 @@ class BatchJob:
     def setNumNodes(self, num_nodes): self.nnodes = num_nodes
     def getNumNodes(self): return self.nnodes
 
-    def setBatchFileName(self, filename): self.fname = filename
+    def setBatchFileName(self, filename): self.fname = os.path.abspath( filename )
     def getBatchFileName(self): return self.fname
 
-    def setRunDirectory(self, rundir): self.rundir = rundir
+    def setRunDirectory(self, rundir): self.rundir = os.path.abspath( rundir )
     def getRunDirectory(self): return self.rundir
 
     def setRunCommands(self, commands): self.cmds = commands
     def getRunCommands(self): return self.cmds
 
-    def setLogFileName(self, filename): self.logfname = filename
+    def setLogFileName(self, filename): self.logfname = os.path.abspath( filename )
     def getLogFileName(self): return self.logfname
 
     def setRunTime(self, queue_time): self.rtime = queue_time

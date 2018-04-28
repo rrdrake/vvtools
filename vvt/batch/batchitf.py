@@ -21,9 +21,11 @@ their status using shell commands.
 
 A job script file is composed like this:
 
-    <header>   : batch system directives, and startup shell commands
+    <shebang>  : like #!/bin/bash -l
+    <header>   : batch system directives
+    <begin>    : startup shell commands
     <commands> : job shell commands
-    <tail>     : informational job completion shell commands
+    <finish>   : informational job completion shell commands
 """
 
 
@@ -34,25 +36,30 @@ class BatchInterface:
 
     def __init__(self):
         ""
-        self.attrs = {}
+        self.ppn = None
 
-    def setAttr(self, name, value):
+    def setProcessorsPerNode(self, ppn):
         ""
-        self.attrs[ name ] = value
+        self.ppn = ppn
 
-    def getAttr(self, name, *default):
+    def getProcessorsPerNode(self, *default):
         ""
-        if len(default) > 0:
-            return self.attrs.get( name, default[0] )
-        return self.attrs[ name ]
+        if len(default) > 0 and self.ppn == None:
+            return default[0]
+        return self.ppn
 
     def computeNumNodes(self, num_cores, cores_per_node=None):
-        ""
-        raise NotImplementedError( "Method computeNumNodes()" )
+        """
+        Returns minimum number of compute nodes to fit the requested
+        number of cores.
+        """
+        ppn = self.getProcessorsPerNode()
+        return compute_num_nodes( num_cores, cores_per_node, ppn )
 
-    def writeBatchFile(self, job):
-        ""
-        raise NotImplementedError( "Method writeBatchFile()" )
+    def writeScriptHeader(self, job, fileobj):
+        """
+        """
+        raise NotImplementedError( "Method writeScriptHeader()" )
 
     def submit(self, job):
         """
@@ -67,6 +74,85 @@ class BatchInterface:
     def cancel(self, job_list=None):
         ""
         raise NotImplementedError( "Method cancel()" )
+
+    def writeScriptFile(self, job):
+        ""
+        batname = job.getBatchFileName()
+
+        fp = open( batname, 'w' )
+        try:
+            self.writeScriptShebang( job, fp )
+            self.writeScriptHeader( job, fp )
+            self.writeScriptBegin( job, fp )
+            fp.write( '\n' + job.getRunCommands() + '\n' )
+            self.writeScriptFinish( job, fp )
+
+        finally:
+            fp.close()
+
+    def writeScriptShebang(self, job, fileobj):
+        """
+        """
+        fileobj.write( '#!/bin/bash -l\n' )
+
+    def writeScriptBegin(self, job, fileobj):
+        """
+        """
+        lineprint( fileobj,
+            'echo "SCRIPT START DATE: `date`"',
+            'env',
+            'echo "UNAME: `uname -a`"' )
+
+        rdir = job.getRunDirectory()
+        if rdir:
+            lineprint( fileobj,
+                'echo "cd '+rdir+'"',
+                'cd "'+rdir+'" || exit 1' )
+
+        lineprint( fileobj, '' )
+
+    def writeScriptFinish(self, job, fileobj):
+        """
+        """
+        lineprint( fileobj,
+            '',
+            'echo "SCRIPT STOP DATE: `date`"' )
+
+    def parseScriptDates(self, job):
+        ""
+        start = None
+        stop = None
+
+        logname = job.getLogFileName()
+
+        if os.path.exists( logname ):
+
+            fp = open( logname, 'r' )
+            try:
+                started = False
+                line = fp.readline()
+                while line:
+
+                    if not started:
+                        L = line.split( 'SCRIPT START DATE:', 1 )
+                        if len(L) == 2:
+                            tm = parse_date_string( L[1].strip() )
+                            if tm:
+                                start = tm
+                            started = True
+
+                    L = line.split( 'SCRIPT STOP DATE:', 1 )
+                    if len(L) == 2:
+                        tm = parse_date_string( L[1].strip() )
+                        if tm:
+                            stop = tm
+
+                    line = fp.readline()
+
+            finally:
+                fp.close()
+
+        return start, stop
 
 
 #############################################################################
@@ -107,12 +193,15 @@ def compute_num_nodes( requested_num_cores,
     Returns minimum number of compute nodes to fit the requested number of
     cores.  If 'requested_num_cores' is less than one, then one is assumed.
     The 'platform_ppn' is used as the number of cores per node unless the
-    'requested_cores_per_node' value is non-None.
+    'requested_cores_per_node' value is non-None.  If both 'platform_ppn'
+    and 'requested_cores_per_node' are None, then one is returned.
     """
     if requested_cores_per_node != None:
         ppn = int( requested_cores_per_node )
-    else:
+    elif platform_ppn != None:
         ppn = int( platform_ppn )
+    else:
+        return 1
 
     assert ppn > 0
 
@@ -190,22 +279,31 @@ def parse_date_string( datestr ):
     return tm
 
 
-def seconds_to_colon_separated_time(self, nseconds):
+def format_time_to_HMS( num_seconds ):
     """
-    Formats number of seconds to H:MM:SS with padded zeros for minutes and
-    seconds.
+    Formats 'num_seconds' in H:MM:SS format.  If the argument is a string,
+    then it checks for a colon.  If it has a colon, the string is returned
+    untouched. Otherwise it assumes seconds and converts to an integer before
+    changing to H:MM:SS format.
     """
-    nseconds = int( float(nseconds) + 0.5 )
+    if type(num_seconds) == type(''):
+        if ':' in num_seconds:
+            return num_seconds
 
-    nhrs = int( float(nseconds)/3600.0 )
-    t = nseconds - nhrs*3600
-    nmin = int( float(t)/60.0 )
-    nsec = t - nmin*60
-    if nsec < 10: nsec = '0' + str(nsec)
-    else:         nsec = str(nsec)
-    if nmin < 10: nmin = '0' + str(nmin)
-    else:         nmin = str(nmin)
-    return str(nhrs) + ':' + nmin + ':' + nsec
+    secs = int(num_seconds)
+
+    nhrs = secs // 3600
+    secs = secs % 3600
+    nmin = secs // 60
+    nsec = secs % 60
+
+    hms = str(nhrs)+':'
+    if nmin < 10: hms += '0'
+    hms += str(nmin)+':'
+    if nsec < 10: hms += '0'
+    hms += str(nsec)
+
+    return hms
 
 
 class AutoPoller:

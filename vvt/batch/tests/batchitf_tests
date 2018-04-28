@@ -115,6 +115,82 @@ class Function_compute_num_nodes( unittest.TestCase ):
         assert bat.compute_num_nodes( 4, 2, 8 ) == 2
         assert bat.compute_num_nodes( 5, 2, 8 ) == 3
 
+    def test_platform_ppn_is_None(self):
+        ""
+        assert bat.compute_num_nodes( 0, 2, None ) == 1
+        assert bat.compute_num_nodes( 1, 2, None ) == 1
+        assert bat.compute_num_nodes( 2, 2, None ) == 1
+        assert bat.compute_num_nodes( 3, 2, None ) == 2
+
+        assert bat.compute_num_nodes( 0, None, None ) == 1
+        assert bat.compute_num_nodes( 1, None, None ) == 1
+        assert bat.compute_num_nodes( 2, None, None ) == 1
+        assert bat.compute_num_nodes( 3, None, None ) == 1
+
+
+class Function_format_time_to_HMS( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_string_with_a_colon_is_returned_unchanged(self):
+        ""
+        hms = bat.format_time_to_HMS( '0:01' )
+        assert hms == '0:01'
+
+    def test_string_without_a_colon_is_converted_to_seconds(self):
+        ""
+        hms = bat.format_time_to_HMS( '66' )
+        assert hms == '0:01:06'
+
+    def test_less_than_a_minute(self):
+        ""
+        hms = bat.format_time_to_HMS( '59' )
+        assert hms == '0:00:59'
+
+        hms = bat.format_time_to_HMS( '09' )
+        assert hms == '0:00:09'
+
+        hms = bat.format_time_to_HMS( 9 )
+        assert hms == '0:00:09'
+
+        hms = bat.format_time_to_HMS( 0 )
+        assert hms == '0:00:00'
+
+    def test_less_than_an_hour(self):
+        ""
+        hms = bat.format_time_to_HMS( 5*60 )
+        assert hms == '0:05:00'
+
+        hms = bat.format_time_to_HMS( 5*60+34 )
+        assert hms == '0:05:34'
+
+        hms = bat.format_time_to_HMS( 59*60+59 )
+        assert hms == '0:59:59'
+
+    def test_less_than_a_day(self):
+        ""
+        hms = bat.format_time_to_HMS( 60*60+1 )
+        assert hms == '1:00:01'
+
+        hms = bat.format_time_to_HMS( 60*60+11*60 )
+        assert hms == '1:11:00'
+
+        hms = bat.format_time_to_HMS( 60*60+11*60+11 )
+        assert hms == '1:11:11'
+
+    def test_more_than_a_day(self):
+        ""
+        hms = bat.format_time_to_HMS( 25*60*60+60 )
+        assert hms == '25:01:00'
+
+        hms = bat.format_time_to_HMS( 25*60*60+6 )
+        assert hms == '25:00:06'
+
+        hms = bat.format_time_to_HMS( 25*60*60+6*60+6 )
+        assert hms == '25:06:06'
+
 
 class Function_parse_date_string( unittest.TestCase ):
 
