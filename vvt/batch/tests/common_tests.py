@@ -107,6 +107,18 @@ class Batch_work_directory:
         self.bat = self.makeBatchInterface()
         self.job = BatchJob()
 
+    def grepLogFileFor_mycwd(self):
+        ""
+        fL = glob.glob( 'job_*.log' )
+        assert len(fL) == 1
+
+        L = util.filegrep( fL[0], 'mycwd=' )
+        assert len(L) == 1
+
+        d = L[0].split('mycwd=',1)[1].strip()
+
+        return d
+
     def test_default_work_dir_is_current_dir(self):
         ""
         os.mkdir( 'wdir' )
@@ -121,11 +133,7 @@ class Batch_work_directory:
         out = run_batch_job_with_stdouterr_capture( self.bat, self.job,
                 'echo "mycwd=`pwd`"' )
 
-        fL = glob.glob( 'job_*.log' )
-        assert len(fL) == 1
-        L = util.filegrep( fL[0], 'mycwd=' )
-        assert len(L) == 1
-        d = L[0].split('mycwd=',1)[1].strip()
+        d = self.grepLogFileFor_mycwd()
         assert os.path.samefile( curdir+'/wdir', d )
 
     def test_setting_work_dir_explicitely(self):
@@ -141,15 +149,11 @@ class Batch_work_directory:
                 'echo "mycwd=`pwd`"' )
 
         os.path.samefile( curdir, os.getcwd() )
-        fL = glob.glob( 'job_*.log' )
-        assert len(fL) == 1
-        L = util.filegrep( fL[0], 'mycwd=' )
-        assert len(L) == 1
-        d = L[0].split('mycwd=',1)[1].strip()
+        d = self.grepLogFileFor_mycwd()
         assert os.path.samefile( curdir+'/wdir', d )
 
 
-class Batch_jobid:
+class Batch_submit:
 
     def setUp(self):
         ""
@@ -168,16 +172,6 @@ class Batch_jobid:
 
         assert jobid != None and jobid.strip()
 
-
-class Batch_queue_dates:
-
-    def setUp(self):
-        ""
-        util.setup_test()
-
-        self.bat = self.makeBatchInterface()
-        self.job = BatchJob()
-
     def test_submit_stdout_stderr_gets_set(self):
         ""
         write_and_submit_batch_job( self.bat, self.job )
@@ -188,6 +182,16 @@ class Batch_queue_dates:
 
         assert subout.strip()
         assert not suberr.strip()
+
+
+class Batch_queue_dates:
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+        self.bat = self.makeBatchInterface()
+        self.job = BatchJob()
 
     def test_submit_date_gets_set(self):
         ""
