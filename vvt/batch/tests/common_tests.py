@@ -202,7 +202,7 @@ class Batch_submit:
         bat.poll()
         sub1,run1,done1 = job.getQueueDates()
 
-        wait_on_job( bat, job, 5 )
+        wait_on_job( bat, job, 10 )
 
         assert sub1
         assert abs( curdate - run1 ) < 5
@@ -212,7 +212,7 @@ class Batch_submit:
         assert sub1 == sub2
         assert run1 == run2
         print 'magic:', done2, curdate
-        assert done2 and done2-curdate > 2
+        assert done2 and done2-curdate > 2  # magic: sometimes fails
 
     def test_batch_failure_will_still_have_done_date(self):
         ""
