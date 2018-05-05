@@ -20,47 +20,45 @@ class Method_computeNumNodes:
         ""
         util.setup_test( cleanout=False )
 
+        self.bat = self.makeBatchInterface()
+
     def test_with_default_cores_per_node(self):
         ""
-        bat = self.makeBatchInterface()
-
-        assert bat.computeNumNodes( 1 ) == 1
-        assert bat.computeNumNodes( 0 ) == 1
-        assert bat.computeNumNodes( 2 ) == 1
+        assert self.bat.computeNumNodes( 1 ) == 1
+        assert self.bat.computeNumNodes( 0 ) == 1
+        assert self.bat.computeNumNodes( 2 ) == 1
 
     def test_with_ppn_variant(self):
         ""
-        bat = self.makeBatchInterface()
-        bat.setProcessorsPerNode( 2 )
+        self.bat.setProcessorsPerNode( 2 )
 
-        assert bat.computeNumNodes( 0 ) == 1
-        assert bat.computeNumNodes( 1 ) == 1
-        assert bat.computeNumNodes( 2 ) == 1
-        assert bat.computeNumNodes( 3 ) == 2
-        assert bat.computeNumNodes( 4 ) == 2
-        assert bat.computeNumNodes( 5 ) == 3
+        assert self.bat.computeNumNodes( 0 ) == 1
+        assert self.bat.computeNumNodes( 1 ) == 1
+        assert self.bat.computeNumNodes( 2 ) == 1
+        assert self.bat.computeNumNodes( 3 ) == 2
+        assert self.bat.computeNumNodes( 4 ) == 2
+        assert self.bat.computeNumNodes( 5 ) == 3
 
     def test_with_cores_per_node_given(self):
         ""
-        bat = self.makeBatchInterface()
-        self.check_cores_per_node( bat )
+        self.check_cores_per_node( self.bat )
 
-        bat = self.makeBatchInterface()
-        bat.setProcessorsPerNode( 2 )
-        self.check_cores_per_node( bat )
+        self.bat = self.makeBatchInterface()
+        self.bat.setProcessorsPerNode( 2 )
+        self.check_cores_per_node( self.bat )
 
     def check_cores_per_node(self, bat):
         ""
-        assert bat.computeNumNodes( 1, 1 ) == 1
-        assert bat.computeNumNodes( 0, 1 ) == 1
-        assert bat.computeNumNodes( 2, 1 ) == 2
+        assert self.bat.computeNumNodes( 1, 1 ) == 1
+        assert self.bat.computeNumNodes( 0, 1 ) == 1
+        assert self.bat.computeNumNodes( 2, 1 ) == 2
 
-        assert bat.computeNumNodes( 0, 2 ) == 1
-        assert bat.computeNumNodes( 1, 2 ) == 1
-        assert bat.computeNumNodes( 2, 2 ) == 1
-        assert bat.computeNumNodes( 3, 2 ) == 2
-        assert bat.computeNumNodes( 4, 2 ) == 2
-        assert bat.computeNumNodes( 5, 2 ) == 3
+        assert self.bat.computeNumNodes( 0, 2 ) == 1
+        assert self.bat.computeNumNodes( 1, 2 ) == 1
+        assert self.bat.computeNumNodes( 2, 2 ) == 1
+        assert self.bat.computeNumNodes( 3, 2 ) == 2
+        assert self.bat.computeNumNodes( 4, 2 ) == 2
+        assert self.bat.computeNumNodes( 5, 2 ) == 3
 
 
 class Batch_output_file:
@@ -69,13 +67,12 @@ class Batch_output_file:
         ""
         util.setup_test()
 
+        self.bat = self.makeBatchInterface()
+        self.job = BatchJob()
+
     def test_job_output_always_goes_to_a_file(self):
         ""
-        bat = self.makeBatchInterface()
-
-        job = BatchJob()
-
-        out = run_batch_job_with_stdouterr_capture( bat, job,
+        out = run_batch_job_with_stdouterr_capture( self.bat, self.job,
                 'echo "grep for this statement"' )
 
         assert 'grep for this statement' not in out
@@ -90,12 +87,9 @@ class Batch_output_file:
         os.mkdir( 'odir' )
         time.sleep(1)
 
-        bat = self.makeBatchInterface()
+        self.job.setLogFileName( 'odir/bat.log' )
 
-        job = BatchJob()
-        job.setLogFileName( 'odir/bat.log' )
-
-        out = run_batch_job_with_stdouterr_capture( bat, job,
+        out = run_batch_job_with_stdouterr_capture( self.bat, self.job,
                 'echo "grep for this statement"' )
 
         assert 'grep for this statement' not in out
@@ -110,6 +104,9 @@ class Batch_work_directory:
         ""
         util.setup_test()
 
+        self.bat = self.makeBatchInterface()
+        self.job = BatchJob()
+
     def test_default_work_dir_is_current_dir(self):
         ""
         os.mkdir( 'wdir' )
@@ -118,11 +115,10 @@ class Batch_work_directory:
         curdir = os.getcwd()
         os.chdir( 'wdir' )
 
-        bat = self.makeBatchInterface()
+        # construct job after changing directory
+        self.job = BatchJob()
 
-        job = BatchJob()
-
-        out = run_batch_job_with_stdouterr_capture( bat, job,
+        out = run_batch_job_with_stdouterr_capture( self.bat, self.job,
                 'echo "mycwd=`pwd`"' )
 
         fL = glob.glob( 'job_*.log' )
@@ -139,12 +135,9 @@ class Batch_work_directory:
 
         curdir = os.getcwd()
 
-        bat = self.makeBatchInterface()
+        self.job.setRunDirectory( 'wdir' )
 
-        job = BatchJob()
-        job.setRunDirectory( 'wdir' )
-
-        out = run_batch_job_with_stdouterr_capture( bat, job,
+        out = run_batch_job_with_stdouterr_capture( self.bat, self.job,
                 'echo "mycwd=`pwd`"' )
 
         os.path.samefile( curdir, os.getcwd() )
