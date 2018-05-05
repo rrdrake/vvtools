@@ -211,6 +211,7 @@ class Batch_submit:
         sub2,run2,done2 = job.getQueueDates()
         assert sub1 == sub2
         assert run1 == run2
+        print 'magic:', done2, curdate
         assert done2 and done2-curdate > 2
 
     def test_batch_failure_will_still_have_done_date(self):
@@ -333,7 +334,7 @@ class Batch_job_status:
             'sleep 1',
             'exit 1' )
 
-        wait_on_job( bat, job, 5 )
+        wait_on_job( bat, job, 10 )
 
         st,x = job.getStatus()
         assert st == 'done'
@@ -366,7 +367,7 @@ class Batch_exit_values:
             'sleep 1',
             'exit 1' )
 
-        wait_on_job( bat, job, 5 )
+        wait_on_job( bat, job, 10 )
 
         st,x = job.getStatus()
         assert x == 'fail'
@@ -386,7 +387,7 @@ class Batch_exit_values:
 
         st,x1 = job.getStatus()
 
-        wait_on_job( bat, job, 5 )
+        wait_on_job( bat, job, 10 )
 
         assert x1 == None
         st,x2 = job.getStatus()

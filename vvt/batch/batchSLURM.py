@@ -71,16 +71,6 @@ class BatchSLURM( batchitf.BatchInterface ):
 
     def poll(self):
         """
-        Some squeue -o format codes:
-
-            %i job or job step id
-            %t job state: PD (pending), R (running), CA (cancelled),
-                          CF(configuring), CG (completing), CD (completed),
-                          F (failed), TO (timeout), NF (node failure),
-                          RV (revoked), SE (special exit state)
-            %V job's submission time
-            %S actual or expected start time
-            %M time used by the job (an INVALID is possible)
         """
         cmd = 'squeue --noheader -o "%i _ %t _ %V _ %S _ %M"'
         x,out,err = self.runcmd( cmd )
@@ -93,10 +83,9 @@ class BatchSLURM( batchitf.BatchInterface ):
 
             statL = tab.get( job.getJobId(), None )
 
-            self.updateBatchJobResults( job, statL )
+            isdone = self.updateBatchJobResults( job, statL )
 
-            st,ex = job.getStatus()
-            if not ex:
+            if not isdone:
                 newL.append( job )
 
         self.jobs = newL
@@ -114,6 +103,17 @@ class BatchSLURM( batchitf.BatchInterface ):
 
     def updateBatchJobResults(self, job, statL ):
         """
+        Some squeue -o format codes:
+
+            %i job or job step id
+            %t job state: PD (pending), R (running), CA (cancelled),
+                          CF(configuring), CG (completing), CD (completed),
+                          F (failed), TO (timeout), NF (node failure),
+                          RV (revoked), SE (special exit state)
+            %V job's submission time
+            %S actual or expected start time
+            %M time used by the job (an INVALID is possible)
+
         - is this job in the queue table?
         - update job info with data from table
         - is this job done?  remove from jobs list
@@ -130,38 +130,83 @@ class BatchSLURM( batchitf.BatchInterface ):
         print 'magic: update, statL', statL, state, exit
         if not exit:
 
-            t0,t1 = job.getRunDates()
+            self.updateJobRunDates( job )
+            self.updateJobState( job, state, statL )
+            self.updateJobQueueDates( job, statL )
 
-            if t1 == None:
-                start,stop = self.parseScriptDates( job )
-                job.setRunDates( start=start, stop=stop )
-                if stop:
-                    job.setStatus( exit='ok' )
+            self.updateJobExit( job )
 
-            if statL != None:
+            state,exit = job.getStatus()
 
-                st = statL[0]
+        return exit
 
-                isdone = False
-                if st == 'R':
-                    job.setStatus( state='running' )
-                elif st == 'PD' or st == 'CF':
-                    job.setStatus( state='queue' )
-                else:
-                    job.setStatus( state='done' )
-                    isdone = True
+    def updateJobRunDates(self, job):
+        ""
+        t0,t1 = job.getRunDates()
 
-                if isdone and statL[2] and statL[3] and (statL[3] > 0.5):
-                    job.setQueueDates( run=statL[2], done=statL[2]+statL[3] )
-                elif statL[2]:
-                    job.setQueueDates( run=statL[2] )
+        if t1 == None:
 
+            start,stop = self.parseScriptDates( job )
+
+            job.setRunDates( start=start, stop=stop )
+
+    def updateJobState(self, job, previous_state, statL):
+        ""
+        if statL != None:
+
+            st = statL[0]
+
+            if st == 'R':
+                job.setStatus( state='running' )
+            elif st == 'PD' or st == 'CF':
+                job.setStatus( state='queue' )
             else:
-                # TODO: apply timeouts (waiting for job)
-                pass
+                job.setStatus( state='done' )
 
-                if state == 'running':
-                    job.setStatus( state='done' )
+        elif previous_state in ['queue','running']:
+            job.setStatus( state='done' )
+
+    def updateJobQueueDates(self, job, statL):
+        ""
+        if statL != None:
+
+            rundate,runtime = statL[2], statL[3]
+
+            isdone = ( statL[0] not in ['R','PD','CF'] )
+
+            if isdone and rundate and runtime and (runtime > 0.5):
+                job.setQueueDates( run=rundate, done=rundate+runtime )
+
+            elif rundate:
+                job.setQueueDates( run=rundate )
+
+    def updateJobExit(self, job):
+        ""
+        t0,t1 = job.getRunDates()
+
+        if t1:
+            job.setStatus( exit='ok' )
+
+        else:
+            curtime = time.time()
+
+            sub,run,done = job.getQueueDates()
+
+            complete_timeout = 5
+            if t0 and done and curtime-done > complete_timeout:
+                job.setStatus( exit='fail' )
+
+        # if not start and absent too long,
+        #   mark exit=missing
+
+        # if started, not running, and no stop date for too long,
+        #   mark exit=fail
+
+        # if not started and not in the queue for too long,
+        #   mark exit=missing
+
+        # if was marked running at least once, but not started for too long,
+        #   mark exit=missing
 
 
 def run_batch_command( cmd ):
@@ -198,6 +243,10 @@ def parse_queue_table_output( out, err ):
     7291680 _ R _ 2018-04-21T12:57:34 _ 2018-04-21T12:57:38 _ 7:37
     7291807 _ PD _ 2018-04-21T13:05:09 _ N/A _ 0:00
     7254586 _ CG _ 2018-04-20T21:05:53 _ 2018-04-20T21:05:58 _ 2:00:25
+
+    gives python dict of
+
+        jobid -> [ state string, submit date, start date, time used ]
     """
     tab = {}
 
@@ -278,7 +327,7 @@ def parse_elapsed_time_string( dstr ):
     if len(nL) > 2:
         try:
             hr = int( nL[-3] )
-            if hr < 0 or hr >= 60:
+            if hr < 0 or hr > 24:
                 return None
         except:
             return None

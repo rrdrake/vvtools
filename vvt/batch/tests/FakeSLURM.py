@@ -11,9 +11,14 @@ import os
 import time
 import glob
 import shlex
-import getopt
+from getopt import getopt
 
 from scriptrunner import ScriptRunner
+from batchSLURM import parse_elapsed_time_string
+
+# magic: TODO:
+#   - have the partition and account added to the jobs list
+#       - this is so tests can check that they were set
 
 
 class FakeSLURM:
@@ -24,16 +29,22 @@ class FakeSLURM:
         self.jobs = []
 
     def runcmd(self, cmd):
-        ""
+        """
+        This is the entry point for faking the SLURM behavior.  Instead of
+        calling "sbatch" and "squeue", it parses the command line options and
+        uses ScriptRunner to execute the job scripts.
+        """
         self.scrun.poll()
 
         argv = shlex.split( cmd )
-
         prog = os.path.basename(argv[0])
+
         if prog == 'sbatch':
-            rtn = self.run_sbatch_command( argv )
+            rtn = self.run_sbatch_command( argv[1:] )
+
         elif prog == 'squeue':
-            rtn = self.run_squeue_command( argv )
+            rtn = self.run_squeue_command( argv[1:] )
+
         else:
             raise NotImplementedError( 'unexpected program: "'+prog+'"' )
 
@@ -41,18 +52,14 @@ class FakeSLURM:
 
         return rtn
 
-    def run_sbatch_command(self, argv):
+    def run_sbatch_command(self, cmd_opts):
         ""
-        optL,argL = getopt( argv[1:], '', [] )
-        if len(argL) != 1:
-            raise ValueError( 'expected exactly one argument' )
+        optL,argL = parse_sbatch_command_options( cmd_opts )
+        scriptname = argL[0]
 
-        optD = parse_sbatch_options( argL[0] )
+        logf, runtime = parse_sbatch_script_file( scriptname )
 
-        logf = optD['--output']  # required
-        tm = optD.get( '--time', None )
-
-        proc = self.scrun.submit( argL[0], redirect=logf, timeout=tm )
+        proc = self.scrun.submit( scriptname, redirect=logf, timeout=runtime )
 
         out = 'Submitted batch job '+str(proc.getId())
 
@@ -61,47 +68,55 @@ class FakeSLURM:
 
         return 0,out,''
 
-    def run_squeue_command(self, argv):
+    def run_squeue_command(self, cmd_opts):
         ""
-        optL,argL = getopt( argv[1:], 'o:', ['noheader'] )
-
-        if len(argL) != 0:
-            raise ValueError( 'unexpected argument: '+str(argL) )
-
-        nohdr = False
-        fmt = None
-
-        for n,v in optL:
-            if n == '-o':
-                fmt = v
-            elif n == '--noheader':
-                nohdr = True
-
-        if not nohdr:
-            raise ValueError( 'expected --noheader option' )
-
-        if fmt == None:
-            raise ValueError( 'expected a -o option' )
-
-        if fmt != '%i _ %t _ %V _ %S _ %M':
-            raise ValueError( 'this mock only knows one -o format,' + \
-                ' which is not "'+str(fmt)+'"' )
+        parse_squeue_command_options( cmd_opts )
 
         out = ''
-
         for job, submit_time in self.jobs:
-            st,x = job.getStatus()
-            if not st:
-                out += pending_job_line( job, submit_time ) + '\n'
-            elif st == 'running':
-                out += running_job_line( job, submit_time ) + '\n'
-            elif x != None:
-                out += completed_job_line( job, submit_time ) + '\n'
+            out += squeue_line_from_runner_status( job.getId(),
+                                                   job.getStatus(),
+                                                   submit_time,
+                                                   job.getDates() )
+            out += '\n'
 
         return 0,out,''
 
 
-def parse_sbatch_options( batchfile ):
+def parse_sbatch_command_options( cmd_opts ):
+    ""
+    optL,argL = getopt( cmd_opts, '', [] )
+
+    if len(argL) != 1:
+        raise ValueError( 'expected exactly one argument' )
+
+    return optL, argL
+
+
+def parse_sbatch_script_file( batchfile ):
+    ""
+    optD = parse_sbatch_file_options_into_dictionary( batchfile )
+
+    if '--output' not in optD:
+        raise Exception( 'expected --output option to be in sbatch script' )
+
+    logf = optD['--output']
+
+    if not logf:
+        raise Exception( 'expected --output option to be non-empty' )
+
+    runtime = optD.get( '--time', None )
+
+    if runtime != None:
+        val = parse_elapsed_time_string( runtime )
+        if val == None:
+            raise Exception( 'invalid --time value: '+str(runtime) )
+        runtime = val
+
+    return logf, runtime
+
+
+def parse_sbatch_file_options_into_dictionary( batchfile ):
     ""
     optD = {}
 
@@ -114,17 +129,9 @@ def parse_sbatch_options( batchfile ):
             line = line.strip()
 
             if line.startswith( '#' ):
-                if line.startswith( '#SBATCH ' ):
-                    optstr = line.split( '#SBATCH ', 1 )[1]
-                    kvL = optstr.split( '=', 1 )
-                    if len(kvL) != 2:
-                        raise ValueError( 'expected <option>=<value> ' + \
-                                'format, but got "'+optstr+'"' )
-                    k,v = kvL
-                    if not k.strip():
-                        raise ValueError( 'option name empty: "'+optstr+'"' )
-
-                    optD[k] = v
+                if line.startswith( '#SBATCH' ):
+                    opt,val = parse_sbatch_option_line( line )
+                    optD[opt] = val
 
             elif line:
                 break
@@ -137,41 +144,73 @@ def parse_sbatch_options( batchfile ):
     return optD
 
 
-def pending_job_line( job, submit_time ):
+def parse_sbatch_option_line( line ):
     ""
-    line = str( job.getId() )  # job id
-    line += ' _ PD'            # job is pending
-    line += ' _ '+format_date( submit_time )  # date job was submitted
-    line += ' _ N/A'
-    line += ' _ 0:00'
+    optstr = line.split( '#SBATCH ', 1 )[1]
 
-    return line
+    kvL = optstr.split( '=', 1 )
+    if len(kvL) != 2:
+        raise ValueError( 'expected <option>=<value> ' + \
+                'format, but got "'+optstr+'"' )
+
+    k,v = kvL
+    if not k.strip():
+        raise ValueError( 'option name empty: "'+optstr+'"' )
+
+    return k,v
 
 
-def running_job_line( job, submit_time ):
+def parse_squeue_command_options( cmd_opts ):
     ""
-    t0,t1 = job.getDates()
-    assert t0
+    optL,argL = getopt( cmd_opts, 'o:', ['noheader'] )
 
-    line = str( job.getId() )  # job id
-    line += ' _ R'             # job is running
-    line += ' _ '+format_date( submit_time )  # date job was submitted
-    line += ' _ '+format_date( t0 )           # date job started
-    line += ' _ '+format_elapsed_time( time.time()-t0 )  # time used by job
+    if len(argL) != 0:
+        raise ValueError( 'unexpected argument: '+str(argL) )
 
-    return line
+    nohdr = False
+    fmt = None
+
+    for n,v in optL:
+        if n == '-o':
+            fmt = v
+        elif n == '--noheader':
+            nohdr = True
+
+    if not nohdr:
+        raise ValueError( 'expected --noheader option' )
+
+    if fmt == None:
+        raise ValueError( 'expected a -o option' )
+
+    if fmt != '%i _ %t _ %V _ %S _ %M':
+        raise ValueError( 'unexpected -o format value: '+str(fmt) )
 
 
-def completed_job_line( job, submit_time ):
+def squeue_line_from_runner_status( jobid, stat_exit, subtime, start_stop ):
     ""
-    t0,t1 = job.getDates()
-    assert t0 and t1
+    line = str( jobid )
 
-    line = str( job.getId() )  # job id
-    line += ' _ CD'            # job is completed
-    line += ' _ '+format_date( submit_time )    # date job was submitted
-    line += ' _ '+format_date( t0 )             # date job started
-    line += ' _ '+format_elapsed_time( t1-t0 )  # time used by job
+    st,x = stat_exit
+    starttime,stoptime = start_stop
+
+    if not st:
+        line += ' _ PD'
+    elif st == 'running':
+        line += ' _ R'
+    elif x != None:
+        line += ' _ CD'
+
+    line += ' _ '+format_date( subtime )
+
+    if starttime:
+        line += ' _ '+format_date( starttime )
+    else:
+        line += ' _ N/A'
+
+    if starttime and stoptime:
+        line += ' _ '+format_elapsed_time( stoptime-starttime )
+    else:
+        line += ' _ 0:00'
 
     return line
 

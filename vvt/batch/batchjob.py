@@ -44,7 +44,8 @@ class BatchJob:
         start date  : script start date according to the log file
         stop date   : script exit date according to the log file
 
-        state : state of the job in the queue; can be
+        state : state of the job in the queue; if the job script runs and
+                provably exits, then the state will not change; can be
                     absent  : job not found in the queue listing
                     queue   : job is in the queue
                     running : job is in the queue and marked running
