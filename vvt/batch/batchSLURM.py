@@ -114,9 +114,6 @@ class BatchSLURM( batchitf.BatchInterface ):
             %S actual or expected start time
             %M time used by the job (an INVALID is possible)
 
-        - is this job in the queue table?
-        - update job info with data from table
-        - is this job done?  remove from jobs list
         - timeouts: waiting too long to show up in the queue, waiting
                     too long for the log file to be created, waiting too
                     long for the "finished" date to appear in the log file

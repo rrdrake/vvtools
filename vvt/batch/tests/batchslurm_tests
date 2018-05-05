@@ -19,14 +19,14 @@ from getopt import getopt
 import testutils as util
 from testutils import print3
 
-import FakeSLURM as fake
-from scriptrunner import ScriptProcess
+import FakeSLURM as sfake
 
 from batchSLURM import parse_queue_table_output
 from batchSLURM import parse_elapsed_time_string
 from batchSLURM import parse_date_string
 from batchSLURM import parse_submit_output_for_job_id
 from batchSLURM import BatchSLURM
+
 from batchjob import BatchJob
 
 from common_tests import Method_computeNumNodes
@@ -36,193 +36,6 @@ from common_tests import Batch_submit
 from common_tests import Batch_start_stop_dates
 from common_tests import Batch_job_status
 from common_tests import Batch_exit_values
-
-
-class FakeSLURM_tests( unittest.TestCase ):
-
-    def setUp(self):
-        ""
-        util.setup_test( cleanout=False )
-
-    def test_parse_sbatch_file_options_into_dictionary(self):
-        ""
-        util.writefile( 'batfile', """
-            #SBATCH --nodes=4
-            #SBATCH --time=1:10:04
-            #SBATCH --output=bat.log
-            #SBATCH --partition=short,batch
-            #SBATCH --account=bigshot
-            date
-            """ )
-        util.writefile( 'oops1', """
-            #SBATCH --nodes=4
-            #SBATCH =1:10:04
-            date
-            """ )
-        util.writefile( 'oops2', """
-            #SBATCH --nodes=4
-            #SBATCH 1:10:04
-            date
-            """ )
-        util.writefile( 'oops3', """
-            #SBATCH --nodes=4
-            #SBATCH 
-            date
-            """ )
-        util.writefile( 'oops4', """
-            #SBATCH --nodes=4
-            #SBATCHjunk
-            date
-            """ )
-        util.writefile( 'oops5', """
-            #SBATCH --nodes=4
-            #SBATCH--time=1:10:04
-            date
-            """ )
-        time.sleep(1)
-
-        optD = fake.parse_sbatch_file_options_into_dictionary( 'batfile' )
-        assert len(optD) == 5
-        assert optD['--nodes']     == '4'
-        assert optD['--time']      == '1:10:04'
-        assert optD['--output']    == 'bat.log'
-        assert optD['--partition'] == 'short,batch'
-        assert optD['--account']   == 'bigshot'
-
-        self.assertRaises( Exception,
-            fake.parse_sbatch_file_options_into_dictionary, 'oops1' )
-        self.assertRaises( Exception,
-            fake.parse_sbatch_file_options_into_dictionary, 'oops2' )
-        self.assertRaises( Exception,
-            fake.parse_sbatch_file_options_into_dictionary, 'oops3' )
-        self.assertRaises( Exception,
-            fake.parse_sbatch_file_options_into_dictionary, 'oops4' )
-        self.assertRaises( Exception,
-            fake.parse_sbatch_file_options_into_dictionary, 'oops5' )
-
-    def test_parse_sbatch_script_file(self):
-        ""
-        util.writefile( 'batfile', """
-            #SBATCH --nodes=4
-            #SBATCH --time=1:10:04
-            #SBATCH --output=bat.log
-            #SBATCH --partition=short,batch
-            #SBATCH --account=bigshot
-            date
-            """ )
-        util.writefile( 'no_output', """
-            #SBATCH --nodes=4
-            #SBATCH --partition=short,batch
-            date
-            """ )
-        util.writefile( 'bad_time', """
-            #SBATCH --nodes=4
-            #SBATCH --time=4:90
-            #SBATCH --output=bat.log
-            date
-            """ )
-        time.sleep(1)
-
-        logf,rtime = fake.parse_sbatch_script_file( 'batfile' )
-        assert os.path.basename(logf) == 'bat.log'
-        assert rtime == 1*60*60+10*60+4
-
-        self.assertRaises( Exception,
-            fake.parse_sbatch_script_file, 'no_output' )
-        self.assertRaises( Exception,
-            fake.parse_sbatch_script_file, 'bad_time' )
-
-    def test_parse_squeue_command_options(self):
-        ""
-        cmdL = shlex.split( '-o "%i _ %t _ %V _ %S _ %M" --noheader' )
-        fake.parse_squeue_command_options( cmdL )
-
-        cmdL = shlex.split( '--noheader -o "%i _ %t _ %V _ %S _ %M"' )
-        fake.parse_squeue_command_options( cmdL )
-
-        self.assertRaises( Exception,
-            fake.parse_squeue_command_options )
-        self.assertRaises( Exception,
-            fake.parse_squeue_command_options,
-            shlex.split('--noheader') )
-        self.assertRaises( Exception,
-            fake.parse_squeue_command_options,
-            shlex.split('-o "%i _ %t _ %V _ %S _ %M"' ) )
-        self.assertRaises( Exception,
-            fake.parse_squeue_command_options,
-            shlex.split('--noheader -o "%i _ %t _ %S _ %M"' ) )
-        self.assertRaises( Exception,
-            fake.parse_squeue_command_options,
-            shlex.split('--noheader -o "%i _ %t _ %V _ %S - %M"' ) )
-
-    def test_slurm_format_date_function(self):
-        ""
-        s = fake.format_date( 1524417005.457964 )
-        tz = time.timezone
-        if tz == 7:
-            assert s == '2018-04-22T11:10:05'
-        else:
-            # the above check assumes US mountain time; skip hour check here
-            assert s.startswith( '2018-04-22T' )
-            assert s.endswith( ':10:05' )
-
-    def test_slurm_format_elapsed_time_function(self):
-        ""
-        assert fake.format_elapsed_time( 45 ) == '0:45'
-        assert fake.format_elapsed_time( 67 ) == '1:07'
-        assert fake.format_elapsed_time( 4*60*60 + 4*60 + 4 ) == '4:04:04'
-        s = fake.format_elapsed_time( 4*24*60*60 + 4*60*60 + 4*60 + 4 )
-        assert s == '4-04:04:04'
-
-    def test_squeue_output_lines(self):
-        ""
-        # submitted, not running, no start/stop, not done
-        line = fake.squeue_line_from_runner_status(
-                        123,
-                        ( '', None ),
-                        make_epoch( 'Sat Apr 28 08:49:22 2018' ),
-                        ( None, None ) )
-
-        assert line == '123 _ PD _ 2018-04-28T08:49:22 _ N/A _ 0:00'
-
-        # submitted, running, start, no stop, not done
-        line = fake.squeue_line_from_runner_status(
-                        123,
-                        ( 'running', None ),
-                        make_epoch( 'Sat Apr 28 08:49:22 2018' ),
-                        ( make_epoch( 'Sat Apr 28 08:50:22 2018' ), None ) )
-
-        assert line == '123 _ R _ 2018-04-28T08:49:22 _ 2018-04-28T08:50:22 _ 0:00'
-
-        # submitted, running, start, stop, not done
-        line = fake.squeue_line_from_runner_status(
-                        123,
-                        ( 'running', None ),
-                        make_epoch( 'Sat Apr 28 08:49:22 2018' ),
-                        ( make_epoch( 'Sat Apr 28 08:50:22 2018' ),
-                          make_epoch( 'Sat Apr 28 08:51:22 2018' ) ) )
-
-        assert line == '123 _ R _ 2018-04-28T08:49:22 _ 2018-04-28T08:50:22 _ 1:00'
-
-        # submitted, exit ok, start, stop, done
-        line = fake.squeue_line_from_runner_status(
-                        123,
-                        ( 'exit', 0 ),
-                        make_epoch( 'Sat Apr 28 08:49:22 2018' ),
-                        ( make_epoch( 'Sat Apr 28 08:50:22 2018' ),
-                          make_epoch( 'Sat Apr 28 09:51:22 2018' ) ) )
-
-        assert line == '123 _ CD _ 2018-04-28T08:49:22 _ 2018-04-28T08:50:22 _ 1:01:00'
-
-        # submitted, exit failure, start, stop, done
-        line = fake.squeue_line_from_runner_status(
-                        123,
-                        ( 'exit', 1 ),
-                        make_epoch( 'Sat Apr 28 08:49:22 2018' ),
-                        ( make_epoch( 'Sat Apr 28 08:50:22 2018' ),
-                          make_epoch( 'Sat Apr 29 08:51:23 2018' ) ) )
-
-        assert line == '123 _ CD _ 2018-04-28T08:49:22 _ 2018-04-28T08:50:22 _ 1-00:01:01'
 
 
 class batchSLURM_free_functions( unittest.TestCase ):
@@ -251,7 +64,7 @@ class batchSLURM_free_functions( unittest.TestCase ):
         ""
         secs = parse_date_string( '2018-04-20T22:20:30' )
         dt = time.ctime( secs )
-        # skip the hour check as easy workaround for time zones
+        # skip the hour check as simple workaround for time zones
         assert dt.startswith( 'Fri Apr 20 ' ) and dt.endswith( ':20:30 2018' )
 
     def test_parse_queue_table_output(self):
@@ -313,20 +126,6 @@ SOME HEADER STUFF
         assert parse_submit_output_for_job_id( '', 'error output' ) == None
 
 
-def make_epoch( string_time ):
-    """
-    'string_time' is output of time.ctime(), such as 'Sat Apr 28 08:49:22 2018'
-    """
-    return time.mktime( time.strptime( string_time ) )
-
-
-def month_day_year( epoch_time ):
-    """
-    """
-    tup = time.localtime( epoch_time )
-    return ( tup[1], tup[2], tup[0] )
-
-
 class BatchSLURM_computeNumNodes( Method_computeNumNodes, unittest.TestCase ):
 
     def makeBatchInterface(self):
@@ -349,7 +148,7 @@ class BatchSLURM_output_file( Batch_output_file, unittest.TestCase ):
     def makeBatchInterface(self):
         ""
         bat = BatchSLURM()
-        engine = fake.FakeSLURM()
+        engine = sfake.FakeSLURM()
         bat.setBatchCommandRunner( engine.runcmd )
         return bat
 
@@ -359,7 +158,7 @@ class BatchSLURM_work_directory( Batch_work_directory, unittest.TestCase ):
     def makeBatchInterface(self):
         ""
         bat = BatchSLURM()
-        engine = fake.FakeSLURM()
+        engine = sfake.FakeSLURM()
         bat.setBatchCommandRunner( engine.runcmd )
         return bat
 
@@ -369,7 +168,7 @@ class BatchSLURM_submit( Batch_submit, unittest.TestCase ):
     def makeBatchInterface(self):
         ""
         bat = BatchSLURM()
-        engine = fake.FakeSLURM()
+        engine = sfake.FakeSLURM()
         bat.setBatchCommandRunner( engine.runcmd )
         return bat
 
@@ -379,7 +178,7 @@ class BatchSLURM_start_stop_dates( Batch_start_stop_dates, unittest.TestCase ):
     def makeBatchInterface(self):
         ""
         bat = BatchSLURM()
-        engine = fake.FakeSLURM()
+        engine = sfake.FakeSLURM()
         bat.setBatchCommandRunner( engine.runcmd )
         return bat
 
@@ -389,7 +188,7 @@ class BatchSLURM_job_status( Batch_job_status, unittest.TestCase ):
     def makeBatchInterface(self):
         ""
         bat = BatchSLURM()
-        engine = fake.FakeSLURM()
+        engine = sfake.FakeSLURM()
         bat.setBatchCommandRunner( engine.runcmd )
         return bat
 
@@ -399,9 +198,35 @@ class BatchSLURM_exit_values( Batch_exit_values, unittest.TestCase ):
     def makeBatchInterface(self):
         ""
         bat = BatchSLURM()
-        engine = fake.FakeSLURM()
+        engine = sfake.FakeSLURM()
         bat.setBatchCommandRunner( engine.runcmd )
         return bat
+
+
+############################################################################
+
+def equal_batch_format_date_strings( datestr, baseline ):
+    """
+    Both strings are like '2018-04-22T11:10:05'.
+    Only checks the date and minute:second (does not check the hour).
+    """
+    dt,tm = baseline.split( 'T' )
+    ok = ( datestr.startswith( dt ) and datestr.endswith( tm ) )
+    return ok
+
+
+def make_epoch( string_time ):
+    """
+    'string_time' is output of time.ctime(), such as 'Sat Apr 28 08:49:22 2018'
+    """
+    return time.mktime( time.strptime( string_time ) )
+
+
+def month_day_year( epoch_time ):
+    """
+    """
+    tup = time.localtime( epoch_time )
+    return ( tup[1], tup[2], tup[0] )
 
 
 ############################################################################
