@@ -132,7 +132,8 @@ class BatchPBS:
                             else: st = ''
                             stateD[j] = st
                             break
-            except Exception, e:
+            except Exception:
+                e = sys.exc_info()[1]
                 err = "failed to parse squeue output: " + str(e)
         
         return cmd, out, err, stateD

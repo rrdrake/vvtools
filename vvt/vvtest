@@ -9,7 +9,6 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import re, string
-import exceptions
 import stat
 import time
 import signal
@@ -629,7 +628,7 @@ def extractTestFiles( dirs, plat, target_dir, rtconfig ):
       if tof not in uniqD:
         uniqD[tof] = None
         try: shutil.copy2( t.getFilename(), tof )
-        except IOError, e: pass
+        except IOError: pass
       
       for srcf in t.getSourceFiles():
 
@@ -661,7 +660,7 @@ def extractTestFiles( dirs, plat, target_dir, rtconfig ):
                 
               else:
                 try: shutil.copy2( fromf, tof )
-                except IOError, e: pass
+                except IOError: pass
 
 
 ##############################################################################
@@ -2049,7 +2048,8 @@ def parseOptionsAndGenerateOptionDictionary():
               ]
     import getopt
     try: opts, dirs = getopt.getopt( argL, singles, longopts=doubles )
-    except getopt.error, e:
+    except getopt.error:
+        e = sys.exc_info()[1]
         sys.stderr.write('*** ' + exeName + ': error: ' + str(e) + '\n')
         sys.exit(1)
     
@@ -2128,13 +2128,15 @@ def parseOptionsAndGenerateOptionDictionary():
     # check validity of -p & -P options and combine them
     try:
       pf = FilterExpressions.ParamFilter( optdict.get('-p',None) )
-    except ValueError, e:
+    except ValueError:
+      e = sys.exc_info()[1]
       sys.stderr.write('*** ' + exeName + \
             ': error: in -p specification: ' + str(e) + '\n')
       sys.exit(1)
     try:
       pf = FilterExpressions.ParamFilter( optdict.get('-P',None) )
-    except ValueError, e:
+    except ValueError:
+      e = sys.exc_info()[1]
       sys.stderr.write('*** ' + exeName + \
             ': error: in -P specification: ' + str(e) + '\n')
       sys.exit(1)

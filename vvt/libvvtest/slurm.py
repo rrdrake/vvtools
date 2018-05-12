@@ -127,7 +127,8 @@ class BatchSLURM:
                         elif st in ['PD']: st = 'pending'
                         else: st = ''
                         stateD[jid] = st
-            except Exception, e:
+            except Exception:
+                e = sys.exc_info()[1]
                 err = "failed to parse squeue output: " + str(e)
         
         return cmd, out, err, stateD
