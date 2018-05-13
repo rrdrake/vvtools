@@ -579,23 +579,22 @@ class TestList:
 
     def scanDirectory(self, base_directory, force_params=None):
         """
-        Recursively scans for test XML files starting at 'base_directory'.
+        Recursively scans for test XML or VVT files starting at 'base_directory'.
         If 'force_params' is not None, it must be a dictionary mapping
         parameter names to a list of parameter values.  Any test that contains
         a parameter in this dictionary will take on the given values for that
         parameter.
         """
         bdir = os.path.normpath( os.path.abspath(base_directory) )
-        os.path.walk( bdir, self._scan_recurse, (bdir,force_params) )
+        for root,dirs,files in os.walk( bdir ):
+            self._scan_recurse( bdir, force_params, root, dirs, files )
     
-    def _scan_recurse(self, argtuple, d, files):
+    def _scan_recurse(self, basedir, force_params, d, dirs, files):
         """
-        This function is given to os.path.walk to recursively scan a directory
-        tree for test XML files.  The 'base_dir' is the directory originally
-        sent to the os.path.walk function.
+        This function is given to os.walk to recursively scan a directory
+        tree for test XML files.  The 'basedir' is the directory originally
+        sent to the os.walk function.
         """
-        basedir, force_params = argtuple
-        
         d = os.path.normpath(d)
         
         if basedir == d:
@@ -605,41 +604,35 @@ class TestList:
           reldir = d[len(basedir)+1:]
 
         # scan files with extension "xml" or "vvt"; soft links to directories
-        # seem to be skipped by os.path.walk so special handling is performed
+        # are skipped by os.walk so special handling is performed
 
-        linkdirs = []
-        skipL = []
         for f in files:
-          if f.startswith("TestResults.") or f.startswith("Build_"):
-            # avoid descending into build and TestResults directories
-            skipL.append(f)
-          else:
             bn,ext = os.path.splitext(f)
             df = os.path.join(d,f)
-            if os.path.isdir(df):
-              if os.path.islink(df):
-                linkdirs.append(f)
-            elif bn and ext in ['.xml','.vvt']:
-              self.readTestFile( basedir, os.path.join(reldir,f), force_params )
-        
+            if bn and ext in ['.xml','.vvt']:
+                self.readTestFile( basedir, os.path.join(reldir,f), force_params )
+
+        linkdirs = []
+        for subd in list(dirs):
+            rd = os.path.join( d, subd )
+            if not os.path.exists(rd) or \
+                    subd.startswith("TestResults.") or \
+                    subd.startswith("Build_"):
+                dirs.remove( subd )
+            elif os.path.islink(rd):
+                linkdirs.append( rd )
+
         # TODO: should check that the soft linked directories do not
         #       point to a parent directory of any of the directories
         #       visited thus far (to avoid an infinite scan loop)
         #       - would have to use os.path.realpath() or something because
         #         the actual path may be the softlinked path rather than the
         #         path obtained by following '..' all the way to root
-        
-        # take the soft linked directories out of the list just in case some
-        # version of os.path.walk actually does recurse into them automatically
-        for f in linkdirs:
-          files.remove(f)
-        
-        for f in skipL:
-          files.remove(f)
-        
+
         # manually recurse into soft linked directories
-        for f in linkdirs:
-          os.path.walk( os.path.join(d,f), self._scan_recurse, argtuple )
+        for ld in linkdirs:
+            for lroot,ldirs,lfiles in os.walk( ld ):
+                self._scan_recurse( basedir, force_params, lroot, ldirs, lfiles )
     
     def readTestFile(self, basepath, relfile, force_params):
         """

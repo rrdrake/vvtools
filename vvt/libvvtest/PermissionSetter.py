@@ -6,6 +6,7 @@
 
 import os, sys
 import stat
+import itertools
 
 
 class PermissionSetter:
@@ -86,20 +87,17 @@ class PermissionSetter:
             
             if not os.path.islink( path ):
                 self._setperms( path )
-            
-            def walker( arg, dirname, fnames ):
-                rmL = []
-                for f in fnames:
+
+            def walker( arg, dirname, dirs, files ):
+                ""
+                for f in itertools.chain( dirs, files ):
                     p = os.path.join( dirname, f )
-                    if os.path.islink(p):
-                        rmL.append(f)
-                    else:
+                    if not os.path.islink(p):
                         arg._setperms(p)
-                for f in rmL:
-                    fnames.remove(f)
-            
-            os.path.walk( path, walker, self )
-        
+
+            for root,dirs,files in os.walk( path ):
+                walker( self, root, dirs, files )
+
         elif not os.path.islink( path ):
             self._setperms( path )
 

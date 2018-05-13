@@ -595,19 +595,19 @@ def extractTestFiles( dirs, plat, target_dir, rtconfig ):
     
     uniqD = {}
     
-    def wvisit( arg, dname, files ):
+    def wvisit( arg, dname, dirs, files ):
         """
         copy a directory tree, but leave out version control files
         """
         for n in ['CVS','.cvsignore','.svn','.git','.gitignore']:
-          while (n in files): files.remove(n)
+            while (n in dirs): dirs.remove(n)
+            while (n in files): files.remove(n)
         fd = os.path.normpath( os.path.join( arg[0], dname ) )
         td = os.path.normpath( os.path.join( arg[1], dname ) )
         if not os.path.exists(td):
-          os.makedirs(td)
+            os.makedirs(td)
         for f1 in files:
-          f2 = os.path.join(fd,f1)
-          if not os.path.isdir(f2):
+            f2 = os.path.join(fd,f1)
             tf = os.path.join(td,f1)
             shutil.copy2( f2, tf )
     
@@ -655,7 +655,8 @@ def extractTestFiles( dirs, plat, target_dir, rtconfig ):
               if os.path.isdir(fromf):
                 cwd = os.getcwd()
                 os.chdir(fromf)
-                os.path.walk( '.', wvisit, (fromf, tof) )
+                for root,dirs,files in os.walk( '.' ):
+                    wvisit( (fromf, tof), root, dirs, files )
                 os.chdir(cwd)
                 
               else:

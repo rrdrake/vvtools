@@ -1808,26 +1808,28 @@ def write_runtimes( optD, fileL ):
     rtdirD = {}  # runtimes directory -> root relative path
     
     # read any existing runtimes files at or below the CWD
-    def read_src_dir( args, dirname, fnames ):
-      trs,rtD,msgs = args
-      rtf = os.path.join( dirname, runtimes_filename )
-      if os.path.isfile(rtf):
-        try:
-          fmt,vers,hdr,nskip = read_file_header( rtf )
-          rr = hdr.get( 'ROOT_RELATIVE', None )
-          trs.mergeRuntimes(rtf)
-        except:
-          msgs.append( "Warning: skipping existing runtimes file due to " + \
-                       "error: " + rtf + ", Exception = " + str(sys.exc_info()[1]) )
-        else:
-          if rr == None:
-            msgs.append( "Warning: skipping existing runtimes file " + \
-                         "because it does not contain the ROOT_RELATIVE " + \
-                         "specification: " + rtf )
-          else:
-            rtD[dirname] = rr
-    os.path.walk( cwd, read_src_dir, (tr,rtdirD,warnL) )
-    
+    def read_src_dir( trs, rtD, msgs, dirname ):
+        rtf = os.path.join( dirname, runtimes_filename )
+        if os.path.isfile(rtf):
+            try:
+                fmt,vers,hdr,nskip = read_file_header( rtf )
+                rr = hdr.get( 'ROOT_RELATIVE', None )
+                trs.mergeRuntimes(rtf)
+            except:
+                msgs.append( "Warning: skipping existing runtimes file due to " + \
+                             "error: " + rtf + ", Exception = " + \
+                             str(sys.exc_info()[1]) )
+            else:
+              if rr == None:
+                  msgs.append( "Warning: skipping existing runtimes file " + \
+                               "because it does not contain the ROOT_RELATIVE " + \
+                               "specification: " + rtf )
+              else:
+                  rtD[dirname] = rr
+
+    for root,dirs,files in os.walk( cwd ):
+        read_src_dir( tr, rtdirD, warnL, root )
+
     if '-w' in optD:
       # the -w option means don't merge
       tr = TestResults()
