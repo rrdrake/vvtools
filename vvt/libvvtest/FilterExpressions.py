@@ -8,7 +8,10 @@ import os, sys
 import re
 import fnmatch
 
-import TestSpec
+if __name__ == "__main__":
+    import TestSpec
+else:
+    from . import TestSpec
 
 
 alphanum_chars = 'abcdefghijklmnopqrstuvwxyz' + \

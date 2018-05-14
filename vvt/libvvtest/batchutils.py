@@ -8,7 +8,7 @@ import sys
 import os
 import time
 
-import TestList
+from . import TestList
 
 
 class BatchScheduler:

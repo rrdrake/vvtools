@@ -29,7 +29,7 @@ vvtest = None
 resultspy = None
 
 testsrcdir = os.path.dirname( os.path.abspath( sys.argv[0] ) )
-sys.path.insert( 0, os.path.dirname( testsrcdir ) )
+sys.path.insert( 0, os.path.dirname( os.path.dirname( testsrcdir ) ) )
 
 
 def initialize( argv ):

@@ -11,8 +11,8 @@ import shutil
 import glob
 import traceback
 
-import cshScriptWriter
-import ScriptWriter
+from . import cshScriptWriter
+from . import ScriptWriter
 
 # this is the exit status that tests use to indicate a diff
 diffExitStatus = 64

@@ -335,7 +335,7 @@ def scanCommonSpecs( filedoc, common_db ):
 def loadCommonSpec( specdir, configdir ):
     """
     """
-    import xmlwrapper
+    import libvvtest.xmlwrapper as xmlwrapper
     xmldocreader = xmlwrapper.XmlDocReader()
     
     xdb = CommonSpecDB()

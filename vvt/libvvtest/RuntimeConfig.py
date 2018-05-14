@@ -11,7 +11,7 @@ import os
 import re
 import fnmatch
 
-import FilterExpressions
+from . import FilterExpressions
 
 
 class RuntimeConfig:

@@ -12,28 +12,18 @@ sys.excepthook = sys.__excepthook__
 import os
 import re
 import time
+import unittest
 
 import testutils as util
-optD,argL = util.initialize( sys.argv )
-if 'TESTUTILS_RUNDIR' not in os.environ:
-    os.chdir( util.working_directory )
+from testutils import print3
 
-from testutils import *
 
-vvtestdir = os.path.dirname( os.path.dirname(util.test_filename) )
-toolsdir = os.path.normpath( vvtestdir + '/..' )
+import libvvtest.CommonSpec as CommonSpec
+import libvvtest.xmlwrapper as xmlwrapper
+import libvvtest.cshScriptWriter as cshScriptWriter
+import libvvtest.TestSpecCreator as TestSpecCreator
+from libvvtest.RuntimeConfig import RuntimeConfig
 
-import CommonSpec
-import xmlwrapper
-import cshScriptWriter
-import TestSpecCreator
-from RuntimeConfig import RuntimeConfig
-
-xreader = xmlwrapper.XmlDocReader()
-
-xdb = CommonSpec.CommonSpecDB()
-xdoc = xreader.readDoc( os.path.join(vvtestdir, 'exeDB.xml') )
-CommonSpec.scanCommonSpecs( xdoc, xdb )
 
 class FakePlatform:
     def __init__(self): pass
@@ -43,29 +33,51 @@ class FakePlatform:
         D = { 'ENVAR':'envarval' }
         return D
 
-plat = FakePlatform()
 
-if not os.path.exists('tdir'):
-  os.mkdir( 'tdir' )
-testdir = os.path.abspath( 'tdir' )
+class writing_csh_scripts( unittest.TestCase ):
 
-rmallfiles()
+    def setUp(self):
+        util.setup_test()
 
-print ( "1111111111111111111111111111111111111" )
+    def test_create_runscript_from_xml_specification(self):
+        ""
+        fn = os.path.join( os.path.dirname(util.testsrcdir), 'exeDB.xml' )
+        xreader = xmlwrapper.XmlDocReader()
+        xdoc = xreader.readDoc( fn )
 
-fp = open('t1.xml',"w")
-fp.writelines( [
-     '<rtest name="atest">\n',
-     '  <execute name="exename"> echo "hello world" </execute>\n',
-     '</rtest>\n' ] )
-fp.close()
-tL = TestSpecCreator.createTestObjects( '.', 't1.xml', None, RuntimeConfig() )
-assert len(tL) == 1
-cshScriptWriter.writeScript( tL[0], xdb, plat,
-                             toolsdir, os.getcwd(), testdir,
-                             [], [], 'runscript' )
-time.sleep(1)
-assert os.path.exists('runscript')
-fp = open( 'runscript', 'r' )
-for line in fp.readlines():
-  sys.stdout.write( line )
+        xdb = CommonSpec.CommonSpecDB()
+        CommonSpec.scanCommonSpecs( xdoc, xdb )
+
+        if not os.path.exists('tdir'):
+            os.mkdir( 'tdir' )
+        testdir = os.path.abspath( 'tdir' )
+
+        util.rmallfiles()
+
+        util.writefile( 't1.xml', """
+            <rtest name="atest">
+              <execute name="exename"> echo "hello world" </execute>
+            </rtest>
+            """ )
+        time.sleep(1)
+
+        tL = TestSpecCreator.createTestObjects( '.', 't1.xml', None, RuntimeConfig() )
+        assert len(tL) == 1
+
+        plat = FakePlatform()
+        toolsdir = os.path.dirname( os.path.dirname( util.testsrcdir ) )
+        cshScriptWriter.writeScript( tL[0], xdb, plat,
+                                     toolsdir, os.getcwd(), testdir,
+                                     [], [], 'runscript' )
+        time.sleep(1)
+
+        assert os.path.exists('runscript')
+        fp = open( 'runscript', 'r' )
+        for line in fp.readlines():
+            sys.stdout.write( line )
+        fp.close()
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

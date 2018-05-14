@@ -8,11 +8,11 @@ import os, sys
 import re
 import string
 
-import xmlwrapper
-import TestSpec
-import FilterExpressions
+from . import xmlwrapper
+from . import TestSpec
+from . import FilterExpressions
 
-from ParameterSet import ParameterSet
+from .ParameterSet import ParameterSet
 
 
 class TestSpecError(Exception):

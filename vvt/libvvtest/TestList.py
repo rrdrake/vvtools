@@ -8,10 +8,10 @@ import os, sys
 import time
 import fnmatch
 
-import TestSpec
-import TestExec
-import TestSpecCreator
-import CommonSpec
+from . import TestSpec
+from . import TestExec
+from . import TestSpecCreator
+from . import CommonSpec
 
 class TestList:
     """
