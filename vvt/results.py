@@ -647,15 +647,15 @@ class MultiResults:
         fp.write( 'FILE_VERSION=multi' + str(self.vers) + os.linesep )
         
         fp.write( os.linesep )
-        dL = self.dataD.keys()
+        dL = list( self.dataD.keys() )
         dL.sort()
         for d in dL:
           tD = self.dataD[d]
-          tL = tD.keys()
+          tL = list( tD.keys() )
           tL.sort()
           for tn in tL:
             pD = tD[tn]
-            pL = pD.keys()
+            pL = list( pD.keys() )
             pL.sort()
             for pc in pL:
               aD = pD[pc]
@@ -1889,7 +1889,7 @@ def results_listing( fname, optD ):
           for tn in src.testList(d):
             for pc in src.platformList(d,tn):
               pcD[pc] = None
-        pcL = pcD.keys()
+        pcL = list( pcD.keys() )
         pcL.sort()
         for pc in pcL:
           print3( pc )
@@ -2194,7 +2194,7 @@ def report_generation( optD, fileL ):
     tnum = 1
 
     keyfmt = "   %-"+str(keylen)+"s"
-    redL = redD.keys()
+    redL = list( redD.keys() )
     redL.sort()
     for d,tn in redL:
 
@@ -2351,7 +2351,7 @@ class ResultsMatrix:
         object containing the specified test.
         """
         if testdir == None or testname == None:
-            L = self.matrixD.keys()
+            L = list( self.matrixD.keys() )
             L.sort()
         else:
             L = []
@@ -2489,7 +2489,7 @@ class ResultsMatrix:
                         if i > 0:
                             maxloc = [ filedate, loc, attrD ]
         
-        L = D.items()
+        L = list( D.items() )
         L.sort()
 
         if maxloc == None: loc = ''

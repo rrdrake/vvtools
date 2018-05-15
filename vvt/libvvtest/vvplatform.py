@@ -89,16 +89,16 @@ class Platform:
 
         if type(batch) == type(''):
             if batch == 'craypbs':
-                import craypbs
+                from . import craypbs
                 self.batch = craypbs.BatchCrayPBS( ppn, **kwargs )
             elif batch == 'pbs':
-                import pbs
+                from . import pbs
                 self.batch = pbs.BatchPBS( ppn, **kwargs )
             elif batch == 'slurm':
-                import slurm
+                from . import slurm
                 self.batch = slurm.BatchSLURM( ppn, **kwargs )
             elif batch == 'moab':
-                import moab
+                from . import moab
                 self.batch = moab.BatchMOAB( ppn, **kwargs )
             else:
                 raise Exception( "Unknown batch system name: "+str(batch) )
@@ -110,7 +110,7 @@ class Platform:
         """
         if not self.batch:
             # construct a default processor batch system
-            import procbatch
+            from . import procbatch
             self.batch = procbatch.ProcessBatch( 1 )
 
         qt = self.attrs.get( 'walltime', queue_time )

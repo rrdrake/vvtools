@@ -8,7 +8,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
-import re, string
+import re
 import stat
 import time
 import signal
@@ -669,13 +669,13 @@ def extractTestFiles( dirs, plat, target_dir, rtconfig ):
 def keywordInformation(tlist):
     
     if '--keys' in optdict:
-      print3( "\nresults keywords: " + string.join( TestSpec.results_keywords ) )
+      print3( "\nresults keywords: " + ' '.join( TestSpec.results_keywords ) )
       kd = {}
       for t in tlist.getActiveTests():
         for k in t.getKeywords():
           if k not in TestSpec.results_keywords and k != t.getName():
             kd[k] = None
-      L = kd.keys()
+      L = list( kd.keys() )
       L.sort()
       print3( "\ntest keywords: " )
       while len(L) > 0:
@@ -691,7 +691,7 @@ def keywordInformation(tlist):
       for t in tlist.getActiveTests():
         d = os.path.normpath( t.getFilename() )
         D[d] = None
-      L = D.keys()
+      L = list( D.keys() )
       L.sort()
       for d in L:
         print3( d )
@@ -830,7 +830,7 @@ def writeCommandInfo( test_dir, plat, perms ):
       fp.write( 'VERSION=' + str(version) + '\n' )
       fp.write( 'DIR=' + os.getcwd() + '\n' )
       if '--plat' in optdict:
-        fp.write( 'PLATFORM=' + string.strip(optdict['--plat']) + '\n' )
+        fp.write( 'PLATFORM=' + optdict['--plat'].strip() + '\n' )
       else:
         fp.write( 'PLATFORM=' + plat.getName() + '\n' )
       if '-p' in optdict:
@@ -839,14 +839,14 @@ def writeCommandInfo( test_dir, plat, perms ):
         fp.write( \
             'PROJECT=' + os.path.abspath( config.get('exepath') ) + '\n' )
       if '-o' in optdict:
-        fp.write( 'ONOPTS=' + string.join(optdict['-o'], '+') + '\n' )
+        fp.write( 'ONOPTS=' + '+'.join(optdict['-o']) + '\n' )
       if '-O' in optdict:
-        fp.write( 'OFFOPTS=' + string.join(optdict['-O'], '+') + '\n' )
+        fp.write( 'OFFOPTS=' + '+'.join(optdict['-O']) + '\n' )
       if '-T' in optdict:
-        fp.write( 'TIMEOUT=' + string.strip( str(optdict['-T']) ) + '\n' )
+        fp.write( 'TIMEOUT=' + str(optdict['-T']).strip() + '\n' )
       if '--timeout-multiplier' in optdict:
         fp.write( 'TIMEOUT_MULTIPLIER=' + \
-             string.strip( str(optdict['--timeout-multiplier']) ) + '\n' )
+             str(optdict['--timeout-multiplier']).strip() + '\n' )
       if '-e' in optdict:
         fp.write( 'USE_ENV=1\n' )
       if '-A' in optdict:
@@ -854,7 +854,7 @@ def writeCommandInfo( test_dir, plat, perms ):
       if '--include-tdd' in optdict:
         fp.write( 'INCLUDE_TDD=True\n' )
       if '--check' in optdict:
-        fp.write( 'CHECK=' + string.join( optdict['--check'] ) + '\n' )
+        fp.write( 'CHECK=' + ' '.join( optdict['--check'] ) + '\n' )
       fp.close()
 
     if perms != None:
@@ -885,8 +885,8 @@ def readCommandInfo():
       fp = open( test_cache, "r" )
       write_version = 0
       for line in fp.readlines():
-        line = string.strip(line)
-        kvpair = string.split(line, '=', 1)
+        line = line.strip()
+        kvpair = line.split( '=', 1 )
         if kvpair[0] == 'VERSION':
           write_version = int(kvpair[1])
         elif kvpair[0] == 'DIR':
@@ -903,10 +903,10 @@ def readCommandInfo():
             optdict['-j'] = kvpair[1]
             config.set( 'exepath', kvpair[1] )
         elif kvpair[0] == 'ONOPTS':
-          optdict['-o'] = string.split( kvpair[1], '+' )
+          optdict['-o'] = kvpair[1].split( '+' )
           config.set( 'onopts', optdict['-o'] )
         elif kvpair[0] == 'OFFOPTS':
-          optdict['-O'] = string.split( kvpair[1], '+' )
+          optdict['-O'] = kvpair[1].split( '+' )
           config.set( 'offopts', optdict['-O'] )
         elif kvpair[0] == 'TIMEOUT':
           # do not replace if the command line contains -T
@@ -924,7 +924,7 @@ def readCommandInfo():
         elif kvpair[0] == 'INCLUDE_TDD':
           optdict['--include-tdd'] = ''
         elif kvpair[0] == 'CHECK':
-          optdict['--check'] = string.split( kvpair[1] )
+          optdict['--check'] = kvpair[1].split()
       fp.close()
 
     if test_cache != None:
@@ -1127,9 +1127,9 @@ def printHTMLResults( sumstr, test_dir, perms,
     fp.write( "  <li> Directory: " + test_dir + "\n" )
     fp.write( "  <li> Options: " )
     if '-o' in optdict:
-      fp.write( ' -o ' + string.join(optdict['-o'],'+') )
+      fp.write( ' -o ' + '+'.join(optdict['-o']) )
     if '-O' in optdict:
-      fp.write( ' -O ' + string.join(optdict['-O'],'+') )
+      fp.write( ' -O ' + '+'.join(optdict['-O']) )
     if '-j' in optdict:
       fp.write( ' -j ' + optdict['-j'] )
     if '--plat' in optdict:
@@ -1196,8 +1196,8 @@ def writeHTMLTestList( fp, test_dir, tlist ):
       for (k,v) in atest.getParameters().items():
         fp.write( ' ' + k + '=' + v )
       fp.write( '</code></li>\n' )
-      fp.write( '  <li>Keywords: <code>' + string.join(atest.getKeywords()) + \
-                 ' ' + string.join( atest.getResultsKeywords() ) + \
+      fp.write( '  <li>Keywords: <code>' + ' '.join(atest.getKeywords()) + \
+                 ' ' + ' '.join( atest.getResultsKeywords() ) + \
                  '</code></li>\n' )
       fp.write( '  <li>Status: <code>' + XstatusString(atest, 1, test_dir, cwd) + \
                  '</code></li>\n' )
@@ -1243,7 +1243,7 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
             time.sleep(1)
 
         showprogress = False
-        for tx in tlist.getRunning():
+        for tx in list( tlist.getRunning() ):
             if tx.poll():
                 xs = XstatusString( tx, False, test_dir, cwd )
                 print3( "Finished:", xs )
@@ -1600,7 +1600,7 @@ class Batcher:
           self.make_queue_batch( qid, qL, qsubids, commonopts )
           qid += 1
         
-        qidL = qsubids.keys()
+        qidL = list( qsubids.keys() )
         qidL.sort()
         for i in qidL:
           incl = self.namer.getTestListName( i, relative=True )
@@ -1716,6 +1716,7 @@ def saveResults( tlist, plat, test_dir, inprogress=False ):
     rdate = optdict.get( '--results-date', None )
     if rdate != None:
       try:
+        assert '_' not in rdate  # recent python 3 allows underscores
         val = float(rdate)
         # assume format was seconds since epoch
         datestr = time.strftime( "%Y_%m_%d", time.localtime( val ) )
@@ -1739,7 +1740,7 @@ def saveResults( tlist, plat, test_dir, inprogress=False ):
     
     L = ['results',datestr,pname,optstag]
     if rtag != None: L.append(rtag)
-    fname = os.path.join( rdir, string.join( L, '.' ) )
+    fname = os.path.join( rdir, '.'.join( L ) )
     
     tr = results.TestResults()
     for t in tlist.getActiveTests():
@@ -1960,8 +1961,8 @@ def computeRelativePath(d1, d2):
     d1 = os.path.normpath(d1)
     d2 = os.path.normpath(d2)
     
-    list1 = string.split( d1, os.sep )
-    list2 = string.split( d2, os.sep )
+    list1 = d1.split( os.sep )
+    list2 = d2.split( os.sep )
     
     while 1:
       try: list1.remove('')
@@ -1988,7 +1989,7 @@ def computeRelativePath(d1, d2):
       j = j + 1
     
     if len(p) > 0:
-      return os.path.normpath( string.join(p, os.sep) )
+      return os.path.normpath( os.sep.join(p) )
     
     return "."
 
@@ -2121,7 +2122,7 @@ def parseOptionsAndGenerateOptionDictionary():
     # change -K into -k expressions by using the '!' operator
     for s in optdict.get('-K',[]):
       bangL = map( lambda k: '!'+k, s.split('/') )
-      keywL.append( string.join( bangL, '/' ) )
+      keywL.append( '/'.join( bangL ) )
     
     if len(keywL) > 0:
       keyword_expr.append( keywL, 'and' )
@@ -2145,30 +2146,30 @@ def parseOptionsAndGenerateOptionDictionary():
     if '-P' in optdict:
       # convert -P values into -p values
       for s in optdict['-P']:
-        s = string.strip(s)
+        s = s.strip()
         if s:
           orL = []
-          for k in string.split(s,'/'):
-            k = string.strip(k)
+          for k in s.split('/'):
+            k = k.strip()
             if k:
               orL.append( '!' + k )
           if '-p' not in optdict:
             optdict['-p'] = []
-          optdict['-p'].append( string.join( orL, '/' ) )
+          optdict['-p'].append( '/'.join( orL ) )
       del optdict['-P']
     
     if '-X' in optdict:
       for s in optdict['-X']:
-        s = string.strip(s)
+        s = s.strip()
         if s:
           orL = []
-          for p in string.split(s,'/'):
-            p = string.strip(p)
+          for p in s.split('/'):
+            p = p.strip()
             if p:
               orL.append( '!' + p )
           if '-x' not in optdict:
             optdict['-x'] = []
-          optdict['-x'].append( string.join( orL, '/' ) )
+          optdict['-x'].append( '/'.join( orL ) )
     
     if '-s' in optdict:
       for pat in optdict['-s']:
@@ -2184,13 +2185,13 @@ def parseOptionsAndGenerateOptionDictionary():
       # a dictionary of param name -> list of values
       sdict = {}
       for s in optdict['-S']:
-        L = string.split(s,'=',1)
+        L = s.split( '=', 1 )
         if len(L) < 2 or not L[0] or not L[1]:
           sys.stderr.write('*** ' + exeName + \
               ': error: -S option values must be "param=value"\n')
           sys.exit(1)
-        if L[0] in sdict: sdict[L[0]].extend( string.split(L[1]) )
-        else:             sdict[L[0]] = string.split( L[1] )
+        if L[0] in sdict: sdict[L[0]].extend( L[1].split() )
+        else:             sdict[L[0]] = L[1].split()
       optdict['-S'] = sdict
     
     if '--sort' in optdict:
@@ -2213,7 +2214,7 @@ def parseOptionsAndGenerateOptionDictionary():
       # create a dictionary storing option->value pairs
       popts = {}
       for po in optdict['--platopt']:
-        tmp = string.split(po, '=', 1)
+        tmp = po.split( '=', 1 )
         if len(tmp) == 1: popts[ po ] = ''
         else:             popts[ tmp[0] ] = tmp[1]
       # reset the platopt option with the dictionary
@@ -2260,10 +2261,10 @@ def parseOptionsAndGenerateOptionDictionary():
     if '-o' in optdict:
       on = {}
       for o1 in optdict.get('-o',[]):
-        for o2 in string.split( o1, '+' ):
-          for o3 in string.split(o2):
+        for o2 in o1.split( '+' ):
+          for o3 in o2.split():
             on[o3] = ''
-      on = on.keys()
+      on = list( on.keys() )
       on.sort()
       optdict['-o'] = on
       config.set( 'onopts', on )
@@ -2271,10 +2272,10 @@ def parseOptionsAndGenerateOptionDictionary():
     if '-O' in optdict:
       off = {}
       for o1 in optdict.get('-O'):
-        for o2 in string.split( o1, '+' ):
-          for o3 in string.split(o2):
+        for o2 in o1.split( '+' ):
+          for o3 in o2.split():
             off[o3] = ''
-      off = off.keys()
+      off = list( off.keys() )
       off.sort()
       optdict['-O'] = off
       config.set( 'offopts', off )
@@ -2518,7 +2519,7 @@ if __name__ == '__main__':
   
   if '--check' in optdict:
     for n in optdict['--check']:
-      os.environ[ 'CHECK_' + string.upper(n) ] = ''
+      os.environ[ 'CHECK_' + n.upper() ] = ''
   
   if '--vg' in optdict:
     os.environ[ 'CHECK_VALGRIND' ] = ''

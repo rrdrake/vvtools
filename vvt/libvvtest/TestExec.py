@@ -676,3 +676,11 @@ class TestExec:
             self._get_processes(p, psdict, pidlist)
         
         return None
+
+    def __cmp__(self, rhs):
+        if rhs == None: return 1  # None objects are always less
+        return cmp( self.atest, rhs.atest )
+    
+    def __lt__(self, rhs):
+        if rhs == None: return False  # None objects are always less
+        return self.atest < rhs.atest

@@ -387,6 +387,8 @@ def runcmd( cmd, echo=True, ignore_exit=False, capture_output=False,
     if capture_output:
         proc = subprocess.Popen( cmd, **opts )
         out = proc.communicate()[0]
+        if sys.version_info[0] > 2:
+            out = out.decode()
         x = proc.returncode
     else:
         x = subprocess.call( cmd, **opts )

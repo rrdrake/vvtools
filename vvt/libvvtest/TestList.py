@@ -543,7 +543,7 @@ class TestList:
                 r : reverse the order
         """
         if not sorting:
-            tL = self.active.values()
+            tL = list( self.active.values() )
             tL.sort()
         else:
             tL = []
@@ -803,7 +803,7 @@ class TestList:
 
         In the latter case, numRunning() will be zero.
         """
-        npL = self.xtlist.keys()
+        npL = list( self.xtlist.keys() )
         npL.sort()
         npL.reverse()
 
@@ -823,7 +823,7 @@ class TestList:
         All remaining tests are removed from the run list and returned.
         """
         tL = []
-        for np,L in self.xtlist.items():
+        for np,L in list( self.xtlist.items() ):
             tL.extend( L )
             del L[:]
             self.xtlist.pop( np )

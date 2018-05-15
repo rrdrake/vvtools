@@ -77,14 +77,14 @@ class BatchScheduler:
             jobidL = [ jb.jobid for qid,jb in startlist ]
             statusD = self.plat.Qquery( jobidL )
             tnow = time.time()
-            for qid,bjob in startlist:
+            for qid,bjob in list( startlist ):
                 if self.checkJobDone( bjob, statusD[ bjob.jobid ], tnow ):
                     self.accountant.markJobStopped( qid )
                     qdoneL.append( qid )
 
         tnow = time.time()
         tdoneL = []
-        for qid,bjob in self.accountant.getStopped():
+        for qid,bjob in list( self.accountant.getStopped() ):
             if bjob.timeToCheckIfFinished( tnow ):
                 if self.checkJobFinished( bjob.outfile, bjob.testfile ):
                     # load the results into the TestList
@@ -189,7 +189,7 @@ class BatchScheduler:
         # force remove the rest of the jobs that were not run and gather
         # the list of tests that were not run
         notrunL = []
-        for qid,bjob in self.accountant.getNotStarted():
+        for qid,bjob in list( self.accountant.getNotStarted() ):
             tx1 = self.getBlockingDependency( bjob )
             assert tx1 != None  # otherwise checkstart() should have ran it
             for tx0 in bjob.testL:
