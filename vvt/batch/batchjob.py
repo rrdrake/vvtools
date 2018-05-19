@@ -60,6 +60,30 @@ class BatchJob:
                     killed  : the batch interface was told to kill/cancel the job
 
 
+        submit jobid : the job id given back from submission
+        submit date : date submitted to the queue
+        submit out : stdout from submission command
+        submit err : stderr from submission command
+
+        Q pending date : first time batch system showed job as pending
+        Q running date : first time batch system showed job as running
+        Q completed date : date the batch system showed the job completed
+        Q done date : one of the following:
+                        1. the first date the job was absent from the queue
+                           after appearing as "pending" or "running"
+                        2. the first date the job was marked by the queue as
+                           "completed"
+                        3. the date the timeout was reached waiting for the
+                           job to appear in the queue at all
+
+        script start date : start date from the script log file
+        script stop date : stop date from the script log file
+        script done date : one of the following:
+                        1. first time the stop date was parsed
+                        2. the date the timeout was reached after the queue
+                           done date was set
+
+
     commands:
         A string with newlines containing the commands to run in the batch job.
     """

@@ -22,7 +22,7 @@ class BatchSLURM( batchitf.BatchInterface ):
         # the function that issues shell batch commands
         self.runcmd = run_batch_command
 
-        self.jobs = []
+        self.jobs = []  # list of JobCache
 
     def computeNumNodes(self, num_cores, cores_per_node=None):
         ""
@@ -67,7 +67,7 @@ class BatchSLURM( batchitf.BatchInterface ):
         job.setStatus( state='absent' )
         job.setQueueDates( sub=time.time() )
 
-        self.jobs.append( job )
+        self.jobs.append( JobCache(job) )
 
     def poll(self):
         """
@@ -79,14 +79,14 @@ class BatchSLURM( batchitf.BatchInterface ):
 
         newL = []
 
-        for job in self.jobs:
+        for jobcache in self.jobs:
 
-            statL = tab.get( job.getJobId(), None )
+            statL = tab.get( jobcache.job.getJobId(), None )
 
-            isdone = self.updateBatchJobResults( job, statL )
+            isdone = self.updateBatchJobResults( jobcache, statL )
 
             if not isdone:
-                newL.append( job )
+                newL.append( jobcache )
 
         self.jobs = newL
 
@@ -101,7 +101,7 @@ class BatchSLURM( batchitf.BatchInterface ):
         """
         self.runcmd = func
 
-    def updateBatchJobResults(self, job, statL ):
+    def updateBatchJobResults(self, jobcache, statL):
         """
         Some squeue -o format codes:
 
@@ -120,50 +120,48 @@ class BatchSLURM( batchitf.BatchInterface ):
         - avoid excessive file system activity by pausing in between job log
           fstat and reads (to get run dates)
 
-            [ st, subdate, startdate, timeused ]
+            statL is [ state string, subdate, startdate, timeused ]
         """
-        state,exit = job.getStatus()
+        print 'magic: update, statL', statL
+        if not jobcache.finished():
 
-        print 'magic: update, statL', statL, state, exit
-        if not exit:
+            self.updateJobRunDates( jobcache )
+            self.updateJobState( jobcache, statL )
+            self.updateJobQueueDates( jobcache, statL )
 
-            self.updateJobRunDates( job )
-            self.updateJobState( job, state, statL )
-            self.updateJobQueueDates( job, statL )
+            self.updateJobExit( jobcache )
 
-            self.updateJobExit( job )
+        return jobcache.finished()
 
-            state,exit = job.getStatus()
-
-        return exit
-
-    def updateJobRunDates(self, job):
+    def updateJobRunDates(self, jobcache):
         ""
-        t0,t1 = job.getRunDates()
+        t0,t1 = jobcache.job.getRunDates()
 
         if t1 == None:
 
-            start,stop = self.parseScriptDates( job )
+            start,stop = self.parseScriptDates( jobcache.job )
 
-            job.setRunDates( start=start, stop=stop )
+            jobcache.job.setRunDates( start=start, stop=stop )
 
-    def updateJobState(self, job, previous_state, statL):
+    def updateJobState(self, jobcache, statL):
         ""
+        previous_state,exit = jobcache.job.getStatus()
+
         if statL != None:
 
             st = statL[0]
 
             if st == 'R':
-                job.setStatus( state='running' )
+                jobcache.job.setStatus( state='running' )
             elif st == 'PD' or st == 'CF':
-                job.setStatus( state='queue' )
+                jobcache.job.setStatus( state='queue' )
             else:
-                job.setStatus( state='done' )
+                jobcache.job.setStatus( state='done' )
 
         elif previous_state in ['queue','running']:
-            job.setStatus( state='done' )
+            jobcache.job.setStatus( state='done' )
 
-    def updateJobQueueDates(self, job, statL):
+    def updateJobQueueDates(self, jobcache, statL):
         ""
         if statL != None:
 
@@ -172,26 +170,26 @@ class BatchSLURM( batchitf.BatchInterface ):
             isdone = ( statL[0] not in ['R','PD','CF'] )
 
             if isdone and rundate and runtime and (runtime > 0.5):
-                job.setQueueDates( run=rundate, done=rundate+runtime )
+                jobcache.job.setQueueDates( run=rundate, done=rundate+runtime )
 
             elif rundate:
-                job.setQueueDates( run=rundate )
+                jobcache.job.setQueueDates( run=rundate )
 
-    def updateJobExit(self, job):
+    def updateJobExit(self, jobcache):
         ""
-        t0,t1 = job.getRunDates()
+        t0,t1 = jobcache.job.getRunDates()
 
         if t1:
-            job.setStatus( exit='ok' )
+            jobcache.job.setStatus( exit='ok' )
 
         else:
             curtime = time.time()
 
-            sub,run,done = job.getQueueDates()
+            sub,run,done = jobcache.job.getQueueDates()
 
             complete_timeout = 5
             if t0 and done and curtime-done > complete_timeout:
-                job.setStatus( exit='fail' )
+                jobcache.job.setStatus( exit='fail' )
 
         # if not start and absent too long,
         #   mark exit=missing
@@ -204,6 +202,26 @@ class BatchSLURM( batchitf.BatchInterface ):
 
         # if was marked running at least once, but not started for too long,
         #   mark exit=missing
+
+
+class JobCache:
+
+    def __init__(self, job):
+        ""
+        self.job = job
+        self.queue_date = time.time()
+
+    def finished(self):
+        ""
+        state,exit = self.job.getStatus()
+        done = ( state == 'done' or self.timedOut() )
+        return exit and done
+
+    def timedOut(self):
+        ""
+        if time.time() - self.queue_date > 60:
+            return True
+        return False
 
 
 def run_batch_command( cmd ):
