@@ -1657,7 +1657,9 @@ def parseTestParameters( filedoc, tname, evaluator, force_params ):
       
       pL = []
       skip = 0
-      for n,v in attrs.items():
+      attrL = list( attrs.items() )
+      attrL.sort()
+      for n,v in attrL:
         
         if n in ["parameters","parameter"]:
           raise TestSpecError( n + " attribute not allowed here, " + \

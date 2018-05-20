@@ -243,24 +243,24 @@ def test06():
           <parameterize np="1 4" dt="0.1 0.01"/>
           <execute> echo "execute zip np = $np dt = $dt" </execute>
           <analyze>
-            echo "access PARAM_np_dt = $PARAM_np_dt"
+            echo "access PARAM_dt_np = $PARAM_dt_np"
           </analyze>
         </rtest> """ )
     
     out,np,nd,nf,nn = run_vvtest( '-N 10' )
     assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    L = filegrep( tdir+'/zip/execute.log', 'access PARAM_np_dt' )
+    L = filegrep( tdir+'/zip/execute.log', 'access PARAM_dt_np' )
     assert len(L) == 1
     pL = L[0].split( '=', 1 )[1].strip().split()
-    assert pL == ['1/0.1','4/0.01']
+    assert pL == ['0.1/1','0.01/4']
     
     os.chdir( tdir+'/zip' )
     out,np,nd,nf,nn = run_vvtest( '-R -N 10' )
     assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    L = filegrep( 'execute.log', 'access PARAM_np_dt' )
+    L = filegrep( 'execute.log', 'access PARAM_dt_np' )
     assert len(L) == 1
     pL = L[0].split( '=', 1 )[1].strip().split()
-    assert pL == ['1/0.1','4/0.01']
+    assert pL == ['0.1/1','0.01/4']
 
 
 #######################################################################
