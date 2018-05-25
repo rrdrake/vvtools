@@ -85,7 +85,7 @@ class BatchSLURM( batchitf.BatchInterface ):
 
             statL is [ state string, subdate, startdate, timeused ]
         """
-        cmd = 'squeue --noheader -o "%i _ %t _ %V _ %S _ %M"'
+        cmd = 'squeue --noheader -o "%i _ %t _ %S _ %M"'
         x,out,err = self.runcmd( cmd )
 
         parse_queue_table_output( jobtable, out )
@@ -133,9 +133,9 @@ def parse_queue_table_output( jqtab, out ):
     """
     The 'out' string is something like
 
-    7291680 _ R _ 2018-04-21T12:57:34 _ 2018-04-21T12:57:38 _ 7:37
-    7291807 _ PD _ 2018-04-21T13:05:09 _ N/A _ 0:00
-    7254586 _ CG _ 2018-04-20T21:05:53 _ 2018-04-20T21:05:58 _ 2:00:25
+    7291680 _ R _ 2018-04-21T12:57:38 _ 7:37
+    7291807 _ PD _ N/A _ 0:00
+    7254586 _ CG _ 2018-04-20T21:05:58 _ 2:00:25
 
     job states: PD (pending), R (running), CA (cancelled),
                 CF(configuring), CG (completing), CD (completed),
@@ -146,7 +146,7 @@ def parse_queue_table_output( jqtab, out ):
 
         sL = line.strip().split( ' _ ' )
 
-        if len(sL) == 5:
+        if len(sL) == 4:
 
             jid = sL[0].strip()
             st = sL[1].strip()
@@ -164,11 +164,10 @@ def parse_queue_table_output( jqtab, out ):
                 else:
                     st = 'done'
 
-                subdate = parse_date_string( sL[2].strip() )
-                startdate = parse_date_string( sL[3].strip() )
-                timeused = parse_elapsed_time_string( sL[4].strip() )
+                startdate = parse_date_string( sL[2].strip() )
+                timeused = parse_elapsed_time_string( sL[3].strip() )
 
-                jqtab.setJobInfo( jid, st, subdate, startdate, timeused )
+                jqtab.setJobInfo( jid, st, startdate, timeused )
 
 
 def parse_date_string( dstr ):

@@ -64,7 +64,7 @@ class FakeSLURM:
         out = 'Submitted batch job '+str(proc.getId())
 
         submit_time = time.time()
-        self.jobs.append( [ proc, submit_time ] )
+        self.jobs.append( proc )
 
         return 0,out,''
 
@@ -73,10 +73,9 @@ class FakeSLURM:
         parse_squeue_command_options( cmd_opts )
 
         out = ''
-        for job, submit_time in self.jobs:
+        for job in self.jobs:
             out += squeue_line_from_runner_status( job.getId(),
                                                    job.getStatus(),
-                                                   submit_time,
                                                    job.getDates() )
             out += '\n'
 
@@ -182,11 +181,11 @@ def parse_squeue_command_options( cmd_opts ):
     if fmt == None:
         raise ValueError( 'expected a -o option' )
 
-    if fmt != '%i _ %t _ %V _ %S _ %M':
+    if fmt != '%i _ %t _ %S _ %M':
         raise ValueError( 'unexpected -o format value: '+str(fmt) )
 
 
-def squeue_line_from_runner_status( jobid, stat_exit, subtime, start_stop ):
+def squeue_line_from_runner_status( jobid, stat_exit, start_stop ):
     ""
     line = str( jobid )
 
@@ -199,8 +198,6 @@ def squeue_line_from_runner_status( jobid, stat_exit, subtime, start_stop ):
         line += ' _ R'
     elif x != None:
         line += ' _ CD'
-
-    line += ' _ '+format_date( subtime )
 
     if starttime:
         line += ' _ '+format_date( starttime )

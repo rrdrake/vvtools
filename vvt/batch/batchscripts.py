@@ -22,7 +22,7 @@ class BatchScripts( batchitf.BatchInterface ):
         batchitf.BatchInterface.__init__(self)
 
         self.runr = ScriptRunner()
-        self.sprocs = []
+        self.sprocs = {}  # runr job id -> runr job
 
     def writeScriptHeader(self, job, fileobj):
         ""
@@ -44,16 +44,14 @@ class BatchScripts( batchitf.BatchInterface ):
         job.setSubmitOutput( out='Job ID: '+jid, err='' )
 
         self.addJob( job )
-        self.sprocs.append( [ sproc, jid, subdate ] )
+        self.sprocs[ jid ] = sproc
 
     def queryQueue(self, jqtab):
         """
         """
         self.runr.poll()
 
-        newL = []
-
-        for sproc,jid,subdate in self.sprocs:
+        for jid,sproc in list( self.sprocs.items() ):
 
             st,x = sproc.getStatus()
 
@@ -71,12 +69,10 @@ class BatchScripts( batchitf.BatchInterface ):
             else:
                 timeused = None
 
-            jqtab.setJobInfo( jid, state, subdate, startdate, timeused )
+            jqtab.setJobInfo( jid, state, startdate, timeused )
 
-            if state != 'done':
-                newL.append( [ sproc, jid, subdate ] )
-
-        self.sprocs = newL
+            if state == 'done':
+                self.sprocs.pop( jid )
 
     def cancel(self, job_list=None):
         ""

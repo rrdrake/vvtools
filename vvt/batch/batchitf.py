@@ -261,10 +261,10 @@ class JobQueueTable:
         ""
         self.jobinfo = {}  # job id -> [ state, subdate, startdate, timeused ]
 
-    def setJobInfo(self, jobid, state, submitdate, startdate, timeused):
+    def setJobInfo(self, jobid, state, startdate, timeused):
         ""
         assert state in ['pending','running','complete','done']
-        self.jobinfo[ jobid ] = [ state, submitdate, startdate, timeused ]
+        self.jobinfo[ jobid ] = [ state, startdate, timeused ]
 
     def numJobs(self):
         ""
@@ -278,17 +278,13 @@ class JobQueueTable:
         ""
         return self.jobinfo[jobid][0]
 
-    def getSubmitDate(self, jobid):
+    def getStartDate(self, jobid):
         ""
         return self.jobinfo[jobid][1]
 
-    def getStartDate(self, jobid):
-        ""
-        return self.jobinfo[jobid][2]
-
     def getTimeUsed(self, jobid):
         ""
-        return self.jobinfo[jobid][3]
+        return self.jobinfo[jobid][2]
 
 
 def lineprint( fileobj, *lines ):

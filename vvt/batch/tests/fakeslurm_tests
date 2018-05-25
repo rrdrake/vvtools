@@ -118,10 +118,10 @@ class FakeSLURM_tests( unittest.TestCase ):
 
     def test_parse_squeue_command_options(self):
         ""
-        cmdL = shlex.split( '-o "%i _ %t _ %V _ %S _ %M" --noheader' )
+        cmdL = shlex.split( '-o "%i _ %t _ %S _ %M" --noheader' )
         fake.parse_squeue_command_options( cmdL )
 
-        cmdL = shlex.split( '--noheader -o "%i _ %t _ %V _ %S _ %M"' )
+        cmdL = shlex.split( '--noheader -o "%i _ %t _ %S _ %M"' )
         fake.parse_squeue_command_options( cmdL )
 
         self.assertRaises( Exception,
@@ -131,13 +131,13 @@ class FakeSLURM_tests( unittest.TestCase ):
             shlex.split('--noheader') )
         self.assertRaises( Exception,
             fake.parse_squeue_command_options,
-            shlex.split('-o "%i _ %t _ %V _ %S _ %M"' ) )
+            shlex.split('-o "%i _ %t _ %S _ %M"' ) )
         self.assertRaises( Exception,
             fake.parse_squeue_command_options,
-            shlex.split('--noheader -o "%i _ %t _ %S _ %M"' ) )
+            shlex.split('--noheader -o "%i _ %t _ %V _ %S _ %M"' ) )
         self.assertRaises( Exception,
             fake.parse_squeue_command_options,
-            shlex.split('--noheader -o "%i _ %t _ %V _ %S - %M"' ) )
+            shlex.split('--noheader -o "%i _ %t _ %S - %M"' ) )
 
     def test_slurm_format_date_function(self):
         ""
@@ -158,49 +158,44 @@ class FakeSLURM_tests( unittest.TestCase ):
         line = fake.squeue_line_from_runner_status(
                         123,
                         ( '', None ),
-                        make_epoch( 'Sat Apr 28 08:49:22 2018' ),
                         ( None, None ) )
 
-        assert line == '123 _ PD _ 2018-04-28T08:49:22 _ N/A _ 0:00'
+        assert line == '123 _ PD _ N/A _ 0:00'
 
         # submitted, running, start, no stop, not done
         line = fake.squeue_line_from_runner_status(
                         123,
                         ( 'running', None ),
-                        make_epoch( 'Sat Apr 28 08:49:22 2018' ),
                         ( make_epoch( 'Sat Apr 28 08:50:22 2018' ), None ) )
 
-        assert line == '123 _ R _ 2018-04-28T08:49:22 _ 2018-04-28T08:50:22 _ 0:00'
+        assert line == '123 _ R _ 2018-04-28T08:50:22 _ 0:00'
 
         # submitted, running, start, stop, not done
         line = fake.squeue_line_from_runner_status(
                         123,
                         ( 'running', None ),
-                        make_epoch( 'Sat Apr 28 08:49:22 2018' ),
                         ( make_epoch( 'Sat Apr 28 08:50:22 2018' ),
                           make_epoch( 'Sat Apr 28 08:51:22 2018' ) ) )
 
-        assert line == '123 _ R _ 2018-04-28T08:49:22 _ 2018-04-28T08:50:22 _ 1:00'
+        assert line == '123 _ R _ 2018-04-28T08:50:22 _ 1:00'
 
         # submitted, exit ok, start, stop, done
         line = fake.squeue_line_from_runner_status(
                         123,
                         ( 'exit', 0 ),
-                        make_epoch( 'Sat Apr 28 08:49:22 2018' ),
                         ( make_epoch( 'Sat Apr 28 08:50:22 2018' ),
                           make_epoch( 'Sat Apr 28 09:51:22 2018' ) ) )
 
-        assert line == '123 _ CD _ 2018-04-28T08:49:22 _ 2018-04-28T08:50:22 _ 1:01:00'
+        assert line == '123 _ CD _ 2018-04-28T08:50:22 _ 1:01:00'
 
         # submitted, exit failure, start, stop, done
         line = fake.squeue_line_from_runner_status(
                         123,
                         ( 'exit', 1 ),
-                        make_epoch( 'Sat Apr 28 08:49:22 2018' ),
                         ( make_epoch( 'Sat Apr 28 08:50:22 2018' ),
                           make_epoch( 'Sat Apr 29 08:51:23 2018' ) ) )
 
-        assert line == '123 _ CD _ 2018-04-28T08:49:22 _ 2018-04-28T08:50:22 _ 1-00:01:01'
+        assert line == '123 _ CD _ 2018-04-28T08:50:22 _ 1-00:01:01'
 
 
 ############################################################################
