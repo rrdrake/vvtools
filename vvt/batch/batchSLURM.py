@@ -20,7 +20,7 @@ class BatchSLURM( batchitf.BatchInterface ):
         batchitf.BatchInterface.__init__(self)
 
         # the function that issues shell batch commands
-        self.runcmd = run_batch_command
+        self.runcmd = batchitf.run_shell_command
 
     def computeNumNodes(self, num_cores, cores_per_node=None):
         ""
@@ -97,17 +97,6 @@ class BatchSLURM( batchitf.BatchInterface ):
         return tuple ( exit status, stdout output, stderr output ).
         """
         self.runcmd = func
-
-
-def run_batch_command( cmd ):
-    ""
-    p = subprocess.Popen( cmd, shell=True,
-                          stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE )
-
-    out,err = p.communicate()
-
-    return p.returncode, out, err
 
 
 def parse_submit_output_for_job_id( out, err ):

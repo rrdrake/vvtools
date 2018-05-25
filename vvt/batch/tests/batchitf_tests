@@ -277,6 +277,142 @@ class Class_JobQueueTable( unittest.TestCase ):
         self.assertRaises( Exception, tab.getTimeUsed, '21' )
 
 
+class BatchInterface_parseScriptDates_and_writeScriptFile( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_write_hollow_script_and_run_it(self):
+        ""
+        bi = bat.BatchInterface()
+        job = BatchJob()
+
+        fname = job.getBatchFileName()
+
+        write_job_script( fname, bi, job )
+        time.sleep(1)
+
+        x,out,err = bat.run_shell_command( '/bin/bash '+fname )
+        assert x == 0
+
+    def test_write_script_run_then_parse_dates(self):
+        ""
+        bi = bat.BatchInterface()
+        job = BatchJob()
+
+        fname = job.getBatchFileName()
+
+        write_job_script( fname, bi, job, 'sleep 5' )
+        time.sleep(1)
+
+        x,out,err = bat.run_shell_command( '/bin/bash '+fname )
+        assert x == 0
+
+        util.writefile( 'log.txt', out )
+        time.sleep(1)
+
+        start,stop = bi.parseScriptDates( 'log.txt' )
+
+        assert time.time() - start < 10
+        assert stop - start < 8
+
+    def test_parsing_a_file_that_does_not_exist_returns_Nones(self):
+        ""
+        bi = bat.BatchInterface()
+
+        start,stop = bi.parseScriptDates( 'log.txt' )
+
+        assert start == None and stop == None
+
+    def test_parse_a_file_without_a_stop_date(self):
+        ""
+        util.writefile( 'log.txt', """
+            SCRIPT START DATE: Fri May 25 14:31:50 MDT 2018
+            UNAME: Linux ceerws1803 2.6.32-642.1.1.el6.x8...
+            cd .
+            """ )
+        time.sleep(1)
+
+        bi = bat.BatchInterface()
+        start,stop = bi.parseScriptDates( 'log.txt' )
+        assert start != None and stop == None
+
+    def test_parsing_a_corrupt_file(self):
+        ""
+        util.writefile( 'log1.txt', """
+            SCRIPT START DATE: Fri May 25 14:31:50 MDT 2018
+            UNAME: Linux ceerws1803 2.6.32-642.1.1.el6.x8...
+            cd .
+            SCRIPT STOP DATE: Fri May 25 14:31:55 MDT 2018
+            """ )
+        util.writefile( 'log2.txt', """
+            SCRIPT START DATE: foo bar
+            UNAME: Linux ceerws1803 2.6.32-642.1.1.el6.x8...
+            cd .
+            SCRIPT STOP DATE: Fri May 25 14:31:55 MDT 2018
+            """ )
+        util.writefile( 'log3.txt', """
+            SCRIPT START DATE: Fri May 25 14:31:50 MDT 2018
+            UNAME: Linux ceerws1803 2.6.32-642.1.1.el6.x8...
+            cd .
+            SCRIPT STOP DATE: foo bar
+            """ )
+        time.sleep(1)
+
+        bi = bat.BatchInterface()
+        start,stop = bi.parseScriptDates( 'log1.txt' )
+        assert start != None and stop != None
+        assert stop - start < 8
+
+        bi = bat.BatchInterface()
+        start,stop = bi.parseScriptDates( 'log2.txt' )
+        assert start == None and stop != None
+
+        bi = bat.BatchInterface()
+        start,stop = bi.parseScriptDates( 'log3.txt' )
+        assert start != None and stop == None
+
+    def test_use_write_script_function(self):
+        ""
+        class SubBatchInterface( bat.BatchInterface ):
+            def writeScriptHeader(self, job, fileobj):
+                pass
+
+        bi = SubBatchInterface()
+        job = BatchJob()
+
+        bi.writeScriptFile( job )
+        time.sleep(1)
+
+        fname = job.getBatchFileName()
+        x,out,err = bat.run_shell_command( '/bin/bash '+fname )
+        assert x == 0
+
+        util.writefile( 'log.txt', out )
+        time.sleep(1)
+
+        start,stop = bi.parseScriptDates( 'log.txt' )
+
+        assert time.time() - start < 10
+        assert stop - start < 8
+
+
+def write_job_script( fname, bitf, job, *command_lines ):
+    """
+    """
+    fp = open( fname, 'w' )
+
+    try:
+        bitf.writeScriptShebang( job, fp )
+        bitf.writeScriptBegin( job, fp )
+        fp.write( '\n' + '\n'.join( command_lines ) +'\n' )
+        bitf.writeScriptFinish( job, fp )
+
+    finally:
+        fp.close()
+
+
 class Functions_update_job_dates( unittest.TestCase ):
 
     def setUp(self):

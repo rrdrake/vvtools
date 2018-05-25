@@ -9,6 +9,7 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
+import subprocess
 
 
 """
@@ -107,7 +108,7 @@ class BatchInterface:
 
         if not stop:
 
-            start,stop = self.parseScriptDates( job )
+            start,stop = self.parseScriptDates( job.getLogFileName() )
 
             job.setScriptDates( start=start, stop=stop )
 
@@ -216,16 +217,14 @@ class BatchInterface:
             '',
             'echo "SCRIPT STOP DATE: `date`"' )
 
-    def parseScriptDates(self, job):
+    def parseScriptDates(self, filename):
         ""
         start = None
         stop = None
 
-        logname = job.getLogFileName()
+        if os.path.exists( filename ):
 
-        if os.path.exists( logname ):
-
-            fp = open( logname, 'r' )
+            fp = open( filename, 'r' )
             try:
                 started = False
                 line = fp.readline()
@@ -285,6 +284,17 @@ class JobQueueTable:
     def getTimeUsed(self, jobid):
         ""
         return self.jobinfo[jobid][2]
+
+
+def run_shell_command( cmd ):
+    ""
+    p = subprocess.Popen( cmd, shell=True,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE )
+
+    out,err = p.communicate()
+
+    return p.returncode, out, err
 
 
 def lineprint( fileobj, *lines ):
