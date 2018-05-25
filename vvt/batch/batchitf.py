@@ -38,6 +38,18 @@ class BatchInterface:
         ""
         self.ppn = None
 
+        self.jobs = {}  # dict jobid -> BatchJob
+
+    def addJob(self, job):
+        """
+        """
+        self.jobs[ job.getJobId() ] = job
+
+    def removeJob(self, jobid):
+        """
+        """
+        self.jobs.pop( jobid )
+
     def setProcessorsPerNode(self, ppn):
         ""
         self.ppn = ppn
@@ -69,7 +81,93 @@ class BatchInterface:
     def poll(self):
         """
         """
-        raise NotImplementedError( "Method poll()" )
+        jqtab = JobQueueTable()
+        self.queryQueue( jqtab )
+
+        for jid,job in list( self.jobs.items() ):
+
+            self.updateBatchJobResults( job, jqtab )
+
+            if job.isFinished():
+                self.removeJob( jid )
+
+    def updateBatchJobResults(self, job, jqtab):
+        """
+        """
+        print 'magic: update, statL', jqtab.jobinfo.get( job.getJobId(), None ), job.isFinished()
+        if not job.isFinished():
+
+            self.updateJobScriptDates( job )
+            self.updateJobQueueDates( job, jqtab, time.time() )
+            self.updateJobExit( job, time.time() )
+
+    def updateJobScriptDates(self, job):
+        ""
+        start,stop,done = job.getScriptDates()
+
+        if not stop:
+
+            start,stop = self.parseScriptDates( job )
+
+            job.setScriptDates( start=start, stop=stop )
+
+    def updateJobQueueDates(self, job, jqtab, curtime):
+        ""
+        dt,was_pending,was_running,dt,dt = job.getQueueDates()
+
+        jid = job.getJobId()
+
+        if jqtab.hasJob( jid ):
+
+            st = jqtab.getState( jid )
+            start = jqtab.getStartDate( jid )
+            tused = jqtab.getTimeUsed( jid )
+
+            if st == 'running':
+                if not start: start = curtime
+                job.setQueueDates( run=start )
+
+            elif st == 'pending':
+                job.setQueueDates( pending=curtime )
+
+            else:
+                if st == 'complete':
+                    if start and tused:
+                        tm = start+tused
+                    else:
+                        tm = time.time()
+                    job.setQueueDates( complete=tm )
+
+                job.setQueueDates( done=curtime )
+
+        elif was_pending or was_running:
+            job.setQueueDates( done=curtime )
+
+    def updateJobExit(self, job, curtime):
+        ""
+        start,stop,sdone = job.getScriptDates()
+
+        if stop:
+            job.setScriptDates( done=curtime )
+
+        else:
+            dt,dt,dt,dt,qdone = job.getQueueDates()
+
+            complete_timeout = 5
+            if start and qdone and curtime-qdone > complete_timeout:
+                job.setScriptDates( done=curtime )
+
+        # if not start and absent too long,
+        #   mark exit=missing
+
+        # if started, not running, and no stop date for too long,
+        #   mark exit=fail
+
+        # if not started and not in the queue for too long,
+        #   mark exit=missing
+
+        # if was marked running at least once, but not started for too long,
+        #   mark exit=missing
 
     def cancel(self, job_list=None):
         ""
@@ -156,6 +254,42 @@ class BatchInterface:
 
 
 #############################################################################
+
+class JobQueueTable:
+
+    def __init__(self):
+        ""
+        self.jobinfo = {}  # job id -> [ state, subdate, startdate, timeused ]
+
+    def setJobInfo(self, jobid, state, submitdate, startdate, timeused):
+        ""
+        assert state in ['pending','running','complete','done']
+        self.jobinfo[ jobid ] = [ state, submitdate, startdate, timeused ]
+
+    def numJobs(self):
+        ""
+        return len( self.jobinfo )
+
+    def hasJob(self, jobid):
+        ""
+        return jobid in self.jobinfo
+
+    def getState(self, jobid):
+        ""
+        return self.jobinfo[jobid][0]
+
+    def getSubmitDate(self, jobid):
+        ""
+        return self.jobinfo[jobid][1]
+
+    def getStartDate(self, jobid):
+        ""
+        return self.jobinfo[jobid][2]
+
+    def getTimeUsed(self, jobid):
+        ""
+        return self.jobinfo[jobid][3]
+
 
 def lineprint( fileobj, *lines ):
     """

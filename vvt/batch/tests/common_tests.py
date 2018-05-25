@@ -201,11 +201,11 @@ class Batch_queue_dates:
         time.sleep(1)
         self.bat.poll()
 
-        sub1,run1,done1 = self.job.getQueueDates()
+        sub1,pend1,run1,comp1,done1 = self.job.getQueueDates()
 
         wait_on_job( self.bat, self.job, 10 )
 
-        sub2,run2,done2 = self.job.getQueueDates()
+        sub2,pend2,run2,comp2,done2 = self.job.getQueueDates()
 
         assert sub1 and sub1 == sub2
         assert run1 and abs( curdate - run1 ) < 5
@@ -220,9 +220,44 @@ class Batch_queue_dates:
 
         wait_on_job( self.bat, self.job, 10 )
 
-        sub,run,done = self.job.getQueueDates()
+        sub,pend,run,comp,done = self.job.getQueueDates()
 
         assert done and abs( done - time.time() ) < 10
+
+    def test_a_running_job_has_a_run_date_but_no_done_date(self):
+        ""
+        write_and_submit_batch_job( self.bat, self.job, 'sleep 4' )
+
+        self.bat.poll()
+        time.sleep(1)
+        self.bat.poll()
+
+        dt,dt,run,dt,done = self.job.getQueueDates()
+
+        wait_on_job( self.bat, self.job, 5 )
+
+        assert ( time.time() - run ) < 10
+        assert not done
+
+    def test_a_finished_job_has_a_done_date(self):
+        ""
+        write_and_submit_batch_job( self.bat, self.job, 'sleep 1' )
+
+        wait_on_job( self.bat, self.job, 5 )
+
+        dt,dt,dt,dt,done = self.job.getQueueDates()
+        assert ( time.time() - done ) < 10
+
+    def test_a_failed_job_has_a_done_date(self):
+        ""
+        write_and_submit_batch_job( self.bat, self.job,
+            'sleep 1',
+            'exit 1' )
+
+        wait_on_job( self.bat, self.job, 10 )
+
+        dt,dt,dt,dt,done = self.job.getQueueDates()
+        assert ( time.time() - done ) < 10
 
 
 class Batch_start_stop_dates:
@@ -242,11 +277,11 @@ class Batch_start_stop_dates:
         time.sleep(1)
         self.bat.poll()
 
-        sub1,run1,done1 = self.job.getQueueDates()
+        sub1,pend1,run1,comp1,done1 = self.job.getQueueDates()
 
         wait_on_job( self.bat, self.job, 10 )
 
-        sub2,run2,done2 = self.job.getQueueDates()
+        sub2,pend2,run2,comp2,done2 = self.job.getQueueDates()
 
         assert run1 and run2 and run1 == run2
         assert done1 == None
@@ -259,7 +294,7 @@ class Batch_start_stop_dates:
 
         wait_on_job( self.bat, self.job, 10 )
 
-        start,stop = self.job.getRunDates()
+        start,stop,done = self.job.getScriptDates()
 
         assert start and stop
         assert stop-start > 4 and stop-start < 10
@@ -272,103 +307,10 @@ class Batch_start_stop_dates:
 
         wait_on_job( self.bat, self.job, 10 )
 
-        start,stop = self.job.getRunDates()
+        start,stop,done = self.job.getScriptDates()
 
         assert start
         assert abs( start - time.time() ) < 10
-
-
-class Batch_job_status:
-
-    def setUp(self):
-        ""
-        util.setup_test()
-
-        self.bat = self.makeBatchInterface()
-        self.job = BatchJob()
-
-    def test_a_running_job_is_marked_running(self):
-        ""
-        write_and_submit_batch_job( self.bat, self.job, 'sleep 4' )
-
-        self.bat.poll()
-        time.sleep(1)
-        self.bat.poll()
-
-        st,x = self.job.getStatus()
-
-        wait_on_job( self.bat, self.job, 5 )
-
-        assert st == 'running'
-
-    def test_a_finished_job_is_marked_done(self):
-        ""
-        write_and_submit_batch_job( self.bat, self.job, 'sleep 1' )
-
-        wait_on_job( self.bat, self.job, 5 )
-
-        st,x = self.job.getStatus()
-        assert st == 'done'
-
-    def test_a_failed_job_is_still_marked_done(self):
-        ""
-        write_and_submit_batch_job( self.bat, self.job,
-            'sleep 1',
-            'exit 1' )
-
-        wait_on_job( self.bat, self.job, 10 )
-
-        st,x = self.job.getStatus()
-        assert st == 'done'
-
-
-class Batch_exit_values:
-
-    def setUp(self):
-        ""
-        util.setup_test()
-
-        self.bat = self.makeBatchInterface()
-        self.job = BatchJob()
-
-    def test_exit_value_is_ok_in_nominal_case(self):
-        ""
-        write_and_submit_batch_job( self.bat, self.job, 'sleep 1' )
-
-        wait_on_job( self.bat, self.job, 5 )
-
-        st,x = self.job.getStatus()
-        assert x == 'ok'
-
-    def test_script_exit_results_in_a_fail_exit_value(self):
-        ""
-        write_and_submit_batch_job( self.bat, self.job,
-            'sleep 1',
-            'exit 1' )
-
-        wait_on_job( self.bat, self.job, 10 )
-
-        st,x = self.job.getStatus()
-        assert x == 'fail'
-
-    def test_a_running_job_does_not_have_an_exit_value(self):
-        ""
-        write_and_submit_batch_job( self.bat, self.job,
-            'sleep 5',
-            'exit 1' )
-
-        self.bat.poll()
-        time.sleep(1)
-        self.bat.poll()
-
-        st,x1 = self.job.getStatus()
-
-        wait_on_job( self.bat, self.job, 10 )
-
-        st,x2 = self.job.getStatus()
-
-        assert x1 == None
-        assert x2 == 'fail'
 
 
 ############################################################################
@@ -415,8 +357,7 @@ def wait_on_job( batchobj, jobobj, maxwait=60 ):
 
         batchobj.poll()
 
-        st,x = jobobj.getStatus()
-        if x != None:
+        if jobobj.isFinished():
             break
 
         if time.time() - tstart > maxwait:

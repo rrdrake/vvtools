@@ -22,8 +22,6 @@ class BatchSLURM( batchitf.BatchInterface ):
         # the function that issues shell batch commands
         self.runcmd = run_batch_command
 
-        self.jobs = []  # list of JobCache
-
     def computeNumNodes(self, num_cores, cores_per_node=None):
         ""
         assert cores_per_node != None or self.getProcessorsPerNode() != None, \
@@ -43,13 +41,11 @@ class BatchSLURM( batchitf.BatchInterface ):
 
         qname = job.getQueueName()
         if qname != None:
-            batchitf.lineprint( fileobj,
-                '#SBATCH --partition='+str(qname) )
+            fileobj.write( '#SBATCH --partition='+str(qname)+'\n' )
 
         accnt = job.getAccount()
         if accnt != None:
-            batchitf.lineprint( fileobj,
-                '#SBATCH --account='+str(accnt) )
+            fileobj.write( '#SBATCH --account='+str(accnt)+'\n' )
 
         batchitf.lineprint( fileobj, '' )
 
@@ -64,44 +60,11 @@ class BatchSLURM( batchitf.BatchInterface ):
 
         job.setJobId( jid )
 
-        job.setStatus( state='absent' )
-        job.setQueueDates( sub=time.time() )
+        job.setQueueDates( submit=time.time() )
 
-        self.jobs.append( JobCache(job) )
+        self.addJob( job )
 
-    def poll(self):
-        """
-        """
-        cmd = 'squeue --noheader -o "%i _ %t _ %V _ %S _ %M"'
-        x,out,err = self.runcmd( cmd )
-
-        tab = parse_queue_table_output( out, err )
-
-        newL = []
-
-        for jobcache in self.jobs:
-
-            statL = tab.get( jobcache.job.getJobId(), None )
-
-            isdone = self.updateBatchJobResults( jobcache, statL )
-
-            if not isdone:
-                newL.append( jobcache )
-
-        self.jobs = newL
-
-    def cancel(self, job_list=None):
-        ""
-        raise NotImplementedError( "Method cancel()" )
-
-    def setBatchCommandRunner(self, func):
-        """
-        The function that is used to execute shell batch commands.  Should
-        return tuple ( exit status, stdout output, stderr output ).
-        """
-        self.runcmd = func
-
-    def updateBatchJobResults(self, jobcache, statL):
+    def queryQueue(self, jobtable):
         """
         Some squeue -o format codes:
 
@@ -122,106 +85,21 @@ class BatchSLURM( batchitf.BatchInterface ):
 
             statL is [ state string, subdate, startdate, timeused ]
         """
-        print 'magic: update, statL', statL
-        if not jobcache.finished():
+        cmd = 'squeue --noheader -o "%i _ %t _ %V _ %S _ %M"'
+        x,out,err = self.runcmd( cmd )
 
-            self.updateJobRunDates( jobcache )
-            self.updateJobState( jobcache, statL )
-            self.updateJobQueueDates( jobcache, statL )
+        parse_queue_table_output( jobtable, out )
 
-            self.updateJobExit( jobcache )
-
-        return jobcache.finished()
-
-    def updateJobRunDates(self, jobcache):
+    def cancel(self, job_list=None):
         ""
-        t0,t1 = jobcache.job.getRunDates()
+        raise NotImplementedError( "Method cancel()" )
 
-        if t1 == None:
-
-            start,stop = self.parseScriptDates( jobcache.job )
-
-            jobcache.job.setRunDates( start=start, stop=stop )
-
-    def updateJobState(self, jobcache, statL):
-        ""
-        previous_state,exit = jobcache.job.getStatus()
-
-        if statL != None:
-
-            st = statL[0]
-
-            if st == 'R':
-                jobcache.job.setStatus( state='running' )
-            elif st == 'PD' or st == 'CF':
-                jobcache.job.setStatus( state='queue' )
-            else:
-                jobcache.job.setStatus( state='done' )
-
-        elif previous_state in ['queue','running']:
-            jobcache.job.setStatus( state='done' )
-
-    def updateJobQueueDates(self, jobcache, statL):
-        ""
-        if statL != None:
-
-            rundate,runtime = statL[2], statL[3]
-
-            isdone = ( statL[0] not in ['R','PD','CF'] )
-
-            if isdone and rundate and runtime and (runtime > 0.5):
-                jobcache.job.setQueueDates( run=rundate, done=rundate+runtime )
-
-            elif rundate:
-                jobcache.job.setQueueDates( run=rundate )
-
-    def updateJobExit(self, jobcache):
-        ""
-        t0,t1 = jobcache.job.getRunDates()
-
-        if t1:
-            jobcache.job.setStatus( exit='ok' )
-
-        else:
-            curtime = time.time()
-
-            sub,run,done = jobcache.job.getQueueDates()
-
-            complete_timeout = 5
-            if t0 and done and curtime-done > complete_timeout:
-                jobcache.job.setStatus( exit='fail' )
-
-        # if not start and absent too long,
-        #   mark exit=missing
-
-        # if started, not running, and no stop date for too long,
-        #   mark exit=fail
-
-        # if not started and not in the queue for too long,
-        #   mark exit=missing
-
-        # if was marked running at least once, but not started for too long,
-        #   mark exit=missing
-
-
-class JobCache:
-
-    def __init__(self, job):
-        ""
-        self.job = job
-        self.queue_date = time.time()
-
-    def finished(self):
-        ""
-        state,exit = self.job.getStatus()
-        done = ( state == 'done' or self.timedOut() )
-        return exit and done
-
-    def timedOut(self):
-        ""
-        if time.time() - self.queue_date > 60:
-            return True
-        return False
+    def setBatchCommandRunner(self, func):
+        """
+        The function that is used to execute shell batch commands.  Should
+        return tuple ( exit status, stdout output, stderr output ).
+        """
+        self.runcmd = func
 
 
 def run_batch_command( cmd ):
@@ -251,35 +129,46 @@ def parse_submit_output_for_job_id( out, err ):
     return jobid
 
 
-def parse_queue_table_output( out, err ):
+def parse_queue_table_output( jqtab, out ):
     """
-    Such as
+    The 'out' string is something like
 
     7291680 _ R _ 2018-04-21T12:57:34 _ 2018-04-21T12:57:38 _ 7:37
     7291807 _ PD _ 2018-04-21T13:05:09 _ N/A _ 0:00
     7254586 _ CG _ 2018-04-20T21:05:53 _ 2018-04-20T21:05:58 _ 2:00:25
 
-    gives python dict of
-
-        jobid -> [ state string, submit date, start date, time used ]
+    job states: PD (pending), R (running), CA (cancelled),
+                CF(configuring), CG (completing), CD (completed),
+                F (failed), TO (timeout), NF (node failure),
+                RV (revoked), SE (special exit state)
     """
-    tab = {}
-
     for line in out.strip().split( os.linesep ):
-        line = line.strip()
-        sL = line.split( ' _ ' )
+
+        sL = line.strip().split( ' _ ' )
+
         if len(sL) == 5:
+
             jid = sL[0].strip()
             st = sL[1].strip()
+
             if jid and st in ['PD','R','CG','CD',
-                              'CA','CF','F','TO','NF','RV','SE']:
+                              'CA','CF','F','TO',
+                              'NF','RV','SE']:
+
+                if st in ['PD','CF']:
+                    st = 'pending'
+                elif st in ['R','CG']:
+                    st = 'running'
+                elif st in ['CD']:
+                    st = 'complete'
+                else:
+                    st = 'done'
+
                 subdate = parse_date_string( sL[2].strip() )
                 startdate = parse_date_string( sL[3].strip() )
                 timeused = parse_elapsed_time_string( sL[4].strip() )
 
-                tab[jid] = [ st, subdate, startdate, timeused ]
-
-    return tab
+                jqtab.setJobInfo( jid, st, subdate, startdate, timeused )
 
 
 def parse_date_string( dstr ):

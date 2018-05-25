@@ -22,7 +22,7 @@ class BatchScripts( batchitf.BatchInterface ):
         batchitf.BatchInterface.__init__(self)
 
         self.runr = ScriptRunner()
-        self.jobs = []
+        self.sprocs = []
 
     def writeScriptHeader(self, job, fileobj):
         ""
@@ -37,43 +37,46 @@ class BatchScripts( batchitf.BatchInterface ):
         sproc = self.runr.submit( batname, redirect=logname )
 
         jid = str( sproc.getId() )
+        subdate = time.time()
+
         job.setJobId( jid )
-        job.setStatus( state='queue' )
-        job.setQueueDates( sub=time.time() )
+        job.setQueueDates( submit=subdate )
         job.setSubmitOutput( out='Job ID: '+jid, err='' )
 
-        self.jobs.append( [ job, sproc ] )
+        self.addJob( job )
+        self.sprocs.append( [ sproc, jid, subdate ] )
 
-    def poll(self):
+    def queryQueue(self, jqtab):
         """
         """
         self.runr.poll()
 
-        L = []
-        for job,sproc in self.jobs:
+        newL = []
 
-            t0,t1 = sproc.getDates()
-            job.setQueueDates( run=t0, done=t1 )
-
-            t0,t1 = self.parseScriptDates( job )
-            job.setRunDates( start=t0, stop=t1 )
+        for sproc,jid,subdate in self.sprocs:
 
             st,x = sproc.getStatus()
 
-            assert st
-            if st == 'running':
-                job.setStatus( state='running' )
-            elif st:
-                job.setStatus( state='done' )
-
-            if x == None:
-                L.append( [ job, sproc ] )
+            if not st:
+                state = 'pending'
+            elif st == 'running':
+                state = 'running'
             else:
-                if t1: xs = 'ok'
-                else:  xs = 'fail'
-                job.setStatus( exit=xs )
+                state = 'done'
 
-        self.jobs = L
+            startdate,stopdate = sproc.getDates()
+
+            if stopdate:
+                timeused = stopdate-startdate
+            else:
+                timeused = None
+
+            jqtab.setJobInfo( jid, state, subdate, startdate, timeused )
+
+            if state != 'done':
+                newL.append( [ sproc, jid, subdate ] )
+
+        self.sprocs = newL
 
     def cancel(self, job_list=None):
         ""

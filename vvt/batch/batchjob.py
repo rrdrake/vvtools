@@ -61,10 +61,10 @@ class BatchJob:
 
 
         submit jobid : the job id given back from submission
-        submit date : date submitted to the queue
         submit out : stdout from submission command
         submit err : stderr from submission command
 
+        Q submit date  : date submitted to the queue
         Q pending date : first time batch system showed job as pending
         Q running date : first time batch system showed job as running
         Q completed date : date the batch system showed the job completed
@@ -104,13 +104,9 @@ class BatchJob:
         self.jobid = None
         self.subout = None
         self.suberr = None
-        self.subdate = None
-        self.rundate = None
-        self.donedate = None
-        self.startdate = None
-        self.stopdate = None
-        self.state = None
-        self.exit = None
+
+        self.qdates = {}
+        self.scriptdates = {}
 
         self.lock = threading.Lock()
 
@@ -164,13 +160,27 @@ class BatchJob:
     def getSubmitOutput(self): return self.subout, self.suberr
 
     @thread_lock
-    def getQueueDates(self): return self.subdate, self.rundate, self.donedate
+    def getQueueDates(self):
+        S = ( self.qdates.get( 'submit', None ),
+              self.qdates.get( 'pending', None ),
+              self.qdates.get( 'run', None ),
+              self.qdates.get( 'complete', None ),
+              self.qdates.get( 'done', None ) )
+        return S
 
     @thread_lock
-    def getRunDates(self): return self.startdate, self.stopdate
+    def getScriptDates(self):
+        S = ( self.scriptdates.get( 'start', None ),
+              self.scriptdates.get( 'stop', None ),
+              self.scriptdates.get( 'done', None ) )
+        return S
 
     @thread_lock
-    def getStatus(self): return self.state, self.exit
+    def isFinished(self):
+        """
+        """
+        return self.qdates.get( 'done', None ) != None and \
+               self.scriptdates.get( 'done', None )
 
     # result set methods
 
@@ -183,20 +193,19 @@ class BatchJob:
         if err != None: self.suberr = err
 
     @thread_lock
-    def setQueueDates(self, sub=None, run=None, done=None):
-        if sub != None: self.subdate = sub
-        if run != None: self.rundate = run
-        if done != None: self.donedate = done
+    def setQueueDates(self, submit=None, pending=None, run=None,
+                            complete=None, done=None):
+        set_date_attr( self.qdates, 'submit', submit )
+        set_date_attr( self.qdates, 'pending', pending )
+        set_date_attr( self.qdates, 'run', run )
+        set_date_attr( self.qdates, 'complete', complete )
+        set_date_attr( self.qdates, 'done', done )
 
     @thread_lock
-    def setRunDates(self, start=None, stop=None):
-        if start != None: self.startdate = start
-        if stop != None: self.stopdate = stop
-
-    @thread_lock
-    def setStatus(self, state=None, exit=None):
-        if state != None: self.state = state
-        if exit != None: self.exit = exit
+    def setScriptDates(self, start=None, stop=None, done=None):
+        set_date_attr( self.scriptdates, 'start', start )
+        set_date_attr( self.scriptdates, 'stop', stop )
+        set_date_attr( self.scriptdates, 'done', done )
 
     @thread_lock
     def testThreadLock(self, num_seconds):
@@ -204,3 +213,10 @@ class BatchJob:
         Only used for testing, this function acquires the lock then sleeps.
         """
         time.sleep( num_seconds )
+
+
+def set_date_attr( attrs, name, value ):
+    """
+    """
+    if value and name not in attrs:
+        attrs[ name ] = value

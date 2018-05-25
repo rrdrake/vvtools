@@ -49,14 +49,11 @@ class BatchJob_defaults( unittest.TestCase ):
         out,err = job.getSubmitOutput()
         assert not out and not err
 
-        sub,run,done = job.getQueueDates()
-        assert not sub and not run and not done
+        sub,pend,run,comp,done = job.getQueueDates()
+        assert not sub and not pend and not run and not comp and not done
 
-        start,stop = job.getRunDates()
-        assert not start and not stop
-
-        state,exit = job.getStatus()
-        assert not state and not exit
+        start,stop,done = job.getScriptDates()
+        assert not start and not stop and not done
 
 
 class BatchJob_specifications( unittest.TestCase ):
@@ -148,41 +145,51 @@ class BatchJob_results( unittest.TestCase ):
         ""
         job = BJ.BatchJob()
 
-        job.setQueueDates( sub=1 )
-        sub,run,done = job.getQueueDates()
-        assert sub == 1 and not run and not done
+        job.setQueueDates( submit=1 )
+        sub,pend,run,comp,done = job.getQueueDates()
+        assert sub == 1 and not pend and not run and not comp and not done
 
-        job.setQueueDates( run=2 )
-        sub,run,done = job.getQueueDates()
-        assert sub == 1 and run == 2 and not done
+        job.setQueueDates( pending=2 )
+        sub,pend,run,comp,done = job.getQueueDates()
+        assert sub == 1 and pend == 2 and not run and not comp and not done
 
-        job.setQueueDates( done=3 )
-        sub,run,done = job.getQueueDates()
-        assert sub == 1 and run == 2 and done == 3
+        job.setQueueDates( run=3 )
+        sub,pend,run,comp,done = job.getQueueDates()
+        assert sub == 1 and pend == 2 and run == 3 and not comp and not done
+
+        job.setQueueDates( complete=4 )
+        sub,pend,run,comp,done = job.getQueueDates()
+        assert sub == 1 and pend == 2 and run == 3 and comp == 4 and not done
+
+        job.setQueueDates( done=5 )
+        sub,pend,run,comp,done = job.getQueueDates()
+        assert sub == 1 and pend == 2 and run == 3 and comp == 4 and done == 5
+
+        # subsequent set is ignored
+        job.setQueueDates( submit=4, done=6 )
+        sub,pend,run,comp,done = job.getQueueDates()
+        assert sub == 1 and pend == 2 and run == 3 and comp == 4 and done == 5
 
     def test_run_dates(self):
         ""
         job = BJ.BatchJob()
 
-        job.setRunDates( start=1 )
-        start,stop = job.getRunDates()
-        assert start == 1 and not stop
+        job.setScriptDates( start=1 )
+        start,stop,done = job.getScriptDates()
+        assert start == 1 and not stop and not done
 
-        job.setRunDates( stop=2 )
-        start,stop = job.getRunDates()
-        assert start == 1 and stop == 2
+        job.setScriptDates( stop=2 )
+        start,stop,done = job.getScriptDates()
+        assert start == 1 and stop == 2 and not done
 
-    def test_status(self):
-        ""
-        job = BJ.BatchJob()
+        job.setScriptDates( done=3 )
+        start,stop,done = job.getScriptDates()
+        assert start == 1 and stop == 2 and done == 3
 
-        job.setStatus( state='foo' )
-        state,exit = job.getStatus()
-        assert state == 'foo' and not exit
-
-        job.setStatus( exit='bar' )
-        state,exit = job.getStatus()
-        assert state == 'foo' and exit == 'bar'
+        # subsequent set is ignored
+        job.setScriptDates( start=7, done=4 )
+        start,stop,done = job.getScriptDates()
+        assert start == 1 and stop == 2 and done == 3
 
     def test_thread_locking_with_a_getter(self):
         ""
@@ -216,12 +223,36 @@ class BatchJob_results( unittest.TestCase ):
 
         t0 = time.time()
         # this call should have to wait for the lock
-        job.setStatus( 'foo', 'bar' )
+        job.setScriptDates( done=1 )
         t1 = time.time()
 
         thr.join()
 
         assert t1-t0 > 3
+
+    def test_isFinished_combinations(self):
+        ""
+        job = BJ.BatchJob()
+
+        assert not job.isFinished()
+
+        job.setQueueDates( done=time.time() )
+        assert not job.isFinished()
+
+        job.setScriptDates( done=time.time() )
+        assert job.isFinished()
+
+        # switch the order
+
+        job = BJ.BatchJob()
+
+        assert not job.isFinished()
+
+        job.setScriptDates( done=time.time() )
+        assert not job.isFinished()
+
+        job.setQueueDates( done=time.time() )
+        assert job.isFinished()
 
 
 ############################################################################

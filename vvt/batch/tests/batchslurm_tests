@@ -21,6 +21,7 @@ from testutils import print3
 
 import FakeSLURM as sfake
 
+from batchitf import JobQueueTable
 from batchSLURM import parse_queue_table_output
 from batchSLURM import parse_elapsed_time_string
 from batchSLURM import parse_date_string
@@ -35,8 +36,6 @@ from common_tests import Batch_work_directory
 from common_tests import Batch_submit
 from common_tests import Batch_queue_dates
 from common_tests import Batch_start_stop_dates
-from common_tests import Batch_job_status
-from common_tests import Batch_exit_values
 
 
 class batchSLURM_free_functions( unittest.TestCase ):
@@ -70,37 +69,33 @@ class batchSLURM_free_functions( unittest.TestCase ):
 
     def test_parse_queue_table_output(self):
         ""
-        tab = parse_queue_table_output( """
+        jqtab = JobQueueTable()
+        parse_queue_table_output( jqtab, """
 SOME HEADER STUFF
 7291680 _ R _ 2018-04-21T12:57:34 _ 2018-04-21T12:57:38 _ 7:37
 7291807 _ PD _ 2018-04-21T13:05:09 _ N/A _ 0:00
 7254586 _ CG _ 2018-04-20T21:05:53 _ 2018-04-20T21:05:58 _ 2:00:25
-            """, '' )
+            """ )
 
-        assert len(tab) == 3
-        jL = list( tab.items() )
-        jL.sort()
+        assert jqtab.numJobs() == 3
 
-        jid,specs = jL[0]
-        assert jid == '7254586'
-        assert specs[0] == 'CG'
-        assert month_day_year( specs[1] ) == (4,20,2018)
-        assert month_day_year( specs[2] ) == (4,20,2018)
-        assert specs[3] == 2*60*60+0*60+25
+        jid = '7254586'
+        assert jqtab.getState(jid) == 'running'
+        assert month_day_year( jqtab.getSubmitDate(jid) ) == (4,20,2018)
+        assert month_day_year( jqtab.getStartDate(jid) ) == (4,20,2018)
+        assert jqtab.getTimeUsed(jid) == 2*60*60+0*60+25
 
-        jid,specs = jL[1]
-        assert jid == '7291680'
-        assert specs[0] == 'R'
-        assert month_day_year( specs[1] ) == (4,21,2018)
-        assert month_day_year( specs[2] ) == (4,21,2018)
-        assert specs[3] == 7*60+37
+        jid = '7291680'
+        assert jqtab.getState(jid) == 'running'
+        assert month_day_year( jqtab.getSubmitDate(jid) ) == (4,21,2018)
+        assert month_day_year( jqtab.getStartDate(jid) ) == (4,21,2018)
+        assert jqtab.getTimeUsed(jid) == 7*60+37
 
-        jid,specs = jL[2]
-        assert jid == '7291807'
-        assert specs[0] == 'PD'
-        assert month_day_year( specs[1] ) == (4,21,2018)
-        assert specs[2] == None
-        assert specs[3] == 0
+        jid = '7291807'
+        assert jqtab.getState(jid) == 'pending'
+        assert month_day_year( jqtab.getSubmitDate(jid) ) == (4,21,2018)
+        assert jqtab.getStartDate(jid) == None
+        assert jqtab.getTimeUsed(jid) == 0
 
     def test_parse_submit_output_for_job_id(self):
         ""
@@ -144,6 +139,69 @@ class BatchSLURM_computeNumNodes( Method_computeNumNodes, unittest.TestCase ):
         self.assertRaises( Exception, bat.computeNumNodes, 1 )
 
 
+class BatchSLURM_update_job_dates( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_updateJobQueueDates_on_nominal_queue_sequence(self):
+        ""
+        bat = BatchSLURM()
+        job = BatchJob()
+        tab = JobQueueTable()
+
+        t0 = time.time()
+        job.setQueueDates( submit=t0 )
+
+        tab.setJobInfo( job.getJobId(), 'pending', t0, None, None )
+        bat.updateJobQueueDates( job, tab, t0+1 )
+        check_queue_dates( job, submit=t0, pending=t0+1 )
+
+        tab.setJobInfo( job.getJobId(), 'running', t0, t0+5, None )
+        bat.updateJobQueueDates( job, tab, t0+10 )
+        check_queue_dates( job, submit=t0, pending=t0+1, run=t0+5 )
+
+        tab.setJobInfo( job.getJobId(), 'complete', t0, t0+5, 20 )
+        bat.updateJobQueueDates( job, tab, t0+30 )
+        check_queue_dates( job, submit=t0, pending=t0+1, run=t0+5,
+                                complete=t0+25, done=t0+30 )
+
+    def test_updateJobExit_when_stop_date_is_set(self):
+        ""
+        bat = BatchSLURM()
+        job = BatchJob()
+
+        t0 = time.time()
+        job.setScriptDates( start=t0, stop=t0+5 )
+
+        bat.updateJobExit( job, t0+8 )
+        check_script_dates( job, start=t0, stop=t0+5, done=t0+8 )
+
+
+def check_queue_dates( job, submit=None, pending=None,
+                            run=None, complete=None, done=None ):
+    """
+    """
+    jsub,jpend,jrun,jcomp,jdone = job.getQueueDates()
+
+    assert jsub == submit
+    assert jpend == pending
+    assert jrun  == run
+    assert jcomp == complete
+    assert jdone == done
+
+
+def check_script_dates( job, start=None, stop=None, done=None ):
+    """
+    """
+    jstart,jstop,jdone = job.getScriptDates()
+
+    assert jstart == start
+    assert jstop == stop
+    assert jdone == done
+
+
 class BatchSLURM_output_file( Batch_output_file, unittest.TestCase ):
 
     def makeBatchInterface(self):
@@ -185,26 +243,6 @@ class BatchSLURM_queue_dates( Batch_queue_dates, unittest.TestCase ):
 
 
 class BatchSLURM_start_stop_dates( Batch_start_stop_dates, unittest.TestCase ):
-
-    def makeBatchInterface(self):
-        ""
-        bat = BatchSLURM()
-        engine = sfake.FakeSLURM()
-        bat.setBatchCommandRunner( engine.runcmd )
-        return bat
-
-
-class BatchSLURM_job_status( Batch_job_status, unittest.TestCase ):
-
-    def makeBatchInterface(self):
-        ""
-        bat = BatchSLURM()
-        engine = sfake.FakeSLURM()
-        bat.setBatchCommandRunner( engine.runcmd )
-        return bat
-
-
-class BatchSLURM_exit_values( Batch_exit_values, unittest.TestCase ):
 
     def makeBatchInterface(self):
         ""
