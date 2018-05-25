@@ -22,6 +22,7 @@ import testutils as util
 from testutils import print3
 
 import batchitf as bat
+from batchjob import BatchJob
 
 
 class Function_parse_variant( unittest.TestCase ):
@@ -210,6 +211,133 @@ class Function_parse_date_string( unittest.TestCase ):
 
         tm = bat.parse_date_string( 'Wed Jul  4 10:29:22 MDT 2018' )
         assert abs( tm - 1530721762 ) < 2
+
+
+class Class_JobQueueTable( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_set_job_info_then_get_job_info(self):
+        ""
+        t0 = time.time()
+
+        tab = bat.JobQueueTable()
+
+        tab.setJobInfo( '123', 'pending', None, None )
+        assert tab.numJobs() == 1
+        assert tab.hasJob( '123' )
+        assert tab.getState( '123' ) == 'pending'
+        assert tab.getStartDate( '123' ) == None
+        assert tab.getTimeUsed( '123' ) == None
+
+        tab.setJobInfo( '123', 'running', t0, None )
+        assert tab.numJobs() == 1
+        assert tab.hasJob( '123' )
+        assert tab.getState( '123' ) == 'running'
+        assert tab.getStartDate( '123' ) == t0
+        assert tab.getTimeUsed( '123' ) == None
+
+        tab.setJobInfo( '123', 'complete', t0, t0+5 )
+        assert tab.numJobs() == 1
+        assert tab.hasJob( '123' )
+        assert tab.getState( '123' ) == 'complete'
+        assert tab.getStartDate( '123' ) == t0
+        assert tab.getTimeUsed( '123' ) == t0+5
+
+        tab.setJobInfo( '123', 'done', t0, t0+5 )
+        assert tab.numJobs() == 1
+        assert tab.hasJob( '123' )
+        assert tab.getState( '123' ) == 'done'
+        assert tab.getStartDate( '123' ) == t0
+        assert tab.getTimeUsed( '123' ) == t0+5
+
+        tab.setJobInfo( '12', 'running', t0+2, None )
+        assert tab.numJobs() == 2
+        assert tab.hasJob( '123' ) and tab.hasJob( '12' )
+        assert tab.getState( '123' ) == 'done'
+        assert tab.getStartDate( '123' ) == t0
+        assert tab.getTimeUsed( '123' ) == t0+5
+        assert tab.getState( '12' ) == 'running'
+        assert tab.getStartDate( '12' ) == t0+2
+        assert tab.getTimeUsed( '12' ) == None
+
+    def test_errors(self):
+        ""
+        tab = bat.JobQueueTable()
+
+        self.assertRaises( Exception, tab.setJobInfo,
+                           '123', 'stopped', None, None )
+
+        tab.setJobInfo( '12', 'running', time.time(), None )
+        assert tab.getState( '12' ) == 'running'
+        self.assertRaises( Exception, tab.getState, '21' )
+        self.assertRaises( Exception, tab.getStartDate, '21' )
+        self.assertRaises( Exception, tab.getTimeUsed, '21' )
+
+
+class Functions_update_job_dates( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_updateJobQueueDates_on_nominal_queue_sequence(self):
+        ""
+        bi = bat.BatchInterface()
+        job = BatchJob()
+        tab = bat.JobQueueTable()
+
+        t0 = time.time()
+        job.setQueueDates( submit=t0 )
+
+        tab.setJobInfo( job.getJobId(), 'pending', None, None )
+        bi.updateJobQueueDates( job, tab, t0+1 )
+        check_queue_dates( job, submit=t0, pending=t0+1 )
+
+        tab.setJobInfo( job.getJobId(), 'running', t0+5, None )
+        bi.updateJobQueueDates( job, tab, t0+10 )
+        check_queue_dates( job, submit=t0, pending=t0+1, run=t0+5 )
+
+        tab.setJobInfo( job.getJobId(), 'complete', t0+5, 20 )
+        bi.updateJobQueueDates( job, tab, t0+30 )
+        check_queue_dates( job, submit=t0, pending=t0+1, run=t0+5,
+                                complete=t0+25, done=t0+30 )
+
+    def test_updateJobExit_when_stop_date_is_set(self):
+        ""
+        bi = bat.BatchInterface()
+        job = BatchJob()
+
+        t0 = time.time()
+        job.setScriptDates( start=t0, stop=t0+5 )
+
+        bi.updateJobExit( job, t0+8 )
+        check_script_dates( job, start=t0, stop=t0+5, done=t0+8 )
+
+
+def check_queue_dates( job, submit=None, pending=None,
+                            run=None, complete=None, done=None ):
+    """
+    """
+    jsub,jpend,jrun,jcomp,jdone = job.getQueueDates()
+
+    assert jsub == submit
+    assert jpend == pending
+    assert jrun  == run
+    assert jcomp == complete
+    assert jdone == done
+
+
+def check_script_dates( job, start=None, stop=None, done=None ):
+    """
+    """
+    jstart,jstop,jdone = job.getScriptDates()
+
+    assert jstart == start
+    assert jstop == stop
+    assert jdone == done
 
 
 ############################################################################

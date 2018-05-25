@@ -16,9 +16,9 @@ from getopt import getopt
 from scriptrunner import ScriptRunner
 from batchSLURM import parse_elapsed_time_string
 
-# magic: TODO:
+# TODO:
 #   - have the partition and account added to the jobs list
-#       - this is so tests can check that they were set
+#       - so that testing can check if they were set
 
 
 class FakeSLURM:

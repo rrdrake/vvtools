@@ -60,6 +60,7 @@ class BatchScripts( batchitf.BatchInterface ):
             elif st == 'running':
                 state = 'running'
             else:
+                # must be one of timeout, killed, exit
                 state = 'done'
 
             startdate,stopdate = sproc.getDates()

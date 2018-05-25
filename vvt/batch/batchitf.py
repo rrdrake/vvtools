@@ -94,7 +94,7 @@ class BatchInterface:
     def updateBatchJobResults(self, job, jqtab):
         """
         """
-        print 'magic: update, statL', jqtab.jobinfo.get( job.getJobId(), None ), job.isFinished()
+        print 'magic: update', jqtab.jobinfo.get( job.getJobId(), None ), job.isFinished()
         if not job.isFinished():
 
             self.updateJobScriptDates( job )

@@ -59,7 +59,6 @@ class BatchSLURM( batchitf.BatchInterface ):
         jid = parse_submit_output_for_job_id( out, err )
 
         job.setJobId( jid )
-
         job.setQueueDates( submit=time.time() )
 
         self.addJob( job )
@@ -82,8 +81,6 @@ class BatchSLURM( batchitf.BatchInterface ):
                     long for the "finished" date to appear in the log file
         - avoid excessive file system activity by pausing in between job log
           fstat and reads (to get run dates)
-
-            statL is [ state string, subdate, startdate, timeused ]
         """
         cmd = 'squeue --noheader -o "%i _ %t _ %S _ %M"'
         x,out,err = self.runcmd( cmd )
