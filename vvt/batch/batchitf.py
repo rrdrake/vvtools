@@ -100,7 +100,7 @@ class BatchInterface:
     def updateBatchJobResults(self, job, jqtab):
         """
         """
-        print 'magic: update', jqtab.jobinfo.get( job.getJobId(), None ), job.isFinished()
+        print ( 'magic: update', jqtab.jobinfo.get( job.getJobId(), None ), job.isFinished() )
         if not job.isFinished():
 
             self.updateJobScriptDates( job )
@@ -298,6 +298,11 @@ def run_shell_command( cmd ):
                           stderr=subprocess.PIPE )
 
     out,err = p.communicate()
+
+    if out != None and sys.version_info[0] > 2:
+        out = out.decode()
+    if err != None and sys.version_info[0] > 2:
+        err = err.decode()
 
     return p.returncode, out, err
 
