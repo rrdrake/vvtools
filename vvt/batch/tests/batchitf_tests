@@ -413,13 +413,52 @@ def write_job_script( fname, bitf, job, *command_lines ):
         fp.close()
 
 
-class Functions_update_job_dates( unittest.TestCase ):
+class Functions_update_jobs( unittest.TestCase ):
 
     def setUp(self):
         ""
-        util.setup_test( cleanout=False )
+        util.setup_test()
 
-    def test_updateJobQueueDates_on_nominal_queue_sequence(self):
+    def test_set_script_dates_multiple_times(self):
+        ""
+        bi = bat.BatchInterface()
+        job = BatchJob()
+        job.setLogFileName( 'log.txt' )
+
+        bi.updateJobScriptDates( job )
+        start,stop,done = job.getScriptDates()
+
+        assert start == None and stop == None
+
+        util.writefile( 'log.txt', """
+            SCRIPT START DATE: Fri May 25 14:31:50 MDT 2018
+            UNAME: Linux ceerws1803 2.6.32-642.1.1.el6.x8...
+            cd .
+            """ )
+        time.sleep(1)
+
+        bi.updateJobScriptDates( job )
+        start,stop,done = job.getScriptDates()
+
+        t0 = bat.parse_date_string( 'Fri May 25 14:31:50 MDT 2018' )
+        assert start != None and start == t0 and stop == None
+
+        util.writefile( 'log.txt', """
+            SCRIPT START DATE: Fri May 25 14:31:50 MDT 2018
+            UNAME: Linux ceerws1803 2.6.32-642.1.1.el6.x8...
+            cd .
+            SCRIPT STOP DATE: Fri May 25 14:31:55 MDT 2018
+            """ )
+        time.sleep(1)
+
+        bi.updateJobScriptDates( job )
+        start,stop,done = job.getScriptDates()
+
+        t1 = bat.parse_date_string( 'Fri May 25 14:31:55 MDT 2018' )
+        assert start != None and start == t0
+        assert stop != None and stop == t1
+
+    def test_queue_dates_on_nominal_queue_sequence(self):
         ""
         bi = bat.BatchInterface()
         job = BatchJob()
@@ -428,20 +467,109 @@ class Functions_update_job_dates( unittest.TestCase ):
         t0 = time.time()
         job.setQueueDates( submit=t0 )
 
+        bi.updateJobQueueDates( job, tab, t0 )
+        check_queue_dates( job, submit=t0 )
+
         tab.setJobInfo( job.getJobId(), 'pending', None, None )
         bi.updateJobQueueDates( job, tab, t0+1 )
         check_queue_dates( job, submit=t0, pending=t0+1 )
 
         tab.setJobInfo( job.getJobId(), 'running', t0+5, None )
         bi.updateJobQueueDates( job, tab, t0+10 )
-        check_queue_dates( job, submit=t0, pending=t0+1, run=t0+5 )
+        check_queue_dates( job, submit=t0, pending=t0+1, running=t0+5 )
 
         tab.setJobInfo( job.getJobId(), 'complete', t0+5, 20 )
         bi.updateJobQueueDates( job, tab, t0+30 )
-        check_queue_dates( job, submit=t0, pending=t0+1, run=t0+5,
+        check_queue_dates( job, submit=t0, pending=t0+1, running=t0+5,
                                 complete=t0+25, done=t0+30 )
 
-    def test_updateJobExit_when_stop_date_is_set(self):
+    def test_queue_dates_when_job_goes_from_pending_to_absent(self):
+        ""
+        bi = bat.BatchInterface()
+        job = BatchJob()
+
+        t0 = time.time()
+        job.setQueueDates( submit=t0 )
+
+        tab = bat.JobQueueTable()
+        tab.setJobInfo( job.getJobId(), 'pending', None, None )
+        bi.updateJobQueueDates( job, tab, t0+1 )
+        check_queue_dates( job, submit=t0, pending=t0+1 )
+
+        tab = bat.JobQueueTable()
+        bi.updateJobQueueDates( job, tab, t0+2 )
+        check_queue_dates( job, submit=t0, pending=t0+1, done=t0+2 )
+
+    def test_queue_dates_when_job_goes_from_running_to_absent(self):
+        ""
+        bi = bat.BatchInterface()
+        job = BatchJob()
+
+        t0 = time.time()
+        job.setQueueDates( submit=t0 )
+
+        tab = bat.JobQueueTable()
+        tab.setJobInfo( job.getJobId(), 'running', t0+1, None )
+        bi.updateJobQueueDates( job, tab, t0+2 )
+        check_queue_dates( job, submit=t0, running=t0+1 )
+
+        tab = bat.JobQueueTable()
+        bi.updateJobQueueDates( job, tab, t0+4 )
+        check_queue_dates( job, submit=t0, running=t0+1, done=t0+4 )
+
+    def test_queue_dates_for_completed_job_with_elapsed_time_given(self):
+        ""
+        bi = bat.BatchInterface()
+        job = BatchJob()
+
+        t0 = time.time()
+        job.setQueueDates( submit=t0 )
+
+        tab = bat.JobQueueTable()
+        tab.setJobInfo( job.getJobId(), 'complete', t0+1, 5 )
+        bi.updateJobQueueDates( job, tab, t0+10 )
+        check_queue_dates( job, submit=t0, complete=t0+6, done=t0+10 )
+
+    def test_queue_dates_for_completed_job_without_elapsed_time_given(self):
+        ""
+        bi = bat.BatchInterface()
+        job = BatchJob()
+
+        t0 = time.time()
+        job.setQueueDates( submit=t0 )
+
+        tab = bat.JobQueueTable()
+        tab.setJobInfo( job.getJobId(), 'complete', t0+1, None )
+        bi.updateJobQueueDates( job, tab, t0+10 )
+        check_queue_dates( job, submit=t0, complete=t0+10, done=t0+10 )
+
+    def test_queue_dates_for_completed_job_with_zero_elapsed_time(self):
+        ""
+        bi = bat.BatchInterface()
+        job = BatchJob()
+
+        t0 = time.time()
+        job.setQueueDates( submit=t0 )
+
+        tab = bat.JobQueueTable()
+        tab.setJobInfo( job.getJobId(), 'complete', t0+1, 0 )
+        bi.updateJobQueueDates( job, tab, t0+10 )
+        check_queue_dates( job, submit=t0, complete=t0+10, done=t0+10 )
+
+    def test_running_date_when_no_start_date_given_by_query_queue(self):
+        ""
+        bi = bat.BatchInterface()
+        job = BatchJob()
+
+        t0 = time.time()
+        job.setQueueDates( submit=t0 )
+
+        tab = bat.JobQueueTable()
+        tab.setJobInfo( job.getJobId(), 'running', None, 2 )
+        bi.updateJobQueueDates( job, tab, t0+10 )
+        check_queue_dates( job, submit=t0, running=t0+10 )
+
+    def test_job_exit_when_script_stop_date_is_set(self):
         ""
         bi = bat.BatchInterface()
         job = BatchJob()
@@ -454,15 +582,15 @@ class Functions_update_job_dates( unittest.TestCase ):
 
 
 def check_queue_dates( job, submit=None, pending=None,
-                            run=None, complete=None, done=None ):
+                            running=None, complete=None, done=None ):
     """
     """
     jsub,jpend,jrun,jcomp,jdone = job.getQueueDates()
 
     assert jsub == submit
     assert jpend == pending
-    assert jrun  == run
-    assert jcomp == complete
+    assert jrun  == running
+    assert jcomp == complete, 'jcomp '+str(jcomp)+' != complete '+str(complete)
     assert jdone == done
 
 

@@ -79,6 +79,11 @@ class BatchInterface:
         """
         raise NotImplementedError( "Method submit()" )
 
+    def queryQueue(self, jobtable):
+        """
+        """
+        raise NotImplementedError( "Method queryQueue()" )
+
     def poll(self):
         """
         """
@@ -136,7 +141,7 @@ class BatchInterface:
                     if start and tused:
                         tm = start+tused
                     else:
-                        tm = time.time()
+                        tm = curtime
                     job.setQueueDates( complete=tm )
 
                 job.setQueueDates( done=curtime )
