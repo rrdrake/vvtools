@@ -569,16 +569,81 @@ class Functions_update_jobs( unittest.TestCase ):
         bi.updateJobQueueDates( job, tab, t0+10 )
         check_queue_dates( job, submit=t0, running=t0+10 )
 
-    def test_job_exit_when_script_stop_date_is_set(self):
+    def test_script_will_finish_when_stop_date_is_set(self):
         ""
         bi = bat.BatchInterface()
         job = BatchJob()
 
         t0 = time.time()
+        job.setQueueDates( submit=t0 )
         job.setScriptDates( start=t0, stop=t0+5 )
 
-        bi.updateJobExit( job, t0+8 )
+        bi.updateJobFinished( job, t0+8 )
         check_script_dates( job, start=t0, stop=t0+5, done=t0+8 )
+
+    def test_script_timeout_after_queue_is_marked_done(self):
+        ""
+        bi = bat.BatchInterface()
+        bi.setTimeout( 'script', 10 )
+        job = BatchJob()
+
+        t0 = time.time()
+        job.setQueueDates( submit=t0 )
+
+        bi.updateJobFinished( job, t0+5 )
+        check_script_dates( job )
+
+        job.setQueueDates( done=t0+10 )
+
+        # should not timeout yet
+        bi.updateJobFinished( job, t0+15 )
+        check_script_dates( job )
+
+        # should timeout this time
+        bi.updateJobFinished( job, t0+25 )
+        check_script_dates( job, done=t0+25 )
+
+    def test_a_missing_job_times_out_and_is_marked_done(self):
+        ""
+        bi = bat.BatchInterface()
+        bi.setTimeout( 'missing', 10 )
+        job = BatchJob()
+
+        t0 = time.time()
+        job.setQueueDates( submit=t0 )
+
+        bi.updateJobFinished( job, t0+5 )
+        check_queue_dates( job, submit=t0 )
+
+        bi.updateJobFinished( job, t0+15 )
+        check_queue_dates( job, submit=t0, done=t0+15 )
+
+    def test_a_missing_job_uses_script_done_date_to_time_out(self):
+        ""
+        bi = bat.BatchInterface()
+        bi.setTimeout( 'missing', 60 )
+        bi.setTimeout( 'complete', 30 )
+        job = BatchJob()
+
+        t0 = time.time()
+        job.setQueueDates( submit=t0 )
+
+        bi.updateJobFinished( job, t0+10 )
+        check_queue_dates( job, submit=t0 )
+
+        job.setScriptDates( done=t0+15 )
+        bi.updateJobFinished( job, t0+20 )
+        check_queue_dates( job, submit=t0 )
+
+        bi.updateJobFinished( job, t0+30 )
+        check_queue_dates( job, submit=t0 )
+
+        bi.updateJobFinished( job, t0+40 )
+        check_queue_dates( job, submit=t0 )
+
+        # should timeout after t0+15+30
+        bi.updateJobFinished( job, t0+55 )
+        check_queue_dates( job, submit=t0, done=t0+55 )
 
 
 def check_queue_dates( job, submit=None, pending=None,
@@ -587,7 +652,7 @@ def check_queue_dates( job, submit=None, pending=None,
     """
     jsub,jpend,jrun,jcomp,jdone = job.getQueueDates()
 
-    assert jsub == submit
+    assert jsub == submit, 'jsub '+str(jsub)+' != submit '+str(submit)
     assert jpend == pending
     assert jrun  == running
     assert jcomp == complete, 'jcomp '+str(jcomp)+' != complete '+str(complete)

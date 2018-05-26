@@ -39,7 +39,13 @@ class BatchInterface:
         ""
         self.ppn = None
 
-        self.jobs = {}  # dict jobid -> BatchJob
+        self.jobs = {}  # jobid -> BatchJob
+
+        self.timeouts = {
+                'script': 5*60,
+                'missing': 10*60,
+                'complete': 60,
+            }
 
     def addJob(self, job):
         """
@@ -68,6 +74,26 @@ class BatchInterface:
         """
         ppn = self.getProcessorsPerNode()
         return compute_num_nodes( num_cores, cores_per_node, ppn )
+
+    def setTimeout(self, name, timeout_seconds):
+        """
+        The 'name' must be one of
+
+            script : once the queue shows the job done, wait this long before
+                     giving up on the script to have a stop date
+            missing : if the job never shows up in the queue, this is the time
+                      after the submit date when it will be marked done
+            complete : if the job never shows up in the queue, this is the time
+                       after the script done date when it will be marked done
+
+        - minimum time between log file checks
+        """
+        assert name in ['script','missing','complete']
+        self.timeouts[name] = timeout_seconds
+
+    def getTimeout(self, name):
+        ""
+        return self.timeouts[name]
 
     def writeScriptHeader(self, job, fileobj):
         """
@@ -105,7 +131,7 @@ class BatchInterface:
 
             self.updateJobScriptDates( job )
             self.updateJobQueueDates( job, jqtab, time.time() )
-            self.updateJobExit( job, time.time() )
+            self.updateJobFinished( job, time.time() )
 
     def updateJobScriptDates(self, job):
         ""
@@ -149,31 +175,28 @@ class BatchInterface:
         elif was_pending or was_running:
             job.setQueueDates( done=curtime )
 
-    def updateJobExit(self, job, curtime):
+    def updateJobFinished(self, job, curtime):
         ""
         start,stop,sdone = job.getScriptDates()
+        sub,pend,run,comp,qdone = job.getQueueDates()
 
         if stop:
             job.setScriptDates( done=curtime )
 
         else:
-            dt,dt,dt,dt,qdone = job.getQueueDates()
-
-            complete_timeout = 5
-            if start and qdone and curtime-qdone > complete_timeout:
+            tm = self.getTimeout( 'script' )
+            if qdone and curtime-qdone > tm:
                 job.setScriptDates( done=curtime )
 
-        # if not start and absent too long,
-        #   mark exit=missing
-
-        # if started, not running, and no stop date for too long,
-        #   mark exit=fail
-
-        # if not started and not in the queue for too long,
-        #   mark exit=missing
-
-        # if was marked running at least once, but not started for too long,
-        #   mark exit=missing
+        if not ( pend or run or comp or qdone ):
+            if sdone:
+                tm = self.getTimeout( 'complete' )
+                if curtime-sdone > tm:
+                    job.setQueueDates( done=curtime )
+            else:
+                tm = self.getTimeout( 'missing' )
+                if curtime-sub > tm:
+                    job.setQueueDates( done=curtime )
 
     def cancel(self, job_list=None):
         ""
