@@ -354,10 +354,11 @@ def run_shell_command( cmd ):
 
     out,err = p.communicate()
 
-    if out != None and sys.version_info[0] > 2:
-        out = out.decode()
-    if err != None and sys.version_info[0] > 2:
-        err = err.decode()
+    if sys.version_info[0] > 2:
+        if out != None:
+            out = out.decode()
+        if err != None:
+            err = err.decode()
 
     return p.returncode, out, err
 

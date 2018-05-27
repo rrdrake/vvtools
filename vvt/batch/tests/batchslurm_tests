@@ -72,9 +72,10 @@ SOME HEADER STUFF
 7291680 _ R _ 2018-04-21T12:57:38 _ 7:37
 7291807 _ PD _ N/A _ 0:00
 7254586 _ CG _ 2018-04-20T21:05:58 _ 2:00:25
+7254582 _ CA _ N/A _ 0:00
             """ )
 
-        assert jqtab.numJobs() == 3
+        assert jqtab.numJobs() == 4
 
         jid = '7254586'
         assert jqtab.getState(jid) == 'running'
@@ -88,6 +89,11 @@ SOME HEADER STUFF
 
         jid = '7291807'
         assert jqtab.getState(jid) == 'pending'
+        assert jqtab.getStartDate(jid) == None
+        assert jqtab.getTimeUsed(jid) == 0
+
+        jid = '7254582'
+        assert jqtab.getState(jid) == 'done'
         assert jqtab.getStartDate(jid) == None
         assert jqtab.getTimeUsed(jid) == 0
 

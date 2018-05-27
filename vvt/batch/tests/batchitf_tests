@@ -718,6 +718,61 @@ def check_script_dates( job, start=None, stop=None, done=None ):
     assert jdone == done
 
 
+class BatchScripts_methods( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_submit_function_in_nominal_case(self):
+        ""
+        class BatSub( bat.BatchInterface ):
+            def submitJobScript(self, job):
+                return '123', 'job id 123', ''
+
+        bs = BatSub()
+        job = BatchJob()
+
+        bs.submit( job )
+
+        assert job.getJobId() == '123'
+        assert time.time() - job.getQueueDates()[0] < 2
+        assert job.getSubmitOutput()[0].strip() == 'job id 123'
+        assert not job.getSubmitOutput()[1].strip()
+
+    def test_a_controlled_submit_failure(self):
+        ""
+        class BatSub( bat.BatchInterface ):
+            def submitJobScript(self, job):
+                return None, '', 'could not submit job'
+
+        bs = BatSub()
+        job = BatchJob()
+
+        bs.submit( job )
+
+        assert job.getJobId() == None
+        assert time.time() - job.getQueueDates()[0] < 2
+        assert not job.getSubmitOutput()[0].strip()
+        assert 'could not submit job' in job.getSubmitOutput()[1]
+
+    def test_a_python_traceback_from_submit(self):
+        ""
+        class BatSub( bat.BatchInterface ):
+            def submitJobScript(self, job):
+                raise Exception( 'test exception' )
+
+        bs = BatSub()
+        job = BatchJob()
+
+        bs.submit( job )
+
+        assert job.getJobId() == None
+        assert time.time() - job.getQueueDates()[0] < 2
+        assert 'Traceback' in job.getSubmitOutput()[1]
+        assert 'test exception' in job.getSubmitOutput()[1]
+
+
 ############################################################################
 
 util.run_test_cases( sys.argv, sys.modules[__name__] )
