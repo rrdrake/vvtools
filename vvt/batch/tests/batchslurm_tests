@@ -16,12 +16,16 @@ import glob
 import shlex
 from getopt import getopt
 
+try:
+    from StringIO import StringIO
+except:
+    from io import StringIO
+
 import testutils as util
 from testutils import print3
 
-import FakeSLURM as sfake
-
 from batchitf import JobQueueTable
+
 from batchSLURM import parse_queue_table_output
 from batchSLURM import parse_elapsed_time_string
 from batchSLURM import parse_date_string
@@ -30,15 +34,8 @@ from batchSLURM import BatchSLURM
 
 from batchjob import BatchJob
 
-from common_tests import Method_computeNumNodes
-from common_tests import Batch_output_file
-from common_tests import Batch_work_directory
-from common_tests import Batch_submit
-from common_tests import Batch_queue_dates
-from common_tests import Batch_start_stop_dates
 
-
-class batchSLURM_free_functions( unittest.TestCase ):
+class BatchSLURM_free_functions( unittest.TestCase ):
 
     def setUp(self):
         ""
@@ -81,12 +78,12 @@ SOME HEADER STUFF
 
         jid = '7254586'
         assert jqtab.getState(jid) == 'running'
-        assert month_day_year( jqtab.getStartDate(jid) ) == (4,20,2018)
+        assert get_month_day_year( jqtab.getStartDate(jid) ) == (4,20,2018)
         assert jqtab.getTimeUsed(jid) == 2*60*60+0*60+25
 
         jid = '7291680'
         assert jqtab.getState(jid) == 'running'
-        assert month_day_year( jqtab.getStartDate(jid) ) == (4,21,2018)
+        assert get_month_day_year( jqtab.getStartDate(jid) ) == (4,21,2018)
         assert jqtab.getTimeUsed(jid) == 7*60+37
 
         jid = '7291807'
@@ -97,119 +94,103 @@ SOME HEADER STUFF
     def test_parse_submit_output_for_job_id(self):
         ""
         jid = parse_submit_output_for_job_id(
-                'Submitted batch job 291041', '' )
+                'Submitted batch job 291041' )
         assert jid == '291041'
 
         jid = parse_submit_output_for_job_id(
-                'some junk\nfoo Submitted batch job 291041\nfollow on junk',
-                '' )
+                'some junk\nfoo Submitted batch job 291041\nfollow on junk' )
         assert jid == '291041'
 
         jid = parse_submit_output_for_job_id(
-                'Submitted batch job 291041_123\n', '' )
+                'Submitted batch job 291041_123\n' )
         assert jid == '291041_123'
 
-        jid = parse_submit_output_for_job_id(
-                'Submitted batch job 291041_123\n', 'some error output' )
-        assert jid == '291041_123'
-
-        assert parse_submit_output_for_job_id( '', '' ) == None
-        assert parse_submit_output_for_job_id( 'Submitted blah', '' ) == None
-        assert parse_submit_output_for_job_id( 'Submitted blah', 'errors' ) == None
-        assert parse_submit_output_for_job_id( '', 'error output' ) == None
+        assert parse_submit_output_for_job_id( '' ) == None
+        assert parse_submit_output_for_job_id( 'Submitted blah' ) == None
 
 
-class BatchSLURM_computeNumNodes( Method_computeNumNodes, unittest.TestCase ):
-
-    def makeBatchInterface(self):
-        bat = BatchSLURM()
-        bat.setProcessorsPerNode( 36 )
-        return bat
-
-    # inherit the tests from Method_computeNumNodes, but add the following
-
-    def test_ppn_must_be_set(self):
-        ""
-        bat = BatchSLURM()
-
-        # there is no default processors-per-node for batch systems
-        self.assertRaises( Exception, bat.computeNumNodes, 1 )
-
-
-class BatchSLURM_output_file( Batch_output_file, unittest.TestCase ):
-
-    def makeBatchInterface(self):
-        ""
-        bat = BatchSLURM()
-        engine = sfake.FakeSLURM()
-        bat.setBatchCommandRunner( engine.runcmd )
-        return bat
-
-
-class BatchSLURM_work_directory( Batch_work_directory, unittest.TestCase ):
-
-    def makeBatchInterface(self):
-        ""
-        bat = BatchSLURM()
-        engine = sfake.FakeSLURM()
-        bat.setBatchCommandRunner( engine.runcmd )
-        return bat
-
-
-class BatchSLURM_submit( Batch_submit, unittest.TestCase ):
-
-    def makeBatchInterface(self):
-        ""
-        bat = BatchSLURM()
-        engine = sfake.FakeSLURM()
-        bat.setBatchCommandRunner( engine.runcmd )
-        return bat
-
-
-class BatchSLURM_queue_dates( Batch_queue_dates, unittest.TestCase ):
-
-    def makeBatchInterface(self):
-        ""
-        bat = BatchSLURM()
-        engine = sfake.FakeSLURM()
-        bat.setBatchCommandRunner( engine.runcmd )
-        return bat
-
-
-class BatchSLURM_start_stop_dates( Batch_start_stop_dates, unittest.TestCase ):
-
-    def makeBatchInterface(self):
-        ""
-        bat = BatchSLURM()
-        engine = sfake.FakeSLURM()
-        bat.setBatchCommandRunner( engine.runcmd )
-        return bat
+def get_month_day_year( epoch_time ):
+    ""
+    tup = time.localtime( epoch_time )
+    return ( tup[1], tup[2], tup[0] )
 
 
 ############################################################################
 
-def equal_batch_format_date_strings( datestr, baseline ):
-    """
-    Both strings are like '2018-04-22T11:10:05'.
-    Only checks the date and minute:second (does not check the hour).
-    """
-    dt,tm = baseline.split( 'T' )
-    ok = ( datestr.startswith( dt ) and datestr.endswith( tm ) )
-    return ok
+class BatchSLURM_methods( unittest.TestCase ):
 
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
 
-def make_epoch( string_time ):
-    """
-    'string_time' is output of time.ctime(), such as 'Sat Apr 28 08:49:22 2018'
-    """
-    return time.mktime( time.strptime( string_time ) )
+    def test_write_minimal_header(self):
+        ""
+        bat = BatchSLURM()
+        job = BatchJob()
 
+        sio = StringIO()
+        bat.writeScriptHeader( job, sio )
 
-def month_day_year( epoch_time ):
-    """
-    """
-    tup = time.localtime( epoch_time )
-    return ( tup[1], tup[2], tup[0] )
+        s = sio.getvalue()
+        assert 'SBATCH --nodes=1' in s
+        assert 'SBATCH --time=' in s
+        assert 'SBATCH --output='+job.getLogFileName() in s
+        assert len( util.grep( s, '#SBATCH ' ) ) == 3
+
+    def test_write_full_header(self):
+        ""
+        bat = BatchSLURM()
+        job = BatchJob()
+        job.setNumNodes( 5 )
+        job.setQueueName( 'bigmem' )
+        job.setAccount( 'vip' )
+
+        sio = StringIO()
+        bat.writeScriptHeader( job, sio )
+
+        s = sio.getvalue()
+        assert 'SBATCH --nodes=5' in s
+        assert 'SBATCH --time=' in s
+        assert 'SBATCH --output='+job.getLogFileName() in s
+        assert 'SBATCH --partition=bigmem' in s
+        assert 'SBATCH --account=vip' in s
+        assert len( util.grep( s, '#SBATCH ' ) ) == 5
+
+    def test_exercise_the_submit_function(self):
+        ""
+        def do_sbatch( command ):
+            assert command.startswith( 'sbatch ' )
+            out = "Submitted batch job 291041"
+            return 0,out,''
+
+        bat = BatchSLURM()
+        bat.setBatchCommandRunner( do_sbatch )
+
+        job = BatchJob()
+
+        jid,out,err = bat.submitJobScript( job )
+
+        assert jid == '291041'
+
+    def test_exercise_the_queue_query_function(self):
+        ""
+        def do_squeue( command ):
+            assert command.startswith( 'squeue ' )
+            out = """
+7291680 _ R _ 2018-04-21T12:57:38 _ 7:37
+7291807 _ PD _ N/A _ 0:00
+7254586 _ CD _ 2018-04-20T21:05:58 _ 2:00:25
+            """
+            return 0,out,''
+
+        bat = BatchSLURM()
+        bat.setBatchCommandRunner( do_squeue )
+
+        jobtable = JobQueueTable()
+
+        bat.queryQueue( jobtable )
+
+        assert jobtable.numJobs() == 3
 
 
 ############################################################################

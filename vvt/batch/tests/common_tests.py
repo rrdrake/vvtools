@@ -60,6 +60,10 @@ class Method_computeNumNodes:
         assert self.bat.computeNumNodes( 4, 2 ) == 2
         assert self.bat.computeNumNodes( 5, 2 ) == 3
 
+    def test_without_ppn_set_always_default_to_one_compute_node(self):
+        ""
+        assert self.bat.computeNumNodes( 1000000 ) == 1
+
 
 class Batch_output_file:
 

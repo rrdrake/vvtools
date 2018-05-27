@@ -10,6 +10,7 @@ sys.excepthook = sys.__excepthook__
 import os
 import time
 import subprocess
+import traceback
 
 
 """
@@ -42,8 +43,8 @@ class BatchInterface:
         self.jobs = {}  # jobid -> BatchJob
 
         self.timeouts = {
-                'script': 5*60,
-                'missing': 10*60,
+                'script'  : 5*60,
+                'missing' : 10*60,
                 'complete': 60,
                 'logcheck': 60,
             }
@@ -103,6 +104,30 @@ class BatchInterface:
 
     def submit(self, job):
         """
+        If the submission fails, then the job ID will be None.  The submit
+        stdout and stderr are set either way.
+        """
+        try:
+            jobid,out,err = self.submitJobScript( job )
+
+        except Exception:
+            err = traceback.format_exc()
+            out = ''
+            jobid = None
+
+        if jobid == None:
+            err += '\n*** submit appears to have failed ***\n'
+        else:
+            job.setJobId( jobid )
+            self.addJob( job )
+
+        job.setQueueDates( submit=time.time() )
+        job.setSubmitOutput( out=out, err=err )
+
+    def submitJobScript(self, job):
+        """
+        Return jobid, stdout, stderr with 'jobid' being None if the submission
+        fails.
         """
         raise NotImplementedError( "Method submit()" )
 
@@ -110,6 +135,10 @@ class BatchInterface:
         """
         """
         raise NotImplementedError( "Method queryQueue()" )
+
+    def cancel(self, job_list=None):
+        ""
+        raise NotImplementedError( "Method cancel()" )
 
     def poll(self):
         """
@@ -127,7 +156,6 @@ class BatchInterface:
     def updateBatchJobResults(self, job, jqtab):
         """
         """
-        print ( 'magic: update', jqtab.jobinfo.get( job.getJobId(), None ), job.isFinished() )
         if not job.isFinished():
 
             curtime = time.time()
@@ -205,10 +233,6 @@ class BatchInterface:
                 tm = self.getTimeout( 'missing' )
                 if curtime-sub > tm:
                     job.setQueueDates( done=curtime )
-
-    def cancel(self, job_list=None):
-        ""
-        raise NotImplementedError( "Method cancel()" )
 
     def writeScriptFile(self, job):
         ""
@@ -459,7 +483,7 @@ def parse_date_string( datestr ):
                     if yr > 1970 and yr < 3000:
                         fmt += ' %Y'
                         val += ' '+s
-                except:
+                except Exception:
                     pass
 
             i += 1
@@ -468,7 +492,7 @@ def parse_date_string( datestr ):
             tup = time.strptime( val, fmt )
             tm = time.mktime( tup )
 
-    except:
+    except Exception:
         pass
 
     return tm

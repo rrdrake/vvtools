@@ -19,16 +19,7 @@ class BatchSLURM( batchitf.BatchInterface ):
         ""
         batchitf.BatchInterface.__init__(self)
 
-        # the function that issues shell batch commands
         self.runcmd = batchitf.run_shell_command
-
-    def computeNumNodes(self, num_cores, cores_per_node=None):
-        ""
-        assert cores_per_node != None or self.getProcessorsPerNode() != None, \
-            "Processors per node must set if 'cores_per_node' is not"
-        superfunc = batchitf.BatchInterface.computeNumNodes
-        n = superfunc( self, num_cores, cores_per_node )
-        return n
 
     def writeScriptHeader(self, job, fileobj):
         ""
@@ -49,19 +40,14 @@ class BatchSLURM( batchitf.BatchInterface ):
 
         batchitf.lineprint( fileobj, '' )
 
-    def submit(self, job):
+    def submitJobScript(self, job):
         """
         """
         x,out,err = self.runcmd( 'sbatch '+job.getBatchFileName() )
 
-        job.setSubmitOutput( out=out, err=err )
+        jid = parse_submit_output_for_job_id( out )
 
-        jid = parse_submit_output_for_job_id( out, err )
-
-        job.setJobId( jid )
-        job.setQueueDates( submit=time.time() )
-
-        self.addJob( job )
+        return jid,out,err
 
     def queryQueue(self, jobtable):
         """
@@ -75,15 +61,8 @@ class BatchSLURM( batchitf.BatchInterface ):
             %V job's submission time
             %S actual or expected start time
             %M time used by the job (an INVALID is possible)
-
-        - timeouts: waiting too long to show up in the queue, waiting
-                    too long for the log file to be created, waiting too
-                    long for the "finished" date to appear in the log file
-        - avoid excessive file system activity by pausing in between job log
-          fstat and reads (to get run dates)
         """
-        cmd = 'squeue --noheader -o "%i _ %t _ %S _ %M"'
-        x,out,err = self.runcmd( cmd )
+        x,out,err = self.runcmd( 'squeue --noheader -o "%i _ %t _ %S _ %M"' )
 
         parse_queue_table_output( jobtable, out )
 
@@ -93,20 +72,20 @@ class BatchSLURM( batchitf.BatchInterface ):
 
     def setBatchCommandRunner(self, func):
         """
-        The function that is used to execute shell batch commands.  Should
-        return tuple ( exit status, stdout output, stderr output ).
+        The function that is used to execute shell batch commands.  Used for
+        testing.  Should return ( exit status, stdout output, stderr output ).
         """
         self.runcmd = func
 
 
-def parse_submit_output_for_job_id( out, err ):
+def parse_submit_output_for_job_id( output ):
     """
     output should contain something like the following
        Submitted batch job 291041
     """
     jobid = None
 
-    L1 = out.split( "Submitted batch job", 1 )
+    L1 = output.strip().split( "Submitted batch job", 1 )
     if len(L1) == 2:
         L2 = L1[1].strip().split()
         if len(L2) > 0 and L2[0]:
@@ -170,7 +149,7 @@ def parse_date_string( dstr ):
             try:
                 tup = time.strptime( dstr, "%Y-%m-%dT%H:%M:%S" )
                 tm = time.mktime( tup )
-            except:
+            except Exception:
                 pass
 
     return tm
@@ -193,7 +172,7 @@ def parse_elapsed_time_string( dstr ):
         try:
             dy = int( sL[0] )
             hms = sL[1]
-        except:
+        except Exception:
             return None
 
     nL = hms.split(':')
@@ -202,7 +181,7 @@ def parse_elapsed_time_string( dstr ):
         sc = int( nL[-1] )
         if sc < 0 or sc >= 60:
             return None
-    except:
+    except Exception:
         return None
 
     if len(nL) > 1:
@@ -210,7 +189,7 @@ def parse_elapsed_time_string( dstr ):
             mn = int( nL[-2] )
             if mn < 0 or mn >= 60:
                 return None
-        except:
+        except Exception:
             return None
 
     if len(nL) > 2:
@@ -218,7 +197,7 @@ def parse_elapsed_time_string( dstr ):
             hr = int( nL[-3] )
             if hr < 0 or hr > 24:
                 return None
-        except:
+        except Exception:
             return None
 
     return dy*24*60*60 + hr*60*60 + mn*60 + sc

@@ -28,7 +28,7 @@ class BatchScripts( batchitf.BatchInterface ):
         ""
         pass
 
-    def submit(self, job):
+    def submitJobScript(self, job):
         """
         """
         batname = job.getBatchFileName()
@@ -37,14 +37,12 @@ class BatchScripts( batchitf.BatchInterface ):
         sproc = self.runr.submit( batname, redirect=logname )
 
         jid = str( sproc.getId() )
-        subdate = time.time()
+        out = 'Job ID: '+jid
+        err = ''
 
-        job.setJobId( jid )
-        job.setQueueDates( submit=subdate )
-        job.setSubmitOutput( out='Job ID: '+jid, err='' )
-
-        self.addJob( job )
         self.sprocs[ jid ] = sproc
+
+        return jid,out,err
 
     def queryQueue(self, jqtab):
         """
