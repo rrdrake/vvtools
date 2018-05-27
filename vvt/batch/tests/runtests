@@ -38,6 +38,7 @@ OPTIONS
                          versions used with -p (instead of globbing)
     -r          : for tests that accept a remote python version (option -r),
                   iterate on a list of python versions and execute with -r
+    --coverage  : generate python coverage data; viewable as html afterwards
 """
 
 
@@ -45,13 +46,15 @@ OPTIONS
 
 def main():
 
-    optL,argL = getopt.getopt( sys.argv[1:], 'hsp:v:rj:', longopts=['help'] )
+    optL,argL = getopt.getopt( sys.argv[1:], 'hsp:v:rj:',
+                               longopts=['help','coverage'] )
 
     iterpy = ''
     pydirs = None
     realssh = False
     remotepy = False
     numconcurrent = 1
+    coverage = False
 
     for n,v in optL:
         if n == '-h' or n == '--help':
@@ -68,6 +71,8 @@ def main():
         elif n == '-j':
             numconcurrent = int( v )
             assert numconcurrent >= 1
+        elif n == '--coverage':
+            coverage = True
 
     if iterpy:
         pyL = []
@@ -82,6 +87,9 @@ def main():
     tdir = makeTestDir()
     print3( 'cd '+tdir )
     os.chdir(tdir)
+
+    if coverage:
+        prepare_to_run_python_coverage()
 
     # collect the test commands to be run
     cmdD = {}
@@ -154,6 +162,10 @@ def main():
             nf += 1
     if nf == 0:
         print3( "ALL TESTS PASSED" )
+
+    if coverage:
+        os.chdir( tdir )
+        post_process_coverage_data()
 
 
 ###########################################################################
@@ -231,6 +243,64 @@ def makeTestDir():
     os.mkdir(dname)
 
     return os.path.abspath(dname)
+
+
+def prepare_to_run_python_coverage():
+    """
+    Write coverage rc file and set coverage environment variable.
+
+    This assumes your python contains the coverage.py package and is
+    configured to check for coverage on python startup.  Information at
+    http://coverage.readthedocs.io/en/coverage-4.2/index.html.
+
+    Here is what I did to install python with coverage support:
+
+        1. install python Python-2.7.12.tar.xz
+            $ configure --prefix /home/rrdrake/bin/pycov/py27
+            $ make
+            $ make install
+        2. install setup setuptools-39.0.1.tar.gz
+            $ (first set path to use new python)
+            $ python bootstrap.py
+            $ python setup.py install
+        3. install coverage.py coveragepy-coverage-4.5.1.tar.gz
+            $ (first set path to use new python)
+            $ python setup.py install
+        4. add sitecustomize.py file in python install area
+            - vi py27/lib/python2.7/sitecustomize.py
+                import coverage
+                coverage.process_startup()
+    """
+    fp = open( 'coverage_rc', 'w' )
+    try:
+        fp.write(
+"""
+[run]
+parallel = True
+data_file = """+os.path.abspath('.coverage')+"""
+""" )
+    finally:
+        fp.close()
+
+    os.environ['COVERAGE_PROCESS_START'] = os.path.abspath( 'coverage_rc' )
+
+
+def post_process_coverage_data():
+    """
+    Combine the coverage data from each test and generate an html report.
+    """
+    del os.environ['COVERAGE_PROCESS_START']
+
+    x = subprocess.call( 'coverage combine', shell=True )
+    assert x == 0
+
+    # may need --ignore-errors if it cannot find some source files
+    cmd = 'coverage html --omit="'+os.getcwd()+'/*"'
+    x = subprocess.call( cmd, shell=True )
+    assert x == 0
+
+    fL = glob.glob( os.path.abspath( 'html*/index.htm*' ) )
+    print3( 'coverage:', fL[0] )
 
 
 def print3( *args ):
