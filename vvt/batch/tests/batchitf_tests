@@ -422,10 +422,13 @@ class Functions_update_jobs( unittest.TestCase ):
     def test_set_script_dates_multiple_times(self):
         ""
         bi = bat.BatchInterface()
+        bi.setTimeout( 'logcheck', 1 )
         job = BatchJob()
         job.setLogFileName( 'log.txt' )
 
-        bi.updateJobScriptDates( job )
+        t0 = time.time()
+
+        bi.updateJobScriptDates( job, t0 )
         start,stop,done = job.getScriptDates()
 
         assert start == None and stop == None
@@ -437,11 +440,11 @@ class Functions_update_jobs( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        bi.updateJobScriptDates( job )
+        bi.updateJobScriptDates( job, t0+10 )
         start,stop,done = job.getScriptDates()
 
-        t0 = bat.parse_date_string( 'Fri May 25 14:31:50 MDT 2018' )
-        assert start != None and start == t0 and stop == None
+        tm_start = bat.parse_date_string( 'Fri May 25 14:31:50 MDT 2018' )
+        assert start != None and start == tm_start and stop == None
 
         util.writefile( 'log.txt', """
             SCRIPT START DATE: Fri May 25 14:31:50 MDT 2018
@@ -451,12 +454,12 @@ class Functions_update_jobs( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        bi.updateJobScriptDates( job )
+        bi.updateJobScriptDates( job, t0+20 )
         start,stop,done = job.getScriptDates()
 
-        t1 = bat.parse_date_string( 'Fri May 25 14:31:55 MDT 2018' )
-        assert start != None and start == t0
-        assert stop != None and stop == t1
+        tm_stop = bat.parse_date_string( 'Fri May 25 14:31:55 MDT 2018' )
+        assert start != None and start == tm_start
+        assert stop != None and stop == tm_stop
 
     def test_queue_dates_on_nominal_queue_sequence(self):
         ""
@@ -644,6 +647,52 @@ class Functions_update_jobs( unittest.TestCase ):
         # should timeout after t0+15+30
         bi.updateJobFinished( job, t0+55 )
         check_queue_dates( job, submit=t0, done=t0+55 )
+
+    def test_dates_of_last_job_log_parse(self):
+        ""
+        job = BatchJob()
+
+        tm = bat.get_parse_script_date( job )
+        assert tm == 0
+
+        t0 = time.time()
+
+        bat.set_parse_script_date( job, t0 )
+        tm = bat.get_parse_script_date( job )
+        assert tm == t0
+
+        bat.set_parse_script_date( job, t0+10 )
+        tm = bat.get_parse_script_date( job )
+        assert tm == t0+10
+
+    def test_time_between_script_log_file_parse(self):
+        ""
+        bi = bat.BatchInterface()
+        bi.setTimeout( 'logcheck', 5 )
+        job = BatchJob()
+        job.setLogFileName( 'log.txt' )
+
+        t0 = time.time()
+
+        bi.updateJobScriptDates( job, t0 )
+        start,stop,done = job.getScriptDates()
+        assert start == None and stop == None
+
+        util.writefile( 'log.txt', """
+            SCRIPT START DATE: Fri May 25 14:31:50 MDT 2018
+            UNAME: Linux ceerws1803 2.6.32-642.1.1.el6.x8...
+            cd .
+            SCRIPT STOP DATE: Fri May 25 14:31:55 MDT 2018
+            """ )
+        time.sleep(1)
+
+        bi.updateJobScriptDates( job, t0+2 )
+        start,stop,done = job.getScriptDates()
+        assert start == None and stop == None
+
+        bi.updateJobScriptDates( job, t0+10 )
+        start,stop,done = job.getScriptDates()
+        assert start != None and stop != None
 
 
 def check_queue_dates( job, submit=None, pending=None,

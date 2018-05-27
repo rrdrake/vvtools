@@ -45,6 +45,7 @@ class BatchInterface:
                 'script': 5*60,
                 'missing': 10*60,
                 'complete': 60,
+                'logcheck': 60,
             }
 
     def addJob(self, job):
@@ -85,10 +86,10 @@ class BatchInterface:
                       after the submit date when it will be marked done
             complete : if the job never shows up in the queue, this is the time
                        after the script done date when it will be marked done
-
-        - minimum time between log file checks
+            logcheck : minimum time between opening the job log file to parse
+                       the script dates (this is to avoid disk thrashing)
         """
-        assert name in ['script','missing','complete']
+        assert name in ['script','missing','complete','logcheck']
         self.timeouts[name] = timeout_seconds
 
     def getTimeout(self, name):
@@ -129,19 +130,26 @@ class BatchInterface:
         print ( 'magic: update', jqtab.jobinfo.get( job.getJobId(), None ), job.isFinished() )
         if not job.isFinished():
 
-            self.updateJobScriptDates( job )
-            self.updateJobQueueDates( job, jqtab, time.time() )
-            self.updateJobFinished( job, time.time() )
+            curtime = time.time()
 
-    def updateJobScriptDates(self, job):
+            self.updateJobScriptDates( job, curtime )
+            self.updateJobQueueDates( job, jqtab, curtime )
+            self.updateJobFinished( job, curtime )
+
+    def updateJobScriptDates(self, job, curtime):
         ""
         start,stop,done = job.getScriptDates()
 
-        if not stop:
+        last_check = get_parse_script_date( job )
+        tm = self.getTimeout( 'logcheck' )
+
+        if not stop and curtime-last_check > tm:
 
             start,stop = self.parseScriptDates( job.getLogFileName() )
 
             job.setScriptDates( start=start, stop=stop )
+
+            set_parse_script_date( job, curtime )
 
     def updateJobQueueDates(self, job, jqtab, curtime):
         ""
@@ -328,6 +336,20 @@ def run_shell_command( cmd ):
         err = err.decode()
 
     return p.returncode, out, err
+
+
+def get_parse_script_date( job ):
+    """
+    The last time the job log file was parsed for the start/stop dates.
+    """
+    if hasattr( job, 'parse_script_date' ):
+        return job.parse_script_date
+    return 0
+
+
+def set_parse_script_date( job, timevalue ):
+    ""
+    job.parse_script_date = timevalue
 
 
 def lineprint( fileobj, *lines ):

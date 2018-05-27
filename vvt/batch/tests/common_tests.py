@@ -69,6 +69,7 @@ class Batch_output_file:
 
         self.bat = self.makeBatchInterface()
         self.bat.setTimeout( 'script', 5 )
+        self.bat.setTimeout( 'logcheck', 1 )
         self.job = BatchJob()
 
     def test_job_output_always_goes_to_a_file(self):
@@ -107,6 +108,7 @@ class Batch_work_directory:
 
         self.bat = self.makeBatchInterface()
         self.bat.setTimeout( 'script', 5 )
+        self.bat.setTimeout( 'logcheck', 1 )
         self.job = BatchJob()
 
     def grepLogFileFor_mycwd(self):
@@ -163,6 +165,7 @@ class Batch_submit:
 
         self.bat = self.makeBatchInterface()
         self.bat.setTimeout( 'script', 5 )
+        self.bat.setTimeout( 'logcheck', 1 )
         self.job = BatchJob()
 
     def test_jobid_gets_defined_and_is_a_string(self):
@@ -195,6 +198,7 @@ class Batch_queue_dates:
 
         self.bat = self.makeBatchInterface()
         self.bat.setTimeout( 'script', 5 )
+        self.bat.setTimeout( 'logcheck', 1 )
         self.job = BatchJob()
 
     def test_submit_date_gets_set(self):
@@ -272,6 +276,7 @@ class Batch_start_stop_dates:
 
         self.bat = self.makeBatchInterface()
         self.bat.setTimeout( 'script', 5 )
+        self.bat.setTimeout( 'logcheck', 1 )
         self.job = BatchJob()
 
     def test_queue_run_and_done_dates(self):
