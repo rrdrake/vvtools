@@ -11,6 +11,7 @@ import os
 import time
 import subprocess
 import traceback
+import threading
 
 
 """
@@ -40,7 +41,7 @@ class BatchInterface:
         ""
         self.ppn = None
 
-        self.jobs = {}  # jobid -> BatchJob
+        self.jobs = ThreadSafeStore()  # jobid -> BatchJob
 
         self.timeouts = {
                 'script'  : 5*60,
@@ -52,7 +53,7 @@ class BatchInterface:
     def addJob(self, job):
         """
         """
-        self.jobs[ job.getJobId() ] = job
+        self.jobs.set( job.getJobId(), job )
 
     def removeJob(self, jobid):
         """
@@ -146,7 +147,7 @@ class BatchInterface:
         jqtab = JobQueueTable()
         self.queryQueue( jqtab )
 
-        for jid,job in list( self.jobs.items() ):
+        for jid,job in self.jobs.asList():
 
             self.updateBatchJobResults( job, jqtab )
 
@@ -344,6 +345,51 @@ class JobQueueTable:
     def getTimeUsed(self, jobid):
         ""
         return self.jobinfo[jobid][2]
+
+
+class ThreadSafeStore:
+
+    def __init__(self):
+        ""
+        self.store = {}
+        self.lock = threading.Lock()
+
+    def thread_lock(func):
+        ""
+        def thread_lock_wrapper( self, *args, **kwargs ):
+            self.lock.acquire()
+            try:
+                rtn = func( self, *args, **kwargs )
+            finally:
+                self.lock.release()
+            return rtn
+
+        return thread_lock_wrapper
+
+    @thread_lock
+    def set(self, key, value):
+        ""
+        self.store[ key ] = value
+
+    @thread_lock
+    def get(self, key):
+        ""
+        return self.store[ key ]
+
+    @thread_lock
+    def pop(self, key):
+        ""
+        return self.store.pop( key )
+
+    @thread_lock
+    def length(self):
+        ""
+        return len( self.store )
+
+    @thread_lock
+    def asList(self):
+        ""
+        return list( self.store.items() )
 
 
 def run_shell_command( cmd ):

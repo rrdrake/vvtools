@@ -213,6 +213,50 @@ class Function_parse_date_string( unittest.TestCase ):
         assert abs( tm - 1530721762 ) < 2
 
 
+class Class_ThreadSafeStore( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_set_get_an_item(self):
+        ""
+        store = bat.ThreadSafeStore()
+        store.set( 'foo', 'bar' )
+        assert store.get( 'foo' ) == 'bar'
+        store.set( 'foo', 5 )
+        assert store.get( 'foo' ) == 5
+
+    def test_set_get_pop_an_item(self):
+        ""
+        store = bat.ThreadSafeStore()
+        store.set( 'foo', 'bar' )
+        assert store.get( 'foo' ) == 'bar'
+        val = store.pop( 'foo' )
+        assert val == 'bar'
+        self.assertRaises( Exception, store.get, 'foo' )
+
+    def test_get_list_of_items(self):
+        ""
+        store = bat.ThreadSafeStore()
+        store.set( 'foo', 5 )
+        store.set( 'bar', 2 )
+        L = store.asList()
+        L.sort()
+        assert L == [ ('bar',2), ('foo',5) ]
+
+    def test_length_of_store(self):
+        ""
+        store = bat.ThreadSafeStore()
+        assert store.length() == 0
+        store.set( 'foo', 5 )
+        assert store.length() == 1
+        store.set( 'bar', 2 )
+        assert store.length() == 2
+        store.pop( 'foo' )
+        assert store.length() == 1
+
+
 class Class_JobQueueTable( unittest.TestCase ):
 
     def setUp(self):
