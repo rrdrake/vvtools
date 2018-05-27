@@ -18,7 +18,7 @@ import threading
 import testutils as util
 from testutils import print3
 
-import scriptrunner as srmod
+from scriptrunner import ScriptProcess
 
 
 class Class_ScriptProcess( unittest.TestCase ):
@@ -28,27 +28,27 @@ class Class_ScriptProcess( unittest.TestCase ):
 
     def test_unique_process_ids_are_created(self):
         ""
-        ps1 = srmod.ScriptProcess( None )
+        ps1 = ScriptProcess( None )
         id1 = ps1.getId()
 
-        ps2 = srmod.ScriptProcess( None )
+        ps2 = ScriptProcess( None )
         id2 = ps2.getId()
 
         assert id1 != id2
 
     def test_optional_args_checking(self):
         ""
-        ps = srmod.ScriptProcess( None, redirect=None, timeout=None )
+        ps = ScriptProcess( None, redirect=None, timeout=None )
 
         self.assertRaises( Exception,
-            srmod.ScriptProcess, None, redirect=3, timeout=None )
+            ScriptProcess, None, redirect=3, timeout=None )
 
-        ps = srmod.ScriptProcess( None, redirect=None, timeout=3 )
+        ps = ScriptProcess( None, redirect=None, timeout=3 )
 
-        ps = srmod.ScriptProcess( None, redirect=None, timeout=3.3 )
+        ps = ScriptProcess( None, redirect=None, timeout=3.3 )
 
         self.assertRaises( Exception,
-            srmod.ScriptProcess, None, redirect=None, timeout='3' )
+            ScriptProcess, None, redirect=None, timeout='3' )
 
     def test_run_script(self):
         ""
@@ -58,7 +58,7 @@ class Class_ScriptProcess( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        ps = srmod.ScriptProcess( 'runme' )
+        ps = ScriptProcess( 'runme' )
 
         t0,t1 = ps.getDates()
         assert t0 == None and t1 == None
@@ -85,7 +85,7 @@ class Class_ScriptProcess( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        ps = srmod.ScriptProcess( 'runme' )
+        ps = ScriptProcess( 'runme' )
         ps.run()
         wait_on_script_process( ps, 5 )
 
@@ -105,7 +105,7 @@ class Class_ScriptProcess( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        ps = srmod.ScriptProcess( 'runme' )
+        ps = ScriptProcess( 'runme' )
         ps.run()
         wait_on_script_process( ps, 2 )
 
@@ -132,7 +132,7 @@ class Class_ScriptProcess( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        ps = srmod.ScriptProcess( 'runme' )
+        ps = ScriptProcess( 'runme' )
         ps.run()
 
         time.sleep(1)
@@ -157,7 +157,7 @@ class Class_ScriptProcess( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        ps = srmod.ScriptProcess( 'runme', timeout=3 )
+        ps = ScriptProcess( 'runme', timeout=3 )
         ps.run()
 
         script_process_sleep_and_poll( ps, 5 )
@@ -178,7 +178,7 @@ class Class_ScriptProcess( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        ps = srmod.ScriptProcess( 'runme', timeout=3 )
+        ps = ScriptProcess( 'runme', timeout=3 )
         ps.run()
 
         script_process_sleep_and_poll( ps, 6 )
@@ -205,7 +205,7 @@ class Class_ScriptProcess( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        ps = srmod.ScriptProcess( 'runme' )
+        ps = ScriptProcess( 'runme' )
         ps.run()
 
         script_process_sleep_and_poll( ps, 2 )
@@ -227,7 +227,7 @@ class Class_ScriptProcess( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        ps = srmod.ScriptProcess( 'runme' )
+        ps = ScriptProcess( 'runme' )
         ps.run()
 
         script_process_sleep_and_poll( ps, 2 )
@@ -265,7 +265,7 @@ class Class_ScriptProcess( unittest.TestCase ):
         time.sleep(1)
         outfile = os.path.abspath( 'out.txt' )
 
-        ps = srmod.ScriptProcess( 'runme', redirect=outfile )
+        ps = ScriptProcess( 'runme', redirect=outfile )
         ps.run()
 
         wait_on_script_process( ps, 5 )
@@ -276,121 +276,6 @@ class Class_ScriptProcess( unittest.TestCase ):
         assert x == 0
         assert len( util.filegrep( outfile, 'hello' ) ) == 1
         assert len( util.filegrep( outfile, 'world' ) ) == 1
-
-    def test_thread_locking(self):
-        ""
-        ps = srmod.ScriptProcess( 'junk' )
-
-        # start thread that acquires lock then sleeps 5 seconds
-        thr = threading.Thread( target=ps.testThreadLock, args=(5,) )
-        thr.start()
-        time.sleep(1)
-
-        t0 = time.time()
-        ps.isDone()  # this call should have to wait for the lock
-        t1 = time.time()
-
-        thr.join()
-
-        assert t1-t0 > 3
-
-
-class Class_ScriptRunner( unittest.TestCase ):
-
-    def setUp(self):
-        ""
-        util.setup_test()
-
-    def test_run_a_script(self):
-        ""
-        util.writefile( 'script.sh', """
-            cd """+os.getcwd()+"""
-            touch hello.txt
-            """ )
-        time.sleep(1)
-
-        srun = srmod.ScriptRunner()
-        ps = srun.submit( 'script.sh' )
-
-        wait_on_script_process_via_script_queue( srun, ps, 5 )
-
-        time.sleep(1)
-        st,x = ps.getStatus()
-        assert x == 0
-        assert os.path.isfile( 'hello.txt' )
-
-    def test_run_two_scripts(self):
-        ""
-        util.writefile( 'script1.sh', """
-            cd """+os.getcwd()+"""
-            touch hello1.txt
-            """ )
-        util.writefile( 'script2.sh', """
-            cd """+os.getcwd()+"""
-            touch hello2.txt
-            """ )
-        time.sleep(1)
-
-        srun = srmod.ScriptRunner()
-        ps1 = srun.submit( 'script1.sh' )
-        ps2 = srun.submit( 'script2.sh' )
-        srun.poll()
-
-        wait_on_script_process_via_script_queue( srun, ps1, 5 )
-        wait_on_script_process_via_script_queue( srun, ps2, 5 )
-
-        time.sleep(1)
-        st1,x1 = ps1.getStatus()
-        st2,x2 = ps2.getStatus()
-        assert x1 == 0 and x2 == 0
-        assert os.path.isfile( 'hello1.txt' )
-        assert os.path.isfile( 'hello2.txt' )
-
-    def test_prove_concurrency(self):
-        ""
-        util.writefile( 'script.sh', """
-            """+sys.executable+""" -c "import time; print ( time.time() )"
-            sleep 5
-            """+sys.executable+""" -c "import time; print ( time.time() )"
-            """ )
-        time.sleep(1)
-
-        srun = srmod.ScriptRunner()
-        ps1 = srun.submit( 'script.sh', redirect='out1.txt' )
-        ps2 = srun.submit( 'script.sh', redirect='out2.txt' )
-        srun.poll()
-
-        wait_on_script_process_via_script_queue( srun, ps1, 10 )
-        wait_on_script_process_via_script_queue( srun, ps2, 5 )
-
-        time.sleep(1)
-        ts1,te1 = parse_time_seconds_from_file( 'out1.txt' )
-        assert te1-ts1 > 4
-
-        ts2,te2 = parse_time_seconds_from_file( 'out2.txt' )
-        assert te2-ts2 > 4
-
-        assert abs( ts1-ts2 ) < 4
-        assert abs( te1-te2 ) < 4
-
-    def test_script_with_run_delay(self):
-        ""
-        util.writefile( 'script.sh', """
-            """+sys.executable+""" -c "import time; print ( time.time() )"
-            """ )
-        time.sleep(1)
-
-        srun = srmod.ScriptRunner()
-        ps1 = srun.submit( 'script.sh', redirect='out1.txt', delay=4 )
-        ps2 = srun.submit( 'script.sh', redirect='out2.txt' )
-        srun.poll()
-
-        wait_on_script_process_via_script_queue( srun, ps1, 10 )
-
-        time.sleep(1)
-        t1 = parse_time_seconds_from_file( 'out1.txt' )
-        t2 = parse_time_seconds_from_file( 'out2.txt' )
-        assert t1-t2 > 2
 
 
 def parse_time_seconds_from_file( filename ):
@@ -451,19 +336,6 @@ def wait_on_script_process( runner, wait_limit=None ):
         if wait_limit != None and time.time()-tenter > wait_limit:
             break
 
-        time.sleep(1)
-
-
-def wait_on_script_process_via_script_queue( srun, ps, wait_limit=None ):
-    ""
-    tenter = time.time()
-
-    while not ps.isDone():
-
-        if wait_limit != None and time.time()-tenter > wait_limit:
-            break
-
-        srun.poll()
         time.sleep(1)
 
 

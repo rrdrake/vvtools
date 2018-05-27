@@ -11,50 +11,7 @@ import os
 import time
 import subprocess
 import signal
-import threading
 
-
-class ScriptRunner:
-
-    def __init__(self):
-        ""
-        self.queued = {}
-        self.running = {}
-        self.done = {}
-
-    def submit(self, bash_script, delay=None, redirect=None, timeout=None):
-        ""
-        ps = ScriptProcess( bash_script, redirect, timeout )
-
-        startat = time.time()
-        if delay != None:
-            startat += delay
-
-        self.queued[ ps.getId() ] = [ ps, startat ]
-
-        return ps
-
-    def poll(self):
-        ""
-        tm = time.time()
-
-        qL = list( self.queued.items() )
-        for rid,L in qL:
-            ps,startat = L
-            if not startat > tm:
-                ps.run()
-                self.queued.pop( rid )
-                self.running[ rid ] = ps
-
-        rL = list( self.running.items() )
-        for rid,ps in rL:
-            x = ps.poll()
-            if x != None:
-                self.running.pop( rid )
-                self.done[ rid ] = ps
-
-
-###########################################################################
 
 class ScriptProcess:
 
@@ -83,8 +40,6 @@ class ScriptProcess:
         self.tstart = None
         self.tstop = None
         self.exit = None
-
-        self.lock = threading.Lock()
 
     def getId(self):
         ""
@@ -154,19 +109,6 @@ class ScriptProcess:
         else:
             os.kill( self.proc.pid, signal.SIGTERM )
 
-    def thread_lock(func):
-        ""
-        def thread_lock_wrapper( self, *args, **kwargs ):
-            self.lock.acquire()
-            try:
-                rtn = func( self, *args, **kwargs )
-            finally:
-                self.lock.release()
-            return rtn
-
-        return thread_lock_wrapper
-
-    @thread_lock
     def getResults(self):
         """
         Returns a tuple
@@ -206,17 +148,9 @@ class ScriptProcess:
         st,t0,t1,x = self.getResults()
         return t0,t1
 
-    @thread_lock
     def setResults(self, state=None, start=None, stop=None, exit=None):
         ""
         if state != None: self.state = state
         if start != None: self.tstart = start
         if stop != None: self.tstop = stop
         if exit != None: self.exit = exit
-
-    @thread_lock
-    def testThreadLock(self, num_seconds):
-        """
-        Only used for testing, this function acquires the lock then sleeps.
-        """
-        time.sleep( num_seconds )

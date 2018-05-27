@@ -299,7 +299,7 @@ class Batch_start_stop_dates:
 
         assert run1 and run2 and run1 == run2
         assert done1 == None
-        assert done2  # magic: this one will fail sometimes but pass when rerun
+        assert done2
         assert done2-run1 > 4 and done2-run1 < 10
 
     def test_run_start_and_stop_dates(self):

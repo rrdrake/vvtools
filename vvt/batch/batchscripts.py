@@ -12,7 +12,7 @@ import time
 
 import batchitf
 
-from scriptrunner import ScriptRunner
+from scriptrunner import ScriptProcess
 
 
 class BatchScripts( batchitf.BatchInterface ):
@@ -21,12 +21,11 @@ class BatchScripts( batchitf.BatchInterface ):
         ""
         batchitf.BatchInterface.__init__(self)
 
-        self.runr = ScriptRunner()
-        self.sprocs = {}  # runr job id -> runr job
+        self.sprocs = batchitf.ThreadSafeStore()  # proc id -> ScriptProcess
 
     def writeScriptHeader(self, job, fileobj):
         ""
-        pass
+        pass  # no header necessary
 
     def submitJobScript(self, job):
         """
@@ -34,22 +33,23 @@ class BatchScripts( batchitf.BatchInterface ):
         batname = job.getBatchFileName()
         logname = job.getLogFileName()
 
-        sproc = self.runr.submit( batname, redirect=logname )
+        sproc = ScriptProcess( batname, redirect=logname, timeout=None )
+        sproc.run()
 
         jid = str( sproc.getId() )
         out = 'Job ID: '+jid
         err = ''
 
-        self.sprocs[ jid ] = sproc
+        self.sprocs.set( jid, sproc )
 
         return jid,out,err
 
     def queryQueue(self, jqtab):
         """
         """
-        self.runr.poll()
+        for jid,sproc in self.sprocs.asList():
 
-        for jid,sproc in list( self.sprocs.items() ):
+            sproc.poll()
 
             st,x = sproc.getStatus()
 
@@ -76,7 +76,4 @@ class BatchScripts( batchitf.BatchInterface ):
     def cancel(self, job_list=None):
         ""
         pass
-
-
-############################################################################
 
