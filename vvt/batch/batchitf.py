@@ -50,6 +50,8 @@ class BatchInterface:
                 'logcheck': 60,
             }
 
+        self.poll_lock = threading.Lock()
+
     def addJob(self, job):
         """
         """
@@ -144,15 +146,20 @@ class BatchInterface:
     def poll(self):
         """
         """
-        jqtab = JobQueueTable()
-        self.queryQueue( jqtab )
+        self.poll_lock.acquire()
+        try:
+            jqtab = JobQueueTable()
+            self.queryQueue( jqtab )
 
-        for jid,job in self.jobs.asList():
+            for jid,job in self.jobs.asList():
 
-            self.updateBatchJobResults( job, jqtab )
+                self.updateBatchJobResults( job, jqtab )
 
-            if job.isFinished():
-                self.removeJob( jid )
+                if job.isFinished():
+                    self.removeJob( jid )
+
+        finally:
+            self.poll_lock.release()
 
     def updateBatchJobResults(self, job, jqtab):
         """
