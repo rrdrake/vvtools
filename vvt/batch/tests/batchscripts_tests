@@ -17,8 +17,10 @@ import glob
 import testutils as util
 from testutils import print3
 
-from batchscripts import BatchScripts
 from batchjob import BatchJob
+
+from batchscripts import BatchScripts
+from batchscripts import ScriptProcess
 
 from common_tests import Method_computeNumNodes
 from common_tests import Batch_output_file
@@ -27,6 +29,327 @@ from common_tests import Batch_submit
 from common_tests import Batch_queue_dates
 from common_tests import Batch_start_stop_dates
 
+
+
+class Class_ScriptProcess( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_unique_process_ids_are_created(self):
+        ""
+        ps1 = ScriptProcess( None )
+        id1 = ps1.getId()
+
+        ps2 = ScriptProcess( None )
+        id2 = ps2.getId()
+
+        assert id1 != id2
+
+    def test_optional_args_checking(self):
+        ""
+        ps = ScriptProcess( None, redirect=None, timeout=None )
+
+        self.assertRaises( Exception,
+            ScriptProcess, None, redirect=3, timeout=None )
+
+        ps = ScriptProcess( None, redirect=None, timeout=3 )
+
+        ps = ScriptProcess( None, redirect=None, timeout=3.3 )
+
+        self.assertRaises( Exception,
+            ScriptProcess, None, redirect=None, timeout='3' )
+
+    def test_run_script(self):
+        ""
+        util.writefile( 'runme', """
+            cd """+os.getcwd()+"""
+            touch hello.txt
+            """ )
+        time.sleep(1)
+
+        ps = ScriptProcess( 'runme' )
+
+        t0,t1 = ps.getDates()
+        assert t0 == None and t1 == None
+
+        ps.run()
+        time.sleep(1)
+
+        wait_on_script_process( ps, 5 )
+
+        st,rt,x = get_results_values( ps )
+
+        assert x == 0
+        assert st == 'exit'
+        assert os.path.exists( 'hello.txt' )
+        assert rt != None and rt > 0
+
+        t0,t1 = ps.getDates()
+        assert t0 != None and t1 != None and t0 <= t1
+
+    def test_failed_script_exit_status(self):
+        ""
+        util.writefile( 'runme', """
+            exit 1
+            """ )
+        time.sleep(1)
+
+        ps = ScriptProcess( 'runme' )
+        ps.run()
+        wait_on_script_process( ps, 5 )
+
+        st,rt,x = get_results_values( ps )
+
+        assert st == 'exit'
+        assert x != None and x != 0
+        assert rt != None and rt > 1
+
+        t0,t1 = ps.getDates()
+        assert t0 != None and t1 != None and t0 <= t1
+
+    def test_timeout_waiting_on_script(self):
+        ""
+        util.writefile( 'runme', """
+            sleep 5
+            """ )
+        time.sleep(1)
+
+        ps = ScriptProcess( 'runme' )
+        ps.run()
+        wait_on_script_process( ps, 2 )
+
+        st1,rt1,x1 = get_results_values( ps )
+        t0,t1 = ps.getDates()
+        assert t0 != None and t1 == None
+
+        wait_on_script_process( ps, 5 )
+        st2,rt2,x2 = get_results_values( ps )
+        t0,t1 = ps.getDates()
+        assert t0 != None and t1 != None and t1-t0 > 4
+
+        assert st1 == 'running'
+        assert st2 == 'exit'
+        assert x1 == None
+        assert x2 != None and x2 == 0
+        assert rt1 == None
+        assert rt2 != None and rt2 > 2
+
+    def test_get_runtime_before_and_after_completion(self):
+        ""
+        util.writefile( 'runme', """
+            sleep 3
+            """ )
+        time.sleep(1)
+
+        ps = ScriptProcess( 'runme' )
+        ps.run()
+
+        time.sleep(1)
+        ps.poll()
+        st1,rt1,x1 = get_results_values( ps )
+
+        time.sleep(4)
+        ps.poll()
+        st2,rt2,x2 = get_results_values( ps )
+
+        assert st1 == 'running'
+        assert st2 == 'exit'
+        assert x1 == None
+        assert x2 == 0
+        assert rt1 == None
+        assert rt2 >= 3 and rt2 < 8
+
+    def test_script_that_times_out(self):
+        ""
+        util.writefile( 'runme', """
+            sleep 10
+            """ )
+        time.sleep(1)
+
+        ps = ScriptProcess( 'runme', timeout=3 )
+        ps.run()
+
+        script_process_sleep_and_poll( ps, 5 )
+        st,rt,x = get_results_values( ps )
+
+        assert st == 'timeout'
+        assert x != None and x != 0
+        assert rt >= 3 and rt < 9
+
+        t0,t1 = ps.getDates()
+        assert t0 != None and t1 != None and t1-t0 > 2
+
+    def test_a_script_that_times_out_but_doesnt_die(self):
+        ""
+        util.writefile( 'runme', """
+            trap "sleep 5" SIGTERM
+            sleep 5
+            """ )
+        time.sleep(1)
+
+        ps = ScriptProcess( 'runme', timeout=3 )
+        ps.run()
+
+        script_process_sleep_and_poll( ps, 6 )
+
+        # if the trap worked, the process should still be alive
+        st1,rt1,x1 = get_results_values( ps )
+
+        script_process_sleep_and_poll( ps, 6 )
+
+        # by now both sleeps should be finished
+        st2,rt2,x2 = get_results_values( ps )
+
+        assert st1 == 'timeout'
+        assert st2 == 'timeout'
+        assert x1 == None
+        assert x2 == 0
+        assert rt1 == None
+        assert rt2 != None and rt2 > 5 and rt2 < 12
+
+    def test_kill_a_script_while_its_running(self):
+        ""
+        util.writefile( 'runme', """
+            sleep 10
+            """ )
+        time.sleep(1)
+
+        ps = ScriptProcess( 'runme' )
+        ps.run()
+
+        script_process_sleep_and_poll( ps, 2 )
+
+        ps.kill()
+
+        script_process_sleep_and_poll( ps, 2 )
+
+        st,rt,x = get_results_values( ps )
+        assert st == 'killed'
+        assert x != None and x != 0
+        assert rt >= 2 and rt < 9
+
+    def test_killing_a_script_but_it_doesnt_die(self):
+        ""
+        util.writefile( 'runme', """
+            trap "sleep 5" SIGTERM
+            sleep 5
+            """ )
+        time.sleep(1)
+
+        ps = ScriptProcess( 'runme' )
+        ps.run()
+
+        script_process_sleep_and_poll( ps, 2 )
+
+        ps.kill()
+        time.sleep(1)
+        ps.poll()
+
+        # if the trap worked, the process should still be alive
+        st1,rt1,x1 = get_results_values( ps )
+
+        for i in range(10):
+            ps.poll()
+            st,x = ps.getStatus()
+            if x != None:
+                break
+            time.sleep(1)
+
+        st2,rt2,x2 = get_results_values( ps )
+
+        assert st1 == 'killed'
+        assert st2 == 'killed'
+        assert x1 == None
+        assert x2 == 0
+        assert rt1 == None
+        assert rt2 != None and rt2 > 5 and rt2 < 12
+
+    def test_redirect_script_output(self):
+        ""
+        util.writefile( 'runme', """
+            echo hello
+            echo world 1>&2
+            sleep 1
+            """ )
+        time.sleep(1)
+        outfile = os.path.abspath( 'out.txt' )
+
+        ps = ScriptProcess( 'runme', redirect=outfile )
+        ps.run()
+
+        wait_on_script_process( ps, 5 )
+        time.sleep(1)
+
+        st,rt,x = get_results_values( ps )
+        assert st == 'exit'
+        assert x == 0
+        assert len( util.filegrep( outfile, 'hello' ) ) == 1
+        assert len( util.filegrep( outfile, 'world' ) ) == 1
+
+
+def parse_time_seconds_from_file( filename ):
+    ""
+    L = util.filegrep( filename, '[0-9]+' )
+
+    rtn = []
+    for line in L:
+        rtn.append( parse_seconds( line ) )
+    
+    if len(rtn) == 0:
+        return None
+    elif len(rtn) == 1:
+        return rtn[0]
+    else:
+        return rtn
+
+def parse_seconds( tstring ):
+    ""
+    s = tstring.strip().strip( '(' ).strip( ')' ).strip()
+    s = s.strip('"').strip("'")
+    return float(s)
+
+
+############################################################################
+
+def get_runtime( runner ):
+    ""
+    tstart,tstop = runner.getDates()
+    if tstop != None:
+        return tstop-tstart
+    return None
+
+
+def get_results_values( runner ):
+    """
+    Return ( state as string, runtime, exit status ) from a ScriptProcess.
+    """
+    st,x = runner.getStatus()
+    return st, get_runtime(runner), x
+
+
+def script_process_sleep_and_poll( script_ps, loop_length ):
+    ""
+    for i in range( loop_length ):
+        time.sleep(1)
+        script_ps.poll()
+
+
+def wait_on_script_process( runner, wait_limit=None ):
+    ""
+    tenter = time.time()
+
+    while not runner.isDone():
+
+        runner.poll()
+
+        if wait_limit != None and time.time()-tenter > wait_limit:
+            break
+
+        time.sleep(1)
+
+
+############################################################################
 
 class BatchScripts_computeNumNodes( Method_computeNumNodes, unittest.TestCase ):
 

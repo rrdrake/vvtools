@@ -342,9 +342,15 @@ def run_batch_job_with_stdouterr_capture( batchobj, job, *lines ):
     redir = util.Redirect( 'job.log' )
     try:
         batchobj.submit( job )
+        assert job.getJobId() != None
         wait_on_job( batchobj, job, 5 )
 
-    finally:
+    except Exception:
+        redir.close()
+        sys.stderr.write( job.getSubmitOutput()[0] + '\n' )
+        sys.stderr.write( job.getSubmitOutput()[1] + '\n' )
+        sys.stderr.flush()
+    else:
         redir.close()
 
     fp = open( 'job.log', 'r' )
@@ -361,6 +367,11 @@ def write_and_submit_batch_job( batchobj, job, *lines ):
     job.setRunCommands( '\n'.join(lines)+'\n' )
     batchobj.writeScriptFile( job )
     batchobj.submit( job )
+
+    assert job.getJobId() != None, \
+        "Got None for a job id\n\n" + \
+        job.getSubmitOutput()[0]+'\n'+ \
+        job.getSubmitOutput()[1]+'\n'
 
 
 def wait_on_job( batchobj, jobobj, maxwait=60 ):
