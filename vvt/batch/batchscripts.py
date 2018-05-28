@@ -74,9 +74,23 @@ class BatchScripts( batchitf.BatchInterface ):
 
             jqtab.setJobInfo( jid, state, start, timeused )
 
-    def cancel(self, job_list=None):
-        ""
-        pass
+    def cancelQueuedJobs(self, *jobs, **kwargs):
+        """
+        Only one thread at a time should call this and queryQueue().
+        """
+        verbose = kwargs.get( 'verbose', False )
+
+        jobids = [ j.getJobId() for j in jobs ]
+
+        for jid,sproc in self.sprocs.asList():
+            if len(jobids) == 0 or jid in jobids:
+                if verbose:
+                    sys.stdout.write( 'Killing job id '+jid+'\n' )
+                    sys.stdout.flush()
+                sproc.kill()
+
+        jqtab = batchitf.JobQueueTable()
+        self.queryQueue( jqtab )
 
 
 ##########################################################################

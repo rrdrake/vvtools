@@ -66,9 +66,17 @@ class BatchSLURM( batchitf.BatchInterface ):
 
         parse_queue_table_output( jobtable, out )
 
-    def cancel(self, job_list=None):
+    def cancelQueuedJobs(self, *jobs, **kwargs):
         ""
-        raise NotImplementedError( "Method cancel()" )
+        verbose = kwargs.get( 'verbose', False )
+
+        if len(jobs) == 0:
+            jobs = [ tup[1] for tup in self.jobs.asList() ]
+
+        for job in jobs:
+            jid = job.getJobId()
+            if jid != None:
+                self.runcmd( 'scancel -v '+jid, verbose=verbose )
 
     def setBatchCommandRunner(self, func):
         """

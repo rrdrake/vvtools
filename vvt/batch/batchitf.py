@@ -112,9 +112,19 @@ class BatchInterface:
         finally:
             self.thread_lock.release()
 
-    def cancel(self, job_list=None):
-        ""
-        raise NotImplementedError( "Method cancel()" )
+    def cancel(self, *jobs, **kwargs):
+        """
+        Cancel a set of jobs, or if no jobs are specified, then cancel all
+        jobs in the queue under management by this BatchInterface.
+
+        An optional 'verbose' keyword argument can be given.
+        """
+        self.thread_lock.acquire()
+        try:
+            self.cancelQueuedJobs( *jobs, **kwargs )
+
+        finally:
+            self.thread_lock.release()
 
     # configuration interface
 
@@ -167,6 +177,16 @@ class BatchInterface:
         Fill the given JobQueueTable instance with a snapshot of the queue.
         """
         raise NotImplementedError( "Method queryQueue()" )
+
+    def cancelQueuedJobs(self, *jobs, **kwargs):
+        """
+        Send abort signal to non-done jobs.  The jobs are a list of BatchJob
+        instances.  If no jobs are listed, then all jobs currently being
+        managed by this BatchInterface should be canceled.
+
+        An optional 'verbose' keyword argument can be given.
+        """
+        raise NotImplementedError( "Method cancelQueuedJobs()" )
 
     # implementation methods
 
@@ -416,8 +436,12 @@ class ThreadSafeMap:
         return list( self.store.items() )
 
 
-def run_shell_command( cmd ):
+def run_shell_command( cmd, verbose=False ):
     ""
+    if verbose:
+        sys.stdout.write( cmd.rstrip() + '\n' )
+        sys.stdout.flush()
+
     p = subprocess.Popen( cmd, shell=True,
                           stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE )
@@ -429,6 +453,13 @@ def run_shell_command( cmd ):
             out = out.decode()
         if err != None:
             err = err.decode()
+
+    if verbose:
+        if out.rstrip():
+            sys.stdout.write( out.rstrip() + '\n' )
+        if err.rstrip():
+            sys.stdout.write( err.rstrip() + '\n' )
+        sys.stdout.flush()
 
     return p.returncode, out, err
 

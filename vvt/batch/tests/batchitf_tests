@@ -213,6 +213,57 @@ class Function_parse_date_string( unittest.TestCase ):
         assert abs( tm - 1530721762 ) < 2
 
 
+class Function_run_shell_command( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_issue_command_with_some_stdout(self):
+        ""
+        x,out,err = bat.run_shell_command( 'echo "hello world"' )
+        assert out.strip() == "hello world"
+        assert not err.strip()
+        assert x == 0
+
+    def test_issue_command_with_some_stderr(self):
+        ""
+        x,out,err = bat.run_shell_command( 'echo "hello world" 1>&2' )
+        assert not out.strip()
+        assert err.strip() == "hello world"
+        assert x == 0
+
+    def test_issue_command_with_verbose_flag(self):
+        ""
+        out = run_shell_command_with_capture( 'echo "hello world"',
+                                              verbose=True )
+        assert 'echo "hello world"' in out
+        assert out.count( 'hello world' ) == 2
+
+        out = run_shell_command_with_capture( 'echo "hello world" 1>&2',
+                                              verbose=True )
+        assert 'echo "hello world"' in out
+        assert out.count( 'hello world' ) == 2
+
+
+def run_shell_command_with_capture( cmd, verbose=False ):
+    """
+    Call run_shell_command() and capture stdout & stderr, which is returned.
+    """
+    redir = util.Redirect( 'run.log' )
+    try:
+        bat.run_shell_command( cmd, verbose=verbose )
+
+    finally:
+        redir.close()
+
+    fp = open( 'run.log', 'r' )
+    out = fp.read()
+    fp.close()
+
+    return out
+
+
 class Class_ThreadSafeMap( unittest.TestCase ):
 
     def setUp(self):
@@ -815,6 +866,23 @@ class BatchScripts_methods( unittest.TestCase ):
         assert time.time() - job.getQueueDates()[0] < 2
         assert 'Traceback' in job.getSubmitOutput()[1]
         assert 'test exception' in job.getSubmitOutput()[1]
+
+    def test_exercise_the_cancel_method(self):
+        ""
+        class BatSub( bat.BatchInterface ):
+            def cancelQueuedJobs(self, *jobs):
+                self.num_jobs = len(jobs)
+
+        bs = BatSub()
+
+        bs.cancel()
+
+        assert bs.num_jobs == 0
+
+        job = BatchJob()
+        bs.cancel( job )
+
+        assert bs.num_jobs == 1
 
 
 ############################################################################

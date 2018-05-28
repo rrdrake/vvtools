@@ -164,13 +164,13 @@ class BatchSLURM_methods( unittest.TestCase ):
 
     def test_exercise_the_submit_function(self):
         ""
-        def do_sbatch( command ):
+        def fake_sbatch( command, **kwargs ):
             assert command.startswith( 'sbatch ' )
             out = "Submitted batch job 291041"
             return 0,out,''
 
         bat = BatchSLURM()
-        bat.setBatchCommandRunner( do_sbatch )
+        bat.setBatchCommandRunner( fake_sbatch )
 
         job = BatchJob()
 
@@ -180,7 +180,7 @@ class BatchSLURM_methods( unittest.TestCase ):
 
     def test_exercise_the_queue_query_function(self):
         ""
-        def do_squeue( command ):
+        def fake_squeue( command, **kwargs ):
             assert command.startswith( 'squeue ' )
             out = """
 7291680 _ R _ 2018-04-21T12:57:38 _ 7:37
@@ -190,13 +190,77 @@ class BatchSLURM_methods( unittest.TestCase ):
             return 0,out,''
 
         bat = BatchSLURM()
-        bat.setBatchCommandRunner( do_squeue )
+        bat.setBatchCommandRunner( fake_squeue )
 
         jobtable = JobQueueTable()
 
         bat.queryQueue( jobtable )
 
         assert jobtable.numJobs() == 3
+
+    def test_exercise_cancel_with_job_arguments(self):
+        ""
+        def fake_sbatch( command, **kwargs ):
+            assert command.startswith( 'sbatch ' )
+            out = "Submitted batch job 291041"
+            return 0,out,''
+
+        idlist = []
+        def fake_scancel( command, **kwargs ):
+            if kwargs.get( 'verbose', False ):
+                sys.stdout.write( command + '\n' )
+                sys.stdout.flush()
+            assert command.startswith( 'scancel ' )
+            idlist.append( command.strip().split()[-1] )
+            return 0,'',''
+
+        bat = BatchSLURM()
+
+        job1 = BatchJob()  # will have None for job id
+        job2 = BatchJob()  # will have a valid job id
+
+        bat.setBatchCommandRunner( fake_sbatch )
+        bat.submit( job2 )
+        assert job2.getJobId() != None
+
+        bat.setBatchCommandRunner( fake_scancel )
+        bat.cancelQueuedJobs( job1, job2, verbose=True )
+
+        assert idlist == [ '291041' ]
+
+    def test_exercise_cancel_all_jobs(self):
+        ""
+        joblist = [ '42', '43' ]
+        def fake_sbatch( command, **kwargs ):
+            assert command.startswith( 'sbatch ' )
+            out = "Submitted batch job "+joblist.pop()
+            return 0,out,''
+
+        idlist = []
+        def fake_scancel( command, **kwargs ):
+            if kwargs.get( 'verbose', False ):
+                sys.stdout.write( command + '\n' )
+                sys.stdout.flush()
+            assert command.startswith( 'scancel ' )
+            idlist.append( command.strip().split()[-1] )
+            return 0,'',''
+
+        bat = BatchSLURM()
+
+        job1 = BatchJob()
+        job2 = BatchJob()
+
+        bat.setBatchCommandRunner( fake_sbatch )
+        bat.submit( job1 )
+        bat.submit( job2 )
+        assert job1.getJobId() != None
+        assert job2.getJobId() != None
+
+        bat.setBatchCommandRunner( fake_scancel )
+        bat.cancelQueuedJobs( verbose=True )
+
+        idlist.sort()
+        assert idlist == [ '42', '43' ]
 
 
 ############################################################################

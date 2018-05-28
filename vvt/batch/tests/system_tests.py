@@ -351,6 +351,99 @@ class Batch_timeout:
         assert done-run >= 4 and done-run < 10
 
 
+class Batch_cancel:
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+        self.bat = self.makeBatchInterface()
+        self.bat.setTimeout( 'script', 5 )
+        self.bat.setTimeout( 'logcheck', 1 )
+        self.job = BatchJob()
+
+    def test_cancel_a_running_job(self):
+        ""
+        t0 = time.time()
+
+        write_and_submit_batch_job( self.bat, self.job, 'sleep 30' )
+
+        time.sleep(2)
+        self.bat.poll()
+
+        self.bat.cancel( self.job )
+
+        poll_and_sleep( self.bat, 4 )
+
+        t1 = time.time()
+
+        sub,pend,run,comp,qdone = self.job.getQueueDates()
+        start,stop,sdone = self.job.getScriptDates()
+        assert sub and run and qdone
+        assert start
+        assert qdone > run and qdone-run < 5
+        assert t1-t0 < 10
+
+    def test_cancel_one_of_two_running_jobs(self):
+        ""
+        job2 = BatchJob()
+        t0 = time.time()
+
+        write_and_submit_batch_job( self.bat, self.job, 'sleep 30' )
+        write_and_submit_batch_job( self.bat, job2, 'sleep 10' )
+
+        time.sleep(2)
+        self.bat.poll()
+
+        self.bat.cancel( self.job, verbose=True )
+
+        poll_and_sleep( self.bat, 4 )
+
+        t1 = time.time()
+
+        sub,pend,run,comp,qdone = self.job.getQueueDates()
+        start,stop,sdone = self.job.getScriptDates()
+
+        wait_on_job( self.bat, job2, 10 )
+
+        start2,stop2,sdone2 = job2.getScriptDates()
+
+        assert sub and run and qdone
+        assert start
+        assert qdone > run and qdone-run < 5
+        assert t1-t0 < 10
+
+        assert job2.isFinished()
+        assert start2 and stop2 and stop2-start2 > 5 and stop2-start2 < 14
+
+    def test_cancel_all_running_jobs(self):
+        ""
+        job2 = BatchJob()
+        t0 = time.time()
+
+        write_and_submit_batch_job( self.bat, self.job, 'sleep 30' )
+        write_and_submit_batch_job( self.bat, job2, 'sleep 40' )
+
+        time.sleep(2)
+        self.bat.poll()
+
+        self.bat.cancel()
+
+        poll_and_sleep( self.bat, 4 )
+
+        sub1,pend1,run1,comp1,qdone1 = self.job.getQueueDates()
+        start1,stop1,sdone1 = self.job.getScriptDates()
+        assert sub1 and run1 and qdone1
+        assert start1
+        assert qdone1 > run1 and qdone1-run1 < 5
+
+        sub2,pend2,run2,comp2,qdone2 = self.job.getQueueDates()
+        start2,stop2,sdone2 = self.job.getScriptDates()
+        assert sub2 and run2 and qdone2
+        assert start2
+        assert qdone2 > run2 and qdone2-run2 < 5
+
+
 ############################################################################
 
 def run_batch_job_with_stdouterr_capture( batchobj, job, *lines ):
@@ -374,6 +467,7 @@ def run_batch_job_with_stdouterr_capture( batchobj, job, *lines ):
         sys.stderr.write( job.getSubmitOutput()[0] + '\n' )
         sys.stderr.write( job.getSubmitOutput()[1] + '\n' )
         sys.stderr.flush()
+        raise
     else:
         redir.close()
 
@@ -412,4 +506,11 @@ def wait_on_job( batchobj, jobobj, maxwait=60 ):
         if time.time() - tstart > maxwait:
             raise Exception( 'max wait time exceeded: '+str(maxwait) )
 
+        time.sleep(1)
+
+
+def poll_and_sleep( batchobj, num_seconds ):
+    ""
+    for i in range( int(num_seconds+0.5) ):
+        batchobj.poll()
         time.sleep(1)
