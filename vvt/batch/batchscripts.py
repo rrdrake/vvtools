@@ -10,6 +10,7 @@ sys.excepthook = sys.__excepthook__
 import os
 import time
 import subprocess
+import signal
 
 import batchitf
 
@@ -50,27 +51,22 @@ class BatchScripts( batchitf.BatchInterface ):
 
             sproc.poll()
 
-            st,x = sproc.getStatus()
+            start,stop = sproc.getDates()
 
-            if not st:
+            if not start:
                 state = 'pending'
-            elif st == 'running':
+            elif not stop:
                 state = 'running'
             else:
-                # must be one of timeout, killed, exit
                 state = 'done'
+                self.sprocs.pop( jid )
 
-            startdate,stopdate = sproc.getDates()
-
-            if stopdate:
-                timeused = stopdate-startdate
+            if stop:
+                timeused = stop-start
             else:
                 timeused = None
 
-            jqtab.setJobInfo( jid, state, startdate, timeused )
-
-            if state == 'done':
-                self.sprocs.pop( jid )
+            jqtab.setJobInfo( jid, state, start, timeused )
 
     def cancel(self, job_list=None):
         ""
@@ -91,21 +87,12 @@ class ScriptProcess:
 
         self.script = script_filename
 
-        if redirect != None and type(redirect) != type(''):
-            raise ValueError( 'redirect must be None or a string' )
-        if timeout != None and \
-           ( type(timeout) != type(2) and type(timeout) != type(2.2) ):
-            raise ValueError( 'timeout must be None or a number' )
-
         self.redirect = redirect
         self.timeout = timeout
 
         self.proc = None
-
-        self.state = ''
         self.tstart = None
         self.tstop = None
-        self.exit = None
 
     def getId(self):
         ""
@@ -113,7 +100,7 @@ class ScriptProcess:
 
     def run(self):
         ""
-        assert not self.state
+        assert self.proc == None
 
         t0 = time.time()
 
@@ -129,44 +116,29 @@ class ScriptProcess:
         else:
             self.proc = subprocess.Popen( ['bash',self.script] )
 
-        self.setResults( state='running', start=t0 )
+        self.tstart = t0
 
     def poll(self):
-        """
-        Call this periodically until the exit status is not None.
-
-        Note: This is the only function that should call setResults()
-              to set the exit status.
-        """
+        ""
         if self.proc != None:
 
             tm = time.time()
 
-            if self.state == 'running':
-                
-                x = self.proc.poll()
+            x = self.proc.poll()
 
-                if x == None:
-                    if self.timeout != None and tm-self.tstart > self.timeout:
-                        self._terminate()
-                        self.setResults( state='timeout' )
+            if x == None:
+                if self.timeout != None and tm-self.tstart > self.timeout:
+                    self._terminate()
+                    self.timeout = None  # avoid repeated terminations
 
-                else:
-                    self.setResults( state='exit', stop=tm, exit=x )
-
-            elif self.exit == None:
-
-                x = self.proc.poll()
-
-                if x != None:
-                    self.setResults( stop=tm, exit=x )
-
-        return self.exit
+            else:
+                self.tstop = tm
+                self.proc = None
 
     def kill(self):
         ""
-        self._terminate()
-        self.setResults( state='killed' )
+        if self.proc != None:
+            self._terminate()
 
     def _terminate(self):
         ""
@@ -175,48 +147,13 @@ class ScriptProcess:
         else:
             os.kill( self.proc.pid, signal.SIGTERM )
 
-    def getResults(self):
+    def getDates(self):
         """
-        Returns a tuple
-
-            ( state, start time, stop time, exit status )
-
-        where the state value is a string:
-
-            <empty> : the run() method has not been called
-            running : the subprocess was launched
-            timeout : the subprocess timed out and was killed
-            killed  : the kill() method was called
-            exit    : the subprocess completed on its own
+        Returns ( start time, stop time )
 
         The start time is the time the run() function was called.
 
         The stop time is the time the poll() function recognized that the
         subprocess exited.
-
-        The exit status is the subprocess.returncode, which is None if still
-        running or an integer if exited.
         """
-        return self.state, self.tstart, self.tstop, self.exit
-
-    def isDone(self):
-        ""
-        st,t0,t1,x = self.getResults()
-        return st and x != None
-
-    def getStatus(self):
-        ""
-        st,t0,t1,x = self.getResults()
-        return st,x
-
-    def getDates(self):
-        ""
-        st,t0,t1,x = self.getResults()
-        return t0,t1
-
-    def setResults(self, state=None, start=None, stop=None, exit=None):
-        ""
-        if state != None: self.state = state
-        if start != None: self.tstart = start
-        if stop != None: self.tstop = stop
-        if exit != None: self.exit = exit
+        return self.tstart, self.tstop
