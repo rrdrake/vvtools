@@ -22,9 +22,10 @@ Defined here is an abstract interface, called BatchInterface.  A client would
 construct one of the derived classes, then
 
     1. Construct BatchJob instances
-    2. Submit job instances to the queue using submit()
-    3. Call poll() periodically
-    4. Use the BatchJob interface to determine the status of jobs
+    2. Write job script with writeJob()
+    3. Submit job instances to the queue using submit()
+    4. Call poll() periodically
+    5. Use the BatchJob interface to determine the status of jobs
 
 Concrete implementations (derived classes) interact with a given batch system
 by submitting script files and querying their status using shell commands.
@@ -68,6 +69,19 @@ class BatchInterface:
         """
         ppn = self.getProcessorsPerNode()
         return compute_num_nodes( num_cores, cores_per_node, ppn )
+
+    def writeJob(self, job):
+        """
+        Write the batch job script to disk.
+        """
+        batname = job.getBatchFileName()
+
+        fp = open( batname, 'w' )
+        try:
+            self.writeScriptFile( job, fp )
+
+        finally:
+            fp.close()
 
     def submit(self, job):
         """
@@ -281,20 +295,17 @@ class BatchInterface:
                 if curtime-sub > tm:
                     job.setQueueDates( done=curtime )
 
-    def writeScriptFile(self, job):
+    def writeScriptFile(self, job, fp):
         ""
-        batname = job.getBatchFileName()
+        self.writeScriptShebang( job, fp )
+        self.writeScriptHeader( job, fp )
+        self.writeScriptBegin( job, fp )
 
-        fp = open( batname, 'w' )
-        try:
-            self.writeScriptShebang( job, fp )
-            self.writeScriptHeader( job, fp )
-            self.writeScriptBegin( job, fp )
-            fp.write( '\n' + job.getRunCommands() + '\n' )
-            self.writeScriptFinish( job, fp )
+        cmds = job.getRunCommands()
+        if cmds and cmds.strip():
+            fp.write( '\n' + cmds.strip() + '\n' )
 
-        finally:
-            fp.close()
+        self.writeScriptFinish( job, fp )
 
     def writeScriptShebang(self, job, fileobj):
         """

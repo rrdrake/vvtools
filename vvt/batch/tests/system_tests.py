@@ -454,7 +454,7 @@ def run_batch_job_with_stdouterr_capture( batchobj, job, *lines ):
     """
     job.setRunCommands( '\n'.join(lines)+'\n' )
 
-    batchobj.writeScriptFile( job )
+    batchobj.writeJob( job )
 
     redir = util.Redirect( 'job.log' )
     try:
@@ -483,7 +483,7 @@ def write_and_submit_batch_job( batchobj, job, *lines ):
     Write batch script and submit the job.
     """
     job.setRunCommands( '\n'.join(lines)+'\n' )
-    batchobj.writeScriptFile( job )
+    batchobj.writeJob( job )
     batchobj.submit( job )
 
     assert job.getJobId() != None, \
