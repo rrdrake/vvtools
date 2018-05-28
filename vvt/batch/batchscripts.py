@@ -16,12 +16,15 @@ import batchitf
 
 
 class BatchScripts( batchitf.BatchInterface ):
+    """
+    This class implements the BatchInterface using subprocesses.
+    """
 
     def __init__(self):
         ""
         batchitf.BatchInterface.__init__(self)
 
-        self.sprocs = batchitf.ThreadSafeStore()  # proc id -> ScriptProcess
+        self.sprocs = batchitf.ThreadSafeMap()  # proc id -> ScriptProcess
 
     def writeScriptHeader(self, job, fileobj):
         ""
@@ -32,8 +35,9 @@ class BatchScripts( batchitf.BatchInterface ):
         """
         batname = job.getBatchFileName()
         logname = job.getLogFileName()
+        timeout = job.getRunTime()
 
-        sproc = ScriptProcess( batname, redirect=logname, timeout=None )
+        sproc = ScriptProcess( batname, redirect=logname, timeout=timeout )
         sproc.run()
 
         jid = str( sproc.getId() )
@@ -46,6 +50,8 @@ class BatchScripts( batchitf.BatchInterface ):
 
     def queryQueue(self, jqtab):
         """
+        Only one thread at a time should call this function because it reads
+        and writes ScriptProcess data.
         """
         for jid,sproc in self.sprocs.asList():
 

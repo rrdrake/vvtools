@@ -327,6 +327,30 @@ class Batch_start_stop_dates:
         assert abs( start - time.time() ) < 10
 
 
+class Batch_timeout:
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+        self.bat = self.makeBatchInterface()
+        self.bat.setTimeout( 'script', 5 )
+        self.bat.setTimeout( 'logcheck', 1 )
+        self.job = BatchJob()
+
+    def test_a_job_whose_runtime_takes_too_long(self):
+        ""
+        self.job.setRunTime( 4 )
+
+        write_and_submit_batch_job( self.bat, self.job, 'sleep 30' )
+        wait_on_job( self.bat, self.job, 10 )
+
+        sub,pend,run,comp,done = self.job.getQueueDates()
+
+        assert sub and run and done
+        assert done-run >= 4 and done-run < 10
+
+
 ############################################################################
 
 def run_batch_job_with_stdouterr_capture( batchobj, job, *lines ):

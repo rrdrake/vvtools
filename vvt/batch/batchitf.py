@@ -41,7 +41,7 @@ class BatchInterface:
         ""
         self.ppn = None
 
-        self.jobs = ThreadSafeStore()  # jobid -> BatchJob
+        self.jobs = ThreadSafeMap()  # jobid -> BatchJob
 
         self.timeouts = {
                 'script'  : 5*60,
@@ -354,7 +354,7 @@ class JobQueueTable:
         return self.jobinfo[jobid][2]
 
 
-class ThreadSafeStore:
+class ThreadSafeMap:
 
     def __init__(self):
         ""
