@@ -18,11 +18,18 @@ import threading
 This file defines a programmatic interface into batch systems, such as SLURM,
 LSF, etc.
 
-Defined here is an abstract interface, called BatchInterface.  Derived classes
-interact with a given batch system by submitting script files and querying
-their status using shell commands.
+Defined here is an abstract interface, called BatchInterface.  A client would
+construct one of the derived classes, then
 
-A job script file is composed like this:
+    1. Construct BatchJob instances
+    2. Submit job instances to the queue using submit()
+    3. Call poll() periodically
+    4. Use the BatchJob interface to determine the status of jobs
+
+Concrete implementations (derived classes) interact with a given batch system
+by submitting script files and querying their status using shell commands.
+
+A job script file is composed of:
 
     <shebang>  : like #!/bin/bash -l
     <header>   : batch system directives
@@ -50,17 +57,66 @@ class BatchInterface:
                 'logcheck': 60,
             }
 
-        self.poll_lock = threading.Lock()
+        self.thread_lock = threading.Lock()
 
-    def addJob(self, job):
-        """
-        """
-        self.jobs.set( job.getJobId(), job )
+    # job management interface
 
-    def removeJob(self, jobid):
+    def computeNumNodes(self, num_cores, cores_per_node=None):
         """
+        Returns minimum number of compute nodes to fit the requested
+        number of cores.
         """
-        self.jobs.pop( jobid )
+        ppn = self.getProcessorsPerNode()
+        return compute_num_nodes( num_cores, cores_per_node, ppn )
+
+    def submit(self, job):
+        """
+        Add a BatchJob instance to the queue for running.
+
+        If the submission fails, then the job ID will be None.  The submit
+        stdout and stderr are set either way.
+        """
+        try:
+            jobid,out,err = self.submitJobScript( job )
+
+        except Exception:
+            err = traceback.format_exc()
+            out = ''
+            jobid = None
+
+        if jobid == None:
+            err += '\n*** submit appears to have failed ***\n'
+        else:
+            job.setJobId( jobid )
+            self.addJob( job )
+
+        job.setQueueDates( submit=time.time() )
+        job.setSubmitOutput( out=out, err=err )
+
+    def poll(self):
+        """
+        Query the queue and update the BatchJob objects that are in flight.
+        """
+        self.thread_lock.acquire()
+        try:
+            jqtab = JobQueueTable()
+            self.queryQueue( jqtab )
+
+            for jid,job in self.jobs.asList():
+
+                self.updateBatchJobResults( job, jqtab )
+
+                if job.isFinished():
+                    self.removeJob( jid )
+
+        finally:
+            self.thread_lock.release()
+
+    def cancel(self, job_list=None):
+        ""
+        raise NotImplementedError( "Method cancel()" )
+
+    # configuration interface
 
     def setProcessorsPerNode(self, ppn):
         ""
@@ -71,14 +127,6 @@ class BatchInterface:
         if len(default) > 0 and self.ppn == None:
             return default[0]
         return self.ppn
-
-    def computeNumNodes(self, num_cores, cores_per_node=None):
-        """
-        Returns minimum number of compute nodes to fit the requested
-        number of cores.
-        """
-        ppn = self.getProcessorsPerNode()
-        return compute_num_nodes( num_cores, cores_per_node, ppn )
 
     def setTimeout(self, name, timeout_seconds):
         """
@@ -100,66 +148,37 @@ class BatchInterface:
         ""
         return self.timeouts[name]
 
+    # primary derived class methods
+
     def writeScriptHeader(self, job, fileobj):
         """
         """
         raise NotImplementedError( "Method writeScriptHeader()" )
 
-    def submit(self, job):
-        """
-        If the submission fails, then the job ID will be None.  The submit
-        stdout and stderr are set either way.
-        """
-        try:
-            jobid,out,err = self.submitJobScript( job )
-
-        except Exception:
-            err = traceback.format_exc()
-            out = ''
-            jobid = None
-
-        if jobid == None:
-            err += '\n*** submit appears to have failed ***\n'
-        else:
-            job.setJobId( jobid )
-            self.addJob( job )
-
-        job.setQueueDates( submit=time.time() )
-        job.setSubmitOutput( out=out, err=err )
-
     def submitJobScript(self, job):
         """
-        Return jobid, stdout, stderr with 'jobid' being None if the submission
-        fails.
+        Return ( jobid, stdout, stderr ) with 'jobid' being None if the
+        submission fails.
         """
         raise NotImplementedError( "Method submit()" )
 
     def queryQueue(self, jobtable):
         """
+        Fill the given JobQueueTable instance with a snapshot of the queue.
         """
         raise NotImplementedError( "Method queryQueue()" )
 
-    def cancel(self, job_list=None):
-        ""
-        raise NotImplementedError( "Method cancel()" )
+    # implementation methods
 
-    def poll(self):
+    def addJob(self, job):
         """
         """
-        self.poll_lock.acquire()
-        try:
-            jqtab = JobQueueTable()
-            self.queryQueue( jqtab )
+        self.jobs.set( job.getJobId(), job )
 
-            for jid,job in self.jobs.asList():
-
-                self.updateBatchJobResults( job, jqtab )
-
-                if job.isFinished():
-                    self.removeJob( jid )
-
-        finally:
-            self.poll_lock.release()
+    def removeJob(self, jobid):
+        """
+        """
+        self.jobs.pop( jobid )
 
     def updateBatchJobResults(self, job, jqtab):
         """
@@ -263,8 +282,7 @@ class BatchInterface:
         fileobj.write( '#!/bin/bash -l\n' )
 
     def writeScriptBegin(self, job, fileobj):
-        """
-        """
+        ""
         lineprint( fileobj,
             'echo "SCRIPT START DATE: `date`"',
             'env',
@@ -279,8 +297,7 @@ class BatchInterface:
         lineprint( fileobj, '' )
 
     def writeScriptFinish(self, job, fileobj):
-        """
-        """
+        ""
         lineprint( fileobj,
             '',
             'echo "SCRIPT STOP DATE: `date`"' )
