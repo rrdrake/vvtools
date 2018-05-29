@@ -1,0 +1,189 @@
+#!/usr/bin/env python
+
+import os, sys
+import time
+from getopt import getopt
+
+from batchjob import BatchJob
+
+
+help_string = """
+USAGE:
+    batrun [OPTIONS] [SHELL COMMANDS]
+
+SYNOPSIS:
+    Run commands or a script using a batch system.  By default, the batch
+system is just UNIX subprocesses, but other batch systems can be chosen
+using the -b option.
+
+OPTIONS:
+    -h, --help : help
+    -b <batch type> : specify the type of batch system; one of
+                        proc  : executes jobs as UNIX subprocesses
+                        slurm : uses sbatch, squeue, scancel
+    --nodes <num nodes> : request this many nodes for the job
+    -a, --account <account> :
+                      specify an account string, needed by many batch systems
+    -p <num seconds> : print job status on an interval basis; by default, the
+                       status is printed when it changes
+    -i <num seconds> : max seconds between polling the queuing system;
+                       defaults to 4 seconds
+"""
+
+
+def main():
+
+    optL,argL = getopt( sys.argv[1:], 'hb:a:p:i:',
+                        ['help','account=','nodes='] )
+
+    optD = {}
+    for n,v in optL:
+        if n in ['-h','--help']:
+            print3( help_string.rstrip() )
+            return
+        else:
+            optD[n] = v
+
+    bat = construct_batch_instance( optD )
+
+    job = make_job( optD, argL )
+
+    try:
+        launch_job( bat, job )
+        wait_on_job( bat, job, optD )
+
+    except KeyboardInterrupt:
+        bat.cancel( verbose=True )
+        sys.exit(1)
+    except:
+        bat.cancel( verbose=True )
+        raise
+
+
+######################################################################
+
+def construct_batch_instance( optD ):
+    ""
+    btype = optD.get( '-b', 'proc' )
+
+    if btype == 'proc':
+
+        from batchscripts import BatchScripts
+        bat = BatchScripts()
+
+        bat.setTimeout( 'script', 20 )
+        bat.setTimeout( 'logcheck', 5 )
+
+    elif btype == 'slurm':
+
+        from batchSLURM import BatchSLURM
+        bat = BatchSLURM()
+
+        bat.setTimeout( 'script', 10 )
+        bat.setTimeout( 'logcheck', 2 )
+
+    else:
+        raise Exception( 'Unknown batch type: '+str(btype) )
+
+    return bat
+
+
+def make_job( optD, argL ):
+    ""
+    job = BatchJob()
+
+    if len(argL) > 0:
+        job.setRunCommands( ' '.join( argL ) )
+
+    nnodes = optD.get( '--nodes', 1 )
+    job.setNumNodes( nnodes )
+
+    acnt = optD.get( '--account', optD.get( '-a', None ) )
+    if acnt != None:
+        job.setAccount( acnt )
+
+    return job
+
+
+def launch_job( bat, job ):
+    ""
+    bat.writeJob( job )
+    bat.submit( job )
+
+    if job.getJobId() == None:
+        out,err = job.getSubmitOutput()
+        print3( out, err )
+        sys.exit(1)
+
+    else:
+        print3( 'Job ID:', job.getJobId() )
+
+
+def wait_on_job( bat, job, optD ):
+    ""
+    prev_msg = ''
+    print_interval = None
+    if '-p' in optD:
+        print_interval = int( optD['-p'] )
+        pval = 1
+        prev_print = 0
+
+    poll_interval = int( optD.get( '-i', 4 ) )
+    ival = 1
+    prev_poll = 0
+
+    while True:
+
+        bat.poll()
+
+        msg = get_job_state( job )
+
+        if print_interval == None:
+            if msg != prev_msg:
+                print3( msg )
+                prev_msg = msg
+
+        else:
+            if time.time() - prev_print > pval:
+                print3( msg )
+                pval = min( 2*pval, print_interval )
+                prev_print = time.time()
+
+        if job.isFinished():
+            break
+
+        else:
+            time.sleep( ival )
+            ival = min( 2*ival, poll_interval )
+
+
+def get_job_state( job ):
+    ""
+    msg = ''
+
+    sub,pend,run,comp,qdone = job.getQueueDates()
+
+    if   qdone: msg += 'Queue: DONE at '    + time.ctime(qdone)
+    elif  comp: msg += 'Queue: COMPLETE at '+ time.ctime(comp)
+    elif   run: msg += 'Queue: RUNNING at ' + time.ctime(run)
+    elif  pend: msg += 'Queue: PENDING at ' + time.ctime(pend)
+    else:       msg += 'Queue: SUBMIT at '  + time.ctime(sub)
+
+    start,stop,sdone = job.getScriptDates()
+
+    if   sdone: msg += ', Script: DONE at '  + time.ctime(sdone)
+    elif  stop: msg += ', Script: STOP at '  + time.ctime(stop)
+    elif start: msg += ', Script: START at ' + time.ctime(start)
+
+    return msg
+
+
+def print3( *args ):
+    s = ' '.join( [ str(arg) for arg in args ] )
+    sys.stdout.write( s + '\n' )
+    sys.stdout.flush()
+
+
+####################################################################
+
+main()
