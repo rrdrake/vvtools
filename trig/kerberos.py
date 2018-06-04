@@ -114,14 +114,14 @@ def get_user_name():
     try:
         import getpass
         return getpass.getuser()
-    except:
+    except Exception:
         pass
 
     try:
         usr = os.path.expanduser( '~' )
         if usr != '~':
             return os.path.basename( usr )
-    except:
+    except Exception:
         pass
 
     raise Exception( "could not determine the user name of this process" )
