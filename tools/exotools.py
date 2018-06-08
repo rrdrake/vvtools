@@ -1469,7 +1469,8 @@ class WeightedErrorTally:
       """
 
       # make sure list lengths are the same
-      if ( len(analytic) != len(code) != len(weight) ):
+      if ( len(analytic) != len(code) or
+           len(analytic) != len(weight) ):
         print "   Error in w_accumulate! "
         print "   List lengths do not match! "
 
