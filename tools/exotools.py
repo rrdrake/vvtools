@@ -1013,7 +1013,9 @@ def node_norm_spatial_exoao(comp_sol,
    comp_var_idx0  = comp_sol.findVar(exodus.EX_NODE,
                                      test_var_list[0])
 
-   # Add error check: test_var not found?
+   if(comp_var_idx0==None):
+       print "Did not find variable "+test_var_list[0]+" in exodus file!"
+       sys.exit(1)
 
    # Accept a solution object as the exact solution
    if hasattr(exact_solution, test_var_list[1]):
@@ -1048,6 +1050,22 @@ def node_norm_spatial_exoao(comp_sol,
    ######## The work proper ########
 
    node_volumes = get_node_volumes(comp_sol, comp_t_idx1)
+
+   # The (0-based) index of the variable in the computed solution
+   #Special analytic syntax to bring in a sub-manifold area or length from 
+   #the solution and replaces the standard node_volumes array
+   #the third entry is the name of this variable
+   if(len(test_var_list)>2): 
+     measure_index = comp_sol.findVar(exodus.EX_NODE,
+                                     test_var_list[2])
+     if(measure_index==None):
+       print "Did not find measure variable", test_var_list[2], "in the exodus file!  It is defined in the third slot of the analytic list"
+       sys.exit(1)
+
+     node_volumes = comp_sol.readVar(comp_t_idx1,
+                               exodus.EX_NODE,
+                               0,
+                               measure_index)
 
    # Sweep over the nodes and compute the norms
 

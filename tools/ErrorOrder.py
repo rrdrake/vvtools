@@ -280,13 +280,15 @@ class ErrorOrder(object):
               elem_var_list.append(pair)
               not_found_pair_list.remove(pair) 
             elif ( (comp_var_requested in node_vars) and
-                   hasattr(exact_sol, exact_var_requested) ):
+                   hasattr(exact_sol, exact_var_requested) and 
+	           (len(pair)<=2 or (pair[2] in node_vars)) ):
               node_var_list.append(pair)
               not_found_pair_list.remove(pair)
           if len(not_found_pair_list) > 0:
-              print "Variable not found"
+              print "Variable not found in exodus file or analytic definition"
               for pair in not_found_pair_list:
-                print "  " + str(pair) + " not found!"
+                print "Some part of the list " + str(pair) + " was not found!"
+	      sys.exit(1)
             
           timeNorms = {}
           m=0

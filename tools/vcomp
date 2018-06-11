@@ -12,7 +12,7 @@ import copy
 from ErrorOrder import *
 import exotools
 
-version = "vcomp  Version 0.09 2014-11-10"
+version = "vcomp  Version 0.10 2018-06-08"
 
 manpage = \
 """
@@ -189,16 +189,19 @@ INPUT FILE COMMANDS
            Specify the analytic solution to be used as the reference
            solution. A "wrapper" python file provides the following 
            attributes:
+
           exact_class [string]
             The analytic solution is expected to be in the form of a
             python class or module. exact_class is the name of this
             object. exact_class provides methods or functions which
             take as arguments the coordinates and time, and return
             values of the exact solution. 
+
           instantiator [string]  (optional)
             If exact_class requires an initialization or instantiation,
             the command to do so can be put in the instantiator string
             which will be evaluated, i.e. "eval(instantiator)"
+
           test_var_list [ [c_var1, a_func1], [c_var2, a_func2], ... ]
             A list of lists, test_var_list,  provides the mapping of
             variables in the computed solution files and the functions
@@ -207,12 +210,21 @@ INPUT FILE COMMANDS
             a_funcX (a string) is the name of the corresponding function
             in exact_class, with signature ([coordinates], time); it
             will be invoked as, e.g. exact_class.a_func([x, y, z], t)
+
+            A special third argument in the list entries is also 
+	    recognized for nodal values.  [c_nodevar1, a_func1,c_nodevar2] 
+	    will replace the nodal volume computation by the value 
+	    in the exodus file given by c_nodevar2.  This allows 
+	    the user to design surface and line norms by providing 
+	    the appropriate measure in c_nodevar2.
+
           zfill [float]  (optional)
             The functions of the analytic class often assume a three-
             dimensional system, e.g. analytic.rho([x, y, z], t). For
             two-dimensional simulations the computed solution only
             provides x- and y-coordinates. Set zfill to specify a
             (single) value for the z-coordinate.
+
           subel_ints [int]  (optional)
             For element variables, the analytic function will be
             evaluated at a number of points within each element;
@@ -253,6 +265,8 @@ LIMITATIONS
 AUTHORS
       Curtis Ober,   Sandia National Laboratories, ccober@sandia.gov
       Gregory Weirs, Sandia National Laboratories, vgweirs@sandia.gov
+      Also:
+        Allen Robinson,SNL,acrobin@sandia.gov,(submanifold analytic on nodes)
 """
 
 
