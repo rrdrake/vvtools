@@ -36,6 +36,7 @@ def main():
                   active1
                   launch1 launch2 launch3
                   hang1
+                  a_job_can_import_the_python_utilities
                """.split()
 
     for func in argL:
@@ -1107,6 +1108,43 @@ def hang1():
     L = logfind( 'exception', lines, 1 ) ; assert L == None
     L = logfind( 'finish', lines, 0 ) ; assert L != None
     L = logfind( 'finish', lines, 1 ) ; assert L == None
+
+
+def a_job_can_import_the_python_utilities():
+    ""
+    curtm = time.time()
+
+    writefile( 'job_foo.py', """
+        # JOB TRIGGER: """+string_time( curtm+3 )+"""
+        import os, sys
+        import command
+        import runjob
+        fp = open( 'success', 'w' ) ; fp.close()
+        """ )
+
+    os.mkdir( 'logs' )
+    loc = os.path.abspath( 'logs' )
+    
+    cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
+    out = runout( cmd )
+    #print3( out )
+    #os.system( cmd )
+    assert not out.strip()
+    
+    lines = readlog( 'logs/trigger.log' )
+
+    jf = os.path.abspath( 'job_foo.py' )
+
+    # get the log directory for the job
+    dL = glob.glob( 'logs/job_foo.py_*' )
+    assert len(dL) == 1
+    ldir = dL[0]
+    assert os.path.isdir( ldir )
+    joblog = os.path.join( ldir, 'log.txt' )
+    assert os.path.exists( joblog )
+
+    markerfile = os.path.join( ldir, 'success' )
+    assert os.path.exists( markerfile )
 
 
 #######################################################################

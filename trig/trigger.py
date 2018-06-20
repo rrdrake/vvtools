@@ -121,6 +121,9 @@ To run on the first day of the week of each month, use:
 For example, "monthly Mon" will run on the first Monday of each month at 5
 seconds past midnight.  And "monthly sun 1am" will run on the first Sunday of
 each month at one AM.
+
+Note that each job is executed with PYTHONPATH appended with the directory
+containing this file.  That way, jobs can easily import utility modules.
 """
 
 
@@ -160,7 +163,7 @@ def main( arglist ):
                 os.chdir( optD['-C'] )
             if activate( optD, argL ):
                 mainloop( optD, argL )
-        except:
+        except Exception:
             pass
 
 
@@ -191,7 +194,7 @@ def activate( optD, argL ):
                         mach = L[0].split('mach=',1)[1]
                         assert mach
                         pid = int( L[1].split('pid=',1)[1] )
-                    except:
+                    except Exception:
                         pass  # hopefully ignoring corrupted messages is ok
                     else:
                         last = ( tm, mach, pid )
@@ -260,7 +263,7 @@ def logreadline( fp ):
                         val.append( aL[0].strip() )
                         if n > 1:
                             val.append( aL[1].strip() )
-            except:
+            except Exception:
                 val = None
             line = None
 
@@ -276,7 +279,7 @@ def logreadline( fp ):
                             break
                 if val != None:
                     break
-    except:
+    except Exception:
         val = None
 
     return val
@@ -314,6 +317,8 @@ def mainloop( optD, argL ):
     rjobs = FileJobs( logdir, argL, erreset )
 
     try:
+        append_to_python_path( mydir )
+
         tlimit_0 = time.time()
         tactive_0 = time.time()
         while tlimit == None or time.time()-tlimit_0 < tlimit:
@@ -330,7 +335,7 @@ def mainloop( optD, argL ):
                 tactive_0 = time.time()
 
             time.sleep( tgrain )
-    except:
+    except Exception:
         # all exceptions are caught and logged, before returning (exiting)
         traceback.print_exc()
         printlog( 'exception', str( sys.exc_info()[1] ) )
@@ -392,7 +397,7 @@ class FileJobs:
         if jD != None:
             try:
                 ft = os.path.getmtime( jfile )
-            except:
+            except Exception:
                 self.errD.pop( jfile )
             else:
                 if ft + granularity > curtm:
@@ -447,7 +452,7 @@ class FileJobs:
 
         except TimeoutException:
             raise
-        except:
+        except Exception:
             err = str( sys.exc_info()[1] )
             if err not in joberrD:
                 traceback.print_exc()
@@ -551,7 +556,7 @@ def next_trigger_time( spec, curtm ):
                 try:
                     m = int( float(s) * 60 + 0.5 )
                     # TODO: could also allow minutes:seconds format here
-                except:
+                except Exception:
                     raise Exception( 'bad number of minutes syntax: '+s )
 
                 tm = check_time( curtm, epoch_hr0 + m, tm )
@@ -585,7 +590,7 @@ def next_trigger_time( spec, curtm ):
             elif len(sL) == 1:
                 try:
                     tod = timeutils.seconds_since_midnight( sL[0] )
-                except:
+                except Exception:
                     raise Exception( 'bad time syntax: '+sL[0] )
 
             if dow == None:
@@ -617,7 +622,7 @@ def next_trigger_time( spec, curtm ):
                 for s in sL:
                     try:
                         t = timeutils.seconds_since_midnight( s )
-                    except:
+                    except Exception:
                         raise Exception( 'bad time syntax: '+s )
 
                     if dow0 in dowL:
@@ -783,7 +788,7 @@ def runout( cmd, include_stderr=False ):
     try:
         p = subprocess.Popen( cmd, **argD )
         out,err = p.communicate()
-    except:
+    except Exception:
         fp.close()
         raise
 
@@ -796,6 +801,15 @@ def runout( cmd, include_stderr=False ):
         out = out.decode()  # convert bytes to a string
 
     return x, out
+
+
+def append_to_python_path( dirpath ):
+    ""
+    pypath = os.environ.get( 'PYTHONPATH', None )
+    if pypath == None:
+        os.environ['PYTHONPATH'] = dirpath
+    else:
+        os.environ['PYTHONPATH'] = pypath+':'+dirpath
 
 
 #########################################################################
