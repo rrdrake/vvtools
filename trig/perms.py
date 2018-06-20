@@ -303,13 +303,13 @@ def chmod_recurse( path, filespecs=[], dirspecs=[], setgroup=None):
         if setgroup:
             change_group( path, setgroup )
         if dirspecs:
-            os.chmod( path, change_filemode( filemode( path ), *dirspecs ) )
+            apply_chmod( path, *dirspecs )
         for f in os.listdir( path ):
             fp = os.path.join( path, f )
             chmod_recurse( fp, filespecs, dirspecs, setgroup )
     else:
         if filespecs:
-            os.chmod( path, change_filemode( filemode( path ), *filespecs ) )
+            apply_chmod( path, *filespecs )
         if setgroup:
             change_group( path, setgroup )
 
