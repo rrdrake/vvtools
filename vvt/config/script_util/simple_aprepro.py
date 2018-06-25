@@ -4,7 +4,6 @@ import os
 import math
 import random
 import re
-import argparse
 
 class SimpleAprepro:
     """
@@ -313,6 +312,7 @@ def simple_aprepro(src_f, dst_f,
     return eval_locals
 
 if __name__ == '__main__':
+    import argparse
 
     # Parse inputs
     parser = argparse.ArgumentParser("simple_aprepro.py")
