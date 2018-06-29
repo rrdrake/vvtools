@@ -31,7 +31,8 @@ class BatchJob_defaults( unittest.TestCase ):
         job = BJ.BatchJob()
 
         assert job.getName() and type( job.getName() ) == type('')
-        assert job.getNumNodes() > 0
+        nc,nn = job.getProcessors()
+        assert nc > 0 and nn > 0
         assert job.getBatchFileName() and \
                type( job.getBatchFileName() ) == type('')
         assert type( job.getRunDirectory() ) == type('')
@@ -68,11 +69,17 @@ class BatchJob_specifications( unittest.TestCase ):
         job.setName( 'foobar' )
         assert job.getName() == 'foobar'
 
+    def test_num_cores(self):
+        ""
+        job = BJ.BatchJob()
+        job.setProcessors( 2, None )
+        assert job.getProcessors()[0] == 2
+
     def test_num_nodes(self):
         ""
         job = BJ.BatchJob()
-        job.setNumNodes( 2 )
-        assert job.getNumNodes() == 2
+        job.setProcessors( None, 2 )
+        assert job.getProcessors()[1] == 2
 
     def test_batch_file_name(self):
         ""

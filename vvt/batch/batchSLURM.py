@@ -25,8 +25,15 @@ class BatchSLURM( batchitf.BatchInterface ):
         ""
         qtime = batchitf.format_time_to_HMS( job.getRunTime() )
 
+        ncores,nnodes = job.getProcessors()
+        if not nnodes:
+            if ncores:
+                nnodes = ncores
+            else:
+                nnodes = 1
+
         batchitf.lineprint( fileobj,
-            '#SBATCH --nodes=' + str( job.getNumNodes() ),
+            '#SBATCH --nodes=' + str( nnodes ),
             '#SBATCH --time=' + qtime,
             '#SBATCH --output=' + job.getLogFileName() )
 

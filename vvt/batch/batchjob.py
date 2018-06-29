@@ -92,7 +92,7 @@ class BatchJob:
     def __init__(self):
         ""
         self.name = 'job'
-        self.nnodes = 1
+        self.nprocs = (1,1)
         self.fname = os.path.abspath( self.name+'_'+str(id(self))+'.sh' )
         self.rundir = '.'
         self.cmds = '\n'
@@ -115,9 +115,6 @@ class BatchJob:
     def setName(self, name): self.name = name
     def getName(self): return self.name
 
-    def setNumNodes(self, num_nodes): self.nnodes = num_nodes
-    def getNumNodes(self): return self.nnodes
-
     def setBatchFileName(self, filename): self.fname = os.path.abspath( filename )
     def getBatchFileName(self): return self.fname
 
@@ -130,7 +127,14 @@ class BatchJob:
     def setLogFileName(self, filename): self.logfname = os.path.abspath( filename )
     def getLogFileName(self): return self.logfname
 
-    def setRunTime(self, queue_time): self.rtime = queue_time
+    # resource specifications
+
+    def setProcessors(self, num_cores, num_nodes):
+        self.nprocs = ( num_cores, num_nodes )
+    def getProcessors(self):
+        return self.nprocs
+
+    def setRunTime(self, runtime): self.rtime = runtime
     def getRunTime(self): return self.rtime
 
     def setQueueName(self, queue_name): self.qname = queue_name
