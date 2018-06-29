@@ -156,6 +156,8 @@ class TestExec:
           
           if self.config.get('analyze'):
             cmd_list.append('--execute_analysis_sections')
+
+          cmd_list.extend( self.config.get( 'testargs' ) )
         
         self.tzero = time.time()
         

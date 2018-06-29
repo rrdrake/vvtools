@@ -15,6 +15,7 @@ import signal
 import shutil
 import types
 import glob
+import shlex
 
 version = '29'  # version number; used to check format and for information
 
@@ -358,7 +359,11 @@ OPTIONS
             where the NAME portion is just upper case of <name>.  Those blocks
             are not active by default.  Using this option will cause those
             blocks to be executed as part of the test.
-      
+
+      --test-args=<arguments>
+            Pass the given arguments to each test script invocation.  Can be
+            option and/or non-option arguments.
+
       --save-results
             If used with the -i option, this saves test results for an
             existing run to the testing directory in a file called
@@ -416,6 +421,7 @@ class Configuration:
                  'preclean':1,
                  'analyze':0,
                  'logfile':1,
+                 'testargs':[],
                }
     
     def get(self, name):
@@ -1592,7 +1598,9 @@ class Batcher:
             commonopts += ' --config='+config.get('configdir')
         for k,v in optdict.get('--platopt',{}).items():
             commonopts += ' --platopt ' + k + '=' + v
-        
+        for arg in config.get('testargs'):
+            commonopts += ' --test-args="'+arg+'"'
+
         qsubids = {}  # maps batch id to max num processors for that batch
         
         qid = 0
@@ -2047,6 +2055,7 @@ def parseOptionsAndGenerateOptionDictionary():
                 'vg', 'config=', 'perms=', 'sort=', 'force',
                 'save-results', 'results-tag=','results-date=',
                 'tmin=', 'tmax=', 'tsum=',
+                'test-args=',
               ]
     import getopt
     try: opts, dirs = getopt.getopt( argL, singles, longopts=doubles )
@@ -2426,7 +2435,13 @@ def parseOptionsAndGenerateOptionDictionary():
     config.set( 'preclean', '-m' not in optdict )
     config.set( 'analyze', '-a' in optdict )
     config.set( 'logfile', '-L' not in optdict )
-    
+
+    if '--test-args' in optdict:
+        argL = []
+        for args in optdict.get( '--test-args', [] ):
+            argL.extend( shlex.split( args ) )
+        config.set( 'testargs', argL )
+
     return dirs
 
 

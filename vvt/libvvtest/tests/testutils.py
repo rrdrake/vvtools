@@ -256,7 +256,7 @@ def run_cmd( cmd, directory=None ):
     """
     if type(cmd) == type(''):
         print3( 'RUN:', cmd )
-        cmdL = cmd.split()
+        cmdL = shlex.split(cmd)
     else:
         print3( 'RUN:', ' '.join( cmd ) )
         cmdL = cmd
