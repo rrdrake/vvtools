@@ -23,17 +23,6 @@ class BatchConfiguration:
     values are determined by queue name
         - queue name of None means default or same for all queues
 
-    a config is populated
-        - from known machine matching (a machine database)
-        - from environment variables
-            PLATFORM_BATCH_TYPE = SLURM, PBS, LSF, ...
-            PLATFORM_BATCH_CONFIG = "ppn=16,maxtime=4h,maxprocs=512"
-            PLATFORM_QUEUE_CONFIG = "short:ppn=16,maxtime=4h,maxprocs=512,
-                                     batch:ppn=16,maxtime=24h,maxprocs=1024"
-        - from vvtest command line
-            --platform-batch-type=SLURM
-            --platform-batch-config="ppn=16,maxtime=4h,maxprocs=512"
-            --platform-batch-config="short:ppn=16,maxtime=4h,maxprocs=512"
     """
 
     def __init__(self):
@@ -126,4 +115,28 @@ class QueueConfiguration:
         if len(default) > 0:
             return self.config.get( attr_name, default[0] )
         return self.config[attr_name]
+
+
+def construct_BatchConfiguration( config_path=None,
+                                  batch_type=None,
+                                  *batch_queue ):
+    """
+    a config is populated
+        - from known machine matching (a machine database)
+        - from environment variables
+            BATCH_CONFIG_TYPE = SLURM, PBS, LSF, ...
+            BATCH_CONFIG_QUEUE = "ppn=16,maxtime=24h,maxprocs=1024,
+                                  short:ppn=16,maxtime=4h,maxprocs=512,
+                                  batch:ppn=16,maxtime=24h,maxprocs=1024"
+        - from command line options
+            --batch-config-type=SLURM
+            --batch-config-queue="ppn=16,maxtime=24h,maxprocs=1024"
+            --batch-config-queue="short:ppn=16,maxtime=4h,maxprocs=512"
+    """
+    cfg = BatchConfiguration()
+
+    if batch_type:
+        cfg.setBatchType( batch_type )
+
+    return cfg
 

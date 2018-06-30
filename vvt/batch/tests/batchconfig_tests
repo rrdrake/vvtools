@@ -1,0 +1,142 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import unittest
+import time
+import threading
+
+import testutils as util
+from testutils import print3
+
+import batchconfig as BC
+
+
+class Class_QueueConfiguration( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_default_queue_config(self):
+        ""
+        cfg = BC.QueueConfiguration( None )
+
+        assert cfg.getName() == None
+        assert cfg.getAttr( 'ppn' ) == None
+        assert cfg.getAttr( 'maxtime' ) == None
+        assert cfg.getAttr( 'maxcores' ) == None
+        assert cfg.getAttr( 'maxnodes' ) == None
+
+    def test_queue_config_set_and_get(self):
+        ""
+        cfg = BC.QueueConfiguration( 'foobar' )
+
+        cfg.setAttr( 'ppn', 4 )
+        assert cfg.getAttr( 'ppn' ) == 4
+
+        cfg.setAttr( 'maxtime', 60 )
+        assert cfg.getAttr( 'maxtime' ) == 60
+
+        cfg.setAttr( 'maxcores', 32 )
+        assert cfg.getAttr( 'maxcores' ) == 32
+
+        cfg.setAttr( 'maxnodes', 16 )
+        assert cfg.getAttr( 'maxnodes' ) == 16
+
+    def test_queue_config_get_with_default(self):
+        ""
+        cfg = BC.QueueConfiguration( 'foobar' )
+
+        self.assertRaises( Exception, cfg.getAttr, 'money' )
+
+        val = cfg.getAttr( 'money', 'beg' )
+        assert val == 'beg'
+
+        cfg.setAttr( 'money', 'easypeasy' )
+        assert cfg.getAttr( 'money' ) == 'easypeasy'
+
+
+class Class_BatchConfiguration( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_default_values(self):
+        ""
+        cfg = BC.BatchConfiguration()
+
+        assert cfg.getBatchType() == 'proc'
+        assert cfg.getProcessorsPerNode() == None
+        assert cfg.getMaxTime() == None
+        assert cfg.getMaxProcessors() == ( None, None )
+        assert cfg.getTimeout( 'script' ) == None
+        assert cfg.getTimeout( 'missing' ) == None
+        assert cfg.getTimeout( 'complete' ) == None
+        assert cfg.getTimeout( 'logcheck' ) == None
+
+    def test_set_and_get_values(self):
+        ""
+        cfg = BC.BatchConfiguration()
+
+        cfg.setBatchType( 'slurm' )
+        assert cfg.getBatchType() == 'slurm'
+
+        cfg.setConfigAttr( ppn=4 )
+        assert cfg.getProcessorsPerNode() == 4
+
+        cfg.setConfigAttr( maxtime=60 )
+        assert cfg.getMaxTime() == 60
+
+        cfg.setConfigAttr( maxcores=512 )
+        assert cfg.getMaxProcessors() == ( 512, None )
+
+        cfg.setConfigAttr( maxnodes=256 )
+        assert cfg.getMaxProcessors() == ( 512, 256 )
+
+        cfg.setTimeout( 'script', 35 )
+        assert cfg.getTimeout( 'script' ) == 35
+
+        cfg.setTimeout( 'missing', 42 )
+        assert cfg.getTimeout( 'missing' ) == 42
+
+        cfg.setTimeout( 'complete', 3 )
+        assert cfg.getTimeout( 'complete' ) == 3
+
+        cfg.setTimeout( 'logcheck', 5 )
+        assert cfg.getTimeout( 'logcheck' ) == 5
+
+    def test_values_specific_to_a_queue_name(self):
+        ""
+        cfg = BC.BatchConfiguration()
+
+        cfg.setConfigAttr( ppn=16 )
+        assert cfg.getProcessorsPerNode() == 16
+
+        cfg.setConfigAttr( 'big', ppn=36 )
+        assert cfg.getProcessorsPerNode() == 16
+        assert cfg.getProcessorsPerNode( 'big' ) == 36
+
+    def test_values_from_two_different_queues(self):
+        ""
+        cfg = BC.BatchConfiguration()
+
+        cfg.setConfigAttr( 'small', ppn=8 )
+        cfg.setConfigAttr( 'big', ppn=36 )
+        assert cfg.getProcessorsPerNode() == None
+        assert cfg.getProcessorsPerNode( 'small' ) == 8
+        assert cfg.getProcessorsPerNode( 'big' ) == 36
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
