@@ -10,7 +10,7 @@ sys.excepthook = sys.__excepthook__
 import os
 
 
-class PlatformConfiguration:
+class BatchConfiguration:
     """
     Machine specific constraints
         - max queue time
