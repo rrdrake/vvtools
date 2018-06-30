@@ -57,6 +57,113 @@ class BatchJob_defaults( unittest.TestCase ):
         assert not start and not stop and not done
 
 
+class BatchJob_setProcessors( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_num_cores_when_ppn_is_one(self):
+        ""
+        job = BJ.BatchJob()
+
+        job.setProcessors( num_cores=0, ppn=1 )
+        nc,nn = job.getProcessors()
+        assert nc == 1 and nn == 1
+
+        job.setProcessors( num_cores=1, ppn=1 )
+        nc,nn = job.getProcessors()
+        assert nc == 1 and nn == 1
+
+        job.setProcessors( num_cores=2, ppn=1 )
+        nc,nn = job.getProcessors()
+        assert nc == 2 and nn == 2
+
+    def test_num_cores_when_ppn_is_two(self):
+        ""
+        job = BJ.BatchJob()
+
+        job.setProcessors( num_cores=0, ppn=2 )
+        nc,nn = job.getProcessors()
+        assert nc == 1 and nn == 1
+
+        job.setProcessors( num_cores=1, ppn=2 )
+        nc,nn = job.getProcessors()
+        assert nc == 1 and nn == 1
+
+        job.setProcessors( num_cores=2, ppn=2 )
+        nc,nn = job.getProcessors()
+        assert nc == 2 and nn == 1
+
+        job.setProcessors( num_cores=3, ppn=2 )
+        nc,nn = job.getProcessors()
+        assert nc == 3 and nn == 2
+
+    def test_num_cores_when_ppn_is_unknown(self):
+        ""
+        job = BJ.BatchJob()
+
+        job.setProcessors( num_cores=0 )
+        nc,nn = job.getProcessors()
+        assert nc == 1 and nn == 1
+
+        job.setProcessors( num_cores=1 )
+        nc,nn = job.getProcessors()
+        assert nc == 1 and nn == 1
+
+        job.setProcessors( num_cores=2 )
+        nc,nn = job.getProcessors()
+        assert nc == 2 and nn == 2
+
+    def test_num_nodes_when_ppn_is_one(self):
+        ""
+        job = BJ.BatchJob()
+
+        job.setProcessors( num_nodes=0, ppn=1 )
+        nc,nn = job.getProcessors()
+        assert nc == 1 and nn == 1
+
+        job.setProcessors( num_nodes=1, ppn=1 )
+        nc,nn = job.getProcessors()
+        assert nc == 1 and nn == 1
+
+        job.setProcessors( num_nodes=2, ppn=1 )
+        nc,nn = job.getProcessors()
+        assert nc == 2 and nn == 2
+
+    def test_num_nodes_when_ppn_is_two(self):
+        ""
+        job = BJ.BatchJob()
+
+        job.setProcessors( num_nodes=0, ppn=2 )
+        nc,nn = job.getProcessors()
+        assert nc == 2 and nn == 1
+
+        job.setProcessors( num_nodes=1, ppn=2 )
+        nc,nn = job.getProcessors()
+        assert nc == 2 and nn == 1
+
+        job.setProcessors( num_nodes=2, ppn=2 )
+        nc,nn = job.getProcessors()
+        assert nc == 4 and nn == 2
+
+    def test_num_nodes_when_ppn_is_two(self):
+        ""
+        job = BJ.BatchJob()
+
+        job.setProcessors( num_nodes=0 )
+        nc,nn = job.getProcessors()
+        assert nc == 1 and nn == 1
+
+        job.setProcessors( num_nodes=1 )
+        nc,nn = job.getProcessors()
+        assert nc == 1 and nn == 1
+
+        job.setProcessors( num_nodes=2 )
+        nc,nn = job.getProcessors()
+        assert nc == 2 and nn == 2
+
+
 class BatchJob_specifications( unittest.TestCase ):
 
     def setUp(self):
@@ -72,13 +179,13 @@ class BatchJob_specifications( unittest.TestCase ):
     def test_num_cores(self):
         ""
         job = BJ.BatchJob()
-        job.setProcessors( 2, None )
+        job.setProcessors( num_cores=2 )
         assert job.getProcessors()[0] == 2
 
     def test_num_nodes(self):
         ""
         job = BJ.BatchJob()
-        job.setProcessors( None, 2 )
+        job.setProcessors( num_nodes=2 )
         assert job.getProcessors()[1] == 2
 
     def test_batch_file_name(self):

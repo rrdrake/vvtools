@@ -47,10 +47,6 @@ class BatchInterface:
 
     def __init__(self):
         ""
-        self.ppn = None
-
-        self.jobs = ThreadSafeMap()  # jobid -> BatchJob
-
         self.timeouts = {
                 'script'  : 5*60,
                 'missing' : 10*60,
@@ -58,17 +54,11 @@ class BatchInterface:
                 'logcheck': 60,
             }
 
+        self.jobs = ThreadSafeMap()  # jobid -> BatchJob
+
         self.thread_lock = threading.Lock()
 
     # job management interface
-
-    def computeNumNodes(self, num_cores, cores_per_node=None):
-        """
-        Returns minimum number of compute nodes to fit the requested
-        number of cores.
-        """
-        ppn = self.getProcessorsPerNode()
-        return compute_num_nodes( num_cores, cores_per_node, ppn )
 
     def writeJob(self, job):
         """
@@ -142,16 +132,6 @@ class BatchInterface:
 
     # configuration interface
 
-    def setProcessorsPerNode(self, ppn):
-        ""
-        self.ppn = ppn
-
-    def getProcessorsPerNode(self, *default):
-        ""
-        if len(default) > 0 and self.ppn == None:
-            return default[0]
-        return self.ppn
-
     def setTimeout(self, name, timeout_seconds):
         """
         The 'name' must be one of
@@ -162,8 +142,8 @@ class BatchInterface:
                       after the submit date when it will be marked done
             complete : if the job never shows up in the queue, this is the time
                        after the script done date when it will be marked done
-            logcheck : minimum time between opening the job log file to parse
-                       the script dates (this is to avoid disk thrashing)
+            logcheck : minimum time between job log file reads to parse the
+                       script dates (longer times avoid disk thrashing)
         """
         assert name in ['script','missing','complete','logcheck']
         self.timeouts[name] = timeout_seconds
@@ -516,36 +496,6 @@ def parse_variant( variant_string ):
             D[ L[0] ] = L[1]
 
     return D
-
-
-def compute_num_nodes( requested_num_cores,
-                       requested_cores_per_node,
-                       platform_ppn ):
-    """
-    Returns minimum number of compute nodes to fit the requested number of
-    cores.  If 'requested_num_cores' is less than one, then one is assumed.
-    The 'platform_ppn' is used as the number of cores per node unless the
-    'requested_cores_per_node' value is non-None.  If both 'platform_ppn'
-    and 'requested_cores_per_node' are None, then one is returned.
-    """
-    if requested_cores_per_node != None:
-        ppn = int( requested_cores_per_node )
-    elif platform_ppn != None:
-        ppn = int( platform_ppn )
-    else:
-        return 1
-
-    assert ppn > 0
-
-    requested_num_cores = max( 1, int(requested_num_cores) )
-
-    n = int( requested_num_cores / ppn )
-    r = int( requested_num_cores % ppn )
-
-    if r == 0:
-        return n
-    else:
-        return n+1
 
 
 days_of_week = 'sun mon tue wed thu fri sat'.split() + \

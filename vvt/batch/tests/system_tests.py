@@ -14,57 +14,6 @@ from testutils import print3
 from batchjob import BatchJob
 
 
-class Method_computeNumNodes:
-
-    def setUp(self):
-        ""
-        util.setup_test( cleanout=False )
-
-        self.bat = self.makeBatchInterface()
-
-    def test_with_default_cores_per_node(self):
-        ""
-        assert self.bat.computeNumNodes( 1 ) == 1
-        assert self.bat.computeNumNodes( 0 ) == 1
-        assert self.bat.computeNumNodes( 2 ) == 1
-
-    def test_with_ppn_variant(self):
-        ""
-        self.bat.setProcessorsPerNode( 2 )
-
-        assert self.bat.computeNumNodes( 0 ) == 1
-        assert self.bat.computeNumNodes( 1 ) == 1
-        assert self.bat.computeNumNodes( 2 ) == 1
-        assert self.bat.computeNumNodes( 3 ) == 2
-        assert self.bat.computeNumNodes( 4 ) == 2
-        assert self.bat.computeNumNodes( 5 ) == 3
-
-    def test_with_cores_per_node_given(self):
-        ""
-        self.check_cores_per_node( self.bat )
-
-        self.bat = self.makeBatchInterface()
-        self.bat.setProcessorsPerNode( 2 )
-        self.check_cores_per_node( self.bat )
-
-    def check_cores_per_node(self, bat):
-        ""
-        assert self.bat.computeNumNodes( 1, 1 ) == 1
-        assert self.bat.computeNumNodes( 0, 1 ) == 1
-        assert self.bat.computeNumNodes( 2, 1 ) == 2
-
-        assert self.bat.computeNumNodes( 0, 2 ) == 1
-        assert self.bat.computeNumNodes( 1, 2 ) == 1
-        assert self.bat.computeNumNodes( 2, 2 ) == 1
-        assert self.bat.computeNumNodes( 3, 2 ) == 2
-        assert self.bat.computeNumNodes( 4, 2 ) == 2
-        assert self.bat.computeNumNodes( 5, 2 ) == 3
-
-    def test_without_ppn_set_always_default_to_one_compute_node(self):
-        ""
-        assert self.bat.computeNumNodes( 1000000 ) == 1
-
-
 class Batch_output_file:
 
     def setUp(self):

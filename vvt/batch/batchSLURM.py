@@ -27,10 +27,7 @@ class BatchSLURM( batchitf.BatchInterface ):
 
         ncores,nnodes = job.getProcessors()
         if not nnodes:
-            if ncores:
-                nnodes = ncores
-            else:
-                nnodes = 1
+            nnodes = 1
 
         batchitf.lineprint( fileobj,
             '#SBATCH --nodes=' + str( nnodes ),

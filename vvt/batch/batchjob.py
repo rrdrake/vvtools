@@ -129,8 +129,20 @@ class BatchJob:
 
     # resource specifications
 
-    def setProcessors(self, num_cores, num_nodes):
+    def setProcessors(self, num_cores=None, num_nodes=None, ppn=None):
+        ""
+        if num_cores == None:
+            num_cores = compute_num_cores( num_nodes, ppn )
+        else:
+            num_cores = max( num_cores, 1 )
+
+        if num_nodes == None:
+            num_nodes = compute_num_nodes( num_cores, ppn )
+        else:
+            num_nodes = max( num_nodes, 1 )
+
         self.nprocs = ( num_cores, num_nodes )
+
     def getProcessors(self):
         return self.nprocs
 
@@ -224,3 +236,36 @@ def set_date_attr( attrs, name, value ):
     """
     if value and name not in attrs:
         attrs[ name ] = value
+
+def compute_num_cores( num_nodes, ppn ):
+    ""
+    ncores = 1
+
+    if ppn and ppn > 0:
+        if num_nodes and num_nodes > 0:
+            ncores = num_nodes * ppn
+        else:
+            ncores = ppn
+
+    elif num_nodes and num_nodes > 0:
+        ncores = num_nodes
+
+    return ncores
+
+def compute_num_nodes( num_cores, ppn ):
+    ""
+    nnodes = 1
+
+    if ppn and ppn > 0:
+        if num_cores and num_cores > 0:
+            n = int( num_cores / ppn )
+            r = int( num_cores % ppn )
+            if r == 0:
+                nnodes = n
+            else:
+                nnodes = n+1
+
+    elif num_cores and num_cores > 0:
+        nnodes = num_cores
+
+    return nnodes

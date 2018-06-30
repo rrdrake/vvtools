@@ -5,6 +5,7 @@ import time
 from getopt import getopt
 
 from batchjob import BatchJob
+from platconfig import PlatformConfiguration
 
 
 help_string = """
@@ -13,15 +14,19 @@ USAGE:
 
 SYNOPSIS:
     Run commands or a script using a batch system.  By default, the batch
-system is just UNIX subprocesses, but other batch systems can be chosen
-using the -b option.
+system is just subprocesses, but other batch systems can be chosen using
+the -b option.
 
 OPTIONS:
     -h, --help : help
     -b <batch type> : specify the type of batch system; one of
-                        proc  : executes jobs as UNIX subprocesses
+                        proc  : executes jobs as subprocesses
                         slurm : uses sbatch, squeue, scancel
+
     --nodes <num nodes> : request this many nodes for the job
+    --cores <num cores> : request this many cores for the job
+    --ppn <cores per node> : use this number of processors per node
+
     -a, --account <account> :
                       specify an account string, needed by many batch systems
     -p <num seconds> : print job status on an interval basis; by default, the
@@ -34,19 +39,28 @@ OPTIONS:
 def main():
 
     optL,argL = getopt( sys.argv[1:], 'hb:a:p:i:',
-                        ['help','account=','nodes='] )
+                        ['help','account=','nodes=','cores=','ppn='] )
 
     optD = {}
     for n,v in optL:
         if n in ['-h','--help']:
             print3( help_string.rstrip() )
             return
+        elif n in ['--nodes','--cores','--ppn']:
+            try:
+                iv = int(v)
+                assert iv > 0
+            except Exception:
+                sys.stderr.write( '*** error: expected a positive '
+                                  'integer for '+n+', got '+repr(v)+'\n' )
+                sys.exit(1)
+            optD[n] = iv
         else:
             optD[n] = v
 
-    bat = construct_batch_instance( optD )
-
-    job = make_job( optD, argL )
+    cfg = construct_batch_configuration( optD )
+    bat = construct_batch_instance( cfg )
+    job = make_job( cfg, optD, argL )
 
     try:
         launch_job( bat, job )
@@ -62,11 +76,21 @@ def main():
 
 ######################################################################
 
-def construct_batch_instance( optD ):
+def construct_batch_configuration( optD ):
     ""
-    btype = optD.get( '-b', 'proc' )
+    cfg = PlatformConfiguration()
 
-    if btype == 'proc':
+    if '-b' in optD:
+        cfg.setBatchType( optD['-b'] )
+
+    return cfg
+
+
+def construct_batch_instance( cfg ):
+    ""
+    btype = cfg.getBatchType()
+
+    if btype.lower() == 'proc':
 
         from batchscripts import BatchScripts
         bat = BatchScripts()
@@ -74,7 +98,7 @@ def construct_batch_instance( optD ):
         bat.setTimeout( 'script', 20 )
         bat.setTimeout( 'logcheck', 5 )
 
-    elif btype == 'slurm':
+    elif btype.lower() == 'slurm':
 
         from batchSLURM import BatchSLURM
         bat = BatchSLURM()
@@ -88,15 +112,16 @@ def construct_batch_instance( optD ):
     return bat
 
 
-def make_job( optD, argL ):
+def make_job( cfg, optD, argL ):
     ""
     job = BatchJob()
 
     if len(argL) > 0:
         job.setRunCommands( ' '.join( argL ) )
 
-    nnodes = optD.get( '--nodes', 1 )
-    job.setNumNodes( nnodes )
+    nnodes = optD.get( '--nodes', None )
+    ncores = optD.get( '--cores', None )
+    job.setProcessors( ncores, nnodes, ppn=None )
 
     acnt = optD.get( '--account', optD.get( '-a', None ) )
     if acnt != None:
