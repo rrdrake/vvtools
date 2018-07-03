@@ -124,6 +124,71 @@ class Simple_Aprepro( unittest.TestCase ):
 
         assert vrun.num_pass == 1
 
+    def test_escaped_curly_braces(self):
+        """
+        This test makes sure that it correctly fixes escaped curly
+        braces. The test includes
+          * escaped start and end braces
+          * escaped start brace
+          * escaped end brace
+          * escaped braces before and after
+        """
+        util.writefile( 'values.aprepro', """
+            # {baz = 3 * 6}
+            if (foo == 1) \{bar = {baz}\}
+            if (foo == 2) \{bar = {baz}
+            \}
+            if (foo == 3) \{
+              bar = {baz}\}
+            if (foo == 4) \{
+              bar = {baz}
+            \}
+            """ )
+        util.writefile( 'values.aprepro.gold', """
+            # 18
+            if (foo == 1) {bar = 18}
+            if (foo == 2) {bar = 18
+            }
+            if (foo == 3) {
+              bar = 18}
+            if (foo == 4) {
+              bar = 18
+            }
+            """ )
+        util.writefile( 'testCurlyBrace.py.vvt', """
+            #VVT: copy : values.aprepro values.aprepro.gold
+            import script_util as util
+
+            apr = util.simple_aprepro("values.aprepro", "values.aprepro.comp")
+
+            with open("values.aprepro.comp", "r") as F:
+                comp = F.readlines()
+
+            with open("values.aprepro.gold", "r") as F:
+                gold = F.readlines()
+
+            print(comp)
+            print(gold)
+            assert comp == gold
+            """ )
+        time.sleep(1)
+
+        self.escaped_curly_braces( '' )
+        self.escaped_curly_braces('--plat '+util.core_platform_name()+' --batch')
+
+    def escaped_curly_braces(self, opt):
+        ""
+        util.remove_results()
+
+        vrun = util.vvtestRunner( opt+' -N 4' )
+
+        assert vrun.num_pass == 1
+
+
+
+
+
+
 ############################################################################
 
 util.run_test_cases( sys.argv, sys.modules[__name__] )
