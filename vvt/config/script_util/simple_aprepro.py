@@ -227,14 +227,12 @@ class SimpleAprepro:
 
             # Process escaped curly braces.
             clean_line = line.replace("\{", "{").replace("\}", "}")
-            print(clean_line)
 
             # Process the aprepro directive blocks.
             split_line = re.split(r"({[^{]*?})", clean_line)
             for idx, chunk in enumerate(split_line):
                 if chunk.startswith("{") and chunk.endswith("}"):
                     # Found a chunk to evaluate.
-                    print(idx, chunk)
                     split_line[idx] = self.safe_eval(chunk[1:-1])
             joined_line = "".join(split_line)
             if self.chatty:
