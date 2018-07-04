@@ -1,0 +1,124 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import re
+import glob
+import time
+import subprocess
+import unittest
+import shutil
+
+import testutils as util
+from testutils import print3
+
+
+class rundir_usage( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_using_rundir_option(self):
+        ""
+        write_unit_test_files()
+        time.sleep(1)
+
+        self.using_rundir_option( '' )
+        self.using_rundir_option(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def using_rundir_option(self, opt):
+        ""
+        util.remove_results()
+
+        if os.path.exists( 'myrundir' ):
+            shutil.rmtree( 'myrundir' )
+
+        vrun = util.vvtestRunner( opt+' --run-dir myrundir' )
+        assert vrun.num_pass == 2
+
+        assert len( glob.glob( 'TestResults*' ) ) == 0
+        assert os.path.isdir( 'myrundir' )
+        logL = glob.glob( 'myrundir/test*/execute.log' )
+        assert len(logL) == 2
+
+    def test_using_rundir_option_and_M_option(self):
+        ""
+        self.using_rundir_option_and_M_option( '' )
+        self.using_rundir_option_and_M_option(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def using_rundir_option_and_M_option(self, opt):
+        ""
+        util.rmallfiles()
+        write_unit_test_files()
+        os.mkdir( 'mymirror' )
+        time.sleep(1)
+
+        cwd = os.getcwd()
+        vrun = util.vvtestRunner( opt+' --run-dir myrundir ' + \
+                                      '-M '+cwd+'/mymirror' )
+        assert vrun.num_pass == 2
+
+        assert len( glob.glob( 'TestResults*' ) ) == 0
+
+        assert os.path.islink( 'myrundir' )
+        lnk = os.readlink( 'myrundir' )
+        assert os.path.exists( lnk )
+        assert os.path.samefile( lnk, 'mymirror/myrundir' )
+
+        logL = glob.glob( 'mymirror/myrundir/test*/execute.log' )
+        assert len(logL) == 2
+
+        logL = glob.glob( 'myrundir/test*/execute.log' )
+        assert len(logL) == 2
+
+    def test_rundir_can_only_be_a_single_word(self):
+        ""
+        util.rmallfiles()
+        write_unit_test_files()
+        time.sleep(1)
+
+        self.assertRaises( Exception, util.vvtestRunner, '--run-dir foo/bar' )
+        self.assertRaises( Exception, util.vvtestRunner,
+            '--run-dir '+os.path.abspath('myrundir') )
+
+
+def write_unit_test_files():
+    ""
+    util.writescript( 'testX.vvt', """
+        #!/usr/bin/env python
+        #VVT: link = auxfile.txt
+        import os, sys
+        import vvtest_util as vvt
+        fp = open( 'auxfile.txt', 'r' )
+        sys.stdout.write( fp.read() )
+        sys.stdout.flush()
+        fp.close()
+        """ )
+    util.writefile( "testY.xml", """
+        <rtest name="testY">
+          <link_files> auxfile.txt </link_files>
+          <execute>
+            cat auxfile.txt
+          </execute>
+        </rtest>""" )
+    util.writefile( "auxfile.txt", """
+        <rtest name="testY">
+          <execute>
+            cat auxfile.txt
+          </execute>
+        </rtest>""" )
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

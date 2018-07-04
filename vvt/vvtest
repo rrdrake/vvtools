@@ -272,6 +272,11 @@ OPTIONS
             The tests will run faster if a local disk is used to write to.
             The special value "any" will search for a scratch disk.
 
+      --run-dir <subdir>
+            Override the default test results directory naming mechanism of
+            TestResults.platform.ON=...  It is the subdirectory under the
+            current working directory in which all the tests will be run.
+
       -n integer
             Set the number of available processers to the given value.  By
             default, this number is set to the maximum number of processors
@@ -551,7 +556,7 @@ def generateTestList( dirs, plat, rtconfig ):
     
     test_dir = None
     cwd = os.getcwd()
-    testdirname = testResultsDir( plat.getName() )
+    testdirname = testResultsDir( optdict, plat.getName() )
     test_dir = os.path.join( cwd, testdirname )
 
     perms = None
@@ -705,16 +710,20 @@ def keywordInformation(tlist):
 ##############################################################################
 
 
-def testResultsDir( platform_name ):
+def testResultsDir( optdict, platform_name ):
     """
     Generates and returns the directory name to hold test results, which is
     unique up to the platform and on/off options.
     """
-    testdirname = 'TestResults.' + platform_name
-    if '-o' in optdict:
-      testdirname += '.ON=' + '_'.join( optdict['-o'] )
-    if '-O' in optdict:
-      testdirname += '.OFF=' + '_'.join( optdict['-O'] )
+    if '--run-dir' in optdict:
+        testdirname = optdict['--run-dir']
+
+    else:
+        testdirname = 'TestResults.' + platform_name
+        if '-o' in optdict:
+          testdirname += '.ON=' + '_'.join( optdict['-o'] )
+        if '-O' in optdict:
+          testdirname += '.OFF=' + '_'.join( optdict['-O'] )
     
     return testdirname
 
@@ -943,7 +952,7 @@ def runTests( dirs, plat, rtconfig ):
     Executes a list of tests.
     """
     # determine the directory that stores the test results then create it
-    testdirname = testResultsDir( plat.getName() )
+    testdirname = testResultsDir( optdict, plat.getName() )
     test_dir = os.path.join( os.getcwd(), testdirname )
     tfile = os.path.join( test_dir, testlist_name )
 
@@ -1852,7 +1861,7 @@ def baselineTests( test_dir, plat, rtconfig ):
     
     path_filter = None
     if test_dir == None:
-      test_dir = os.path.join( cwd, testResultsDir(plat.getName()) )
+      test_dir = os.path.join( cwd, testResultsDir( optdict, plat.getName() ) )
     else:
       path_filter = os.getcwd()
     
@@ -2055,7 +2064,7 @@ def parseOptionsAndGenerateOptionDictionary():
                 'vg', 'config=', 'perms=', 'sort=', 'force',
                 'save-results', 'results-tag=','results-date=',
                 'tmin=', 'tmax=', 'tsum=',
-                'test-args=',
+                'test-args=', 'run-dir=',
               ]
     import getopt
     try: opts, dirs = getopt.getopt( argL, singles, longopts=doubles )
@@ -2298,7 +2307,15 @@ def parseOptionsAndGenerateOptionDictionary():
       sys.stderr.write('*** ' + exeName + \
             ': error: only one -M option allowed\n')
       sys.exit(1)
-    
+
+    if '--run-dir' in optdict:
+        d = optdict['--run-dir'][0]
+        if d != os.path.basename(d):
+            sys.stderr.write('*** ' + exeName + \
+                ': error: --run-dir value can only be a single path segment\n')
+            sys.exit(1)
+        optdict['--run-dir'] = d
+
     if '-n' in optdict:
       if len(optdict['-n']) > 1:
           sys.stderr.write('*** ' + exeName + \
@@ -2549,6 +2566,8 @@ if __name__ == '__main__':
   
   # construct platform
   plat = vvplatform.construct_Platform( toolsdir, optdict )
+
+  results_dir = testResultsDir( optdict, plat.getName() )
   
   rtconfig = RuntimeConfig( \
                 param_expr_list=optdict.get('-p', None),
@@ -2582,8 +2601,8 @@ if __name__ == '__main__':
       tlist.readFile( tfile )
       tlist.loadAndFilter( plat.getMaxProcs(),
                     filter_dir=computeRelativePath( test_dir, os.getcwd() ) )
-    elif os.path.exists( testResultsDir(plat.getName()) ):
-      test_dir = os.path.join( os.getcwd(), testResultsDir(plat.getName()) )
+    elif os.path.exists( results_dir ):
+      test_dir = os.path.join( os.getcwd(), results_dir )
       tfile = os.path.join( test_dir, testlist_name )
       rtconfig.setAttr( 'include_tdd', True )  # always include tdd with -i
       tlist.readFile( tfile )
@@ -2597,7 +2616,7 @@ if __name__ == '__main__':
       tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
     else:
       print3( "*** warning: previous TestResults directory not found" )
-      test_dir = os.path.join( os.getcwd(), testResultsDir(plat.getName()) )
+      test_dir = os.path.join( os.getcwd(), results_dir )
       tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
     
     if '--keys' in optdict or '--files' in optdict:
