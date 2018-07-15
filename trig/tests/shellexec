@@ -1,0 +1,137 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import getopt
+
+mydir = os.path.abspath( sys.path[0] )
+bashexec = os.path.join( os.path.dirname(mydir), 'bashexec' )
+
+# this will os.chdir() to a subdirectory
+from testutils import *
+
+
+def main():
+    """
+    """
+    optL,argL = getopt.getopt( sys.argv[1:], '' )
+    cwd = os.getcwd()
+
+    if len(argL) == 0:
+        argL = """simple_pass_through_works
+                  setting_a_PATH_directory
+                  using_PATH_values_preserves_order
+                  running_module_command
+                  arguments_with_spaces_are_preserved
+               """.split()
+
+    for func in argL:
+        os.chdir( cwd )
+        rmallfiles()
+        time.sleep(1)
+        print3( '====> ', func )
+        eval( func+'()' )
+
+
+#######################################################################
+
+def simple_pass_through_works():
+    ""
+    writefile( 'dummyfile', 'dummy contents\n' )
+    dummy = os.path.abspath('dummyfile')
+    time.sleep(1)
+
+    out = runout( bashexec+' cat '+dummy )
+    print out
+    assert 'dummy contents' in out
+
+
+def setting_a_PATH_directory():
+    ""
+    writescript( 'bin/myscript', '#!'+sys.executable, """
+        import os, sys
+        sys.stdout.write( 'hello from myscript'+os.linesep )
+        sys.stdout.flush()
+        """ )
+    time.sleep(1)
+
+    d = os.path.abspath( 'bin' )
+    out = runout( bashexec+' -p '+d+' myscript' )
+    print out
+    assert 'hello from myscript' in out
+
+    d = os.path.abspath( 'bin' )
+    out = runout( bashexec+' --path '+d+' myscript' )
+    print out
+    assert 'hello from myscript' in out
+
+
+def using_PATH_values_preserves_order():
+    ""
+    writescript( 'bin1/myscript', '#!'+sys.executable, """
+        import os, sys
+        sys.stdout.write( 'hello script one'+os.linesep )
+        sys.stdout.flush()
+        """ )
+    writescript( 'bin2/myscript', '#!'+sys.executable, """
+        import os, sys
+        sys.stdout.write( 'hello script two'+os.linesep )
+        sys.stdout.flush()
+        """ )
+    time.sleep(1)
+
+    d1 = os.path.abspath( 'bin1' )
+    d2 = os.path.abspath( 'bin2' )
+    out = runout( bashexec+' -p '+d1+' -p '+d2+' myscript' )
+    print out
+    assert 'hello script one' in out
+
+    out = runout( bashexec+' -p '+d2+' -p '+d1+' myscript' )
+    print out
+    assert 'hello script two' in out
+
+
+def running_module_command():
+    ""
+    out = runout( bashexec+' -v -m list pwd' )
+    print out
+    assert 'module list' in out
+
+
+def arguments_with_spaces_are_preserved():
+    ""
+    writescript( 'myscript', '#!'+sys.executable, """
+        import os, sys
+        nargs = len( sys.argv[1:] )
+        sys.stdout.write( 'num arguments '+str(nargs)+os.linesep )
+        sys.stdout.flush()
+        """ )
+    time.sleep(1)
+
+    f = os.path.abspath( 'myscript' )
+    out = runout( bashexec+' '+f+' "foo bar"' )
+    print out
+    assert 'num arguments 1' in out
+
+    f = os.path.abspath( 'myscript' )
+    out = runout( bashexec+' '+f+' "foo bar" arg2' )
+    print out
+    assert 'num arguments 2' in out
+
+    f = os.path.abspath( 'myscript' )
+    out = runout( bashexec+' '+f+' arg1 "foo bar"' )
+    print out
+    assert 'num arguments 2' in out
+
+
+#######################################################################
+
+main()
