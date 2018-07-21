@@ -1,0 +1,236 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import glob
+import unittest
+import time
+
+import testutils as util
+from testutils import print3
+
+
+
+class batchconfig_plugin_functions( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+        vvtdir = os.path.dirname( os.path.dirname(util.testsrcdir) )
+        cfgdir = os.path.join( vvtdir, 'config' )
+
+        if cfgdir not in sys.path:
+            sys.path.insert( 0, cfgdir )
+
+    def test_ini_style_string_to_dict(self):
+        ""
+        from batchconfig_plugin import ini_style_string_to_dict
+
+        cfgD = ini_style_string_to_dict( '' )
+        assert len(cfgD) == 1
+        assert cfgD[None] == {}
+
+        cfgD = ini_style_string_to_dict( '[dummy]'
+                                         '' )
+        assert len(cfgD) == 2
+        assert cfgD['dummy'] == {}
+
+        try: cfgD = ini_style_string_to_dict( '  [bad syntax]' )
+        except Exception: pass
+        else: raise Exception( 'expected an exception' )
+
+        try: cfgD = ini_style_string_to_dict( '[mach]\n'
+                                              '  bad = syntax' )
+        except Exception: pass
+        else: raise Exception( 'expected an exception' )
+
+        try: cfgD = ini_style_string_to_dict( '[mach]\n'
+                                              'key=value\n'
+                                              '\n'
+                                              '  bad = syntax' )
+        except Exception: pass
+        else: raise Exception( 'expected an exception' )
+
+        try: cfgD = ini_style_string_to_dict( '[mach]\n'
+                                              'key value\n' )
+        except Exception: pass
+        else: raise Exception( 'expected an exception' )
+
+        cfgD = ini_style_string_to_dict( '[section]\n'
+                                         'key = value' )
+        assert len(cfgD) == 2
+        assert cfgD['section'] == { 'key':'value' }
+
+        cfgD = ini_style_string_to_dict( '\n'
+                                         'key = value' )
+        assert len(cfgD) == 1
+        assert cfgD[None] == { 'key':'value' }
+
+        cfgD = ini_style_string_to_dict( 'foo=bar\n'
+                                         '[mach]\n'
+                                         'key = value\n'
+                                         '[big]\n'
+                                         'bigkey=bigval\n'
+                                         'bfd=iknowright\n' )
+        assert len(cfgD) == 3
+        assert cfgD[None] == { 'foo':'bar' }
+        assert cfgD['mach'] == { 'key':'value' }
+        assert cfgD['big'] == { 'bigkey':'bigval', 'bfd':'iknowright' }
+
+        cfgD = ini_style_string_to_dict( '[mach]\n'
+                                         'key = value\n'
+                                         '      more value\n' )
+        assert len(cfgD) == 2
+        assert cfgD['mach'] == { 'key':'value more value' }
+
+        cfgD = ini_style_string_to_dict( '[mach]\n'
+                                         'key = value\n'
+                                         '#some = var\n'
+                                         'more=stuff\n' )
+        assert len(cfgD) == 2
+        assert cfgD['mach'] == { 'key':'value', 'more':'stuff' }
+
+    def test_satisfies_host_match(self):
+        ""
+        from batchconfig_plugin import satisfies_host_match
+
+        specD = {}
+        assert satisfies_host_match( 'machname', specD )
+
+        specD = { 'host_match':'machname' }
+        assert satisfies_host_match( 'machname', specD )
+
+        specD = { 'host_match':'machname*' }
+        assert satisfies_host_match( 'machname.domain.name', specD )
+
+        specD = { 'host_match':'' }
+        assert not satisfies_host_match( 'machname', specD )
+
+        specD = { 'host_match':'mach*' }
+        assert satisfies_host_match( 'machname', specD )
+
+        specD = { 'host_match':'mach-login[0-9]' }
+        assert satisfies_host_match( 'mach-login1', specD )
+
+        specD = { 'host_match':'mach-login[0-9] mach-login[0-9][0-9]' }
+        assert satisfies_host_match( 'mach-login13', specD )
+
+    def test_filter_config_set_by_host_name(self):
+        ""
+        from batchconfig_plugin import ini_style_string_to_dict
+        from batchconfig_plugin import filter_config_set_by_host_name
+
+        config = ( '[mach]\n'
+                   'host_match = mach-login*\n'
+                   'batch_type=lsf\n' )
+
+        cfgD = ini_style_string_to_dict( config )
+        filter_config_set_by_host_name( cfgD, 'foo-login2' )
+        assert len(cfgD) == 1
+        assert cfgD[None] == {}
+
+        cfgD = ini_style_string_to_dict( config )
+        filter_config_set_by_host_name( cfgD, 'mach-login5' )
+        assert len(cfgD) == 2
+        assert cfgD[None] == {}
+        assert cfgD['mach'] == { 'host_match': 'mach-login*', 'batch_type': 'lsf' }
+
+        config = ( '[foo]\n'
+                   'host_match = foo-login*\n'
+                   'batch_type=lsf\n'
+                   '[bar]\n'
+                   'host_match=bar-login*\n'
+                   'batch_type=slurm\n' )
+
+        cfgD = ini_style_string_to_dict( config )
+        filter_config_set_by_host_name( cfgD, 'foo-login2' )
+        assert len(cfgD) == 2
+        assert cfgD[None] == {}
+        assert cfgD['foo'] == { 'host_match': 'foo-login*', 'batch_type': 'lsf' }
+
+        cfgD = ini_style_string_to_dict( config )
+        filter_config_set_by_host_name( cfgD, 'bar-login11' )
+        assert len(cfgD) == 2
+        assert cfgD[None] == {}
+        assert cfgD['bar'] == { 'host_match': 'bar-login*', 'batch_type': 'slurm' }
+
+    def test_determine_batch_type_and_queue_config(self):
+        ""
+        from batchconfig_plugin import ini_style_string_to_dict
+        from batchconfig_plugin import determine_batch_type_and_queue_config
+
+        config = ( '[mach]\n'
+                   'host_match = mach-login*\n'
+                   'batch_type=lsf\n'
+                   'queue_config = ppn=16, maxtime=24hr\n'
+                   '               short: maxtime=4hr\n' )
+
+        cfgD = ini_style_string_to_dict( config )
+
+        btype,qcfg = determine_batch_type_and_queue_config( cfgD )
+        assert btype == 'lsf'
+        assert qcfg == 'ppn=16, maxtime=24hr short: maxtime=4hr'
+
+        config = ( 'batch_type = slurm\n'
+                   '[mach]\n'
+                   'host_match = mach-login*\n'
+                   'batch_type=lsf\n'
+                   'queue_config = short: ppn=32, maxtime=4hr\n' )
+
+        cfgD = ini_style_string_to_dict( config )
+
+        btype,qcfg = determine_batch_type_and_queue_config( cfgD )
+        assert btype == 'lsf'
+        assert qcfg == 'short: ppn=32, maxtime=4hr'
+
+        config = ( 'batch_type = slurm\n'
+                   '[mach]\n'
+                   'host_match = mach-login*\n'
+                   'queue_config = ppn=16, maxtime=24hr\n'
+                   '               short: maxtime=4hr\n' )
+
+        cfgD = ini_style_string_to_dict( config )
+
+        btype,qcfg = determine_batch_type_and_queue_config( cfgD )
+        assert btype == 'slurm'
+        assert qcfg == 'ppn=16, maxtime=24hr short: maxtime=4hr'
+
+
+class batchconfig_plugin_command_line( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+        vvtdir = os.path.dirname( os.path.dirname(util.testsrcdir) )
+        cfgdir = os.path.join( vvtdir, 'config' )
+
+        self.src_file = os.path.join( cfgdir, 'batchconfig_plugin.py' )
+
+    def test_running_the_plugin_should_not_fail(self):
+        ""
+        ok = util.run_redirect( sys.executable+' '+self.src_file, 'cmd.out' )
+        assert ok
+
+        fp = open( 'cmd.out', 'r' )
+        content = fp.read()
+        fp.close()
+
+        # expecting "None None" or "slurm queue stuff"
+        L = content.strip().split()
+        assert len(L) >= 2
+        assert os.linesep not in content.strip()
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
