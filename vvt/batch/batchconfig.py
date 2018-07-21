@@ -253,8 +253,10 @@ def create_module_from_filename( fname ):
                 fp.close()
         else:
             import importlib
+            import importlib.machinery as impmach
             import importlib.util as imputil
-            spec = imputil.spec_from_file_location( modname, fname )
+            loader = impmach.SourceFileLoader( modname, fname )
+            spec = imputil.spec_from_file_location( modname, fname, loader=loader )
             mod = imputil.module_from_spec(spec)
             spec.loader.exec_module(mod)
 

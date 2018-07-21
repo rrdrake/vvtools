@@ -230,6 +230,19 @@ class function_create_module_from_filename( unittest.TestCase ):
         assert mod != None
         assert mod.myfunc( 'ok' ) == 'ok'
 
+    def test_load_python_file_with_no_extension(self):
+        ""
+        util.writefile( 'noext', '''
+            import os, sys
+            def myfunc():
+                return 'yep'
+            ''' )
+        time.sleep(1)
+
+        mod = BC.create_module_from_filename( 'noext' )
+        assert mod != None
+        assert mod.myfunc() == 'yep'
+
     def test_two_files_with_same_basename_are_unique(self):
         ""
         util.writefile( 'dir1/code.py', '''
