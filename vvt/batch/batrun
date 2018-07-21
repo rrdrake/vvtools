@@ -2,10 +2,12 @@
 
 import os, sys
 import time
+import pipes
 from getopt import getopt
 
 from batchjob import BatchJob
-from batchconfig import BatchConfiguration
+from batchconfig import construct_BatchConfiguration
+from batchfactory import construct_batch_interface
 
 
 help_string = """
@@ -13,15 +15,10 @@ USAGE:
     batrun [OPTIONS] [SHELL COMMANDS]
 
 SYNOPSIS:
-    Run commands or a script using a batch system.  By default, the batch
-system is just subprocesses, but other batch systems can be chosen using
-the -b option.
+    Run commands or a script using a batch system.
 
 OPTIONS:
     -h, --help : help
-    -b <batch type> : specify the type of batch system; one of
-                        proc  : executes jobs as subprocesses
-                        slurm : uses sbatch, squeue, scancel
 
     --nodes <num nodes> : request this many nodes for the job
     --cores <num cores> : request this many cores for the job
@@ -29,17 +26,36 @@ OPTIONS:
 
     -a, --account <account> :
                       specify an account string, needed by many batch systems
+
     -p <num seconds> : print job status on an interval basis; by default, the
                        status is printed when it changes
     -i <num seconds> : max seconds between polling the queuing system;
                        defaults to 4 seconds
+
+    --batch-type <name> : specify the type of batch system; one of
+                            proc  : executes jobs as subprocesses
+                            slurm : uses sbatch, squeue, scancel
+                            lsf   : 
+                            pbs   : 
+    --batch-queue <specs> : a string that specifies the queue parameters, such
+                            as "ppn=16,maxtime=24hr"
+    --config-path <path> : a colon separated list of directories to search
+                           for a batchconfig_plugin.py file
+
+    The command line options take precedence, then environment variables:
+
+        BATCH_ACCOUNT      : same value as for --account
+        CONFIG_BATCH_TYPE  : same value as for --batch-type
+        CONFIG_BATCH_QUEUE : same value as for --batch-queue
+        CONFIG_PATH        : same value as for --config-path
 """
 
 
 def main():
 
-    optL,argL = getopt( sys.argv[1:], 'hb:a:p:i:',
-                        ['help','account=','nodes=','cores=','ppn='] )
+    optL,argL = getopt( sys.argv[1:], 'ha:p:i:',
+                        ['help','account=','nodes=','cores=','ppn=',
+                         'config-path=','batch-type=','batch-queue='] )
 
     optD = {}
     for n,v in optL:
@@ -55,11 +71,15 @@ def main():
                                   'integer for '+n+', got '+repr(v)+'\n' )
                 sys.exit(1)
             optD[n] = iv
+        elif n in ['--batch-queue','--config-path']:
+            if n not in optD:
+                optD[n] = []
+            optD[n].append( v )
         else:
             optD[n] = v
 
     cfg = construct_batch_configuration( optD )
-    bat = construct_batch_instance( cfg )
+    bat = construct_batch_interface( cfg, interactive=True )
     job = make_job( cfg, optD, argL )
 
     try:
@@ -77,39 +97,51 @@ def main():
 ######################################################################
 
 def construct_batch_configuration( optD ):
-    ""
-    cfg = BatchConfiguration()
+    """
+    A BatchConfiguration instance is created from:
 
-    if '-b' in optD:
-        cfg.setBatchType( optD['-b'] )
+        - a machine database (first file named batchconfig_plugin.py found
+          in path)
+            --config-path=/some/dir1:/some/dir2
+            CONFIG_PATH = /some/dir1:/some/dir2
+
+        - environment variables
+            CONFIG_BATCH_TYPE = SLURM, PBS, LSF, ...
+            CONFIG_BATCH_QUEUE = "ppn=16,maxtime=24h,maxprocs=1024,
+                                  short:ppn=16,maxtime=4h,maxprocs=512,
+                                  batch: ppn=16,maxtime=24h,maxprocs=1024"
+
+        - command line settings
+            --config-batch-type=SLURM
+            --config-batch-queue="ppn=16,maxtime=24h,maxprocs=1024"
+            --config-batch-queue="short:ppn=16,maxtime=4h,maxprocs=512"
+    """
+    batch_type = None
+    if '--batch-type' in optD:
+        batch_type = optD['--batch-type']
+    elif 'CONFIG_BATCH_TYPE' in os.environ:
+        batch_type = os.environ['CONFIG_BATCH_TYPE'].strip()
+
+    environ_config = None
+    if 'CONFIG_BATCH_QUEUE' in os.environ:
+        environ_config = os.environ['CONFIG_BATCH_QUEUE'].strip()
+
+    queue_config = None
+    if '--batch-queue' in optD:
+        queue_config = ', '.join( optD['--batch-queue'] )
+
+    config_path = None
+    if '--config-path' in optD:
+        config_path = ':'.join( optD['--config-path'] )
+    elif 'CONFIG_PATH' in os.environ:
+        config_path = os.environ['CONFIG_PATH'].strip()
+
+    cfg = construct_BatchConfiguration( batch_type=batch_type,
+                                        queue_config=queue_config,
+                                        environ_config=environ_config,
+                                        config_path=config_path )
 
     return cfg
-
-
-def construct_batch_instance( cfg ):
-    ""
-    btype = cfg.getBatchType()
-
-    if btype.lower() == 'proc':
-
-        from batchscripts import BatchScripts
-        bat = BatchScripts()
-
-        bat.setTimeout( 'script', 20 )
-        bat.setTimeout( 'logcheck', 5 )
-
-    elif btype.lower() == 'slurm':
-
-        from batchSLURM import BatchSLURM
-        bat = BatchSLURM()
-
-        bat.setTimeout( 'script', 10 )
-        bat.setTimeout( 'logcheck', 2 )
-
-    else:
-        raise Exception( 'Unknown batch type: '+str(btype) )
-
-    return bat
 
 
 def make_job( cfg, optD, argL ):
@@ -117,13 +149,17 @@ def make_job( cfg, optD, argL ):
     job = BatchJob()
 
     if len(argL) > 0:
-        job.setRunCommands( ' '.join( argL ) )
+        cmds = ' '.join( [ pipes.quote( arg ) for arg in argL ] )
+        job.setRunCommands( cmds )
 
     nnodes = optD.get( '--nodes', None )
     ncores = optD.get( '--cores', None )
-    job.setProcessors( ncores, nnodes, ppn=None )
+    ppn = optD.get( '--ppn', cfg.getProcessorsPerNode() )
 
-    acnt = optD.get( '--account', optD.get( '-a', None ) )
+    job.setProcessors( ncores, nnodes, ppn=ppn )
+
+    env = os.environ.get( 'BATCH_ACCOUNT', None )
+    acnt = optD.get( '--account', optD.get( '-a', env  ) )
     if acnt != None:
         job.setAccount( acnt )
 
@@ -211,4 +247,5 @@ def print3( *args ):
 
 ####################################################################
 
-main()
+if __name__ == "__main__":
+    main()

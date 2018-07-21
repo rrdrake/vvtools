@@ -1,0 +1,210 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import unittest
+import time
+import glob
+
+import testutils as util
+from testutils import print3
+
+d = os.path.dirname( util.testsrcdir )
+batrun = os.path.join( d, 'batrun' )
+
+# use this function to import batrun as a module
+from batchconfig import create_module_from_filename
+mod_batrun = create_module_from_filename( batrun )
+
+
+help_fragment = 'Run commands or a script using a batch system'
+
+
+def clean_environ():
+    ""
+    for n in [ 'CONFIG_BATCH_TYPE','CONFIG_BATCH_QUEUE','CONFIG_PATH',
+               'BATCH_ACCOUNT' ]:
+        if n in os.environ:
+            os.environ.pop( n )
+
+
+class smoke_tests( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+        clean_environ()
+
+    def test_batrun_file_exists(self):
+        ""
+        assert os.path.exists( batrun )
+        assert os.access( batrun, os.R_OK )
+        assert os.access( batrun, os.X_OK )
+
+    def test_help_string(self):
+        ""
+        out = util.runout( batrun+' -h', raise_on_failure=True )
+        assert help_fragment in out
+
+        out = util.runout( batrun+' --help', raise_on_failure=True )
+        assert help_fragment in out
+
+    def test_hello_world(self):
+        ""
+        util.run_cmd( batrun+' --batch-type proc echo hello world' )
+        time.sleep(1)
+
+        logL = glob.glob( 'job_*.log' )
+        assert len(logL) == 1
+        log = logL[0]
+        assert len( util.filegrep( log, 'hello world' ) ) == 1
+
+
+class function_construct_batch_configuration( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+        clean_environ()
+
+    def test_default_config(self):
+        ""
+        cfg = mod_batrun.construct_batch_configuration( {} )
+        assert cfg.getBatchType() == 'proc'
+
+    def test_specify_batch_type(self):
+        ""
+        opts = { '--batch-type':'slurm' }
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        assert cfg.getBatchType() == 'slurm'
+
+        opts = {}
+        os.environ['CONFIG_BATCH_TYPE'] = 'lsf'
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        assert cfg.getBatchType() == 'lsf'
+
+        opts = { '--batch-type':'slurm' }
+        os.environ['CONFIG_BATCH_TYPE'] = 'lsf'
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        assert cfg.getBatchType() == 'slurm'
+
+    def test_specify_batch_queues(self):
+        ""
+        opts = { '--batch-queue':['ppn=9'] }
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        assert cfg.getProcessorsPerNode() == 9
+
+        opts = {}
+        os.environ['CONFIG_BATCH_QUEUE'] = 'ppn=11'
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        assert cfg.getProcessorsPerNode() == 11
+
+        opts = { '--batch-queue':['ppn=9'] }
+        os.environ['CONFIG_BATCH_QUEUE'] = 'ppn=11'
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        assert cfg.getProcessorsPerNode() == 9
+
+    def test_specify_config_path(self):
+        ""
+        util.writefile( '1/batchconfig_plugin.py', '''
+            import os, sys
+            def get_config():
+                return 'lsf', 'ppn=7'
+            ''' )
+        d1 = os.path.abspath( '1' )
+        util.writefile( '2/batchconfig_plugin.py', '''
+            import os, sys
+            def get_config():
+                return 'slurm', 'ppn=17'
+            ''' )
+        d2 = os.path.abspath( '2' )
+        time.sleep(1)
+
+        opts = { '--config-path':[d1] }
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        assert cfg.getBatchType() == 'lsf'
+        assert cfg.getProcessorsPerNode() == 7
+
+        opts = {}
+        os.environ['CONFIG_PATH'] = d2
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        assert cfg.getBatchType() == 'slurm'
+        assert cfg.getProcessorsPerNode() == 17
+
+        opts = { '--config-path':[d2] }
+        os.environ['CONFIG_PATH'] = d1
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        assert cfg.getBatchType() == 'slurm'
+        assert cfg.getProcessorsPerNode() == 17
+
+
+class function_make_job( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+        clean_environ()
+
+    def test_specify_command_to_run(self):
+        ""
+        cfg = mod_batrun.construct_batch_configuration( {} )
+        job = mod_batrun.make_job( cfg, {}, ['super_cool_command'] )
+        assert 'super_cool_command' in job.getRunCommands()
+
+        job = mod_batrun.make_job( cfg, {}, ['echo', 'super   cool'] )
+        assert 'echo' in job.getRunCommands()
+        assert 'super   cool' in job.getRunCommands()
+
+    def test_specify_processors(self):
+        ""
+        opts = { '--nodes':2, '--ppn':5 }
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        job = mod_batrun.make_job( cfg, opts, [] )
+        assert job.getProcessors() == ( 10, 2 )
+
+        opts = { '--cores':11, '--ppn':5 }
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        job = mod_batrun.make_job( cfg, opts, [] )
+        assert job.getProcessors() == ( 11, 3 )
+
+        opts = { '--batch-queue':['ppn=7'], '--nodes':3 }
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        job = mod_batrun.make_job( cfg, opts, [] )
+        assert job.getProcessors() == ( 21, 3 )
+
+    def test_account_name(self):
+        ""
+        opts = { '--account':'gimme' }
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        job = mod_batrun.make_job( cfg, opts, [] )
+        assert job.getAccount() == 'gimme'
+
+        opts = { '-a':'doit' }
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        job = mod_batrun.make_job( cfg, opts, [] )
+        assert job.getAccount() == 'doit'
+
+        opts = {}
+        os.environ['BATCH_ACCOUNT'] = 'mywcid'
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        job = mod_batrun.make_job( cfg, opts, [] )
+        assert job.getAccount() == 'mywcid'
+
+        opts = { '-a':'doit' }
+        os.environ['BATCH_ACCOUNT'] = 'mywcid'
+        cfg = mod_batrun.construct_batch_configuration( opts )
+        job = mod_batrun.make_job( cfg, opts, [] )
+        assert job.getAccount() == 'doit'
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

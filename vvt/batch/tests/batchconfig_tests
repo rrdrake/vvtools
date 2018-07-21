@@ -12,7 +12,6 @@ sys.excepthook = sys.__excepthook__
 import os
 import unittest
 import time
-import threading
 
 import testutils as util
 from testutils import print3
@@ -74,15 +73,7 @@ class Class_BatchConfiguration( unittest.TestCase ):
     def test_default_values(self):
         ""
         cfg = BC.BatchConfiguration()
-
-        assert cfg.getBatchType() == 'proc'
-        assert cfg.getProcessorsPerNode() == None
-        assert cfg.getMaxTime() == None
-        assert cfg.getMaxProcessors() == ( None, None )
-        assert cfg.getTimeout( 'script' ) == None
-        assert cfg.getTimeout( 'missing' ) == None
-        assert cfg.getTimeout( 'complete' ) == None
-        assert cfg.getTimeout( 'logcheck' ) == None
+        check_default_configuration_values( cfg )
 
     def test_set_and_get_values(self):
         ""
@@ -91,16 +82,16 @@ class Class_BatchConfiguration( unittest.TestCase ):
         cfg.setBatchType( 'slurm' )
         assert cfg.getBatchType() == 'slurm'
 
-        cfg.setConfigAttr( ppn=4 )
+        cfg.setConfigAttr( 'ppn', 4 )
         assert cfg.getProcessorsPerNode() == 4
 
-        cfg.setConfigAttr( maxtime=60 )
+        cfg.setConfigAttr( 'maxtime', 60 )
         assert cfg.getMaxTime() == 60
 
-        cfg.setConfigAttr( maxcores=512 )
+        cfg.setConfigAttr( 'maxcores', 512 )
         assert cfg.getMaxProcessors() == ( 512, None )
 
-        cfg.setConfigAttr( maxnodes=256 )
+        cfg.setConfigAttr( 'maxnodes', 256 )
         assert cfg.getMaxProcessors() == ( 512, 256 )
 
         cfg.setTimeout( 'script', 35 )
@@ -119,10 +110,10 @@ class Class_BatchConfiguration( unittest.TestCase ):
         ""
         cfg = BC.BatchConfiguration()
 
-        cfg.setConfigAttr( ppn=16 )
+        cfg.setConfigAttr( 'ppn', 16 )
         assert cfg.getProcessorsPerNode() == 16
 
-        cfg.setConfigAttr( 'big', ppn=36 )
+        cfg.setConfigAttr( 'ppn', 36, queue_name='big' )
         assert cfg.getProcessorsPerNode() == 16
         assert cfg.getProcessorsPerNode( 'big' ) == 36
 
@@ -130,11 +121,374 @@ class Class_BatchConfiguration( unittest.TestCase ):
         ""
         cfg = BC.BatchConfiguration()
 
-        cfg.setConfigAttr( 'small', ppn=8 )
-        cfg.setConfigAttr( 'big', ppn=36 )
+        cfg.setConfigAttr( 'ppn', 8, queue_name='small' )
+        cfg.setConfigAttr( 'ppn', 36, queue_name='big' )
         assert cfg.getProcessorsPerNode() == None
         assert cfg.getProcessorsPerNode( 'small' ) == 8
         assert cfg.getProcessorsPerNode( 'big' ) == 36
+
+    def test_parse_config_with_name_value_pairs(self):
+        ""
+        L = BC.parse_queue_config_string( 'ppn=16' )
+        assert len(L) == 1
+        q,n,v = L[0]
+        assert q == None and n == 'ppn' and v == '16'
+
+        L = BC.parse_queue_config_string( 'ppn=16,maxtime=24h' )
+        assert len(L) == 2
+        q,n,v = L[0]
+        assert q == None and n == 'ppn' and v == '16'
+        q,n,v = L[1]
+        assert q == None and n == 'maxtime' and v == '24h'
+
+        L = BC.parse_queue_config_string( 'ppn=16, maxtime=24h' )
+        assert len(L) == 2
+        q,n,v = L[0]
+        assert q == None and n == 'ppn' and v == '16'
+        q,n,v = L[1]
+        assert q == None and n == 'maxtime' and v == '24h'
+
+    def test_parse_config_with_a_queue_name(self):
+        ""
+        L = BC.parse_queue_config_string( 'short: ppn=16' )
+        assert len(L) == 1
+        q,n,v = L[0]
+        assert q == 'short' and n == 'ppn' and v == '16'
+
+        L = BC.parse_queue_config_string( 'short:ppn=16,maxtime=24h' )
+        assert len(L) == 2
+        q,n,v = L[0]
+        assert q == 'short' and n == 'ppn' and v == '16'
+        q,n,v = L[1]
+        assert q == 'short' and n == 'maxtime' and v == '24h'
+
+        L = BC.parse_queue_config_string( 'short,ppn=16,maxtime=24h' )
+        assert len(L) == 2
+        q,n,v = L[0]
+        assert q == 'short' and n == 'ppn' and v == '16'
+        q,n,v = L[1]
+        assert q == 'short' and n == 'maxtime' and v == '24h'
+
+        L = BC.parse_queue_config_string( 'short, ppn=16,maxtime=24h' )
+        assert len(L) == 2
+        q,n,v = L[0]
+        assert q == 'short' and n == 'ppn' and v == '16'
+        q,n,v = L[1]
+        assert q == 'short' and n == 'maxtime' and v == '24h'
+
+    def test_parse_config_with_more_than_one_queue_name(self):
+        ""
+        L = BC.parse_queue_config_string( 'ppn=16, short: ppn=8, long, ppn=32' )
+        assert len(L) == 3
+        q,n,v = L[0]
+        assert q == None and n == 'ppn' and v == '16'
+        q,n,v = L[1]
+        assert q == 'short' and n == 'ppn' and v == '8'
+        q,n,v = L[2]
+        assert q == 'long' and n == 'ppn' and v == '32'
+
+    def test_parse_config_with_whitespace_rather_than_commas(self):
+        ""
+        L = BC.parse_queue_config_string( 'ppn=16 short: ppn=8 long, ppn=32' )
+        assert len(L) == 3
+        q,n,v = L[0]
+        assert q == None and n == 'ppn' and v == '16'
+        q,n,v = L[1]
+        assert q == 'short' and n == 'ppn' and v == '8'
+        q,n,v = L[2]
+        assert q == 'long' and n == 'ppn' and v == '32'
+
+
+def check_default_configuration_values( cfg ):
+    ""
+    assert cfg.getBatchType() == 'proc'
+    assert cfg.getProcessorsPerNode() == None
+    assert cfg.getMaxTime() == None
+    assert cfg.getMaxProcessors() == ( None, None )
+    assert cfg.getTimeout( 'script' ) == None
+    assert cfg.getTimeout( 'missing' ) == None
+    assert cfg.getTimeout( 'complete' ) == None
+    assert cfg.getTimeout( 'logcheck' ) == None
+
+
+class function_create_module_from_filename( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_read_a_python_file_to_create_a_module_object(self):
+        ""
+        util.writefile( 'mycode.py', '''
+            import os, sys
+            def myfunc( arg ):
+                return arg
+            ''' )
+        time.sleep(1)
+
+        mod = BC.create_module_from_filename( 'mycode.py' )
+        assert mod != None
+        assert mod.myfunc( 'ok' ) == 'ok'
+
+    def test_two_files_with_same_basename_are_unique(self):
+        ""
+        util.writefile( 'dir1/code.py', '''
+            import os, sys
+            def myfunc( arg ):
+                return arg+arg
+            ''' )
+        util.writefile( 'dir2/code.py', '''
+            import os, sys
+            def myfunc( arg ):
+                return arg-arg
+            ''' )
+        time.sleep(1)
+
+        mod1 = BC.create_module_from_filename( 'dir1/code.py' )
+        mod2 = BC.create_module_from_filename( 'dir2/code.py' )
+        assert mod1.myfunc(2) == 4
+        assert mod2.myfunc(2) == 0
+
+    def test_loaded_modules_are_cached(self):
+        ""
+        util.writefile( 'thing.py', '''
+            import os, sys
+            filescopevar = 1
+            ''' )
+        os.mkdir( 'subdir' )
+        time.sleep(1)
+
+        mod1 = BC.create_module_from_filename( 'thing.py' )
+        mod1.filescopevar += 1
+
+        mod2 = BC.create_module_from_filename( 'thing.py' )
+        assert mod2.filescopevar == 2
+
+        os.chdir( 'subdir' )
+        mod2 = BC.create_module_from_filename( '../thing.py' )
+        assert mod2.filescopevar == 2
+
+
+class function_load_config_from_file( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_load_config_string_in_hours(self):
+        ""
+        cfg = BC.BatchConfiguration()
+
+        BC.load_config_string( cfg, 'maxtime=240' )
+        assert cfg.getMaxTime() == 240
+
+        BC.load_config_string( cfg, 'maxtime=2h' )
+        assert cfg.getMaxTime() == 2*60*60
+
+        BC.load_config_string( cfg, 'maxtime=4hr' )
+        assert cfg.getMaxTime() == 4*60*60
+
+    def test_load_a_simple_config_file(self):
+        ""
+        util.writefile( '1/batchconfig_plugin.py', '''
+            import os, sys
+            def get_config():
+                return 'lsf', ''
+            ''' )
+        time.sleep(1)
+
+        cfg = BC.BatchConfiguration()
+        assert cfg.getBatchType() != 'lsf'
+
+        ok = BC.load_config_from_file( cfg, '1/batchconfig_plugin.py' )
+        assert ok == True
+        assert cfg.getBatchType() == 'lsf'
+
+    def test_when_the_get_config_function_returns_None_None(self):
+        ""
+        util.writefile( '2/batchconfig_plugin.py', '''
+            import os, sys
+            def get_config():
+                return None, None
+            ''' )
+        time.sleep(1)
+
+        cfg = BC.BatchConfiguration()
+        btype = cfg.getBatchType()
+
+        ok = BC.load_config_from_file( cfg, '2/batchconfig_plugin.py' )
+        assert ok == False
+        assert cfg.getBatchType() == btype
+
+    def test_when_the_get_config_function_is_not_defined(self):
+        ""
+        util.writefile( '3/batchconfig_plugin.py', '''
+            import os, sys
+            def misspelled_function():
+                return 'hello!'
+            ''' )
+        time.sleep(1)
+
+        cfg = BC.BatchConfiguration()
+        btype = cfg.getBatchType()
+
+        ok = BC.load_config_from_file( cfg, '3/batchconfig_plugin.py' )
+        assert ok == False
+        assert cfg.getBatchType() == btype
+
+    def test_when_the_file_does_not_exist(self):
+        ""
+        cfg = BC.BatchConfiguration()
+        self.assertRaises( Exception, BC.load_config_from_file,
+                           cfg, '4/batchconfig_plugin.py' )
+
+
+class function_load_config_file_from_path( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_load_a_simple_config_file_using_path(self):
+        ""
+        util.writefile( '10/batchconfig_plugin.py', '''
+            import os, sys
+            def get_config():
+                return 'lsf', ''
+            ''' )
+        bpath = os.path.abspath( '10' )
+        time.sleep(1)
+
+        cfg = BC.BatchConfiguration()
+        assert cfg.getBatchType() != 'lsf'
+
+        BC.load_config_file_from_path( cfg, bpath )
+        assert cfg.getBatchType() == 'lsf'
+
+    def test_first_path_fails_second_path_succeeds(self):
+        ""
+        util.writefile( '11/batchconfig.py', '''
+            import os, sys
+            def get_config():
+                return 'slurm', ''
+            ''' )
+        bpath1 = os.path.abspath( '11' )
+        util.writefile( '12/batchconfig_plugin.py', '''
+            import os, sys
+            def get_config():
+                return 'lsf', ''
+            ''' )
+        bpath2 = os.path.abspath( '12' )
+        time.sleep(1)
+
+        cfg = BC.BatchConfiguration()
+        assert cfg.getBatchType() != 'lsf' and cfg.getBatchType() != 'slurm'
+
+        BC.load_config_file_from_path( cfg, bpath1+':'+bpath2 )
+        assert cfg.getBatchType() == 'lsf'
+
+    def test_first_path_doest_exist(self):
+        ""
+        bpath1 = os.path.abspath( '13' )
+        util.writefile( '14/batchconfig_plugin.py', '''
+            import os, sys
+            def get_config():
+                return 'lsf', ''
+            ''' )
+        bpath2 = os.path.abspath( '14' )
+        time.sleep(1)
+
+        cfg = BC.BatchConfiguration()
+        assert cfg.getBatchType() != 'lsf'
+
+        BC.load_config_file_from_path( cfg, bpath1+':'+bpath2 )
+        assert cfg.getBatchType() == 'lsf'
+
+
+class function_construct_BatchConfiguration( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_default_construct_BatchConfiguration_function(self):
+        ""
+        cfg = BC.construct_BatchConfiguration()
+        check_default_configuration_values( cfg )
+
+    def test_specifying_batch_type(self):
+        ""
+        cfg = BC.construct_BatchConfiguration( batch_type='slurm' )
+        assert cfg.getBatchType() == 'slurm'
+        cfg = BC.construct_BatchConfiguration( batch_type='lsf' )
+        assert cfg.getBatchType() == 'lsf'
+
+    def test_specifying_batch_type_and_queue_config(self):
+        ""
+        cfg = BC.construct_BatchConfiguration(
+            batch_type='lsf',
+            queue_config="ppn=13" )
+        assert cfg.getBatchType() == 'lsf'
+        assert cfg.getProcessorsPerNode() == 13
+
+    def test_specifying_batch_type_and_environ_config(self):
+        ""
+        cfg = BC.construct_BatchConfiguration(
+            batch_type='lsf',
+            environ_config="ppn=21" )
+        assert cfg.getBatchType() == 'lsf'
+        assert cfg.getProcessorsPerNode() == 21
+
+    def test_queue_config_takes_precedence_over_environ_config(self):
+        ""
+        cfg = BC.construct_BatchConfiguration(
+            batch_type='lsf',
+            queue_config="ppn=13",
+            environ_config="ppn=21" )
+        assert cfg.getBatchType() == 'lsf'
+        assert cfg.getProcessorsPerNode() == 13
+
+    def test_using_a_config_file(self):
+        ""
+        util.writefile( '20/batchconfig_plugin.py', '''
+            import os, sys
+            def get_config():
+                return 'lsf', 'ppn=19'
+            ''' )
+        bpath = os.path.abspath( '20' )
+        time.sleep(1)
+
+        cfg = BC.construct_BatchConfiguration( config_path=bpath )
+        assert cfg.getBatchType() == 'lsf'
+        assert cfg.getProcessorsPerNode() == 19
+
+    def test_using_a_config_file_with_multiple_queues(self):
+        ""
+        util.writefile( '21/batchconfig_plugin.py', '''
+            import os, sys
+            def get_config():
+                return 'lsf', 'ppn=19 short: ppn=7, maxtime=24h viz: ppn=16, maxtime=3h'
+            ''' )
+        bpath = os.path.abspath( '21' )
+        time.sleep(1)
+
+        cfg = BC.construct_BatchConfiguration( config_path=bpath )
+        assert cfg.getBatchType() == 'lsf'
+        assert cfg.getProcessorsPerNode() == 19
+        assert cfg.getProcessorsPerNode( 'short' ) == 7
+        assert cfg.getProcessorsPerNode( 'viz' ) == 16
+
+    def test_just_specify_queue_config(self):
+        ""
+        cfg = BC.construct_BatchConfiguration( queue_config='ppn=51' )
+        assert cfg.getProcessorsPerNode() == 51
+
+    def test_queue_config_with_default_and_specific_queue_name(self):
+        ""
+        cfg = BC.construct_BatchConfiguration(
+            queue_config='ppn=51, short: ppn=21' )
+        assert cfg.getProcessorsPerNode() == 51
+        assert cfg.getProcessorsPerNode( 'short' ) == 21
 
 
 ############################################################################

@@ -241,6 +241,30 @@ def writescript( fname, content ):
     except: pass
 
 
+def runout( cmd, raise_on_failure=False ):
+    """
+    """
+    opts = {}
+    if type(cmd) == type(''):
+        opts['shell'] = True
+    p = subprocess.Popen( cmd, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT,
+                               **opts )
+    out = p.communicate()[0]
+    try:
+        s = out.decode()
+        out = s
+    except:
+        pass
+
+    x = p.returncode
+    if raise_on_failure and x != 0:
+        print3(out)
+        raise Exception( 'command failed: ' + str(cmd) )
+
+    return out
+
+
 def run_cmd( cmd, directory=None ):
     """
     """
