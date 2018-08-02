@@ -1,0 +1,288 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import unittest
+
+import testutils as util
+from testutils import print3
+
+from libvvtest.ScriptReader import ScriptReader
+from libvvtest.TestSpecError import TestSpecError
+
+
+class ScriptReader_file_reads( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_parse_file_with_no_directives(self):
+        ""
+        util.writefile( 'script.vvt', """
+            pass
+            """ )
+        time.sleep(1)
+
+        rdr = ScriptReader( 'script.vvt' )
+
+        assert len( rdr.getSpecList() ) == 0
+
+    def test_parse_file_with_keyword_value(self):
+        ""
+        util.writefile( 'script.vvt', """
+            #VVT: keyname = value1 value2
+            pass
+            """ )
+        time.sleep(1)
+
+        rdr = ScriptReader( 'script.vvt' )
+
+        specL = rdr.getSpecList()
+        assert len( specL ) == 1
+        assert specL[0].keyword == 'keyname'
+        assert specL[0].value == 'value1 value2'
+
+    def test_directives_can_have_spaces_before_and_after_VVT(self):
+        ""
+        util.writefile( 'script.vvt', """
+            # VVT: keyname1 = value1
+            #  VVT: keyname2 = value2
+            #\tVVT: keyname3 = value3
+            #VVT : keyname4 = value4
+            # VVT  : keyname5 = value5
+            #VVT \t: keyname6 = value6
+            pass
+            """ )
+        time.sleep(1)
+
+        rdr = ScriptReader( 'script.vvt' )
+
+        specL = rdr.getSpecList()
+        assert len( specL ) == 6
+
+        assert specL[0].keyword == 'keyname1' and specL[0].value == 'value1'
+        assert specL[1].keyword == 'keyname2' and specL[1].value == 'value2'
+        assert specL[2].keyword == 'keyname3' and specL[2].value == 'value3'
+        assert specL[3].keyword == 'keyname4' and specL[3].value == 'value4'
+        assert specL[4].keyword == 'keyname5' and specL[4].value == 'value5'
+        assert specL[5].keyword == 'keyname6' and specL[5].value == 'value6'
+
+
+class ScriptReader_include_directives( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_insert_file_into_directives(self):
+        ""
+        util.writefile( 'script.vvt', """
+            #VVT: insert directive file : directive_file.txt
+            pass
+            """ )
+        util.writefile( 'directive_file.txt', """
+            #VVT: keyname = value
+            """ )
+        time.sleep(1)
+
+        rdr = ScriptReader( 'script.vvt' )
+
+        specL = rdr.getSpecList()
+        assert len( specL ) == 1
+        assert specL[0].keyword == 'keyname' and specL[0].value == 'value'
+
+    def test_insert_file_contained_in_parent_directory(self):
+        ""
+        os.mkdir( 'rundir' )
+
+        util.writefile( 'subdir/script.vvt', """
+            #VVT : perl : is old school
+            #VVT: insert directive file : ../directive_file.txt
+            # VVT: python : rocks
+            pass
+            """ )
+        util.writefile( 'directive_file.txt', """
+            #VVT: whatever key = whatever value
+            #VVT: foo : bar
+
+            """ )
+        time.sleep(1)
+
+        vvtfile = os.path.abspath( 'subdir/script.vvt' )
+
+        os.chdir( 'rundir' )
+        rdr = ScriptReader( vvtfile )
+
+        specL = rdr.getSpecList()
+        assert len( specL ) == 4
+        assert specL[0].keyword == 'perl' and specL[0].value == 'is old school'
+        assert specL[1].keyword == 'whatever key' and specL[1].value == 'whatever value'
+        assert specL[2].keyword == 'foo' and specL[2].value == 'bar'
+        assert specL[3].keyword == 'python' and specL[3].value == 'rocks'
+
+    def test_insert_nested_files(self):
+        ""
+        os.mkdir( 'rundir' )
+
+        util.writefile( 'subdir/script.vvt', """
+            #VVT: insert directive file : ../directive_file.txt
+            # VVT: python : rocks
+            pass
+            """ )
+        util.writefile( 'directive_file.txt', """
+            #VVT: foo : bar
+            #VVT: insert directive file: subdir/moredirectives.txt
+            """ )
+        util.writefile( 'subdir/moredirectives.txt', """
+            #VVT: planets : earth mars others
+            """ )
+        time.sleep(1)
+
+        os.chdir( 'rundir' )
+        rdr = ScriptReader( '../subdir/script.vvt' )
+
+        specL = rdr.getSpecList()
+        assert len( specL ) == 3
+        assert specL[0].keyword == 'foo' and specL[0].value == 'bar'
+        assert specL[1].keyword == 'planets' and specL[1].value == 'earth mars others'
+        assert specL[2].keyword == 'python' and specL[2].value == 'rocks'
+
+    def test_insert_abspath_file(self):
+        ""
+        util.writefile( 'subdir/directive_file.txt', """
+            #VVT: perl : old
+            """ )
+        fname = os.path.abspath( 'subdir/directive_file.txt' )
+        util.writefile( 'script.vvt', """
+            #VVT: insert directive file : """+fname+"""
+            #VVT: python : rocks
+            pass
+            """ )
+        time.sleep(1)
+
+        rdr = ScriptReader( 'script.vvt' )
+
+        specL = rdr.getSpecList()
+        assert len( specL ) == 2
+        assert specL[0].keyword == 'perl' and specL[0].value == 'old'
+        assert specL[1].keyword == 'python' and specL[1].value == 'rocks'
+
+    def test_run_vvtest_on_a_test_file_with_an_insert_directive(self):
+        ""
+        util.writefile( 'subdir/directive_file.txt', """
+            #VVT: parameterize : size = 1 2
+            """ )
+        util.writescript( 'script.vvt', """
+            #!/usr/bin/env python
+            #VVT: insert directive file : subdir/directive_file.txt
+            #VVT: link (parameters="size=2") : foo
+            #VVT: link (parameters="size=1") : bar
+            import os
+            import vvtest_util as vvt
+            if vvt.size == '1':
+                assert os.path.exists( 'bar' )
+                assert not os.path.exists( 'foo' )
+            elif vvt.size == '2':
+                assert os.path.exists( 'foo' )
+                assert not os.path.exists( 'bar' )
+            else:
+                assert False
+            """ )
+
+        util.writefile( 'foo', "foofile\n" )
+        util.writefile( 'bar', "barfile\n" )
+
+        time.sleep(1)
+
+        vrun = util.vvtestRunner( '--plat '+util.core_platform_name() )
+        assert vrun.num_pass == 2
+
+
+class parsing_errors( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_invalid_directive(self):
+        ""
+        util.writefile( 'script.vvt', """
+            #VVT: link (options="opt") oops : somefile
+            pass
+            """ )
+        time.sleep(1)
+
+        try:
+            ScriptReader( 'script.vvt' )
+        except TestSpecError:
+            assert 'script.vvt:2' in str( sys.exc_info()[1] )
+        else:
+            raise Exception( 'expected an exception' )
+
+    def test_invalid_directive_in_an_inserted_file(self):
+        ""
+        util.writefile( 'insertme.txt', """
+            # ignore this line
+            #VVT: link (options="opt") oops : somefile
+            """ )
+        util.writefile( 'script.vvt', """
+            #VVT: insert directive file = insertme.txt
+            pass
+            """ )
+        time.sleep(1)
+
+        try:
+            ScriptReader( 'script.vvt' )
+        except TestSpecError:
+            assert 'insertme.txt:3' in str( sys.exc_info()[1] )
+        else:
+            raise Exception( 'expected an exception' )
+
+    def test_inserted_file_does_not_exist(self):
+        ""
+        util.writefile( 'script.vvt', """
+            #VVT: insert directive file = foobar.txt
+            pass
+            """ )
+        time.sleep(1)
+
+        try:
+            ScriptReader( 'script.vvt' )
+        except TestSpecError:
+            assert 'script.vvt:2' in str( sys.exc_info()[1] )
+        else:
+            raise Exception( 'expected an exception' )
+
+    def test_error_in_insert_directive_itself(self):
+        ""
+        util.writefile( 'script.vvt', """
+            #VVT: insert directive file = 
+            pass
+            """ )
+        time.sleep(1)
+
+        try:
+            ScriptReader( 'script.vvt' )
+        except TestSpecError:
+            assert 'script.vvt:2' in str( sys.exc_info()[1] )
+        else:
+            raise Exception( 'expected an exception' )
+
+
+
+# USE CASES:
+#   - error in a directive has file/line number
+#   - error in an inserted file has file/line number
+#   - error can't find inserted file
+#   - 
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
