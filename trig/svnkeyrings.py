@@ -8,7 +8,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
-import glob
+import re
 import time
 import getopt
 import subprocess
@@ -20,75 +20,45 @@ from os.path import join as pjoin
 help_string = """
 USAGE
     svnkeyrings.py {-h|--help}
-    svnkeyrings.py [--sessionless] reset
-    svnkeyrings.py [--bash|--csh]
+    svnkeyrings.py reset
 
 SYNOPSIS
 
     This script helps set up for passwordless subversion access using
 gnome-keyring.  Use the "reset" mode to reset your login keyring and
-initialize for subversion access.  Afterward, your shells originating from
-an X session should be able to access the subversion repository without
-entering a password.
+initialize for subversion access.  Afterward, use the svnwrap script to
+run svn commands without having to enter a password.
 
-    Shells originating from cron or ssh will need to set a few variables in
-order to communicate with the gnome-keyring utility running in the X session.
-This script without any arguments will print the variables to stdout which
-the shell can eval.  For example, for bash use
+The setup is specific to each machine.  On machines not running an X session,
+the configuration will not survive reboots, so you have to run "reset" again.
+On machines running an X session, a reboot just requires that you log back
+into the desktop session.
 
-    $ eval $(keyringvars.py)
+To summarize, do this
 
-or for csh/tcsh use
-
-    $ eval `keyringvars.py --csh`
-
-Python programs can do
-
-    import svnkeyrings
-    svnkeyrings.set_environ()
-
-To automate this in your shell logins, you can add to a bash login file,
-
-    if [ -z "$GNOME_KEYRING_SOCKET" -o -z "$SSH_AUTH_SOCK" ]; then
-      eval $(keyringvars.py)
-    fi
-
-or for csh/tcsh,
-
-    if ( ! $?GNOME_KEYRING_SOCKET || ! $?SSH_AUTH_SOCK ) then
-      eval `keyringvars.py --csh`
-    endif
-
-    To setup for a machine that is not running an X session, add the
---sessionless option to the reset command.  The shell eval and python
-set_environ() will prefer a sessionless configuration if one exists for
-the machine.
-
-    Note that gnome-keyring data does not survive a reboot.  For X sessions,
-you just need to log back in to the X session.  For sessionless machines, you
-will want to run "svnkeyrings.py --sessionless reset" again.
+    1. In a shell on the target machine, run "svnkeyrings.py reset"
+    2. Copy the svnwrap script into a bin directory in your PATH
+    3. Optionally, edit the svnwrap script to set the SVNEXE variable
+    4. Use svnwrap in place of the svn program
 """
 
 
 def main():
     ""
-    optL,argL = getopt.getopt( sys.argv[1:], 'h',
-                               ['help','sessionless','csh','bash'] )
+    optL,argL = getopt.getopt( sys.argv[1:], 'h', ['help'] )
 
     if ('-h','') in optL or ('--help','') in optL:
-        print help_string
+        print3( help_string )
         return
 
-    sessionless = ('--sessionless','') in optL
-
     if 'reset' in argL:
+
         remove_progress_file()
 
-        if sessionless:
-            run_reset_machine_sequence()
-
+        if running_in_a_desktop_session():
+            run_reset_desktop_session()
         else:
-            run_reset_sequence()
+            run_reset_machine_sequence()
 
     else:
         state = read_last_state_from_progress_file()
@@ -97,17 +67,141 @@ def main():
             run_subversion_sequence()
 
         elif state == 'svnconfig':
-            initialize_subversion_password_in_keyring()
-            write_session_info_file()
+            configdir = construct_subversion_config_dir_name()
+            initialize_subversion_password_in_keyring( configdir )
 
         else:
-            syntax = 'csh' if ('--csh','') in optL else 'bash'
-            print_keyring_variables( syntax )
+            configdir = construct_subversion_config_dir_name()
+            print3( configdir )
+
+
+##################################################################
+
+def reset_subversion_config( configdir ):
+    ""
+    if os.path.exists( configdir ):
+        shutil.rmtree( configdir )
+        time.sleep(1)
+
+    generate_subversion_files( configdir )
+
+    modify_subversion_config_file( configdir )
+    modify_subversion_servers_file( configdir )
+
+
+def construct_subversion_config_dir_name():
+    ""
+    mach = os.uname()[1]
+    path = os.path.expanduser( '~/.subversion_'+mach )
+    return path
+
+
+def running_in_a_desktop_session():
+    ""
+    if 'DESKTOP_SESSION' in os.environ or \
+       'GDMSESSION' in os.environ:
+        return True
+
+    return False
+
+
+def kill_dbus_and_keyring_daemons():
+    ""
+    cmd = construct_ps_command()
+
+    x,out = run_capture( cmd )
+
+    proclist = extract_processes_to_kill( out )
+
+    for spid,args in proclist:
+        print3( 'Killing:', spid, '=', args )
+        subprocess.call( 'kill -9 '+spid, shell=True )
+
+
+def construct_ps_command():
+    ""
+    cmd = 'ps'
+
+    usr = get_current_user_name()
+    if usr:
+        cmd += ' -u '+usr
+    else:
+        cmd += ' -A'
+
+    if sys.platform == 'darwin':
+        cmd += ' -o "pid,ppid,command"'
+    else:
+        cmd += ' -o "pid,ppid,args"'
+
+    return cmd
+
+
+def extract_processes_to_kill( ps_out ):
+    ""
+    wspat = re.compile('[ \t]+')
+
+    proclist = []
+
+    for line in re.split( '[\n\r]+', ps_out ):
+
+        lineL = wspat.split( line.strip(), 2 )
+
+        if len( lineL ) == 3:
+
+            spid,sppid,args = lineL
+
+            if should_kill_process( sppid, args ):
+                proclist.append( [spid,args] )
+
+    return proclist
+
+
+def should_kill_process( sppid, args ):
+    ""
+    basenames = [ 'dbus-daemon', 'gnome-keyring-daemon' ]
+
+    killit = False
+
+    try:
+        ppid = int( sppid )
+
+    except Exception:
+        pass
+
+    else:
+        if ppid == 1:
+            prog = args.split()[0]
+            if os.path.basename( prog ) in basenames:
+                killit = True
+
+    return killit
+
+
+def get_current_user_name( try_getpass=True, try_homedir=True ):
+    ""
+    usr = None
+
+    if try_getpass:
+        try:
+            import getpass
+            usr = getpass.getuser()
+        except Exception:
+            usr = None
+
+    if usr == None and try_homedir:
+        try:
+            usrdir = os.path.expanduser( '~' )
+            if usrdir != '~':
+                usr = os.path.basename( usrdir )
+        except Exception:
+            usr = None
+
+    return usr
 
 
 ############################################################################
 
-def run_reset_sequence():
+def run_reset_desktop_session():
     """
     """
     ok = introduction()
@@ -206,14 +300,20 @@ def run_reset_machine_sequence():
     ok = response_is_yes( response )
 
     if ok:
-        ok,evars = start_gnome_keyring()
+        kill_dbus_and_keyring_daemons()
 
-    if ok:
-        initialize_subversion_password_in_keyring()
-        write_keyring_info_file( evars, True )
+        configdir = construct_subversion_config_dir_name()
+        print3( '\nSubversion config dir:', configdir )
+        reset_subversion_config( configdir )
+
+        evars = start_dbus_and_gnome_keyring()
+
+        initialize_subversion_password_in_keyring( configdir )
+
+        write_keyring_variable_files( configdir, evars )
 
 
-def start_gnome_keyring():
+def start_dbus_and_gnome_keyring():
     ""
     vars1 = launch_dbus()
     os.environ.update( vars1 )
@@ -223,13 +323,15 @@ def start_gnome_keyring():
 
     vars1.update( keyring_vars )
 
-    return True, vars1
+    return vars1
 
 
 def launch_dbus():
     ""
     x,out = run_capture( 'dbus-launch --sh-syntax' )
+    assert x == 0, "dbus-launch failed (non-zero exit status)"
     varD = parse_shell_output_for_variables( out )
+    assert len( varD ) > 0, 'dbus-launch did not return any variables'
     return varD
 
 
@@ -251,144 +353,85 @@ def parse_shell_output_for_variables( output ):
 def launch_keyring():
     ""
     x,out = run_capture( 'gnome-keyring-daemon' )
+    assert x == 0, "gnome-keyring-daemon failed (non-zero exit status)"
     varD = parse_shell_output_for_variables( out )
+    assert len( varD ) > 0, 'gnome-keyring-daemon did not return any variables'
     return varD
 
 
-def write_keyring_info_file( evars, sessionless ):
+def write_keyring_variable_files( configdir, evars ):
     ""
-    fname = keyring_info_filename( sessionless )
+    fname = pjoin( configdir, 'keyring_vars.sh' )
 
     fp = open( fname, 'w' )
     try:
         for k,v in evars.items():
-            fp.write( k + '=' + v + '\n' )
+            fp.write( 'export ' + k + '="' + v + '"\n' )
+
+    finally:
+        fp.close()
+
+    fname = pjoin( configdir, 'keyring_vars.csh' )
+
+    fp = open( fname, 'w' )
+    try:
+        for k,v in evars.items():
+            fp.write( 'setenv ' + k + ' "' + v + '"\n' )
+
+    finally:
+        fp.close()
+
+    fname = pjoin( configdir, 'keyring_vars.py' )
+
+    fp = open( fname, 'w' )
+    try:
+        fp.write( '\nimport os\n' )
+        for k,v in evars.items():
+            fp.write( 'os.environ[ "'+k+'" ] = "'+v+'"\n' )
 
     finally:
         fp.close()
 
 
-def read_keyring_info_file():
-    ""
-    fname = keyring_info_filename( True )
-    if not os.path.exists( fname ):
-        fname = keyring_info_filename( False )
-
-    varD = {}
-
-    if os.path.exists( fname ):
-
-        fp = open( fname, 'r' )
-        try:
-            for line in fp.readlines():
-                line = line.strip()
-                if line:
-                    kvL = line.split('=',1)
-                    if len(kvL) == 2:
-                        varD[ kvL[0] ] = kvL[1]
-
-        finally:
-            fp.close()
-
-    return varD
-
-
-def keyring_info_filename( sessionless ):
-    ""
-    if sessionless:
-        mach = os.uname()[1]
-        fname = os.path.expanduser( '~/.subversion/keyring_info.'+mach )
-
-    else:
-        fname = os.path.expanduser( '~/.subversion/keyring_info.xsession' )
-
-    return fname
-
-
 ############################################################################
 
-svndir_string = """
+configdir_string = """
 =============================================================================
 
-Subversion caches data in ~/.subversion, including ways to access your
-password.  You can choose to wipe and refresh your ~/.subversion directory
-or have this script modify it with settings for getting your password from
-gnome-keyring.  Note that this script turns off plain text password store.
-
-The only reason not to wipe is if you made changes to the config or servers
-files that you want to retain.  FYI, this script is a little more robust
-when it starts from the subversion defaults.
-
-Finally, backups are made of the files that are modified.
+Subversion caches data in a configuration directory (by default ~/.subversion).
+This next step will select a machine specific configuration directory, wipe
+it (if it exists), regenerate it, and modify it to get your password from
+gnome keyring.
 """
 
 
 def run_subversion_sequence():
     """
     """
-    svndir = os.path.expanduser( '~/.subversion' )
+    response = prompt_for_input( configdir_string )
 
-    ok = True
-
-    if os.path.exists( svndir ):
-
-        response = prompt_for_input( svndir_string,
-                                     'Type "wipe", "modify", or "quit":',
-                                     'wipe' )
-
-        if response.lower() == 'modify':
-            modify_subversion_configuration( svndir )
-
-        elif response.lower() == 'wipe':
-            shutil.rmtree( svndir )
-            generate_subversion_files( svndir )
-            modify_subversion_configuration( svndir )
-
-        else:
-            ok = False
-
-    else:
-        generate_subversion_files( svndir )
-        modify_subversion_configuration( svndir )
+    ok = response_is_yes( response )
 
     if ok:
-        initialize_subversion_password_in_keyring()
-        write_session_info_file()
+
+        configdir = construct_subversion_config_dir_name()
+        print3( '\nSubversion config dir:', configdir )
+
+        reset_subversion_config( configdir )
+
+        initialize_subversion_password_in_keyring( configdir )
 
 
-def write_session_info_file():
-    ""
-    varD = get_session_keyring_variables()
-    write_keyring_info_file( varD, False )
-
-
-def get_session_keyring_variables():
-    ""
-    varD = {}
-
-    for k in ['GNOME_KEYRING_SOCKET','SSH_AUTH_SOCK']:
-        varD[k] = os.environ[k]
-
-    return varD
-
-
-def modify_subversion_configuration( svndir ):
-    ""
-    modify_subversion_config_file( svndir )
-    modify_subversion_servers_file( svndir )
-    append_progress_file( 'svnconfig' )
-
-
-def generate_subversion_files( svndir ):
+def generate_subversion_files( configdir ):
     ""
     print3( 'Generating subversion configuration files...' )
 
-    majr,minr,micr = get_subversion_version()
+    majr,minr,micr = get_subversion_version( configdir )
 
     check_subversion_version( majr, minr )
 
-    cfg = os.path.expanduser( pjoin( svndir, 'config' ) )
-    srv = os.path.expanduser( pjoin( svndir, 'servers' ) )
+    cfg = os.path.expanduser( pjoin( configdir, 'config' ) )
+    srv = os.path.expanduser( pjoin( configdir, 'servers' ) )
 
     assert os.path.exists( cfg ) and os.path.exists( srv ), \
         'Running "svn --version" failed to regenerate files: ' + \
@@ -408,9 +451,9 @@ def check_subversion_version( majr, minr ):
         time.sleep(1)
 
 
-def modify_subversion_config_file( svndir ):
+def modify_subversion_config_file( configdir ):
     ""
-    config = pjoin( svndir, 'config' )
+    config = pjoin( configdir, 'config' )
 
     lineL = read_file_lines( config )
 
@@ -443,9 +486,9 @@ def modify_subversion_config_file( svndir ):
     write_lines_to_file( config, lineL )
 
 
-def modify_subversion_servers_file( svndir ):
+def modify_subversion_servers_file( configdir ):
     ""
-    serv = pjoin( svndir, 'servers' )
+    serv = pjoin( configdir, 'servers' )
 
     lineL = read_file_lines( serv )
 
@@ -513,7 +556,7 @@ time, the second time the command is run may or may not ask for your password,
 and the third time should definitely not require a password.
 """
 
-def initialize_subversion_password_in_keyring():
+def initialize_subversion_password_in_keyring( configdir ):
     """
     """
     url = prompt_for_input( init_string,
@@ -522,7 +565,7 @@ def initialize_subversion_password_in_keyring():
 
     if url and url.strip():
 
-        cmd = 'svn list '+url
+        cmd = 'svn --config-dir ' + configdir + ' list '+url
 
         print3( cmd )
         subprocess.call( cmd, shell=True )
@@ -537,13 +580,13 @@ def initialize_subversion_password_in_keyring():
             if not response_is_yes(rtn):
                 break
 
-        remove_progress_file()
+    remove_progress_file()
 
 
-def get_subversion_version():
+def get_subversion_version( configdir ):
     ""
     try:
-        cmd = 'svn --version --quiet'
+        cmd = 'svn --config-dir '+configdir+' --version --quiet'
         x,out = run_capture( cmd )
 
         assert x == 0, \
@@ -592,31 +635,6 @@ def response_is_yes( response ):
         return True
 
     return False
-
-
-############################################################################
-
-def print_keyring_variables( syntax ):
-    """
-    """
-    varD = read_keyring_info_file()
-
-    vL = []
-    for k,v in varD.items():
-        if syntax == 'csh':
-            vL.append( 'setenv '+k+' "'+v+'"' )
-        else:
-            vL.append( 'export '+k+'="'+v+'"' )
-
-    sys.stdout.write( '; '.join( vL ) )
-    sys.stdout.flush()
-
-
-def set_environ():
-    """
-    """
-    varD = read_keyring_info_file()
-    os.environ.update( varD )
 
 
 ###########################################################################
