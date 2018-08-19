@@ -99,7 +99,7 @@ def _make_message( content, subtype ):
 def _make_list( recvaddrs ):
     ""
     if type(recvaddrs) == type(''):
-        return [ recvaddrs ]
+        return recvaddrs.strip().split()
     else:
         return list( recvaddrs )
 

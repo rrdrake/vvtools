@@ -121,6 +121,38 @@ def test_send_basic_text_message():
     assert MockSMTP.cache['close'] == True
 
 
+def test_send_with_more_than_one_receiver():
+    ""
+    MockSMTP.cache.clear()
+
+    msg = MM.Message( 'foo@bar another@one ', 'my subject' )
+    msg.setContent( 'my content' )
+    msg.send( smtpclass=MockSMTP )
+
+    assert len( MockSMTP.cache['sendaddr'].split('@') ) == 2
+
+    rcv = MockSMTP.cache['recvaddrs']
+    assert len(rcv) == 2 and rcv[0] == 'foo@bar' and rcv[1] == 'another@one'
+
+    assert MockSMTP.cache['close'] == True
+
+
+def test_send_with_python_list_of_receivers():
+    ""
+    MockSMTP.cache.clear()
+
+    msg = MM.Message( ['foo@bar','another@one'], 'my subject' )
+    msg.setContent( 'my content' )
+    msg.send( smtpclass=MockSMTP )
+
+    assert len( MockSMTP.cache['sendaddr'].split('@') ) == 2
+
+    rcv = MockSMTP.cache['recvaddrs']
+    assert len(rcv) == 2 and rcv[0] == 'foo@bar' and rcv[1] == 'another@one'
+
+    assert MockSMTP.cache['close'] == True
+
+
 def test_setting_the_sender_address():
     ""
     MockSMTP.cache.clear()
