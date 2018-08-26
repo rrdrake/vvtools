@@ -1,0 +1,82 @@
+#!/usr/bin/env python
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import getopt
+import distutils
+from distutils.dir_util import copy_tree
+from distutils.file_util import copy_file
+
+
+help_string = """
+USAGE:
+    install_vvtest [OPTIONS] <install directory>
+
+SYNOPSIS:
+    An installer for vvtest.  The main vvtest executable will be installed
+in <install directory>, and subdirectories will be batch, config, and
+libvvtest.
+
+OPTIONS:
+    -h, --help : this help page
+"""
+
+
+def main():
+    ""
+    try:
+        optL,argL = getopt.getopt( sys.argv[1:], 'h', ['help'] )
+    except getopt.error as e:
+        print3( '*** error: '+str(e), file=sys.stderr )
+        sys.exit(1)
+
+    if ('-h','') in optL or ('--help','') in optL:
+        print3( help_string )
+        return
+
+    if len(argL) != 1:
+        print3( '*** error: installation directory required', file=sys.stderr )
+        sys.exit(1)
+
+    todir = os.path.normpath( os.path.abspath( argL[0] ) )
+
+    copy_path( 'vvt/vvtest', todir )
+    copy_path( 'vvt/results.py', todir )
+    copy_path( 'vvt/libvvtest', todir )
+    copy_path( 'vvt/config', todir )
+    copy_path( 'vvt/batch', todir )
+
+
+#########################################################################
+
+def copy_path( relpath, todir ):
+    ""
+    frompath = os.path.join( mydir, relpath )
+
+    bn = os.path.basename( relpath )
+    topath = os.path.join( todir, bn )
+
+    if not os.path.exists( todir ):
+        os.makedirs( todir )
+
+    if os.path.isdir( frompath ):
+        copy_tree( frompath, topath, preserve_symlinks=1 )
+    else:
+        copy_file( frompath, topath )
+
+
+def print3( *args, **kwargs ):
+    ""
+    s = ' '.join( [ str(x) for x in args ] )
+    fileobj = kwargs.get( 'file', sys.stdout )
+    fileobj.write( s + '\n' )
+    fileobj.flush()
+
+
+#########################################################################
+
+mydir = os.path.dirname( os.path.abspath( __file__ ) )
+
+main()
