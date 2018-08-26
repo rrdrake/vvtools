@@ -735,6 +735,12 @@ class TestList:
                 analyze_xt = xdir2testexec.get( analyze_xdir, None )
                 if analyze_xt != None:
                     analyze_xt.addDependency( xt )
+            elif xt.atest.isAnalyze():
+                key = ( xt.atest.getFilepath(), xt.atest.getName() )
+                grpL = self.groups.get( key, None )
+                for gt in grpL:
+                    if not gt.isAnalyze():
+                        xt.addDependency( gt )
 
     def _add_general_dependencies(self, xdir2testexec):
         """
@@ -917,7 +923,7 @@ def find_tests_by_execute_directory_match( xdir, pattern, xdir_list ):
         3. pat
         4. *pat
 
-    The first of these that matches at least test will be returned.
+    The first of these that matches at least one test will be returned.
 
     A python set of xdir is returned.
     """
