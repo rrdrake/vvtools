@@ -374,6 +374,70 @@ class dependency_information( unittest.TestCase ):
         assert vrun.num_total == 2
         assert vrun.num_pass == 2
 
+    def test_depdirs_are_available_when_rerunning_an_analyze(self):
+        ""
+        util.writescript( 'testA.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : value = 1 2
+            #VVT: analyze : --analyze
+
+            import sys
+            import script_util as vvt
+            from script_util import print3
+
+            if "--analyze" in sys.argv[1:]:
+                print3( "Analysis DEPDIRS", vvt.DEPDIRS )
+                assert len(vvt.DEPDIRS) == 2, 'DEPDIRS not length two'
+                raise Exception( "always fail" )
+            else:
+                print3( "value:", vvt.value )
+            """ )
+        time.sleep(1)
+
+        vrun = util.vvtestRunner()
+        assert vrun.num_total == 3 and vrun.num_pass == 2 and vrun.num_fail == 1
+        time.sleep(1)
+
+        tdir = vrun.testdir
+        lines = util.filegrep( tdir+'/testA/execute.log', 'always fail' )
+        assert len( lines ) > 0
+
+        vrun = util.vvtestRunner( '-k fail' )
+        assert vrun.num_total == 1 and vrun.num_fail == 1
+        lines = util.filegrep( tdir+'/testA/execute.log', 'always fail' )
+        assert len( lines ) > 0
+
+    def test_depdirs_are_available_when_rerunning_a_test_with_a_dependency(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!/usr/bin/env python
+            #VVT: depends on : testY
+            import script_util as vvt
+            vvt.print3( 'DEPDIRS', vvt.DEPDIRS )
+            assert len(vvt.DEPDIRS) == 1, 'DEPDIRS not length one'
+            raise Exception( 'always fail' )
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!/usr/bin/env python
+            import script_util as vvt
+            assert len(vvt.DEPDIRS) == 0
+            """ )
+        time.sleep(1)
+
+        vrun = util.vvtestRunner()
+        assert vrun.num_total == 2 and vrun.num_pass == 1 and vrun.num_fail == 1
+        time.sleep(1)
+
+        tdir = vrun.testdir
+        lines = util.filegrep( tdir+'/testX/execute.log', 'always fail' )
+        assert len( lines ) > 0
+
+        vrun = util.vvtestRunner( '-k fail' )
+        assert vrun.num_total == 1 and vrun.num_fail == 1
+        lines = util.filegrep( tdir+'/testX/execute.log', 'always fail' )
+        assert len( lines ) > 0
+
+
 
 ############################################################################
 

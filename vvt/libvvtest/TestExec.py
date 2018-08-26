@@ -378,7 +378,8 @@ class TestExec:
         """
         A dependency can be either a TestExec object or a TestSpec object.
         """
-        self.deps.append( (testexec,match_pattern,expr) )
+        if not deplist_contains_test_object( testexec, self.deps ):
+            self.deps.append( (testexec,match_pattern,expr) )
     
     def hasDependency(self):
         """
@@ -686,3 +687,49 @@ class TestExec:
     def __lt__(self, rhs):
         if rhs == None: return False  # None objects are always less
         return self.atest < rhs.atest
+
+
+def deplist_contains_test_object( testexec, deps_triples ):
+    """
+    Returns True if
+
+        1. 'testexec' is a TestExec object and a dependency is also a
+           TestExec object with the same execute dir
+
+        or
+
+        2. 'testexec' is a TestSpec object and either a TestExec or a
+           TestSpec object has the same execute dir
+    """
+    if isinstance( testexec, TestExec ):
+        xdir = testexec.atest.getExecuteDirectory()
+        if find_testexec( xdir, deps_triples ):
+            return True
+    else:
+        xdir = testexec.getExecuteDirectory()
+        if find_testobj( xdir, deps_triples ):
+            return True
+
+    return False
+
+
+def find_testexec( xdir, deps_triples ):
+    ""
+    for tx,pat,exp in deps_triples:
+        if isinstance( tx, TestExec ):
+            if tx.atest.getExecuteDirectory() == xdir:
+                return tx
+
+    return None
+
+
+def find_testobj( xdir, deps_triples ):
+    ""
+    for tx,pat,exp in deps_triples:
+        if isinstance( tx, TestExec ):
+            if tx.atest.getExecuteDirectory() == xdir:
+                return tx
+        elif tx.getExecuteDirectory() == xdir:
+            return tx
+
+    return None
