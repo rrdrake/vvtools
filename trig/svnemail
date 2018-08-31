@@ -1,0 +1,317 @@
+#!/usr/bin/env python
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import getopt
+import time
+import calendar
+import xml.etree.ElementTree as ET
+import traceback
+import signal
+
+from command import Command
+from mailmessage import Message, get_current_user_name
+
+
+# use signals to implement a timeout mechanism
+class TimeoutException(Exception): pass
+def timeout_handler( signum, frame ):
+    raise TimeoutException( "timeout" )
+
+
+SEND_MAIL_TIMEOUT = 30
+DEFAULT_SMTPHOSTS = ['mailgate.sandia.gov','mailgate2.sandia.gov']
+EMAIL_DOMAIN = 'sandia.gov'
+POLL_SLEEP = 60
+
+
+help_page = """
+"""
+
+
+def main():
+    ""
+    optL,argL = getopt.getopt( sys.argv[1:], 'hn',
+                               ['help','repo=','svnexe='] )
+
+    repo = None
+    svnexe = 'svn'
+    noop = False
+
+    for n,v in optL:
+        if n in ['-h','--help']:
+            print3( help_page )
+            return
+        elif n == '--svnexe':
+            svnexe = v
+        elif n == '-n':
+            noop = True
+        elif n == '--repo':
+            repo = v
+
+    try:
+        import svnemail_plugin as plugin
+
+        if repo == None and hasattr( plugin, 'get_repo_url' ):
+            repo = plugin.get_repo_url()
+
+    except ImportError:
+        plugin = None
+
+    if repo != None:
+        monitor_repo( repo, plugin, svnexe, noop )
+
+
+class Commit:
+
+    def __init__(self, elmt):
+        ""
+        self.rev = int( elmt.get( 'revision', 0 ) )
+        self.author = get_author( elmt )
+        self.date = get_date( elmt )
+        self.msg = get_message( elmt )
+        self.paths = get_paths( elmt )
+
+    def getRevision(self):
+        ""
+        return self.rev
+
+    def getAuthor(self):
+        ""
+        return self.author
+
+    def getDate(self):
+        ""
+        return self.date
+
+    def getShortMessage(self):
+        ""
+        return self.msg.strip().split('\n')[0][:60]
+
+    def getBranch(self):
+        """
+        If all paths in the commit are in a subdirectory of "branches" then
+        that subdirectory name is returned.  Else the first path element is
+        returned, such as "/trunk" or "/devel".
+        """
+        pre = self.getCommonPrefix()
+        predirs = pre.split('/')
+
+        if pre.startswith( '/branches' ):
+            if len(predirs) > 2:
+                return predirs[2]
+            return '/branches'
+
+        else:
+            return '/'.join( predirs[:2] )
+
+    def getCommonPrefix(self):
+        """
+        Returns the longest starting directory in common between all files
+        in the commit.
+        """
+        pathlist = [ path for act,path in self.paths ]
+        pre = common_path_prefix( pathlist )
+        return pre
+
+    def getMessage(self):
+        ""
+        return self.msg
+
+    def formatFileList(self):
+        ""
+        L = [ ' '+act+' '+path for act,path in self.paths ]
+        return '\n'.join( L ) + '\n'
+
+
+#########################################################################
+
+def monitor_repo( repo, plugin, svnexe, noop ):
+    ""
+    commit_cache = set()
+
+    while True:
+
+        cmtL = get_recent_commits( repo, svnexe, 5*60, noop )
+
+        for cmt in cmtL:
+
+            rev = cmt.getRevision()
+
+            if rev not in commit_cache:
+
+                try:
+                    mail_handler( cmt, plugin, repo, noop )
+                except TimeoutException:
+                    raise
+                except Exception:
+                    traceback.print_exc()
+
+                commit_cache.add( rev )
+
+        time.sleep( POLL_SLEEP )
+
+
+def mail_handler( cmt, plugin, repo, noop ):
+    ""
+    reponame = os.path.basename( repo )
+
+    msg = Message()
+
+    if plugin != None and hasattr( plugin, 'should_email_be_sent' ):
+        sendit = plugin.should_email_be_sent( cmt )
+    else:
+        sendit = True
+
+    if sendit:
+        fill_message( msg, cmt, reponame, plugin, noop )
+        if not noop:
+            send_message( msg, plugin )
+
+
+def fill_message( msg, cmt, reponame, plugin, noop ):
+    ""
+    addr = cmt.getAuthor()
+    if '@' not in addr:
+        addr += '@'+EMAIL_DOMAIN
+    msg.set( sendaddr=addr )
+
+    if plugin != None and hasattr( plugin, 'make_subject' ):
+        sbj = plugin.make_subject(cmt)
+    else:
+        sbj = '['+reponame+':'+cmt.getBranch()+'] '+cmt.getShortMessage()
+    msg.set( subject=sbj )
+
+    if plugin != None and hasattr( plugin, 'get_recipient_addrs' ):
+        recv = plugin.get_recipient_addrs( cmt )
+    else:
+        usr = get_current_user_name()
+        recv = usr+'@'+EMAIL_DOMAIN
+    msg.set( recvaddrs=recv )
+
+    body = time.ctime( cmt.getDate() ) + '\n'
+    body += 'Revision: '+str(cmt.getRevision()) + '\n'
+    body += 'By '+cmt.getAuthor() + '\n\n'
+    body += cmt.getMessage().strip() + '\n\n'
+    body += cmt.formatFileList().strip() + '\n'
+    msg.setContent( body )
+
+    if noop:
+        print3( 'To:', recv, ' Subj:', sbj )
+
+
+def send_message( msg, plugin ):
+    ""
+    signal.signal( signal.SIGALRM, timeout_handler )
+
+    signal.alarm( SEND_MAIL_TIMEOUT )
+    try:
+        if plugin != None and hasattr( plugin, 'get_smtp_hosts' ):
+            msg.send( smtphosts=plugin.get_smtp_hosts() )
+        else:
+            msg.send( smtphosts=DEFAULT_SMTPHOSTS )
+
+    finally:
+        signal.alarm(0)
+
+
+def get_recent_commits( repo, svnexe, age, noop ):
+    ""
+    if noop:
+        echo = 'echo'
+    else:
+        echo = 'none'
+
+    etree = svn_log_as_xml( repo, age, svnexe=svnexe, echo=echo )
+
+    curtime = time.time()
+
+    cmtL = []
+    for nd in etree:
+        cmt = Commit( nd )
+        if cmt.getDate() >= curtime - age:
+            cmtL.append( cmt )
+
+    if noop:
+        for cmt in cmtL:
+            print3( cmt.getRevision(), cmt.getAuthor(),
+                    time.ctime(cmt.getDate()),
+                    cmt.getBranch(), cmt.getCommonPrefix(),
+                    cmt.getShortMessage(), '\n'+cmt.formatFileList() )
+
+    return cmtL
+
+
+##################################################################
+
+def common_path_prefix( listofpaths, sep='/' ):
+    ""
+    return os.path.commonprefix(listofpaths).rpartition(sep)[0]
+
+
+def get_author( elmt ):
+    ""
+    nd = elmt.find( 'author' )
+    if nd != None:
+        return nd.text.strip()
+    return 'unknown'
+
+
+def get_date( elmt ):
+    ""
+    nd = elmt.find( 'date' )
+    if nd != None:
+        datestr = nd.text.strip()
+        tup = time.strptime( datestr, '%Y-%m-%dT%H:%M:%S.%fZ' )
+        tm = calendar.timegm( tup )
+        return tm
+    return 0
+
+
+def get_message( elmt ):
+    ""
+    nd = elmt.find( 'msg' )
+    if nd != None:
+        return nd.text
+    return ''
+
+
+def get_paths( elmt ):
+    ""
+    pathL = []
+
+    nd = elmt.find( 'paths' )
+    if nd != None:
+        for pnd in nd.findall( 'path' ):
+            act = pnd.get( 'action', '?' )
+            pathL.append( (act,pnd.text) )
+
+    return pathL
+
+
+def svn_log_as_xml( repo, age, svnexe='svn', echo="none" ):
+    ""
+    tm = time.localtime( time.time() - age )
+    ts = time.strftime( '%Y-%m-%d %H:%M:%S', tm )
+
+    cmd = Command( '$svnexe log --xml -v -r' ).arg( '{$ts}:HEAD' ).add( repo )
+    out = cmd.run_output( shell=False, echo=echo )
+
+    etree = ET.fromstring( out )
+    return etree
+
+
+def print3( *args ):
+    ""
+    sys.stdout.write( ' '.join( [ str(x) for x in args ] ) + '\n' )
+    sys.stdout.flush()
+
+
+#########################################################################
+
+mydir = os.path.dirname( os.path.normpath( os.path.abspath( __file__ ) ) )
+
+if __name__ == "__main__":
+    main()

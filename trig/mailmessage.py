@@ -46,7 +46,7 @@ class Message:
 
             msg = _make_message( self.content, self.subtype )
 
-            msg['From']    = _make_sender_address( self.sendaddr )
+            msg['From']    = create_sender_address( self.sendaddr )
             msg['To']      = ', '.join( self.recvaddrs )
             msg['Subject'] = self.subject
 
@@ -54,7 +54,7 @@ class Message:
 
     def _send_mail_message(self, smtphosts, smtpclass, msg_as_string):
         ""
-        sender = _make_sender_address( self.sendaddr )
+        sender = create_sender_address( self.sendaddr )
 
         err = ''
 
@@ -104,7 +104,7 @@ def _make_list( recvaddrs ):
         return list( recvaddrs )
 
 
-def _make_sender_address( addr ):
+def create_sender_address( addr=None ):
     ""
     if addr:
         return addr
