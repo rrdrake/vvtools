@@ -17,31 +17,187 @@ import subprocess
 import signal
 import shlex
 import pipes
-import filecmp
-import glob
-
+import getopt
+import unittest
 
 # this file is expected to be imported from a script that was run
 # within the tests directory (which is how all the tests are run)
-testdir = os.path.dirname( os.path.abspath( sys.argv[0] ) )
 
-srcdir = os.path.normpath( os.path.join( testdir, '..' ) )
+test_filename = None
+working_directory = None
+vvtest = None
+resultspy = None
+use_this_ssh = 'fake'
+remotepy = sys.executable
 
-sys.path.insert( 0, srcdir )
+testsrcdir = os.path.dirname( os.path.abspath( sys.argv[0] ) )
+sys.path.insert( 0, os.path.dirname( testsrcdir ) )
 
-arglist = sys.argv[1:]
 
-def get_arg_list(): return arglist
+def initialize( argv ):
+    """
+    """
+    global test_filename
+    global working_directory
+    global use_this_ssh
+    global vvtest
+    global resultspy
+    global remotepy
 
-def get_test_dir():  # magic: is this still needed ??
-    return testdir
+    test_filename = os.path.abspath( argv[0] )
+
+    optL,argL = getopt.getopt( argv[1:], 'p:sSr:' )
+
+    optD = {}
+    for n,v in optL:
+        if n == '-p':
+            pass
+        elif n == '-s':
+            use_this_ssh = 'fake'
+        elif n == '-S':
+            use_this_ssh = 'ssh'
+        elif n == '-r':
+            remotepy = v
+        optD[n] = v
+
+    working_directory = make_working_directory( test_filename )
+
+    testdir = os.path.dirname( test_filename )
+
+    srcdir = os.path.normpath( os.path.join( testdir, '..' ) )
+    topdir = os.path.normpath( os.path.join( srcdir, '..' ) )
+
+    vvtest = os.path.join( topdir, 'vvtest' )
+    resultspy = os.path.join( topdir, 'results.py' )
+
+    return optD, argL
+
+
+def run_test_cases( argv, test_module ):
+    """
+    """
+    optD, argL = initialize( argv )
+
+    loader = unittest.TestLoader()
+
+    tests = TestSuiteAccumulator( loader, test_module )
+
+    if len(argL) == 0:
+        tests.addModuleTests()
+
+    else:
+        test_classes = get_TestCase_classes( test_module )
+        for arg in argL:
+            if not tests.addTestCase( arg ):
+                # not a TestClass name; look for individual tests
+                count = 0
+                for name in test_classes.keys():
+                    if tests.addTestCase( name+'.'+arg ):
+                        count += 1
+                if count == 0:
+                    raise Exception( 'No tests found for "'+arg+'"' )
+
+    # it would be nice to use the 'failfast' argument (defaults to False), but
+    # not all versions of python have it
+    runner = unittest.TextTestRunner( stream=sys.stdout,
+                                      verbosity=2 )
+
+    results = runner.run( tests.getTestSuite() )
+    if len(results.errors) + len(results.failures) > 0:
+        sys.exit(1)
+
+
+class TestSuiteAccumulator:
+
+    def __init__(self, loader, test_module):
+        self.loader = loader
+        self.testmod = test_module
+        self.suite = unittest.TestSuite()
+
+    def getTestSuite(self):
+        ""
+        return self.suite
+
+    def addModuleTests(self):
+        ""
+        suite = self.loader.loadTestsFromModule( self.testmod )
+        self.suite.addTest( suite )
+
+    def addTestCase(self, test_name):
+        ""
+        haserrors = hasattr( self.loader, 'errors' )
+        if haserrors:
+            # starting in Python 3.5, the loader will not raise an exception
+            # if a test class or test case is not found; rather, the loader
+            # accumulates erros in a list; clear it first...
+            del self.loader.errors[:]
+
+        try:
+            suite = self.loader.loadTestsFromName( test_name, module=self.testmod )
+        except:
+            return False
+
+        if haserrors and len(self.loader.errors) > 0:
+            return False
+
+        self.suite.addTest( suite )
+        return True
+
+
+def get_TestCase_classes( test_module ):
+    """
+    Searches the given module for classes that derive from unittest.TestCase,
+    and returns a map from the class name as a string to the class object.
+    """
+    tcD = {}
+    for name in dir(test_module):
+        obj = getattr( test_module, name )
+        try:
+            if issubclass( obj, unittest.TestCase ):
+                tcD[name] = obj
+        except:
+            pass
+
+    return tcD
+
+
+def setup_test( cleanout=True ):
+    """
+    """
+    print3()
+    os.chdir( working_directory )
+
+    if cleanout:
+        rmallfiles()
+        time.sleep(1)
+
+    # for batch tests
+    os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
+    os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
+    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+
+    # force the results files to be written locally for testing;
+    # it is used in vvtest when handling the --save-results option
+    os.environ['TESTING_DIRECTORY'] = os.getcwd()
+
+
+
+def make_working_directory( test_filename ):
+    """
+    directly executing a test script can be done but rm -rf * is performed;
+    to avoid accidental removal of files, cd into a working directory
+    """
+    d = os.path.join( 'tmpdir_'+os.path.basename( test_filename ) )
+    if not os.path.exists(d):
+        os.mkdir(d)
+        time.sleep(1)
+    return os.path.abspath(d)
+
+
+##########################################################################
 
 def print3( *args ):
-    """
-    Python 2 & 3 compatible print function.
-    """
-    s = ' '.join( [ str(x) for x in args ] )
-    sys.stdout.write( s + '\n' )
+    sys.stdout.write( ' '.join( [ str(x) for x in args ] ) + os.linesep )
     sys.stdout.flush()
 
 def writefile( fname, content, header=None ):
@@ -64,8 +220,8 @@ def writefile( fname, content, header=None ):
     # make the directory to contain the file, if not already exist
     d = os.path.dirname( fname )
     if os.path.normpath(d) not in ['','.']:
-      if not os.path.exists(d):
-        os.makedirs(d)
+        if not os.path.exists(d):
+            os.makedirs(d)
     # open and write contents
     fp = open( fname, 'w' )
     if header != None:
@@ -208,32 +364,32 @@ def shell_escape( cmd ):
 
 def rmallfiles( not_these=None ):
     for f in os.listdir("."):
-      if not_these == None or not fnmatch.fnmatch( f, not_these ):
-        if os.path.islink(f):
-          os.remove(f)
-        elif os.path.isdir(f):
-          shutil.rmtree(f)
-        else:
-          os.remove(f)
+        if not_these == None or not fnmatch.fnmatch( f, not_these ):
+            if os.path.islink(f):
+                os.remove(f)
+            elif os.path.isdir(f):
+                shutil.rmtree(f)
+            else:
+                os.remove(f)
 
 def filegrep(fname, pat):
     L = []
     fp = open(fname,"r")
     repat = re.compile(pat)
     for line in fp.readlines():
-      line = line.rstrip()
-      if repat.search(line):
-        L.append(line)
+        line = line.rstrip()
+        if repat.search(line):
+            L.append(line)
     fp.close()
     return L
 
 def grep(out, pat):
     L = []
     repat = re.compile(pat)
-    for line in out.split( '\n' ):
-      line = line.rstrip()
-      if repat.search(line):
-        L.append(line)
+    for line in out.split( os.linesep ):
+        line = line.rstrip()
+        if repat.search(line):
+            L.append(line)
     return L
 
 

@@ -9,10 +9,14 @@
 import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
-import getopt
+import os
+import time
+import subprocess
+import glob
+import unittest
 
-# this will os.chdir() to a subdirectory
-from testutils import *
+import testutils as util
+from testutils import print3
 
 # this is the module we are testing
 import trigger
@@ -22,1129 +26,1032 @@ trigfile = os.path.join( trigger.mydir, 'trigger.py' )
 localpy = sys.executable
 
 
-def main():
-    """
-    """
-    optL,argL = getopt.getopt( sys.argv[1:], '' )
-    cwd = os.getcwd()
-
-    if len(argL) == 0:
-        argL = """dow1 trigtime1 trigtime2 trigtime3 trigtime4 trigtime5
-                  log1 log2 log3 log4
-                  run1 run2 run3 run4 run5 run6 run7
-                  startup1 startup2 startup3 startup4
-                  active1
-                  launch1 launch2 launch3
-                  hang1
-                  a_job_can_import_the_python_utilities
-               """.split()
-
-    for func in argL:
-        os.chdir( cwd )
-        rmallfiles()
-        time.sleep(1)
-        print3( '====> ', func )
-        eval( func+'()' )
-
-
 #######################################################################
 
-def dow1():
-    """
-    recurse_dow function
-    """
-    spec = 'Mon tue 3am'
-    sL = [ s.strip() for s in spec.split(',') ]
-    dowL = []
-    R = trigger.recurse_dow( sL, dowL )
-    assert dowL == ['mon','tue'] and R == ['3am']
-
-    spec = 'Mon, tue, 3am'
-    sL = [ s.strip() for s in spec.split(',') ]
-    dowL = []
-    R = trigger.recurse_dow( sL, dowL )
-    assert dowL == ['mon','tue'] and R == ['3am']
-
-    spec = 'Mon, WEDNESDAY, 3am, fri'
-    sL = [ s.strip() for s in spec.split(',') ]
-    dowL = []
-    R = trigger.recurse_dow( sL, dowL )
-    assert dowL == ['mon','wed'] and R == ['3am','fri']
-
-    spec = 'Sunday'
-    sL = [ s.strip() for s in spec.split(',') ]
-    dowL = []
-    R = trigger.recurse_dow( sL, dowL )
-    assert dowL == ['sun'] and R == []
-
-    spec = 'Sunday Monday'
-    sL = [ s.strip() for s in spec.split(',') ]
-    dowL = []
-    R = trigger.recurse_dow( sL, dowL )
-    assert dowL == ['sun','mon'] and R == []
-
-    spec = 'Mon 3 am'
-    sL = [ s.strip() for s in spec.split(',') ]
-    dowL = []
-    R = trigger.recurse_dow( sL, dowL )
-    assert dowL == ['mon'] and R == ['3 am']
-
-    spec = 'Mon, 3 am'
-    sL = [ s.strip() for s in spec.split(',') ]
-    dowL = []
-    R = trigger.recurse_dow( sL, dowL )
-    assert dowL == ['mon'] and R == ['3 am']
-
-    spec = 'Mon, 3am'
-    sL = [ s.strip() for s in spec.split(',') ]
-    dowL = []
-    R = trigger.recurse_dow( sL, dowL )
-    assert dowL == ['mon'] and R == ['3am']
-
-
-def trigtime1():
-    """
-    test next_trigger_time function
-    """
-    hr = 60*60
-    curtm = time.time()
-    midnight = epoch_at_midnight( curtm )
-    midnight2 = epoch_at_midnight( midnight+26*60*60 )
-
-    # some am/pm time-of-days
-    tm = trigger.next_trigger_time( '1am', midnight )
-    assert tm != None and tm == (midnight+hr)
-    tm = trigger.next_trigger_time( '1am', midnight+hr )
-    assert tm != None and tm == (midnight+hr)
-    tm = trigger.next_trigger_time( '1am', midnight+2*hr )
-    assert tm != None and tm == (midnight2+hr)
-
-    #print3( time.ctime(tm), time.ctime(midnight+13*hr+hr/2) )
-
-    # military time-of-day
-    tm = trigger.next_trigger_time( '13:30', midnight+hr+hr/2 )
-    assert tm != None and tm == (midnight+13*hr+hr/2)
-    tm = trigger.next_trigger_time( '13:30', midnight+13*hr+hr/2 )
-    assert tm != None and tm == (midnight+13*hr+hr/2)
-    tm = trigger.next_trigger_time( '13:30', midnight+14*hr+hr/2 )
-    assert tm != None and tm == (midnight2+13*hr+hr/2)
-    
-    # more than one time-of-day given
-    tm = trigger.next_trigger_time( '2am, 4am', midnight+1*hr )
-    assert tm != None and tm == (midnight+2*hr)
-    tm = trigger.next_trigger_time( '4am, 2am', midnight+1*hr )
-    assert tm != None and tm == (midnight+2*hr)
-    tm = trigger.next_trigger_time( '2am, 4am', midnight+2*hr )
-    assert tm != None and tm == (midnight+2*hr)
-    tm = trigger.next_trigger_time( '2am, 4am', midnight+3*hr )
-    assert tm != None and tm == (midnight+4*hr)
-    tm = trigger.next_trigger_time( '2am, 4am', midnight+4*hr )
-    assert tm != None and tm == (midnight+4*hr)
-    tm = trigger.next_trigger_time( '2am, 4am', midnight+5*hr )
-    assert tm != None and tm == (midnight2+2*hr)
-
-
-def trigtime2():
-    """
-    DOW alone or plus a time
-    """
-    hr = 60*60
-    curtm = time.time()
-    midnight = epoch_at_midnight( curtm )
-    midnight2 = epoch_at_midnight( midnight+26*60*60 )
-    dow = day_of_week( curtm )
-
-    tm = trigger.next_trigger_time( dow, midnight+0*hr )
-    assert tm != None and tm == (midnight+0*hr+5)
-    tm = trigger.next_trigger_time( dow[:3].lower(), midnight+0*hr )
-    assert tm != None and tm == (midnight+0*hr+5)
-    tm = trigger.next_trigger_time( dow[:3].lower(), midnight+1*hr )
-    assert tm == None
-
-    dow2 = day_of_week( midnight+26*60*60 )
-    tm = trigger.next_trigger_time( dow2, midnight+23*hr )
-    assert tm != None and tm == (midnight2+0*hr+5)
-    tm = trigger.next_trigger_time( dow+' '+dow2, midnight+23*hr )
-    assert tm != None and tm == (midnight2+0*hr+5)
-
-    tm = trigger.next_trigger_time( dow+' '+dow2+' 6am', midnight+1*hr )
-    assert tm != None and tm == (midnight+6*hr)
-    tm = trigger.next_trigger_time( dow+' '+dow2+' 6am', midnight+10*hr )
-    #print3( 'tm', time.ctime(tm) )
-    assert tm != None and tm == (midnight2+6*hr)
-
-    # more than one day plus more than one time
-    midprev = epoch_at_midnight( midnight-22*60*60 )
-    dowprev = day_of_week( midnight-22*60*60 )
-    tm = trigger.next_trigger_time( dowprev+' '+dow+' 6am', midnight+1*hr )
-    assert tm != None and tm == (midnight+6*hr)
-    tm = trigger.next_trigger_time( dowprev+' '+dow+' 6am', midnight+7*hr )
-    assert tm == None
-    tm = trigger.next_trigger_time( dowprev+' '+dow+' 1:30, 6am', midnight+2*hr )
-    assert tm != None and tm == (midnight+6*hr)
-    tm = trigger.next_trigger_time( dowprev+' '+dow+' 1:30, 6am', midnight+1*hr )
-    assert tm != None and tm == (midnight+1.5*hr)
-    tm = trigger.next_trigger_time( dowprev+' '+dow+' 1:30, 6am', midnight+7*hr )
-    assert tm == None
-
-
-def trigtime3():
-    """
-    test next_trigger_time error
-    """
-    hr = 60*60
-    curtm = time.time()
-    midnight = epoch_at_midnight( curtm )
-    midnight2 = epoch_at_midnight( midnight+26*60*60 )
-    dow = day_of_week( curtm )
-    dow2 = day_of_week( midnight+26*60*60 )
-
-    try:
-        tm = trigger.next_trigger_time( '1mm', midnight )
-    except:
-        err = str( sys.exc_info()[1] )
-        print3( err )
-        assert err.find('bad time syntax') >= 0
-    else:
-        raise Exception( "expected an exception" )
-
-    try:
-        tm = trigger.next_trigger_time( dow+' 6am '+dow2, midnight+5*hr )
-    except:
-        err = str( sys.exc_info()[1] )
-        print3( err )
-        assert err.find('bad time syntax') >= 0
-    else:
-        raise Exception( "expected an exception" )
-
-    try:
-        tm = trigger.next_trigger_time( '6am '+dow, midnight+5*hr )
-    except:
-        err = str( sys.exc_info()[1] )
-        print3( err )
-        assert err.find('bad time syntax') >= 0
-    else:
-        raise Exception( "expected an exception" )
-
-
-def trigtime4():
-    """
-    hourly trigger
-    """
-    hr = 60*60
-    curtm = time.time()
-    midnight = epoch_at_midnight( curtm )
-    midnight2 = epoch_at_midnight( midnight+26*60*60 )
-    dow = day_of_week( curtm )
-
-    tm = trigger.next_trigger_time( 'hourly', midnight+1*hr )
-    assert tm != None and tm == (midnight+1*hr)
-    tm = trigger.next_trigger_time( 'hourly', midnight+1*hr+5 )
-    assert tm != None and tm == (midnight+2*hr)
-    tm = trigger.next_trigger_time( 'hourly', midnight+1*hr+59*60 )
-    assert tm != None and tm == (midnight+2*hr)
-
-    tm = trigger.next_trigger_time( 'hourly', midnight+23*hr )
-    assert tm != None and tm == (midnight+23*hr)
-    tm = trigger.next_trigger_time( 'hourly', midnight+23*hr+10 )
-    assert tm != None and tm == midnight2
-
-    tm = trigger.next_trigger_time( 'hourly', midnight+23*hr+10 )
-    assert tm != None and tm == (midnight2)
-
-    tm = trigger.next_trigger_time( 'hourly 5', midnight+1*hr )
-    assert tm != None and tm == (midnight+1*hr+5*60)
-    tm = trigger.next_trigger_time( 'hourly, 5', midnight+1*hr )
-    assert tm != None and tm == (midnight+1*hr+5*60)
-    tm = trigger.next_trigger_time( 'hourly, 5', midnight+1*hr+10*60 )
-    assert tm != None and tm == (midnight+2*hr+5*60)
-
-    tm = trigger.next_trigger_time( 'hourly 5, 35', midnight+1*hr )
-    assert tm != None and tm == (midnight+1*hr+5*60)
-    tm = trigger.next_trigger_time( 'hourly 5, 35', midnight+1*hr+10*60 )
-    assert tm != None and tm == (midnight+1*hr+35*60)
-    tm = trigger.next_trigger_time( 'hourly 5, 35', midnight+1*hr+40*60 )
-    assert tm != None and tm == (midnight+2*hr+5*60)
-
-
-def trigtime5():
-    """
-    monthly trigger
-    """
-    hr = 60*60
-    curtm = time.time()
-    m1 = epoch_at_month_start( curtm )
-    m2 = epoch_at_month_start( m1 + 45*24*hr + 10*hr )
-
-    tm = trigger.next_trigger_time( 'monthly', m1+10*hr )
-    assert tm != None and tm == (m2+5)
-    tm = trigger.next_trigger_time( 'monthly', m1+1 )
-    assert tm != None and tm == (m1+5)
-
-    tm = trigger.next_trigger_time( 'monthly 6am', m1+4*hr )
-    assert tm != None and tm == (m1+6*hr)
-    tm = trigger.next_trigger_time( 'monthly 6am', m1+10*hr )
-    assert tm != None and tm == (m2+6*hr)
-
-    dow1 = day_of_week( m1 + 2*hr )[:3]
-    dow2 = day_of_week( m1 + 30*hr )[:3]
-    midnight2 = epoch_at_midnight( m1 + 30*hr )  # midnight on dow2
-    tm = trigger.next_trigger_time( 'monthly '+dow1, m1+1 )
-    assert tm != None and tm == (m1+5)
-    tm = trigger.next_trigger_time( 'monthly '+dow2, m1+10*hr )
-    assert tm != None and tm == (midnight2+5)
-    tm = trigger.next_trigger_time( 'monthly '+dow1, m1+10*hr )
-    assert tm != None and tm >= (m2+5)
-
-    tm = trigger.next_trigger_time( 'monthly '+dow1+' 6am', m1+1 )
-    assert tm != None and tm == (m1+6*hr)
-    tm = trigger.next_trigger_time( 'monthly '+dow2+' 6am', m1+10*hr )
-    assert tm != None and tm >= (midnight2+6*hr)
-    tm = trigger.next_trigger_time( 'monthly '+dow1+' 6am', m1+10*hr )
-    assert tm != None and tm >= (m2+6*hr)
-
-
-def log1():
-    """
-    exercise the log print and read functions
-    """
-    redir = trigger.Redirect( 'testlog.txt' )
-    trigger.printlog( 'msgtype', 'arg2=value', 42 )
-    redir.close()
-
-    lines = readlog( 'testlog.txt' )
-
-    assert len(lines) == 1
-    L = lines[0]
-    assert len(L) == 4
-    assert abs( time.time() - L[0] ) < 10
-    assert L[1] == "msgtype"
-    assert L[2] == "arg2=value"
-    assert L[3] == "42"
-
-
-def log2():
-    """
-    more than one log message
-    """
-    redir = trigger.Redirect( 'testlog.txt' )
-    trigger.printlog( 'msgtype', 'arg2=value', 42 )
-    trigger.printlog( 'foobar', 'so that happened' )
-    redir.close()
-
-    lines = readlog( 'testlog.txt' )
-
-    assert len(lines) == 2
-    L = lines[0]
-    assert len(L) == 4
-    assert abs( time.time() - L[0] ) < 10
-    assert L[1] == "msgtype"
-    assert L[2] == "arg2=value"
-    assert L[3] == "42"
-    L = lines[1]
-    assert len(L) == 3
-    assert abs( time.time() - L[0] ) < 10
-    assert L[1] == "foobar"
-    assert L[2] == "so that happened"
-
-
-def log3():
-    """
-    log file has extra lines
-    """
-    redir = trigger.Redirect( 'testlog.txt' )
-    trigger.printlog( 'msgtype', 'arg2=value', 42 )
-    print3( 'this is some\n    output to try to confuse\nthe reader\n' )
-    trigger.printlog( 'foobar', 'so that happened' )
-    print3( '['+time.ctime()+'] 3 this is just mean' )
-    trigger.printlog( 'zigzag', 'ok then' )
-    redir.close()
-
-    lines = readlog( 'testlog.txt' )
-
-    assert len(lines) == 3
-    L = lines[0]
-    assert len(L) == 4
-    assert abs( time.time() - L[0] ) < 10
-    assert L[1] == "msgtype"
-    assert L[2] == "arg2=value"
-    assert L[3] == "42"
-    L = lines[1]
-    assert len(L) == 3
-    assert abs( time.time() - L[0] ) < 10
-    assert L[1] == "foobar"
-    assert L[2] == "so that happened"
-    L = lines[2]
-    assert len(L) == 3
-    assert abs( time.time() - L[0] ) < 10
-    assert L[1] == "zigzag"
-    assert L[2] == "ok then"
-
-
-def log4():
-    """
-    log file has extra lines on the end
-    """
-    redir = trigger.Redirect( 'testlog.txt' )
-    trigger.printlog( 'msgtype', 'arg2=value', 42 )
-    trigger.printlog( 'foobar', 'so that happened' )
-    print3( '['+time.ctime()+'] 3 this is just mean' )
-    redir.close()
-
-    lines = readlog( 'testlog.txt' )
-
-    assert len(lines) == 2
-    L = lines[0]
-    assert len(L) == 4
-    assert abs( time.time() - L[0] ) < 10
-    assert L[1] == "msgtype"
-    assert L[2] == "arg2=value"
-    assert L[3] == "42"
-    L = lines[1]
-    assert len(L) == 3
-    assert abs( time.time() - L[0] ) < 10
-    assert L[1] == "foobar"
-    assert L[2] == "so that happened"
-
-
-def run1():
-    """
-    run a job
-    """
-    curtm = time.time()
-
-    writefile( 'job_foo.py', """
-        # JOB TRIGGER: """+string_time( curtm+3 )+"""
-        import os, sys
-        sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
-        sys.stdout.write( 'hello foo' + os.linesep )
-        sys.stdout.flush()
-        """ )
-
-    os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-    
-    cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
-    out = runout( cmd )
-    #print3( out )
-    #os.system( cmd )
-    assert not out.strip()
-    
-    lines = readlog( 'logs/trigger.log' )
-
-    jf = os.path.abspath( 'job_foo.py' )
-
-    # get the log directory for the job
-    dL = glob.glob( 'logs/job_foo.py_*' )
-    assert len(dL) == 1
-    ldir = dL[0]
-    assert os.path.isdir( ldir )
-    joblog = os.path.join( ldir, 'log.txt' )
-    assert os.path.exists( joblog )
-
-    # check startup info
-    L = logfind( 'startup', lines )
-    assert len(L) > 3
-    t0 = L[0]
-    assert abs( time.time() - t0 ) < 20
-    L2 = L[2].split()
-    assert L2[0].startswith( 'mach=' ) or L2[1].startswith( 'mach=' )
-    assert L2[0].startswith( 'pid=' ) or L2[1].startswith( 'pid=' )
-    assert L[3].startswith( 'argv=' )
-
-    # check launch info
-    t1,trig,f,d = loglaunch( lines )
-    assert t1 >= t0
-    assert os.path.samefile( f, jf )
-    assert os.path.samefile( d, ldir )
-
-    # check finish message
-    t2,x,f,d = logfinish( lines )
-    assert t2 >= t1
-    assert x == '0'
-    assert os.path.samefile( f, jf )
-    assert os.path.samefile( d, ldir )
-
-    # check job log content
-    L = filegrep( joblog, 'PWD:' )
-    assert len(L) == 1
-    d = L[0].strip().split( 'PWD:', 1 )[1].strip()
-    assert os.path.samefile( d, ldir )
-    L = filegrep( joblog, 'hello foo' )
-    assert len(L) == 1 and L[0].strip() == 'hello foo'
-
-
-def run2():
-    """
-    two jobs at the same time
-    """
-    curtm = time.time()
-
-    writefile( 'job_foo.py', """
-        # JOB TRIGGER: """+string_time( curtm+3 )+"""
-        import os, sys
-        sys.stdout.write( 'hello foo' + os.linesep )
-        sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
-        sys.stdout.flush()
-        """ )
-
-    writefile( 'job_bar.py', """
-        # JOB TRIGGER: """+string_time( curtm+3 )+"""
-        import os, sys
-        sys.stdout.write( 'hello bar' + os.linesep )
-        sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
-        sys.stdout.flush()
-        """ )
-
-    os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-    
-    cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
-    out = runout( cmd )
-    #print3( out )
-    #os.system( cmd )
-    assert not out.strip()
-
-    lines = readlog( 'logs/trigger.log' )
-
-    jf1 = os.path.abspath( 'job_foo.py' )
-    jf2 = os.path.abspath( 'job_bar.py' )
-
-    # get the log directory for the jobs
-    dL = glob.glob( 'logs/job_foo.py_*' )
-    assert len(dL) == 1
-    ldir1 = dL[0]
-    assert os.path.isdir( ldir1 )
-    joblog1 = os.path.join( ldir1, 'log.txt' )
-    assert os.path.exists( joblog1 )
-    dL = glob.glob( 'logs/job_bar.py_*' )
-    assert len(dL) == 1
-    ldir2 = dL[0]
-    assert os.path.isdir( ldir2 )
-    joblog2 = os.path.join( ldir2, 'log.txt' )
-    assert os.path.exists( joblog2 )
-
-    t1 = os.path.basename( ldir1 ).split( 'job_foo.py_', 1 )[1]
-    t2 = os.path.basename( ldir2 ).split( 'job_bar.py_', 1 )[1]
-    assert t1 != t2  # job time should not be the same
-
-    # check launch info
-    L1 = logfind( 'launch', lines, 0 )
-    L2 = logfind( 'launch', lines, 1 )
-    assert L1[0] < L2[0]  # launch times should not be the same
-
-    # check finish message
-    L1 = logfind( 'finish', lines, 0 )
-    L2 = logfind( 'finish', lines, 1 )
-    assert L1[2].strip() == 'exit=0'
-    assert L2[2].strip() == 'exit=0'
-
-    # check job log content
-    L = filegrep( joblog1, 'hello foo' )
-    assert len(L) == 1 and L[0].strip() == 'hello foo'
-    L = filegrep( joblog2, 'hello bar' )
-    assert len(L) == 1 and L[0].strip() == 'hello bar'
-
-
-def run3():
-    """
-    a second job file gets created after trigger.py launches
-    """
-    curtm = time.time()
-    writefile( 'job_foo.py', """
-        # JOB TRIGGER: """+string_time( curtm+2 )+"""
-        import os, sys, time
-        sys.stdout.write( 'hello foo' + os.linesep )
-        sys.stdout.flush()
-        time.sleep(11)
-        """ )
-
-    os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-
-    cmd = localpy+' '+trigfile + ' -g 3 -Q 15 -r '+loc
-    bg = Background( cmd, outfile='bg1.log' )
-
-    time.sleep(4)
-
-    curtm = time.time()
-    writefile( 'job_bar.py', """
-        # JOB TRIGGER: """+string_time( curtm+2 )+"""
-        import os, sys
-        sys.stdout.write( 'hello bar' + os.linesep )
-        sys.stdout.flush()
-        """ )
-    
-    bg.wait()
-    fp = open( 'bg1.log', 'r' )
-    s = fp.read() ; fp.close()
-    #print3( s )
-    assert not s.strip()
-
-    lines = readlog( 'logs/trigger.log' )
-
-    # check launch info
-    t1,trig,f1,d1 = loglaunch( lines, 0 )
-    t2,trig,f2,d2 = loglaunch( lines, 1 )
-    assert t2 - t1 >= 4
-    assert os.path.basename( f1 ) == 'job_foo.py'
-    assert os.path.basename( f2 ) == 'job_bar.py'
-
-    # check finish
-    t1,x1,f1,d1 = logfinish( lines, 0 )
-    t2,x2,f2,d2 = logfinish( lines, 1 )
-    assert t1 < t2
-    assert x1 == '0' and x2 == '0'
-    assert os.path.basename( f1 ) == 'job_bar.py'
-    assert os.path.basename( f2 ) == 'job_foo.py'
-
-
-def run4():
-    """
-    exercise job location arguments
-    """
-    curtm = time.time()
-
-    writefile( 'dir1/job_foo.py', """
-        # JOB TRIGGER: """+string_time( curtm+3 )+"""
-        import os, sys
-        sys.stdout.write( 'hello foo' + os.linesep )
-        sys.stdout.flush()
-        """ )
-
-    writefile( 'dir2/bar.py', """
-        # JOB TRIGGER: """+string_time( curtm+3 )+"""
-        import os, sys
-        sys.stdout.write( 'hello bar' + os.linesep )
-        sys.stdout.flush()
-        """ )
-
-    writefile( 'dir2/baz.py', """
-        # JOB TRIGGER: """+string_time( curtm+6 )+"""
-        import os, sys
-        sys.stdout.write( 'hello baz' + os.linesep )
-        sys.stdout.flush()
-        """ )
-
-    os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-    
-    cmd = localpy+' '+trigfile + \
-            ' -g 2 -Q 10 -r logs -C '+os.getcwd() + \
-            ' dir1 dir2/*.py'
-    out = runout( cmd )
-    #print3( out )
-    #os.system( cmd )
-    assert not out.strip()
-
-    lines = readlog( 'logs/trigger.log' )
-
-    t1,s,f1,d1 = loglaunch( lines, 0 )
-    t2,s,f2,d2 = loglaunch( lines, 1 )
-    t3,s,f3,d3 = loglaunch( lines, 2 )
-    assert logfind( 'launch', lines, 3 ) == None
-
-    a,b = os.path.split( f3 )
-    assert b == 'baz.py' and os.path.basename(a) == 'dir2'
-
-
-def run5():
-    """
-    error in JOB TRIGGER syntax
-    """
-    curtm = time.time()
-
-    # put a syntax error in the job trigger
-    writefile( 'job_foo.py', """
-        # JOB TRIGGER: junk """+string_time( curtm+3 )+"""
-        import os, sys
-        sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
-        sys.stdout.write( 'hello foo' + os.linesep )
-        sys.stdout.flush()
-        """ )
-
-    # set the file date back a little to avoid time granularity issues
-    t = time.time() - 59
-    os.utime( 'job_foo.py', (t,t) )
-
-    os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-
-    cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -a 5 -r '+loc
-    out = runout( cmd )
-    #print3( out )
-    #os.system( cmd )
-    assert not out.strip()
-
-    lines = readlog( 'logs/trigger.log' )
-
-    # expect exactly one exception log line and alive line
-    assert logfind( 'exception', lines, 0 ) != None
-    assert logfind( 'exception', lines, 1 ) == None
-    assert logfind( 'alive', lines, 0 ) != None
-    assert logfind( 'alive', lines, 1 ) == None
-    # the alive should come after the exception
-    i = 1
-    while lines[i][1] != 'exception':
-        i += 1
-    assert lines[i+1][1] == 'alive'
-
-
-def run6():
-    """
-    error in JOB TRIGGER syntax, but check error repeat time
-    """
-    curtm = time.time()
-
-    # put a syntax error in the job trigger
-    writefile( 'job_foo.py', """
-        # JOB TRIGGER: junk """+string_time( curtm+3 )+"""
-        import os, sys
-        sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
-        sys.stdout.write( 'hello foo' + os.linesep )
-        sys.stdout.flush()
-        """ )
-
-    # set the file date back a little to avoid time granularity issues
-    t = time.time() - 59
-    os.utime( 'job_foo.py', (t,t) )
-
-    os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-
-    secs = str( 6./(60.0*60.0) )
-    cmd = localpy+' '+trigfile + ' -g 2 -Q 10 -E '+secs+' -r '+loc
-    out = runout( cmd )
-    #print3( out )
-    #os.system( cmd )
-    assert not out.strip()
-
-    lines = readlog( 'logs/trigger.log' )
-
-    # expect exactly one exception log line and alive line
-    L0 = logfind( 'exception', lines, 0 )
-    assert L0 != None
-    L1 = logfind( 'exception', lines, 1 )
-    assert L1 != None
-    assert logfind( 'exception', lines, 2 ) == None
-    assert L0[0] + 4 < L1[0]
-
-
-def run7():
-    """
-    multiple job triggers in a file
-    """
-    curtm = time.time()
-
-    writefile( 'job_foo.py', """
-        # JOB TRIGGER: """+string_time( curtm-10 )+"""
-        # JOB TRIGGER: """+string_time( curtm+3 )+"""
-        import os, sys
-        sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
-        sys.stdout.write( 'hello foo' + os.linesep )
-        sys.stdout.flush()
-        """ )
-
-    writefile( 'job_bar.py', """
-        # JOB TRIGGER: """+string_time( curtm-10 )+"""
-        # JOB TRIGGER: """+string_time( curtm-20 )+"""
-        import os, sys
-        sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
-        sys.stdout.write( 'hello bar' + os.linesep )
-        sys.stdout.flush()
-        """ )
-
-    os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-    
-    cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
-    out = runout( cmd )
-    #print3( out )
-    #os.system( cmd )
-    assert not out.strip()
-    
-    lines = readlog( 'logs/trigger.log' )
-
-    # job_foo should launch exactly once, but not job_bar
-    t1,s,f1,d1 = loglaunch( lines, 0 )
-    assert os.path.basename(f1).startswith( 'job_foo' )
-    assert logfind( 'launch', lines, 1 ) == None
-    tm,x,f,d = logfinish( lines, 0 )
-    assert os.path.basename(f1).startswith( 'job_foo' )
-    assert logfind( 'finish', lines, 1 ) == None
-
-
-def startup1():
-    """
-    log directory not given
-    """
-    curtm = time.time()
-
-    #os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-    
-    cmd = localpy+' '+trigfile + ' -g 2 -Q 6'
-    out = runout( cmd )
-    #print3( out )
-    #os.system( cmd )
-
-    assert time.time() - curtm < 5
-    assert len( grep( out, 'Traceback' ) ) > 0
-
-
-def startup2():
-    """
-    log directory does not exist
-    """
-    curtm = time.time()
-
-    #os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-    
-    cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc
-    out = runout( cmd )
-    #print3( out )
-    #os.system( cmd )
-
-    # error not written without -S option, but should not start up
-    assert time.time() - curtm < 5
-    assert not out.strip()
-
-    curtm = time.time()
-    cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -S -r '+loc
-    out = runout( cmd )
-    #print3( out )
-    assert time.time() - curtm < 5
-    assert len( grep( out, 'Traceback' ) ) > 0
-
-
-def startup3():
-    """
-    a second startup should preserve the log file
-    """
-    curtm = time.time()
-
-    writefile( 'job_foo.py', """
-        # JOB TRIGGER: """+string_time( curtm+2 )+"""
-        import os, sys, time
-        sys.stdout.write( 'hello foo' + os.linesep )
-        sys.stdout.flush()
+class catchall( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_recurse_dow_function(self):
+        ""
+        spec = 'Mon tue 3am'
+        sL = [ s.strip() for s in spec.split(',') ]
+        dowL = []
+        R = trigger.recurse_dow( sL, dowL )
+        assert dowL == ['mon','tue'] and R == ['3am']
+
+        spec = 'Mon, tue, 3am'
+        sL = [ s.strip() for s in spec.split(',') ]
+        dowL = []
+        R = trigger.recurse_dow( sL, dowL )
+        assert dowL == ['mon','tue'] and R == ['3am']
+
+        spec = 'Mon, WEDNESDAY, 3am, fri'
+        sL = [ s.strip() for s in spec.split(',') ]
+        dowL = []
+        R = trigger.recurse_dow( sL, dowL )
+        assert dowL == ['mon','wed'] and R == ['3am','fri']
+
+        spec = 'Sunday'
+        sL = [ s.strip() for s in spec.split(',') ]
+        dowL = []
+        R = trigger.recurse_dow( sL, dowL )
+        assert dowL == ['sun'] and R == []
+
+        spec = 'Sunday Monday'
+        sL = [ s.strip() for s in spec.split(',') ]
+        dowL = []
+        R = trigger.recurse_dow( sL, dowL )
+        assert dowL == ['sun','mon'] and R == []
+
+        spec = 'Mon 3 am'
+        sL = [ s.strip() for s in spec.split(',') ]
+        dowL = []
+        R = trigger.recurse_dow( sL, dowL )
+        assert dowL == ['mon'] and R == ['3 am']
+
+        spec = 'Mon, 3 am'
+        sL = [ s.strip() for s in spec.split(',') ]
+        dowL = []
+        R = trigger.recurse_dow( sL, dowL )
+        assert dowL == ['mon'] and R == ['3 am']
+
+        spec = 'Mon, 3am'
+        sL = [ s.strip() for s in spec.split(',') ]
+        dowL = []
+        R = trigger.recurse_dow( sL, dowL )
+        assert dowL == ['mon'] and R == ['3am']
+
+    def test_next_trigger_time_function(self):
+        ""
+        hr = 60*60
+        curtm = time.time()
+        midnight = epoch_at_midnight( curtm )
+        midnight2 = epoch_at_midnight( midnight+26*60*60 )
+
+        # some am/pm time-of-days
+        tm = trigger.next_trigger_time( '1am', midnight )
+        assert tm != None and tm == (midnight+hr)
+        tm = trigger.next_trigger_time( '1am', midnight+hr )
+        assert tm != None and tm == (midnight+hr)
+        tm = trigger.next_trigger_time( '1am', midnight+2*hr )
+        assert tm != None and tm == (midnight2+hr)
+
+        #print3( time.ctime(tm), time.ctime(midnight+13*hr+hr/2) )
+
+        # military time-of-day
+        tm = trigger.next_trigger_time( '13:30', midnight+hr+hr/2 )
+        assert tm != None and tm == (midnight+13*hr+hr/2)
+        tm = trigger.next_trigger_time( '13:30', midnight+13*hr+hr/2 )
+        assert tm != None and tm == (midnight+13*hr+hr/2)
+        tm = trigger.next_trigger_time( '13:30', midnight+14*hr+hr/2 )
+        assert tm != None and tm == (midnight2+13*hr+hr/2)
+        
+        # more than one time-of-day given
+        tm = trigger.next_trigger_time( '2am, 4am', midnight+1*hr )
+        assert tm != None and tm == (midnight+2*hr)
+        tm = trigger.next_trigger_time( '4am, 2am', midnight+1*hr )
+        assert tm != None and tm == (midnight+2*hr)
+        tm = trigger.next_trigger_time( '2am, 4am', midnight+2*hr )
+        assert tm != None and tm == (midnight+2*hr)
+        tm = trigger.next_trigger_time( '2am, 4am', midnight+3*hr )
+        assert tm != None and tm == (midnight+4*hr)
+        tm = trigger.next_trigger_time( '2am, 4am', midnight+4*hr )
+        assert tm != None and tm == (midnight+4*hr)
+        tm = trigger.next_trigger_time( '2am, 4am', midnight+5*hr )
+        assert tm != None and tm == (midnight2+2*hr)
+
+    def test_next_trigger_time_function_using_DOW_and_plus_a_time(self):
+        ""
+        hr = 60*60
+        curtm = time.time()
+        midnight = epoch_at_midnight( curtm )
+        midnight2 = epoch_at_midnight( midnight+26*60*60 )
+        dow = day_of_week( curtm )
+
+        tm = trigger.next_trigger_time( dow, midnight+0*hr )
+        assert tm != None and tm == (midnight+0*hr+5)
+        tm = trigger.next_trigger_time( dow[:3].lower(), midnight+0*hr )
+        assert tm != None and tm == (midnight+0*hr+5)
+        tm = trigger.next_trigger_time( dow[:3].lower(), midnight+1*hr )
+        assert tm == None
+
+        dow2 = day_of_week( midnight+26*60*60 )
+        tm = trigger.next_trigger_time( dow2, midnight+23*hr )
+        assert tm != None and tm == (midnight2+0*hr+5)
+        tm = trigger.next_trigger_time( dow+' '+dow2, midnight+23*hr )
+        assert tm != None and tm == (midnight2+0*hr+5)
+
+        tm = trigger.next_trigger_time( dow+' '+dow2+' 6am', midnight+1*hr )
+        assert tm != None and tm == (midnight+6*hr)
+        tm = trigger.next_trigger_time( dow+' '+dow2+' 6am', midnight+10*hr )
+        #print3( 'tm', time.ctime(tm) )
+        assert tm != None and tm == (midnight2+6*hr)
+
+        # more than one day plus more than one time
+        midprev = epoch_at_midnight( midnight-22*60*60 )
+        dowprev = day_of_week( midnight-22*60*60 )
+        tm = trigger.next_trigger_time( dowprev+' '+dow+' 6am', midnight+1*hr )
+        assert tm != None and tm == (midnight+6*hr)
+        tm = trigger.next_trigger_time( dowprev+' '+dow+' 6am', midnight+7*hr )
+        assert tm == None
+        tm = trigger.next_trigger_time( dowprev+' '+dow+' 1:30, 6am', midnight+2*hr )
+        assert tm != None and tm == (midnight+6*hr)
+        tm = trigger.next_trigger_time( dowprev+' '+dow+' 1:30, 6am', midnight+1*hr )
+        assert tm != None and tm == (midnight+1.5*hr)
+        tm = trigger.next_trigger_time( dowprev+' '+dow+' 1:30, 6am', midnight+7*hr )
+        assert tm == None
+
+    def test_next_trigger_time_errors(self):
+        ""
+        hr = 60*60
+        curtm = time.time()
+        midnight = epoch_at_midnight( curtm )
+        midnight2 = epoch_at_midnight( midnight+26*60*60 )
+        dow = day_of_week( curtm )
+        dow2 = day_of_week( midnight+26*60*60 )
+
+        try:
+            tm = trigger.next_trigger_time( '1mm', midnight )
+        except Exception:
+            err = str( sys.exc_info()[1] )
+            print3( err )
+            assert err.find('bad time syntax') >= 0
+        else:
+            raise Exception( "expected an exception" )
+
+        try:
+            tm = trigger.next_trigger_time( dow+' 6am '+dow2, midnight+5*hr )
+        except Exception:
+            err = str( sys.exc_info()[1] )
+            print3( err )
+            assert err.find('bad time syntax') >= 0
+        else:
+            raise Exception( "expected an exception" )
+
+        try:
+            tm = trigger.next_trigger_time( '6am '+dow, midnight+5*hr )
+        except Exception:
+            err = str( sys.exc_info()[1] )
+            print3( err )
+            assert err.find('bad time syntax') >= 0
+        else:
+            raise Exception( "expected an exception" )
+
+    def test_hourly_trigger(self):
+        ""
+        hr = 60*60
+        curtm = time.time()
+        midnight = epoch_at_midnight( curtm )
+        midnight2 = epoch_at_midnight( midnight+26*60*60 )
+        dow = day_of_week( curtm )
+
+        tm = trigger.next_trigger_time( 'hourly', midnight+1*hr )
+        assert tm != None and tm == (midnight+1*hr)
+        tm = trigger.next_trigger_time( 'hourly', midnight+1*hr+5 )
+        assert tm != None and tm == (midnight+2*hr)
+        tm = trigger.next_trigger_time( 'hourly', midnight+1*hr+59*60 )
+        assert tm != None and tm == (midnight+2*hr)
+
+        tm = trigger.next_trigger_time( 'hourly', midnight+23*hr )
+        assert tm != None and tm == (midnight+23*hr)
+        tm = trigger.next_trigger_time( 'hourly', midnight+23*hr+10 )
+        assert tm != None and tm == midnight2
+
+        tm = trigger.next_trigger_time( 'hourly', midnight+23*hr+10 )
+        assert tm != None and tm == (midnight2)
+
+        tm = trigger.next_trigger_time( 'hourly 5', midnight+1*hr )
+        assert tm != None and tm == (midnight+1*hr+5*60)
+        tm = trigger.next_trigger_time( 'hourly, 5', midnight+1*hr )
+        assert tm != None and tm == (midnight+1*hr+5*60)
+        tm = trigger.next_trigger_time( 'hourly, 5', midnight+1*hr+10*60 )
+        assert tm != None and tm == (midnight+2*hr+5*60)
+
+        tm = trigger.next_trigger_time( 'hourly 5, 35', midnight+1*hr )
+        assert tm != None and tm == (midnight+1*hr+5*60)
+        tm = trigger.next_trigger_time( 'hourly 5, 35', midnight+1*hr+10*60 )
+        assert tm != None and tm == (midnight+1*hr+35*60)
+        tm = trigger.next_trigger_time( 'hourly 5, 35', midnight+1*hr+40*60 )
+        assert tm != None and tm == (midnight+2*hr+5*60)
+
+    def test_monthly_trigger(self):
+        ""
+        hr = 60*60
+        curtm = time.time()
+        m1 = epoch_at_month_start( curtm )
+        m2 = epoch_at_month_start( m1 + 45*24*hr + 10*hr )
+
+        tm = trigger.next_trigger_time( 'monthly', m1+10*hr )
+        assert tm != None and tm == (m2+5)
+        tm = trigger.next_trigger_time( 'monthly', m1+1 )
+        assert tm != None and tm == (m1+5)
+
+        tm = trigger.next_trigger_time( 'monthly 6am', m1+4*hr )
+        assert tm != None and tm == (m1+6*hr)
+        tm = trigger.next_trigger_time( 'monthly 6am', m1+10*hr )
+        assert tm != None and tm == (m2+6*hr)
+
+        dow1 = day_of_week( m1 + 2*hr )[:3]
+        dow2 = day_of_week( m1 + 30*hr )[:3]
+        midnight2 = epoch_at_midnight( m1 + 30*hr )  # midnight on dow2
+        tm = trigger.next_trigger_time( 'monthly '+dow1, m1+1 )
+        assert tm != None and tm == (m1+5)
+        tm = trigger.next_trigger_time( 'monthly '+dow2, m1+10*hr )
+        assert tm != None and tm == (midnight2+5)
+        tm = trigger.next_trigger_time( 'monthly '+dow1, m1+10*hr )
+        assert tm != None and tm >= (m2+5)
+
+        tm = trigger.next_trigger_time( 'monthly '+dow1+' 6am', m1+1 )
+        assert tm != None and tm == (m1+6*hr)
+        tm = trigger.next_trigger_time( 'monthly '+dow2+' 6am', m1+10*hr )
+        assert tm != None and tm >= (midnight2+6*hr)
+        tm = trigger.next_trigger_time( 'monthly '+dow1+' 6am', m1+10*hr )
+        assert tm != None and tm >= (m2+6*hr)
+
+    def test_log_print_and_read_functions(self):
+        ""
+        redir = trigger.Redirect( 'testlog.txt' )
+        trigger.printlog( 'msgtype', 'arg2=value', 42 )
+        redir.close()
+
+        lines = readlog( 'testlog.txt' )
+
+        assert len(lines) == 1
+        L = lines[0]
+        assert len(L) == 4
+        assert abs( time.time() - L[0] ) < 10
+        assert L[1] == "msgtype"
+        assert L[2] == "arg2=value"
+        assert L[3] == "42"
+
+    def test_multiple_log_print_and_read_functions(self):
+        ""
+        redir = trigger.Redirect( 'testlog.txt' )
+        trigger.printlog( 'msgtype', 'arg2=value', 42 )
+        trigger.printlog( 'foobar', 'so that happened' )
+        redir.close()
+
+        lines = readlog( 'testlog.txt' )
+
+        assert len(lines) == 2
+        L = lines[0]
+        assert len(L) == 4
+        assert abs( time.time() - L[0] ) < 10
+        assert L[1] == "msgtype"
+        assert L[2] == "arg2=value"
+        assert L[3] == "42"
+        L = lines[1]
+        assert len(L) == 3
+        assert abs( time.time() - L[0] ) < 10
+        assert L[1] == "foobar"
+        assert L[2] == "so that happened"
+
+    def test_log_file_with_extra_lines(self):
+        ""
+        redir = trigger.Redirect( 'testlog.txt' )
+        trigger.printlog( 'msgtype', 'arg2=value', 42 )
+        print3( 'this is some\n    output to try to confuse\nthe reader\n' )
+        trigger.printlog( 'foobar', 'so that happened' )
+        print3( '['+time.ctime()+'] 3 this is just mean' )
+        trigger.printlog( 'zigzag', 'ok then' )
+        redir.close()
+
+        lines = readlog( 'testlog.txt' )
+
+        assert len(lines) == 3
+        L = lines[0]
+        assert len(L) == 4
+        assert abs( time.time() - L[0] ) < 10
+        assert L[1] == "msgtype"
+        assert L[2] == "arg2=value"
+        assert L[3] == "42"
+        L = lines[1]
+        assert len(L) == 3
+        assert abs( time.time() - L[0] ) < 10
+        assert L[1] == "foobar"
+        assert L[2] == "so that happened"
+        L = lines[2]
+        assert len(L) == 3
+        assert abs( time.time() - L[0] ) < 10
+        assert L[1] == "zigzag"
+        assert L[2] == "ok then"
+
+    def test_when_log_file_has_extra_lines_on_the_end(self):
+        ""
+        redir = trigger.Redirect( 'testlog.txt' )
+        trigger.printlog( 'msgtype', 'arg2=value', 42 )
+        trigger.printlog( 'foobar', 'so that happened' )
+        print3( '['+time.ctime()+'] 3 this is just mean' )
+        redir.close()
+
+        lines = readlog( 'testlog.txt' )
+
+        assert len(lines) == 2
+        L = lines[0]
+        assert len(L) == 4
+        assert abs( time.time() - L[0] ) < 10
+        assert L[1] == "msgtype"
+        assert L[2] == "arg2=value"
+        assert L[3] == "42"
+        L = lines[1]
+        assert len(L) == 3
+        assert abs( time.time() - L[0] ) < 10
+        assert L[1] == "foobar"
+        assert L[2] == "so that happened"
+
+    def test_running_a_job(self):
+        ""
+        curtm = time.time()
+
+        util.writefile( 'job_foo.py', """
+            # JOB TRIGGER: """+string_time( curtm+3 )+"""
+            import os, sys
+            sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
+            sys.stdout.write( 'hello foo' + os.linesep )
+            sys.stdout.flush()
+            """ )
+
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+        
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
+        out = util.runout( cmd )
+        #print3( out )
+        #os.system( cmd )
+        assert not out.strip()
+        
+        lines = readlog( 'logs/trigger.log' )
+
+        jf = os.path.abspath( 'job_foo.py' )
+
+        # get the log directory for the job
+        dL = glob.glob( 'logs/job_foo.py_*' )
+        assert len(dL) == 1
+        ldir = dL[0]
+        assert os.path.isdir( ldir )
+        joblog = os.path.join( ldir, 'log.txt' )
+        assert os.path.exists( joblog )
+
+        # check startup info
+        L = logfind( 'startup', lines )
+        assert len(L) > 3
+        t0 = L[0]
+        assert abs( time.time() - t0 ) < 20
+        L2 = L[2].split()
+        assert L2[0].startswith( 'mach=' ) or L2[1].startswith( 'mach=' )
+        assert L2[0].startswith( 'pid=' ) or L2[1].startswith( 'pid=' )
+        assert L[3].startswith( 'argv=' )
+
+        # check launch info
+        t1,trig,f,d = loglaunch( lines )
+        assert t1 >= t0
+        assert os.path.samefile( f, jf )
+        assert os.path.samefile( d, ldir )
+
+        # check finish message
+        t2,x,f,d = logfinish( lines )
+        assert t2 >= t1
+        assert x == '0'
+        assert os.path.samefile( f, jf )
+        assert os.path.samefile( d, ldir )
+
+        # check job log content
+        L = util.filegrep( joblog, 'PWD:' )
+        assert len(L) == 1
+        d = L[0].strip().split( 'PWD:', 1 )[1].strip()
+        assert os.path.samefile( d, ldir )
+        L = util.filegrep( joblog, 'hello foo' )
+        assert len(L) == 1 and L[0].strip() == 'hello foo'
+
+    def test_running_two_jobs_at_the_same_time(self):
+        ""
+        curtm = time.time()
+
+        util.writefile( 'job_foo.py', """
+            # JOB TRIGGER: """+string_time( curtm+3 )+"""
+            import os, sys
+            sys.stdout.write( 'hello foo' + os.linesep )
+            sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
+            sys.stdout.flush()
+            """ )
+
+        util.writefile( 'job_bar.py', """
+            # JOB TRIGGER: """+string_time( curtm+3 )+"""
+            import os, sys
+            sys.stdout.write( 'hello bar' + os.linesep )
+            sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
+            sys.stdout.flush()
+            """ )
+
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+        
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
+        out = util.runout( cmd )
+        #print3( out )
+        #os.system( cmd )
+        assert not out.strip()
+
+        lines = readlog( 'logs/trigger.log' )
+
+        jf1 = os.path.abspath( 'job_foo.py' )
+        jf2 = os.path.abspath( 'job_bar.py' )
+
+        # get the log directory for the jobs
+        dL = glob.glob( 'logs/job_foo.py_*' )
+        assert len(dL) == 1
+        ldir1 = dL[0]
+        assert os.path.isdir( ldir1 )
+        joblog1 = os.path.join( ldir1, 'log.txt' )
+        assert os.path.exists( joblog1 )
+        dL = glob.glob( 'logs/job_bar.py_*' )
+        assert len(dL) == 1
+        ldir2 = dL[0]
+        assert os.path.isdir( ldir2 )
+        joblog2 = os.path.join( ldir2, 'log.txt' )
+        assert os.path.exists( joblog2 )
+
+        t1 = os.path.basename( ldir1 ).split( 'job_foo.py_', 1 )[1]
+        t2 = os.path.basename( ldir2 ).split( 'job_bar.py_', 1 )[1]
+        assert t1 != t2  # job time should not be the same
+
+        # check launch info
+        L1 = logfind( 'launch', lines, 0 )
+        L2 = logfind( 'launch', lines, 1 )
+        assert L1[0] < L2[0]  # launch times should not be the same
+
+        # check finish message
+        L1 = logfind( 'finish', lines, 0 )
+        L2 = logfind( 'finish', lines, 1 )
+        assert L1[2].strip() == 'exit=0'
+        assert L2[2].strip() == 'exit=0'
+
+        # check job log content
+        L = util.filegrep( joblog1, 'hello foo' )
+        assert len(L) == 1 and L[0].strip() == 'hello foo'
+        L = util.filegrep( joblog2, 'hello bar' )
+        assert len(L) == 1 and L[0].strip() == 'hello bar'
+
+    def test_that_newly_created_job_files_will_get_run(self):
+        ""
+        curtm = time.time()
+        util.writefile( 'job_foo.py', """
+            # JOB TRIGGER: """+string_time( curtm+2 )+"""
+            import os, sys, time
+            sys.stdout.write( 'hello foo' + os.linesep )
+            sys.stdout.flush()
+            time.sleep(11)
+            """ )
+
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+
+        cmd = localpy+' '+trigfile + ' -g 3 -Q 15 -r '+loc
+        bg = Background( cmd, outfile='bg1.log' )
+
+        time.sleep(4)
+
+        curtm = time.time()
+        util.writefile( 'job_bar.py', """
+            # JOB TRIGGER: """+string_time( curtm+2 )+"""
+            import os, sys
+            sys.stdout.write( 'hello bar' + os.linesep )
+            sys.stdout.flush()
+            """ )
+        
+        bg.wait()
+        fp = open( 'bg1.log', 'r' )
+        s = fp.read() ; fp.close()
+        #print3( s )
+        assert not s.strip()
+
+        lines = readlog( 'logs/trigger.log' )
+
+        # check launch info
+        t1,trig,f1,d1 = loglaunch( lines, 0 )
+        t2,trig,f2,d2 = loglaunch( lines, 1 )
+        assert t2 - t1 >= 4
+        assert os.path.basename( f1 ) == 'job_foo.py'
+        assert os.path.basename( f2 ) == 'job_bar.py'
+
+        # check finish
+        t1,x1,f1,d1 = logfinish( lines, 0 )
+        t2,x2,f2,d2 = logfinish( lines, 1 )
+        assert t1 < t2
+        assert x1 == '0' and x2 == '0'
+        assert os.path.basename( f1 ) == 'job_bar.py'
+        assert os.path.basename( f2 ) == 'job_foo.py'
+
+    def test_job_location_specifications(self):
+        ""
+        curtm = time.time()
+
+        util.writefile( 'dir1/job_foo.py', """
+            # JOB TRIGGER: """+string_time( curtm+3 )+"""
+            import os, sys
+            sys.stdout.write( 'hello foo' + os.linesep )
+            sys.stdout.flush()
+            """ )
+
+        util.writefile( 'dir2/bar.py', """
+            # JOB TRIGGER: """+string_time( curtm+3 )+"""
+            import os, sys
+            sys.stdout.write( 'hello bar' + os.linesep )
+            sys.stdout.flush()
+            """ )
+
+        util.writefile( 'dir2/baz.py', """
+            # JOB TRIGGER: """+string_time( curtm+6 )+"""
+            import os, sys
+            sys.stdout.write( 'hello baz' + os.linesep )
+            sys.stdout.flush()
+            """ )
+
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+        
+        cmd = localpy+' '+trigfile + \
+                ' -g 2 -Q 10 -r logs -C '+os.getcwd() + \
+                ' dir1 dir2/*.py'
+        out = util.runout( cmd )
+        #print3( out )
+        #os.system( cmd )
+        assert not out.strip()
+
+        lines = readlog( 'logs/trigger.log' )
+
+        t1,s,f1,d1 = loglaunch( lines, 0 )
+        t2,s,f2,d2 = loglaunch( lines, 1 )
+        t3,s,f3,d3 = loglaunch( lines, 2 )
+        assert logfind( 'launch', lines, 3 ) == None
+
+        a,b = os.path.split( f3 )
+        assert b == 'baz.py' and os.path.basename(a) == 'dir2'
+
+    def test_how_an_error_in_JOB_TRIGGER_syntax_is_handled(self):
+        ""
+        curtm = time.time()
+
+        # put a syntax error in the job trigger
+        util.writefile( 'job_foo.py', """
+            # JOB TRIGGER: junk """+string_time( curtm+3 )+"""
+            import os, sys
+            sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
+            sys.stdout.write( 'hello foo' + os.linesep )
+            sys.stdout.flush()
+            """ )
+
+        # set the file date back a little to avoid time granularity issues
+        t = time.time() - 59
+        os.utime( 'job_foo.py', (t,t) )
+
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -a 5 -r '+loc
+        out = util.runout( cmd )
+        #print3( out )
+        #os.system( cmd )
+        assert not out.strip()
+
+        lines = readlog( 'logs/trigger.log' )
+
+        # expect exactly one exception log line and alive line
+        assert logfind( 'exception', lines, 0 ) != None
+        assert logfind( 'exception', lines, 1 ) == None
+        assert logfind( 'alive', lines, 0 ) != None
+        assert logfind( 'alive', lines, 1 ) == None
+        # the alive should come after the exception
+        i = 1
+        while lines[i][1] != 'exception':
+            i += 1
+        assert lines[i+1][1] == 'alive'
+
+    def test_error_print_frequency_for_an_error_in_JOB_TRIGGER_syntax(self):
+        ""
+        curtm = time.time()
+
+        # put a syntax error in the job trigger
+        util.writefile( 'job_foo.py', """
+            # JOB TRIGGER: junk """+string_time( curtm+3 )+"""
+            import os, sys
+            sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
+            sys.stdout.write( 'hello foo' + os.linesep )
+            sys.stdout.flush()
+            """ )
+
+        # set the file date back a little to avoid time granularity issues
+        t = time.time() - 59
+        os.utime( 'job_foo.py', (t,t) )
+
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+
+        secs = str( 6./(60.0*60.0) )
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 10 -E '+secs+' -r '+loc
+        out = util.runout( cmd )
+        #print3( out )
+        #os.system( cmd )
+        assert not out.strip()
+
+        lines = readlog( 'logs/trigger.log' )
+
+        # expect exactly one exception log line and alive line
+        L0 = logfind( 'exception', lines, 0 )
+        assert L0 != None
+        L1 = logfind( 'exception', lines, 1 )
+        assert L1 != None
+        assert logfind( 'exception', lines, 2 ) == None
+        assert L0[0] + 4 < L1[0]
+
+    def test_multiple_job_triggers_in_the_same_file(self):
+        ""
+        curtm = time.time()
+
+        util.writefile( 'job_foo.py', """
+            # JOB TRIGGER: """+string_time( curtm-10 )+"""
+            # JOB TRIGGER: """+string_time( curtm+3 )+"""
+            import os, sys
+            sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
+            sys.stdout.write( 'hello foo' + os.linesep )
+            sys.stdout.flush()
+            """ )
+
+        util.writefile( 'job_bar.py', """
+            # JOB TRIGGER: """+string_time( curtm-10 )+"""
+            # JOB TRIGGER: """+string_time( curtm-20 )+"""
+            import os, sys
+            sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
+            sys.stdout.write( 'hello bar' + os.linesep )
+            sys.stdout.flush()
+            """ )
+
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+        
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
+        out = util.runout( cmd )
+        #print3( out )
+        #os.system( cmd )
+        assert not out.strip()
+        
+        lines = readlog( 'logs/trigger.log' )
+
+        # job_foo should launch exactly once, but not job_bar
+        t1,s,f1,d1 = loglaunch( lines, 0 )
+        assert os.path.basename(f1).startswith( 'job_foo' )
+        assert logfind( 'launch', lines, 1 ) == None
+        tm,x,f,d = logfinish( lines, 0 )
+        assert os.path.basename(f1).startswith( 'job_foo' )
+        assert logfind( 'finish', lines, 1 ) == None
+
+    def test_error_launching_trigger_cuz_log_directory_not_given(self):
+        ""
+        curtm = time.time()
+
+        #os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+        
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 6'
+        out = util.runout( cmd )
+        #print3( out )
+        #os.system( cmd )
+
+        assert time.time() - curtm < 5
+        assert len( util.grep( out, 'Traceback' ) ) > 0
+
+    def test_error_launching_trigger_cuz_log_directory_does_not_exist(self):
+        ""
+        curtm = time.time()
+
+        #os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+        
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc
+        out = util.runout( cmd )
+        #print3( out )
+        #os.system( cmd )
+
+        # error not written without -S option, but should not start up
+        assert time.time() - curtm < 5
+        assert not out.strip()
+
+        curtm = time.time()
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -S -r '+loc
+        out = util.runout( cmd )
+        #print3( out )
+        assert time.time() - curtm < 5
+        assert len( util.grep( out, 'Traceback' ) ) > 0
+
+    def test_a_second_startup_should_preserve_the_log_file(self):
+        ""
+        curtm = time.time()
+
+        util.writefile( 'job_foo.py', """
+            # JOB TRIGGER: """+string_time( curtm+2 )+"""
+            import os, sys, time
+            sys.stdout.write( 'hello foo' + os.linesep )
+            sys.stdout.flush()
+            time.sleep(1)
+            """ )
+
+        jf = os.path.abspath( 'job_foo.py' )
+
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+        
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc
+        out = util.runout( cmd )
+        #print3( out )
+        #os.system( cmd )
+        assert not out.strip()
+        
+        lines1 = readlog( 'logs/trigger.log' )
+        
+        L = logfind( 'startup', lines1, 0 ) ; assert L != None
+        L = logfind( 'startup', lines1, 1 ) ; assert L == None
+        L = logfind( 'launch', lines1, 0 ) ; assert L != None
+        L = logfind( 'launch', lines1, 1 ) ; assert L == None
+        L = logfind( 'finish', lines1, 0 ) ; assert L != None
+        L = logfind( 'finish', lines1, 1 ) ; assert L == None
+
+        util.writefile( 'job_bar.py', """
+            # JOB TRIGGER: """+string_time( time.time()+2 )+"""
+            import os, sys, time
+            sys.stdout.write( 'hello bar' + os.linesep )
+            sys.stdout.flush()
+            time.sleep(1)
+            """ )
+
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc
+        out = util.runout( cmd )
+        #print3( out )
+        #os.system( cmd )
+        assert not out.strip()
+        
+        lines2 = readlog( 'logs/trigger.log' )
+
+        # first part of the log file is the same
+        assert lines1 == lines2[:len(lines1)]
+
+        L = logfind( 'startup', lines2, 0 ) ; assert L != None
+        L = logfind( 'startup', lines2, 1 ) ; assert L != None
+        L = logfind( 'startup', lines2, 2 ) ; assert L == None
+        L = logfind( 'launch', lines2, 0 ) ; assert L != None
+        L = logfind( 'launch', lines2, 1 ) ; assert L != None
+        L = logfind( 'launch', lines2, 2 ) ; assert L == None
+        L = logfind( 'finish', lines2, 0 ) ; assert L != None
+        L = logfind( 'finish', lines2, 1 ) ; assert L != None
+        L = logfind( 'finish', lines2, 2 ) ; assert L == None
+
+    def test_two_trigger_startups_in_different_directories_is_ok(self):
+        ""
+        curtm = time.time()
+
+        util.writefile( 'jobs1/job_foo.py', """
+            # JOB TRIGGER: """+string_time( curtm+2 )+"""
+            import os, sys, time
+            sys.stdout.write( 'hello foo' + os.linesep )
+            sys.stdout.flush()
+            time.sleep(1)
+            """ )
+
+        os.mkdir( 'logs1' )
+        loc1 = os.path.abspath( 'logs1' )
+        os.mkdir( 'logs2' )
+        loc2 = os.path.abspath( 'logs2' )
+
+        os.chdir( 'jobs1' )    
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc1
+        bg1 = Background( cmd, outfile='bg1.log' )
+
+        os.chdir( '..' )
         time.sleep(1)
-        """ )
 
-    jf = os.path.abspath( 'job_foo.py' )
+        util.writefile( 'jobs2/job_bar.py', """
+            # JOB TRIGGER: """+string_time( time.time()+2 )+"""
+            import os, sys, time
+            sys.stdout.write( 'hello bar' + os.linesep )
+            sys.stdout.flush()
+            time.sleep(1)
+            """ )
 
-    os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-    
-    cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc
-    out = runout( cmd )
-    #print3( out )
-    #os.system( cmd )
-    assert not out.strip()
-    
-    lines1 = readlog( 'logs/trigger.log' )
-    
-    L = logfind( 'startup', lines1, 0 ) ; assert L != None
-    L = logfind( 'startup', lines1, 1 ) ; assert L == None
-    L = logfind( 'launch', lines1, 0 ) ; assert L != None
-    L = logfind( 'launch', lines1, 1 ) ; assert L == None
-    L = logfind( 'finish', lines1, 0 ) ; assert L != None
-    L = logfind( 'finish', lines1, 1 ) ; assert L == None
+        os.chdir( 'jobs2' )    
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc2
+        bg2 = Background( cmd, outfile='bg2.log' )
 
-    writefile( 'job_bar.py', """
-        # JOB TRIGGER: """+string_time( time.time()+2 )+"""
-        import os, sys, time
-        sys.stdout.write( 'hello bar' + os.linesep )
-        sys.stdout.flush()
+        x = bg1.wait() ; assert x == 0
+        x = bg2.wait() ; assert x == 0
+
+        # the two processes should run concurrently
+        assert time.time() - curtm < 10
+
+        os.chdir( '..' )
+
+        lines1 = readlog( 'logs1/trigger.log' )
+        L = logfind( 'startup', lines1, 0 ) ; assert L != None
+        L = logfind( 'startup', lines1, 1 ) ; assert L == None
+        L = logfind( 'launch', lines1, 0 ) ; assert L != None
+        L = logfind( 'launch', lines1, 1 ) ; assert L == None
+        L = logfind( 'finish', lines1, 0 ) ; assert L != None
+        L = logfind( 'finish', lines1, 1 ) ; assert L == None
+        tm,x,f,d = logfinish( lines1 )
+        assert os.path.basename(f) == 'job_foo.py'
+
+        lines2 = readlog( 'logs2/trigger.log' )
+        L = logfind( 'startup', lines2, 0 ) ; assert L != None
+        L = logfind( 'startup', lines2, 1 ) ; assert L == None
+        L = logfind( 'launch', lines2, 0 ) ; assert L != None
+        L = logfind( 'launch', lines2, 1 ) ; assert L == None
+        L = logfind( 'finish', lines2, 0 ) ; assert L != None
+        L = logfind( 'finish', lines2, 1 ) ; assert L == None
+        tm,x,f,d = logfinish( lines2 )
+        assert os.path.basename(f) == 'job_bar.py'
+
+    def test_that_im_alive_messages_appear_in_log_file(self):
+        ""
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 10 -a 4 -r '+loc
+        out = util.runout( cmd )
+        #print3( out )
+        #os.system( cmd )
+        assert not out.strip()
+
+        lines = readlog( 'logs/trigger.log' )
+
+        L = logfind( 'alive', lines, 0 )
+        assert L != None
+        L = logfind( 'alive', lines, 1 )
+        assert L != None
+        L = logfind( 'alive', lines, 2 )
+        assert L == None
+
+    def test_a_second_trigger_launch_should_not_run(self):
+        ""
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+
+        cmd = localpy+' '+trigfile + ' -g 1 -Q 5 -r '+loc
+        bg = Background( cmd, outfile='bg1.log' )
+
+        time.sleep(3)
+        out = util.runout( cmd )
+        #print3( out )
+        assert not out.strip()
+
+        bg.wait()
+        fp = open( 'bg1.log', 'r' )
+        s = fp.read() ; fp.close()
+        assert not s.strip()
+
+        lines = readlog( 'logs/trigger.log' )
+
+        # only one startup message should be in the log file
+        L = logfind( 'startup', lines, 0 )
+        assert L != None
+        L = logfind( 'startup', lines, 1 )
+        assert L == None
+
+    def test_trigger_launch_also_looks_for_alive_messages(self):
+        ""
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+
+        cmd = localpy+' '+trigfile + ' -g 1 -Q 10 -a 4 -r '+loc
+        bg = Background( cmd, outfile='bg1.log' )
+
+        time.sleep(7)
+        out = util.runout( cmd )
+        #print3( out )
+        assert not out.strip()
+
+        bg.wait()
+        fp = open( 'bg1.log', 'r' )
+        s = fp.read() ; fp.close()
+        assert not s.strip()
+
+        lines = readlog( 'logs/trigger.log' )
+
+        # only one startup message should be in the log file
+        L = logfind( 'startup', lines, 0 )
+        assert L != None
+        L = logfind( 'startup', lines, 1 )
+        assert L == None
+
+        # should have at least two alive messages
+        L = logfind( 'alive', lines, 0 )
+        assert L != None
+        L = logfind( 'alive', lines, 1 )
+        assert L != None
+
+    def test_a_second_launch_should_occur_if_first_process_exits(self):
+        ""
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+
+        cmd = localpy+' '+trigfile + ' -g 1 -Q 5 -r '+loc
+        out = util.runout( cmd )
+        #print3( out )
+        assert not out.strip()
+
         time.sleep(1)
-        """ )
 
-    cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc
-    out = runout( cmd )
-    #print3( out )
-    #os.system( cmd )
-    assert not out.strip()
-    
-    lines2 = readlog( 'logs/trigger.log' )
+        out = util.runout( cmd )
+        #print3( out )
+        assert not out.strip()
 
-    # first part of the log file is the same
-    assert lines1 == lines2[:len(lines1)]
+        lines = readlog( 'logs/trigger.log' )
 
-    L = logfind( 'startup', lines2, 0 ) ; assert L != None
-    L = logfind( 'startup', lines2, 1 ) ; assert L != None
-    L = logfind( 'startup', lines2, 2 ) ; assert L == None
-    L = logfind( 'launch', lines2, 0 ) ; assert L != None
-    L = logfind( 'launch', lines2, 1 ) ; assert L != None
-    L = logfind( 'launch', lines2, 2 ) ; assert L == None
-    L = logfind( 'finish', lines2, 0 ) ; assert L != None
-    L = logfind( 'finish', lines2, 1 ) ; assert L != None
-    L = logfind( 'finish', lines2, 2 ) ; assert L == None
+        # two startup messages should be in the log file
+        L = logfind( 'startup', lines, 0 )
+        assert L != None
+        L = logfind( 'startup', lines, 1 )
+        assert L != None
 
+    def test_handling_of_a_hang_when_reading_a_job_file(self):
+        ""
+        curtm = time.time()
+        util.writefile( 'job_foo.py', """
+            # JOB TRIGGER: """+string_time( curtm+2 )+"""
+            import os, sys, time
+            sys.stdout.write( 'hello foo' + os.linesep )
+            sys.stdout.flush()
+            time.sleep(15)
+            """ )
 
-def startup4():
-    """
-    two startups in different log directories is ok
-    """
-    curtm = time.time()
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
 
-    writefile( 'jobs1/job_foo.py', """
-        # JOB TRIGGER: """+string_time( curtm+2 )+"""
-        import os, sys, time
-        sys.stdout.write( 'hello foo' + os.linesep )
-        sys.stdout.flush()
-        time.sleep(1)
-        """ )
+        cmd = localpy+' '+trigfile + ' -g 3 -Q 60 -r '+loc
+        bg = Background( cmd, outfile='bg1.log' )
 
-    os.mkdir( 'logs1' )
-    loc1 = os.path.abspath( 'logs1' )
-    os.mkdir( 'logs2' )
-    loc2 = os.path.abspath( 'logs2' )
+        time.sleep(4)
 
-    os.chdir( 'jobs1' )    
-    cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc1
-    bg1 = Background( cmd, outfile='bg1.log' )
+        # add a special string to cause a hang
+        util.writefile( 'job_bar.py', """
+            #TRIGGER_TEST_HANG_READ=60
+            # JOB TRIGGER: """+string_time( time.time()+2 )+"""
+            """ )
+        
+        bg.wait()
+        fp = open( 'bg1.log', 'r' )
+        s = fp.read() ; fp.close()
+        #print3( s )
+        assert not s.strip()
 
-    os.chdir( '..' )
-    time.sleep(1)
+        # a timeout causes trigger.py to exit
+        assert time.time() - curtm < 20
 
-    writefile( 'jobs2/job_bar.py', """
-        # JOB TRIGGER: """+string_time( time.time()+2 )+"""
-        import os, sys, time
-        sys.stdout.write( 'hello bar' + os.linesep )
-        sys.stdout.flush()
-        time.sleep(1)
-        """ )
+        lines = readlog( 'logs/trigger.log' )
 
-    os.chdir( 'jobs2' )    
-    cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc2
-    bg2 = Background( cmd, outfile='bg2.log' )
+        # a timeout should still finish existing jobs
+        L = logfind( 'launch', lines, 0 ) ; assert L != None
+        L = logfind( 'launch', lines, 1 ) ; assert L == None
+        L = logfind( 'exception', lines, 0 ) ; assert L != None
+        L = logfind( 'exception', lines, 1 ) ; assert L == None
+        L = logfind( 'finish', lines, 0 ) ; assert L != None
+        L = logfind( 'finish', lines, 1 ) ; assert L == None
 
-    x = bg1.wait() ; assert x == 0
-    x = bg2.wait() ; assert x == 0
+    def test_a_job_can_import_the_python_utilities(self):
+        ""
+        curtm = time.time()
 
-    # the two processes should run concurrently
-    assert time.time() - curtm < 10
+        util.writefile( 'job_foo.py', """
+            # JOB TRIGGER: """+string_time( curtm+3 )+"""
+            import os, sys
+            import command
+            import runjob
+            fp = open( 'success', 'w' ) ; fp.close()
+            """ )
 
-    os.chdir( '..' )
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+        
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
+        out = util.runout( cmd )
+        #print3( out )
+        #os.system( cmd )
+        assert not out.strip()
+        
+        lines = readlog( 'logs/trigger.log' )
 
-    lines1 = readlog( 'logs1/trigger.log' )
-    L = logfind( 'startup', lines1, 0 ) ; assert L != None
-    L = logfind( 'startup', lines1, 1 ) ; assert L == None
-    L = logfind( 'launch', lines1, 0 ) ; assert L != None
-    L = logfind( 'launch', lines1, 1 ) ; assert L == None
-    L = logfind( 'finish', lines1, 0 ) ; assert L != None
-    L = logfind( 'finish', lines1, 1 ) ; assert L == None
-    tm,x,f,d = logfinish( lines1 )
-    assert os.path.basename(f) == 'job_foo.py'
+        jf = os.path.abspath( 'job_foo.py' )
 
-    lines2 = readlog( 'logs2/trigger.log' )
-    L = logfind( 'startup', lines2, 0 ) ; assert L != None
-    L = logfind( 'startup', lines2, 1 ) ; assert L == None
-    L = logfind( 'launch', lines2, 0 ) ; assert L != None
-    L = logfind( 'launch', lines2, 1 ) ; assert L == None
-    L = logfind( 'finish', lines2, 0 ) ; assert L != None
-    L = logfind( 'finish', lines2, 1 ) ; assert L == None
-    tm,x,f,d = logfinish( lines2 )
-    assert os.path.basename(f) == 'job_bar.py'
+        # get the log directory for the job
+        dL = glob.glob( 'logs/job_foo.py_*' )
+        assert len(dL) == 1
+        ldir = dL[0]
+        assert os.path.isdir( ldir )
+        joblog = os.path.join( ldir, 'log.txt' )
+        assert os.path.exists( joblog )
 
-
-def active1():
-    """
-    excercise active messages
-    """
-    os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-
-    cmd = localpy+' '+trigfile + ' -g 2 -Q 10 -a 4 -r '+loc
-    out = runout( cmd )
-    #print3( out )
-    #os.system( cmd )
-    assert not out.strip()
-
-    lines = readlog( 'logs/trigger.log' )
-
-    L = logfind( 'alive', lines, 0 )
-    assert L != None
-    L = logfind( 'alive', lines, 1 )
-    assert L != None
-    L = logfind( 'alive', lines, 2 )
-    assert L == None
-
-
-def launch1():
-    """
-    a second trigger launch should not run
-    """
-    os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-
-    cmd = localpy+' '+trigfile + ' -g 1 -Q 5 -r '+loc
-    bg = Background( cmd, outfile='bg1.log' )
-
-    time.sleep(3)
-    out = runout( cmd )
-    #print3( out )
-    assert not out.strip()
-
-    bg.wait()
-    fp = open( 'bg1.log', 'r' )
-    s = fp.read() ; fp.close()
-    assert not s.strip()
-
-    lines = readlog( 'logs/trigger.log' )
-
-    # only one startup message should be in the log file
-    L = logfind( 'startup', lines, 0 )
-    assert L != None
-    L = logfind( 'startup', lines, 1 )
-    assert L == None
-
-
-def launch2():
-    """
-    a trigger launch must also consider the alive messages
-    """
-    os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-
-    cmd = localpy+' '+trigfile + ' -g 1 -Q 10 -a 4 -r '+loc
-    bg = Background( cmd, outfile='bg1.log' )
-
-    time.sleep(7)
-    out = runout( cmd )
-    #print3( out )
-    assert not out.strip()
-
-    bg.wait()
-    fp = open( 'bg1.log', 'r' )
-    s = fp.read() ; fp.close()
-    assert not s.strip()
-
-    lines = readlog( 'logs/trigger.log' )
-
-    # only one startup message should be in the log file
-    L = logfind( 'startup', lines, 0 )
-    assert L != None
-    L = logfind( 'startup', lines, 1 )
-    assert L == None
-
-    # should have at least two alive messages
-    L = logfind( 'alive', lines, 0 )
-    assert L != None
-    L = logfind( 'alive', lines, 1 )
-    assert L != None
-
-
-def launch3():
-    """
-    a second launch should occur if first process exits
-    """
-    os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-
-    cmd = localpy+' '+trigfile + ' -g 1 -Q 5 -r '+loc
-    out = runout( cmd )
-    #print3( out )
-    assert not out.strip()
-
-    time.sleep(1)
-
-    out = runout( cmd )
-    #print3( out )
-    assert not out.strip()
-
-    lines = readlog( 'logs/trigger.log' )
-
-    # two startup messages should be in the log file
-    L = logfind( 'startup', lines, 0 )
-    assert L != None
-    L = logfind( 'startup', lines, 1 )
-    assert L != None
-
-
-def hang1():
-    """
-    a hang reading a job file
-    """
-    curtm = time.time()
-    writefile( 'job_foo.py', """
-        # JOB TRIGGER: """+string_time( curtm+2 )+"""
-        import os, sys, time
-        sys.stdout.write( 'hello foo' + os.linesep )
-        sys.stdout.flush()
-        time.sleep(15)
-        """ )
-
-    os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-
-    cmd = localpy+' '+trigfile + ' -g 3 -Q 60 -r '+loc
-    bg = Background( cmd, outfile='bg1.log' )
-
-    time.sleep(4)
-
-    # add a special string to cause a hang
-    writefile( 'job_bar.py', """
-        #TRIGGER_TEST_HANG_READ=60
-        # JOB TRIGGER: """+string_time( time.time()+2 )+"""
-        """ )
-    
-    bg.wait()
-    fp = open( 'bg1.log', 'r' )
-    s = fp.read() ; fp.close()
-    #print3( s )
-    assert not s.strip()
-
-    # a timeout causes trigger.py to exit
-    assert time.time() - curtm < 20
-
-    lines = readlog( 'logs/trigger.log' )
-
-    # a timeout should still finish existing jobs
-    L = logfind( 'launch', lines, 0 ) ; assert L != None
-    L = logfind( 'launch', lines, 1 ) ; assert L == None
-    L = logfind( 'exception', lines, 0 ) ; assert L != None
-    L = logfind( 'exception', lines, 1 ) ; assert L == None
-    L = logfind( 'finish', lines, 0 ) ; assert L != None
-    L = logfind( 'finish', lines, 1 ) ; assert L == None
-
-
-def a_job_can_import_the_python_utilities():
-    ""
-    curtm = time.time()
-
-    writefile( 'job_foo.py', """
-        # JOB TRIGGER: """+string_time( curtm+3 )+"""
-        import os, sys
-        import command
-        import runjob
-        fp = open( 'success', 'w' ) ; fp.close()
-        """ )
-
-    os.mkdir( 'logs' )
-    loc = os.path.abspath( 'logs' )
-    
-    cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
-    out = runout( cmd )
-    #print3( out )
-    #os.system( cmd )
-    assert not out.strip()
-    
-    lines = readlog( 'logs/trigger.log' )
-
-    jf = os.path.abspath( 'job_foo.py' )
-
-    # get the log directory for the job
-    dL = glob.glob( 'logs/job_foo.py_*' )
-    assert len(dL) == 1
-    ldir = dL[0]
-    assert os.path.isdir( ldir )
-    joblog = os.path.join( ldir, 'log.txt' )
-    assert os.path.exists( joblog )
-
-    markerfile = os.path.join( ldir, 'success' )
-    assert os.path.exists( markerfile )
+        markerfile = os.path.join( ldir, 'success' )
+        assert os.path.exists( markerfile )
 
 
 #######################################################################
@@ -1288,19 +1195,12 @@ class Background:
         try:
             os.kill( self.p.pid, signal.SIGINT )
             self.p.wait()
-        except:
+        except Exception:
             if hasattr( self.p, 'terminate' ):
                 try: self.p.terminate()
-                except: pass
+                except Exception: pass
 
 
 #######################################################################
 
-mydir = os.path.abspath( sys.path[0] )
-
-testdir = os.path.join( os.path.basename( sys.argv[0] )+'_dir' )
-if not os.path.exists(testdir):
-    os.mkdir(testdir)
-os.chdir(testdir)
-
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )

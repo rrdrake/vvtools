@@ -11,11 +11,11 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
-import getopt
+import stat
+import unittest
 
-
-# this will os.chdir() to a subdirectory
-from testutils import *
+import testutils as util
+from testutils import print3
 
 # the module being tested
 import keytab
@@ -26,139 +26,113 @@ mydir = os.path.dirname( os.path.abspath( sys.argv[0] ) )
 ktfile = os.path.join( os.path.dirname(mydir), 'keytab.py' )
 
 
-def main():
-    ""
-    optL,argL = getopt.getopt( sys.argv[1:], '' )
-
-    if len(argL) == 0:
-        argL = """man_page
-                  generate_keytab
-                  delete_keytab_file
-                  command_line_init_ticket_should_only_echo_the_cache_file
-                  init_ticket_modifies_environment
-                  command_line_init_ticket_followed_by_destroy_ticket
-                  programmatic_init_ticket_followed_by_destroy_ticket
-               """.split()
-
-    savedir = os.getcwd()
-
-    for func in argL:
-        os.chdir( savedir )
-        rmallfiles()
-
-        os.environ[ 'COMMAND_DRYRUN' ] = ''
-
-        time.sleep(1)
-        print3( '====> ', func )
-        eval( func+'()' )
-
-
 ######################################################################
 
-def man_page():
-    ""
-    os.environ.pop( 'COMMAND_DRYRUN' )
-    Command( '$ktfile -h' ).run( raise_on_error=True )
-    Command( '$ktfile --help' ).run( raise_on_error=True )
+class catchall( unittest.TestCase ):
 
+    def setUp(self):
+        ""
+        util.setup_test()
+        os.environ[ 'COMMAND_DRYRUN' ] = ''
 
-def generate_keytab():
-    ""
-    keytab.generate_keytab()
+    def test_man_page(self):
+        ""
+        os.environ.pop( 'COMMAND_DRYRUN' )
+        Command( '$ktfile -h' ).run( raise_on_error=True )
+        Command( '$ktfile --help' ).run( raise_on_error=True )
 
-    os.environ['COMMAND_DRYRUN'] = 'keytab.py'
-    Command( '$ktfile generate' ).run( raise_on_error=True )
+    def test_generate_keytab(self):
+        ""
+        keytab.generate_keytab()
 
+        os.environ['COMMAND_DRYRUN'] = 'keytab.py'
+        Command( '$ktfile generate' ).run( raise_on_error=True )
 
-def delete_keytab_file():
-    ""
-    os.environ.pop( 'COMMAND_DRYRUN' )
+    def test_delete_keytab_file(self):
+        ""
+        os.environ.pop( 'COMMAND_DRYRUN' )
 
-    # does not fail
-    keytab.delete_keytab_file( '/foo/bar/baz.txt' )
+        # does not fail
+        keytab.delete_keytab_file( '/foo/bar/baz.txt' )
 
-    writefile( 'junkfile.txt', "contents" )
-    time.sleep(1)
+        util.writefile( 'junkfile.txt', "contents" )
+        time.sleep(1)
 
-    keytab.delete_keytab_file( 'junkfile.txt' )
-    time.sleep(1)
-    assert not os.path.exists( 'junkfile.txt' )
+        keytab.delete_keytab_file( 'junkfile.txt' )
+        time.sleep(1)
+        assert not os.path.exists( 'junkfile.txt' )
 
+    def test_command_line_init_ticket_should_only_echo_the_cache_file(self):
+        ""
+        util.run_redirect( ktfile+' init', 'init.log' )
 
-def command_line_init_ticket_should_only_echo_the_cache_file():
-    ""
-    run_redirect( ktfile+' init', 'init.log' )
+        time.sleep(1)
+        fname = util.readfile( 'init.log' ).strip()
+        check_ticket_cache_and_remove_it( fname )
 
-    time.sleep(1)
-    fname = readfile( 'init.log' ).strip()
-    check_ticket_cache_and_remove_it( fname )
+    def test_init_ticket_modifies_environment(self):
+        ""
+        os.environ['KRB5CCNAME'] = 'fakevalue'
 
+        return_fname = keytab.init_ticket()
 
-def init_ticket_modifies_environment():
-    ""
-    os.environ['KRB5CCNAME'] = 'fakevalue'
+        time.sleep(1)
+        assert os.environ['PREVIOUS_KRB5CCNAME'] == 'fakevalue'
 
-    return_fname = keytab.init_ticket()
+        fname = os.environ['KRB5CCNAME']
+        assert fname == return_fname
+        check_ticket_cache_and_remove_it( fname )
 
-    time.sleep(1)
-    assert os.environ['PREVIOUS_KRB5CCNAME'] == 'fakevalue'
+        # should still work if KRB5CCNAME is not defined in the environment
 
-    fname = os.environ['KRB5CCNAME']
-    assert fname == return_fname
-    check_ticket_cache_and_remove_it( fname )
+        os.environ.pop( 'KRB5CCNAME' )
+        return_fname = keytab.init_ticket()
 
-    # should still work if KRB5CCNAME is not defined in the environment
+        fname = os.environ['KRB5CCNAME']
+        assert fname == return_fname
+        check_ticket_cache_and_remove_it( fname )
 
-    os.environ.pop( 'KRB5CCNAME' )
-    return_fname = keytab.init_ticket()
+    def test_command_line_init_ticket_followed_by_destroy_ticket(self):
+        ""
+        util.run_redirect( ktfile+' init', 'init.log' )
 
-    fname = os.environ['KRB5CCNAME']
-    assert fname == return_fname
-    check_ticket_cache_and_remove_it( fname )
+        time.sleep(1)
+        fname = util.readfile( 'init.log' ).strip()
+        assert os.path.exists( os.path.dirname(fname) )
 
+        # have to set this manually to test (used in destroy_ticket() )
+        os.environ['KRB5CCNAME'] = fname
 
-def command_line_init_ticket_followed_by_destroy_ticket():
-    ""
-    run_redirect( ktfile+' init', 'init.log' )
+        util.writefile( fname, 'junk contents' )
 
-    time.sleep(1)
-    fname = readfile( 'init.log' ).strip()
-    assert os.path.exists( os.path.dirname(fname) )
+        # allow this one to execute
+        os.environ['COMMAND_DRYRUN'] = 'keytab.py'
+        Command( ktfile+' destroy' ).run( raise_on_error=True )
 
-    # have to set this manually to test (used in destroy_ticket() )
-    os.environ['KRB5CCNAME'] = fname
+        assert not os.path.exists( fname )
+        assert not os.path.exists( os.path.dirname(fname) )
 
-    writefile( fname, 'junk contents' )
+    def test_programmatic_init_ticket_followed_by_destroy_ticket(self):
+        ""
+        os.environ['KRB5CCNAME'] = 'fakevalue'
 
-    # allow this one to execute
-    os.environ['COMMAND_DRYRUN'] = 'keytab.py'
-    Command( ktfile+' destroy' ).run( raise_on_error=True )
+        fname = keytab.init_ticket()
 
-    assert not os.path.exists( fname )
-    assert not os.path.exists( os.path.dirname(fname) )
+        time.sleep(1)
+        assert os.path.exists( os.path.dirname(fname) )
+        assert os.environ['KRB5CCNAME'] == fname
+        assert os.environ['PREVIOUS_KRB5CCNAME'] == 'fakevalue'
 
+        util.writefile( fname, 'junk contents' )
+        time.sleep(1)
 
-def programmatic_init_ticket_followed_by_destroy_ticket():
-    ""
-    os.environ['KRB5CCNAME'] = 'fakevalue'
+        keytab.destroy_ticket()
 
-    fname = keytab.init_ticket()
-
-    time.sleep(1)
-    assert os.path.exists( os.path.dirname(fname) )
-    assert os.environ['KRB5CCNAME'] == fname
-    assert os.environ['PREVIOUS_KRB5CCNAME'] == 'fakevalue'
-
-    writefile( fname, 'junk contents' )
-    time.sleep(1)
-
-    keytab.destroy_ticket()
-
-    time.sleep(1)
-    assert not os.path.exists( fname )
-    assert not os.path.exists( os.path.dirname(fname) )
-    assert 'PREVIOUS_KRB5CCNAME' not in os.environ
-    assert os.environ['KRB5CCNAME'] == 'fakevalue'
+        time.sleep(1)
+        assert not os.path.exists( fname )
+        assert not os.path.exists( os.path.dirname(fname) )
+        assert 'PREVIOUS_KRB5CCNAME' not in os.environ
+        assert os.environ['KRB5CCNAME'] == 'fakevalue'
 
 
 ######################################################################
@@ -180,4 +154,4 @@ def check_ticket_cache_and_remove_it( filename ):
 
 ######################################################################
 
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )

@@ -10,10 +10,18 @@
 import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
-import getopt
+import os
+import re
+import struct
+import time
+import filecmp
+import stat
+import shutil
+import fnmatch
+import unittest
 
-# this will os.chdir() to a subdirectory
-from testutils import *
+import testutils as util
+from testutils import print3
 
 # this is the module we are testing
 import runjob
@@ -27,1392 +35,1208 @@ localpy = sys.executable
 # By default, a "fake" ssh script is used that acts like ssh.  To use
 # an actual ssh, add the -s option to the unit test command line.  In this
 # case, make sure you can ssh to the current machine without a password.
-use_real_ssh = False
 
-
-def main():
-    """
-    """
-    optL,argL = getopt.getopt( sys.argv[1:], 's' )
-    cwd = os.getcwd()
-
-    for n,v in optL:
-        if n == '-s':
-            global use_real_ssh
-            use_real_ssh = True
-
-    if len(argL) == 0:
-        argL = """runjob1 runjob1b runjob1c
-                  runjob2 runjob3 runjob4 runjob5a runjob5b
-                  waitall1 waitall2 waitall3 waitall4 waitall5 waitall6
-                  jobfail1 jobfail2 jobfail3 jobfail4 jobfail5
-                  multijob1
-                  echo1 chdir1
-                  jobcast1 jobcast2
-                  remote1 remote2 remote3 remote4
-                  timeout1 timeout2 timeout3 timeout4 timeout5
-                  remotefail1 remotefail2a remotefail2b
-                  update1
-                  dryrun1 dryrun2 dryrun3 dryrun4 dryrun5 dryrun6
-                  waitfor1 waitfor2 waitfor3 waitfor4 waitfor5 waitfor6
-                  waitfor7
-               """.split()
-
-    for func in argL:
-        os.chdir( cwd )
-        rmallfiles()
-        if 'COMMAND_DRYRUN' in os.environ:
-            del os.environ['COMMAND_DRYRUN']
-        time.sleep(1)
-        print3( '====> ', func )
-        eval( func+'()' )
+srcdir = os.path.dirname( util.testsrcdir )
 
 
 #######################################################################
 
-def runjob1():
-    """
-    run a simple shell command
-    """
-    jid = runjob.run_job( 'echo "hello" ; sleep 2',
-                          poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'hello' ) ) == 1
-
-
-def runjob1b():
-    """
-    run a command using an argument list
-    """
-    jid = runjob.run_job( '/bin/bash', '-c', 'echo hello',
-                          poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'bash-*.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'hello' ) ) == 1
-
-
-def runjob1c():
-    """
-    run a Command object
-    """
-    cmd = command.Command( 'touch' ).arg( 'file name' )
-    jid = runjob.run_job( cmd, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
-    assert len(fL) == 1
-    assert os.path.exists( 'file name' )
-
-
-def runjob1d():
-    """
-    Command object with shell True/False
-    """
-    writefile( 'file1.txt', 'contents' )
-    time.sleep(1)
-
-    # shell expansion is True by default
-    cmd = command.Command( 'echo file*.txt' )
-    jid = runjob.run_job( cmd, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
-    assert len(fL) == 1
-    f1 = fL[0]
-    assert len( filegrep( f1, 'file1.txt' ) ) == 1
-
-    # turn off shell expansion and the file glob should not occur
-    cmd = command.Command( 'echo file*.txt' )
-    jid = runjob.run_job( cmd, poll_interval=2, shell=False )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
-    assert len(fL) == 2
-    fL.remove( f1 )
-    assert len( filegrep( fL[0], 'file1.txt' ) ) == 0
-
-
-def runjob2():
-    """
-    make sure the command is run in the background
-    """
-    jid = runjob.run_job( 'touch hello ; sleep 5 ; touch goodbye',
-                          poll_interval=2 )
-    time.sleep(1)
-    assert not os.path.exists( 'goodbye' )
-    # the wait returns the job object
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
-    assert len(fL) == 1
-
-    assert os.path.exists( 'hello' )
-    assert os.path.exists( 'goodbye' )
-
-
-def runjob3():
-    """
-    run a command in the background and poll it
-    """
-    jid = runjob.run_job( 'touch hello ; sleep 5 ; touch goodbye',
-                          poll_interval=2 )
-
-    # poll should be false
-    b = runjob.poll_job( jid )
-    assert not b
-    assert not os.path.exists( 'goodbye' )
-    time.sleep(2)
-
-    # poll should still be false, but the first file should exist
-    b = runjob.poll_job( jid )
-    assert not b
-    assert os.path.exists( 'hello' )
-    assert not os.path.exists( 'goodbye' )
-    # let the job finish
-    time.sleep(6)
-
-    b = runjob.poll_job( jid )
-    assert b
-    assert os.path.exists( 'hello' )
-    assert os.path.exists( 'goodbye' )
-
-    # the wait returns the job object
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
-    assert len(fL) == 1
-    
-    assert os.path.exists( 'hello' )
-    assert os.path.exists( 'goodbye' )
-
-
-def runjob4():
-    """
-    give job a name
-    """
-    jid = runjob.run_job( 'touch', 'file.txt', name="makefile",
-                          poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
-    assert len(fL) == 0
-    fL = fnmatch.filter( os.listdir( '.' ), 'makefile-*.log' )
-    assert len(fL) == 1
-    assert os.path.exists( 'file.txt' )
-
-
-def runjob5a():
-    """
-    using run_wait()
-    """
-    x = runjob.run_wait( 'echo "hello" ; ls -l job.py ; sleep 2',
-                         poll_interval=2 )
-    assert x == 0
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'hello' ) ) == 1
-    assert len( filegrep( fL[0], 'job.py' ) ) == 1
-
-
-def runjob5b():
-    """
-    using run_wait() with error
-    """
-    x = runjob.run_wait( '/noexist/program || exit 1', poll_interval=2 )
-    assert x != 0
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'program-*.log' )
-    assert len(fL) == 1
-
-
-def waitall1():
-    """
-    wait_all giving job ids
-    """
-    jid1 = runjob.run_job( 'echo hello ; sleep 6', poll_interval=2 )
-    jid2 = runjob.run_job( 'sleep 2', poll_interval=2 )
-
-    jL = runjob.wait_all( jid2, jid1, poll_interval=3 )
-
-    assert len(jL) == 2
-    assert jL[0] and jL[0].get( 'name' ) == 'sleep'
-    assert jL[1] and jL[1].get( 'name' ) == 'echo'
-
-
-def waitall2():
-    """
-    wait_all without job ids
-    """
-    jid1 = runjob.run_job( 'echo hello ; sleep 6', poll_interval=2 )
-    jid2 = runjob.run_job( 'sleep 2', poll_interval=2 )
-
-    jL = runjob.wait_all( poll_interval=3 )
-
-    assert len(jL) == 2
-    assert jL[0] and jL[1]
-    assert ( jL[0].get( 'name' ) == 'sleep' and \
-             jL[1].get( 'name' ) == 'echo' ) or \
-           ( jL[0].get( 'name' ) == 'echo' and \
-             jL[1].get( 'name' ) == 'sleep' )
-
-
-def waitall3():
-    """
-    use wait_all to wait for one of two jobs
-    """
-    jid1 = runjob.run_job( 'echo hello ; sleep 6', poll_interval=2 )
-    jid2 = runjob.run_job( 'sleep 2', poll_interval=2 )
-
-    jL = runjob.wait_all( jid1, poll_interval=3 )
-
-    assert len(jL) == 1
-    assert jL[0] and jL[0].get( 'name' ) == 'echo'
-    assert runjob.wait_job( jid2, poll_interval=2 )
-
-
-def waitall4():
-    """
-    same as previous but switch jids
-    """
-    jid1 = runjob.run_job( 'echo hello ; sleep 6', poll_interval=2 )
-    jid2 = runjob.run_job( 'sleep 2', poll_interval=2 )
-
-    jL = runjob.wait_all( jid2, poll_interval=3 )
-
-    assert len(jL) == 1
-    assert jL[0] and jL[0].get( 'name' ) == 'sleep'
-    assert runjob.wait_job( jid1, poll_interval=2 )
-
-
-def waitall5():
-    """
-    wait_all when one of two jobs are not done
-    """
-    jid1 = runjob.run_job( 'echo hello ; sleep 6', poll_interval=2 )
-    jid2 = runjob.run_job( 'sleep 2', poll_interval=2 )
-    j = runjob.wait_job( jid2, poll_interval=2 )
-    assert j
-
-    jL = runjob.wait_all( poll_interval=3 )
-
-    assert len(jL) == 1
-    assert jL[0] and jL[0].get( 'name' ) == 'echo'
-
-
-def waitall6():
-    """
-    wait_all with two jobids given but one job is already done
-    """
-    jid1 = runjob.run_job( 'echo hello ; sleep 6', poll_interval=2 )
-    jid2 = runjob.run_job( 'sleep 2', poll_interval=2 )
-    j = runjob.wait_job( jid2, poll_interval=2 )
-    assert j
-
-    jL = runjob.wait_all( jid2, jid1, poll_interval=3 )
-
-    assert len(jL) == 2
-    assert jL[0] and jL[1]
-    assert jL[0].get( 'name' ) == 'sleep'
-    assert jL[1].get( 'name' ) == 'echo'
-
-
-def jobfail1():
-    """
-    a job that fails
-    """
-    jid = runjob.run_job( 'echo "fake failure" ; exit 1', poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 1
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'fake failure' ) ) == 1
-
-
-def jobfail2():
-    """
-    a background job that fails to launch
-    """
-    jid = runjob.run_job( '/an/arbitrary/path/badprogram', '-h',
-                          poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) > 0
-    assert not jb.has( 'exc' )
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'badprogram-*.log' )
-    assert len(fL) == 1
-
-
-def jobfail3():
-    """
-    a shell job that fails to launch
-    """
-    jid = runjob.run_job( '/an/arbitrary/path/badprogram', poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) != None and jb.get( 'exit' ) != 0
-    assert not jb.has( 'exc' )
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'badprogram-*.log' )
-    assert len(fL) == 1
-
-
-def jobfail4():
-    """
-    an ill formed job
-    """
-    jid = runjob.run_job(  )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert not jb.has( 'exit' )
-    assert jb.has( 'exc' )
-
-    jid = runjob.run_job( 'ls', ['-l','uhoh'], poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.has( 'exc' )
-    assert 'arg must be a Command or string' in jb.get( 'exc' )
-
-    fL = fnmatch.filter( os.listdir( '.' ), '*.log' )
-    assert len(fL) == 0
-
-
-def jobfail5():
-    """
-    bad attributes to job specification
-    """
-    jid = runjob.run_job( 'ls', machine=' sparky.gov' )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert not jb.has( 'exit' )
-    assert jb.has( 'exc' )
-    jid = runjob.run_job( '' )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert not jb.has( 'exit' )
-    assert jb.has( 'exc' )
-
-    fL = fnmatch.filter( os.listdir( '.' ), '*.log' )
-    assert len(fL) == 0
-
-
-def multijob1():
-    """
-    running two jobs in background
-    """
-    # the first job stalls before touching a file
-    jid1 = runjob.run_job( 'sleep 8 ; touch file1', poll_interval=2 )
-    time.sleep(1)
-    assert not os.path.exists( 'file1' )
-
-    # the second job touches a file quickly
-    jid2 = runjob.run_job( 'sleep 1 ; touch file2', poll_interval=2 )
-    time.sleep(1)
-    assert not os.path.exists( 'file1' )
-    assert os.path.exists( 'file2' )
-
-    time.sleep(1)
-    assert not runjob.poll_job( jid1 )
-    assert runjob.poll_job( jid2 )
-
-    jb2 = runjob.wait_job( jid2, poll_interval=2 )
-    assert jb2.get( 'exit' ) == 0
-
-    jb1 = runjob.wait_job( jid1, poll_interval=2 )
-    assert jb1.get( 'exit' ) == 0
-
-    assert os.path.exists( 'file1' )
-    assert os.path.exists( 'file2' )
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'sleep-*.log' )
-    assert len(fL) == 2
-
-
-def echo1():
-    """
-    check the log output markers
-    """
-    writescript( 'scr', '#!/usr/bin/env python', """
-        import os, sys, time
-        sys.path.insert( 0, '"""+srcdir+"""' )
-        import runjob
-        x = runjob.run_wait( 'echo hello', poll_interval=2 )
+class catchall( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+        if 'COMMAND_DRYRUN' in os.environ:
+            del os.environ['COMMAND_DRYRUN']
+
+    def test_running_a_simple_shell_command(self):
+        ""
+        jid = runjob.run_job( 'echo "hello" ; sleep 2',
+                              poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'hello' ) ) == 1
+
+    def test_running_a_command_with_a_list_of_arguments(self):
+        ""
+        jid = runjob.run_job( '/bin/bash', '-c', 'echo hello',
+                              poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'bash-*.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'hello' ) ) == 1
+
+    def test_running_a_job_using_a_Command_object(self):
+        ""
+        cmd = command.Command( 'touch' ).arg( 'file name' )
+        jid = runjob.run_job( cmd, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
+        assert len(fL) == 1
+        assert os.path.exists( 'file name' )
+
+    def test_running_a_job_using_a_Command_object_with_shell_option(self):
+        ""
+        util.writefile( 'file1.txt', 'contents' )
+        time.sleep(1)
+
+        # shell expansion is True by default
+        cmd = command.Command( 'echo file*.txt' )
+        jid = runjob.run_job( cmd, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
+        assert len(fL) == 1
+        f1 = fL[0]
+        assert len( util.filegrep( f1, 'file1.txt' ) ) == 1
+
+        # turn off shell expansion and the file glob should not occur
+        cmd = command.Command( 'echo file*.txt' )
+        jid = runjob.run_job( cmd, poll_interval=2, shell=False )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
+        assert len(fL) == 2
+        fL.remove( f1 )
+        assert len( util.filegrep( fL[0], 'file1.txt' ) ) == 0
+
+    def test_that_jobs_are_run_in_the_background(self):
+        ""
+        jid = runjob.run_job( 'touch hello ; sleep 5 ; touch goodbye',
+                              poll_interval=2 )
+        time.sleep(1)
+        assert not os.path.exists( 'goodbye' )
+        # the wait returns the job object
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
+        assert len(fL) == 1
+
+        assert os.path.exists( 'hello' )
+        assert os.path.exists( 'goodbye' )
+
+    def test_poll_a_background_job(self):
+        ""
+        jid = runjob.run_job( 'touch hello ; sleep 5 ; touch goodbye',
+                              poll_interval=2 )
+
+        # poll should be false
+        b = runjob.poll_job( jid )
+        assert not b
+        assert not os.path.exists( 'goodbye' )
+        time.sleep(2)
+
+        # poll should still be false, but the first file should exist
+        b = runjob.poll_job( jid )
+        assert not b
+        assert os.path.exists( 'hello' )
+        assert not os.path.exists( 'goodbye' )
+        # let the job finish
+        time.sleep(6)
+
+        b = runjob.poll_job( jid )
+        assert b
+        assert os.path.exists( 'hello' )
+        assert os.path.exists( 'goodbye' )
+
+        # the wait returns the job object
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
+        assert len(fL) == 1
+        
+        assert os.path.exists( 'hello' )
+        assert os.path.exists( 'goodbye' )
+
+    def test_giving_a_job_a_name(self):
+        ""
+        jid = runjob.run_job( 'touch', 'file.txt', name="makefile",
+                              poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'touch-*.log' )
+        assert len(fL) == 0
+        fL = fnmatch.filter( os.listdir( '.' ), 'makefile-*.log' )
+        assert len(fL) == 1
+        assert os.path.exists( 'file.txt' )
+
+    def test_using_run_wait_function(self):
+        ""
+        x = runjob.run_wait( 'echo "hello" ; ls -l job.py ; sleep 2',
+                             poll_interval=2 )
         assert x == 0
-        """ )
-    time.sleep(1)
-
-    out = runout( './scr', raise_on_failure=True )
-    print3( out )
-
-    pat = re.compile(
-        r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? RunJob: ' )
-    L = grep( out, 'RunJob:' )
-    assert len(L) == 1 and pat.match( L[0] ) != None
-
-    pat = re.compile(
-        r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? JobID: ' )
-    L = grep( out, 'JobID:' )
-    assert len(L) == 1
-    m = pat.match( L[0] )
-    assert m != None
-    jid = L[0][m.end():].strip()
-
-    pat = re.compile(
-        r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? LogFile: ' )
-    L = grep( out, 'LogFile:' )
-    assert len(L) == 1
-    m = pat.match( L[0] )
-    assert m != None
-    logf = L[0][m.end():].strip()
-    assert os.path.exists( logf )
-
-    pat = re.compile(
-        r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? JobDone: ' )
-    L = grep( out, 'JobDone:' )
-    assert len(L) == 1
-    m = pat.match( L[0] )
-    assert m != None
-    s = L[0][m.end():].strip()
-    s1,s2 = s.split('exit=0')
-    assert s1.strip() == 'jobid='+jid
-    assert s2.strip() == 'exc='
-
-
-def chdir1():
-    """
-    specify the run directory
-    """
-    os.mkdir( 'wdir' )
-    cd = os.path.join( os.getcwd(), 'wdir' )
-    time.sleep(1)
-
-    jid = runjob.run_job( 'echo hello > afile.txt',
-                          chdir=cd, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
-    assert len(fL) == 1
-    fn = os.path.join( cd, 'afile.txt' )
-    assert os.path.exists( fn )
-    assert len( filegrep( fn, "hello" ) ) == 1
-
-
-def jobcast1():
-    """
-    cast a Job instance to True/False
-    """
-    jid = runjob.run_job( 'echo hello > afile.txt', poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-    if jb:
-        pass
-    else:
-        raise Exception( "cast should be True" )
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
-    assert len(fL) == 1
-    assert os.path.exists( 'afile.txt' )
-    assert len( filegrep( 'afile.txt', "hello" ) ) == 1
-
-
-def jobcast2():
-    """
-    cast a Job instance to True/False
-    """
-    jid = runjob.run_job( 'echo hello > afile.txt ; exit 1',
-                          poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.has( 'exit' )
-    if jb:
-        raise Exception( "cast should be False" )
-    else:
-        pass
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
-    assert len(fL) == 1
-    assert os.path.exists( 'afile.txt' )
-    assert len( filegrep( 'afile.txt', "hello" ) ) == 1
-
-
-def remote1():
-    """
-    run a remote job
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'rdir' )
-    os.mkdir( 'ldir' )
-    rd = os.path.abspath( 'rdir' )  # remote run directory
-    ld = os.path.abspath( 'ldir' )  # local run and log directory
-    time.sleep(1)
-
-    os.chdir( ld )
-
-    jid = runjob.run_job( 'echo hello',
-                          machine=sshmach, sshexe=sshprog,
-                          chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
-    assert len(fL) == 1
-    lf = os.path.join( ld, fL[0] )
-
-    fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
-    assert len(fL) == 1
-    rf = os.path.join( rd, fL[0] )
-
-    assert os.path.basename(lf) == os.path.basename(rf)
-    assert filecmp.cmp( lf, rf, False )
-
-    L = filegrep( lf, 'hello' )
-    assert len(L) == 2
-    assert L[1].strip() == 'hello'
-
-
-def remote2():
-    """
-    remote job that fails
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'rdir' )
-    os.mkdir( 'ldir' )
-    rd = os.path.abspath( 'rdir' )  # remote run directory
-    ld = os.path.abspath( 'ldir' )  # local run and log directory
-    time.sleep(1)
-
-    os.chdir( ld )
-
-    jid = runjob.run_job( '/bad/program',
-                          machine=sshmach, sshexe=sshprog,
-                          chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) != 0
-    time.sleep(2)
-
-    fL = fnmatch.filter( os.listdir( ld ), 'program-*.log' )
-    assert len(fL) == 1
-    lf = os.path.join( ld, fL[0] )
-
-    fL = fnmatch.filter( os.listdir( rd ), 'program-*.log' )
-    assert len(fL) == 1
-    rf = os.path.join( rd, fL[0] )
-
-    assert os.path.basename(lf) == os.path.basename(rf)
-    assert filecmp.cmp( lf, rf, False )
-
-
-def remote3():
-    """
-    dual remote jobs
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'rdir' )
-    os.mkdir( 'ldir' )
-    rd = os.path.abspath( 'rdir' )  # remote run directory
-    ld = os.path.abspath( 'ldir' )  # local run and log directory
-    time.sleep(1)
-
-    os.chdir( ld )
-
-    jid1 = runjob.run_job( 'sleep 1; echo hello',
-                           machine=sshmach, sshexe=sshprog,
-                           chdir=rd, poll_interval=2 )
-    jid2 = runjob.run_job( 'sleep 4; echo world',
-                           machine=sshmach, sshexe=sshprog,
-                           chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid1, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-    jb = runjob.wait_job( jid2, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
- 
-    fL = fnmatch.filter( os.listdir( ld ), 'sleep-*.log' )
-    assert len(fL) == 2
-    fL.sort()
-    lf1,lf2 = os.path.join( ld, fL[0] ), os.path.join( ld, fL[1] )
-
-    fL = fnmatch.filter( os.listdir( rd ), 'sleep-*.log' )
-    assert len(fL) == 2
-    fL.sort()
-    rf1,rf2 = os.path.join( rd, fL[0] ), os.path.join( rd, fL[1] )
-
-    assert os.path.basename(lf1) == os.path.basename(rf1)
-    assert filecmp.cmp( lf1, rf1, False )
-    assert os.path.basename(lf2) == os.path.basename(rf2)
-    assert filecmp.cmp( lf2, rf2, False )
-    
-    L = filegrep( lf1, 'hello' )
-    assert len(L) == 2
-    assert L[1].strip() == 'hello'
-    L = filegrep( lf2, 'world' )
-    assert len(L) == 2
-    assert L[1].strip() == 'world'
-
-
-def remote4():
-    """
-    logdir and sharedlog attributes
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'rdir1' )
-    os.mkdir( 'rdir2' )
-    os.mkdir( 'ldir' )
-    rd1 = os.path.abspath( 'rdir1' )  # remote run directory
-    rd2 = os.path.abspath( 'rdir2' )  # remote run directory
-    ld = os.path.abspath( 'ldir' )  # local run and log directory
-    time.sleep(1)
-
-    os.chdir( ld )
-
-    jid1 = runjob.run_job( 'sleep 1; echo hello',
-                           machine=sshmach, sshexe=sshprog,
-                           logdir=rd1, poll_interval=2 )
-    jid2 = runjob.run_job( 'sleep 4; echo world',
-                           machine=sshmach, sshexe=sshprog,
-                           logdir=rd2, sharedlog=True, poll_interval=2 )
-    jb1,jb2 = runjob.wait_all( jid1, jid2, poll_interval=2 )
-    assert jb1.get( 'exit' ) == 0
-    assert jb1.get( 'exit' ) == 0
- 
-    fL = fnmatch.filter( os.listdir( ld ), 'sleep-*.log' )
-    assert len(fL) == 2
-    fL.sort()
-    lf1,lf2 = os.path.join( ld, fL[0] ), os.path.join( ld, fL[1] )
-
-    fL = fnmatch.filter( os.listdir( rd1 ), 'sleep-*.log' )
-    assert len(fL) == 1
-    rf1 = os.path.join( rd1, fL[0] )
-
-    assert os.path.basename(lf1) == os.path.basename(rf1)
-    assert filecmp.cmp( lf1, rf1, False )
-
-    fL = fnmatch.filter( os.listdir( rd2 ), 'sleep-*.log' )
-    assert len(fL) == 0
-    L = filegrep( lf2, 'world' )
-    assert len(L) == 2
-    assert L[1].strip() == 'world'
-
-
-def remote5():
-    """
-    remote with a Command object
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'rdir' )
-    os.mkdir( 'ldir' )
-    rd = os.path.abspath( 'rdir' )  # remote run directory
-    ld = os.path.abspath( 'ldir' )  # local run and log directory
-    time.sleep(1)
-
-    os.chdir( ld )
-
-    cmd = command.Command( 'touch' ).arg( 'file name' )
-    jid = runjob.run_job( cmd,
-                          machine=sshmach, sshexe=sshprog,
-                          chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    fL = fnmatch.filter( os.listdir( rd ), 'touch-*.log' )
-    assert len(fL) == 1
-    assert os.path.exists( os.path.join( rd, 'file name' ) )
-
-
-def remote6():
-    """
-    remote with a Command object and shell=False
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'rdir' )
-    os.mkdir( 'ldir' )
-    rd = os.path.abspath( 'rdir' )  # remote run directory
-    ld = os.path.abspath( 'ldir' )  # local run and log directory
-    time.sleep(1)
-
-    os.chdir( ld )
-
-    cmd = command.Command( 'touch' ).arg( 'file name' )
-    jid = runjob.run_job( cmd, shell=False,
-                          machine=sshmach, sshexe=sshprog,
-                          chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    fL = fnmatch.filter( os.listdir( rd ), 'touch-*.log' )
-    assert len(fL) == 1
-    assert os.path.exists( os.path.join( rd, 'file name' ) )
-
-
-def timeout1():
-    """
-    timeout a local job
-    """
-    t0 = time.time()
-    jid = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
-                          timeout=5, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    t1 = time.time()
-    assert jb.get( 'exit' ) == None
-    assert not jb.has( 'exc' )
-    assert t1 - t0 < 10
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'hello' ) ) == 1
-    assert len( filegrep( fL[0], 'world' ) ) == 0
-
-
-def timeout2():
-    """
-    timeout a remote job
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'rdir' )
-    os.mkdir( 'ldir' )
-    rd = os.path.abspath( 'rdir' )  # remote run directory
-    ld = os.path.abspath( 'ldir' )  # local run and log directory
-    time.sleep(1)
-
-    os.chdir( ld )
-
-    t0 = time.time()
-    jid = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
-                          machine=sshmach, sshexe=sshprog,
-                          chdir=rd, timeout=5, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    t1 = time.time()
-    assert jb.get( 'exit' ) == None
-
-    assert t1 - t0 < 15
-
-    fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
-    assert len(fL) == 1
-    lf = os.path.join( ld, fL[0] )
-
-    fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
-    assert len(fL) == 1
-    rf = os.path.join( rd, fL[0] )
-
-    assert os.path.basename(lf) == os.path.basename(rf)
-    assert filecmp.cmp( lf, rf, False )
-    
-    L = filegrep( lf, 'hello' )
-    assert len(L) == 2
-    assert L[1].strip() == 'hello'
-    # it should timeout before print "world"
-    L = filegrep( lf, 'world' )
-    assert len(L) == 1
-    assert L[0].strip() != 'world'
-
-
-def timeout3():
-    """
-    timeout_date a local job
-    """
-    t0 = time.time()
-    jid = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
-                          timeout_date=time.time()+5, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    t1 = time.time()
-    assert jb.get( 'exit' ) == None
-    assert not jb.has( 'exc' )
-    assert t1 - t0 < 10
-
-    fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
-    assert len(fL) == 1
-    assert len( filegrep( fL[0], 'hello' ) ) == 1
-    assert len( filegrep( fL[0], 'world' ) ) == 0
-
-
-def timeout4():
-    """
-    timeout_date a remote job
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'rdir' )
-    os.mkdir( 'ldir' )
-    rd = os.path.abspath( 'rdir' )  # remote run directory
-    ld = os.path.abspath( 'ldir' )  # local run and log directory
-    time.sleep(1)
-
-    os.chdir( ld )
-
-    t0 = time.time()
-    jid = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
-                          machine=sshmach, sshexe=sshprog,
-                          chdir=rd, timeout_date=time.time()+5,
-                          poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    t1 = time.time()
-    assert jb.get( 'exit' ) == None
-
-    assert t1 - t0 < 15
-
-    fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
-    assert len(fL) == 1
-    lf = os.path.join( ld, fL[0] )
-
-    fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
-    assert len(fL) == 1
-    rf = os.path.join( rd, fL[0] )
-
-    assert os.path.basename(lf) == os.path.basename(rf)
-    assert filecmp.cmp( lf, rf, False )
-    
-    L = filegrep( lf, 'hello' )
-    assert len(L) == 2
-    assert L[1].strip() == 'hello'
-    # it should timeout before print "world"
-    L = filegrep( lf, 'world' )
-    assert len(L) == 1
-    assert L[0].strip() != 'world'
-
-
-def timeout5():
-    """
-    timeout_date a remote job with waitforjobid
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'rdir' )
-    os.mkdir( 'ldir' )
-    rd = os.path.abspath( 'rdir' )  # remote run directory
-    ld = os.path.abspath( 'ldir' )  # local run and log directory
-    time.sleep(1)
-
-    os.chdir( ld )
-
-    t0 = time.time()
-    jid1 = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
-                           machine=sshmach, sshexe=sshprog,
-                           chdir=rd, timeout_date=time.time()+5,
-                           poll_interval=2 )
-    jid2 = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
-                           machine=sshmach, sshexe=sshprog,
-                           chdir=rd, timeout_date=time.time()+10,
-                           poll_interval=2, waitforjobid=jid1 )
-    jb1,jb2 = runjob.wait_all( jid1, jid2, poll_interval=2 )
-    t1 = time.time()
-    assert jb1.get( 'exit' ) == None
-    assert jb2.get( 'exit' ) == None
-
-    assert t1 - t0 < 17
-
-    fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
-    assert len(fL) == 2
-    for i in range(2):
-        lf = os.path.join( ld, fL[i] )
-
-        L = filegrep( lf, 'hello' )
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'hello' ) ) == 1
+        assert len( util.filegrep( fL[0], 'job.py' ) ) == 1
+
+    def test_using_run_wait_but_with_an_error(self):
+        ""
+        x = runjob.run_wait( '/noexist/program || exit 1', poll_interval=2 )
+        assert x != 0
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'program-*.log' )
+        assert len(fL) == 1
+
+    def test_using_wait_all_on_job_ids(self):
+        ""
+        jid1 = runjob.run_job( 'echo hello ; sleep 6', poll_interval=2 )
+        jid2 = runjob.run_job( 'sleep 2', poll_interval=2 )
+
+        jL = runjob.wait_all( jid2, jid1, poll_interval=3 )
+
+        assert len(jL) == 2
+        assert jL[0] and jL[0].get( 'name' ) == 'sleep'
+        assert jL[1] and jL[1].get( 'name' ) == 'echo'
+
+    def test_using_wait_all_without_giving_it_job_ids(self):
+        ""
+        jid1 = runjob.run_job( 'echo hello ; sleep 6', poll_interval=2 )
+        jid2 = runjob.run_job( 'sleep 2', poll_interval=2 )
+
+        jL = runjob.wait_all( poll_interval=3 )
+
+        assert len(jL) == 2
+        assert jL[0] and jL[1]
+        assert ( jL[0].get( 'name' ) == 'sleep' and \
+                 jL[1].get( 'name' ) == 'echo' ) or \
+               ( jL[0].get( 'name' ) == 'echo' and \
+                 jL[1].get( 'name' ) == 'sleep' )
+
+    def test_using_wait_all_with_a_specific_job_id(self):
+        ""
+        jid1 = runjob.run_job( 'echo hello ; sleep 6', poll_interval=2 )
+        jid2 = runjob.run_job( 'sleep 2', poll_interval=2 )
+
+        jL = runjob.wait_all( jid1, poll_interval=3 )
+
+        assert len(jL) == 1
+        assert jL[0] and jL[0].get( 'name' ) == 'echo'
+        assert runjob.wait_job( jid2, poll_interval=2 )
+
+    def test_using_wait_all_with_a_specific_job_id_but_different_order(self):
+        ""
+        jid1 = runjob.run_job( 'echo hello ; sleep 6', poll_interval=2 )
+        jid2 = runjob.run_job( 'sleep 2', poll_interval=2 )
+
+        jL = runjob.wait_all( jid2, poll_interval=3 )
+
+        assert len(jL) == 1
+        assert jL[0] and jL[0].get( 'name' ) == 'sleep'
+        assert runjob.wait_job( jid1, poll_interval=2 )
+
+    def test_using_wait_all_with_a_specific_job_id_when_one_job_is_not_done(self):
+        ""
+        jid1 = runjob.run_job( 'echo hello ; sleep 6', poll_interval=2 )
+        jid2 = runjob.run_job( 'sleep 2', poll_interval=2 )
+        j = runjob.wait_job( jid2, poll_interval=2 )
+        assert j
+
+        jL = runjob.wait_all( poll_interval=3 )
+
+        assert len(jL) == 1
+        assert jL[0] and jL[0].get( 'name' ) == 'echo'
+
+    def test_using_wait_all_when_one_job_is_already_done(self):
+        ""
+        jid1 = runjob.run_job( 'echo hello ; sleep 6', poll_interval=2 )
+        jid2 = runjob.run_job( 'sleep 2', poll_interval=2 )
+        j = runjob.wait_job( jid2, poll_interval=2 )
+        assert j
+
+        jL = runjob.wait_all( jid2, jid1, poll_interval=3 )
+
+        assert len(jL) == 2
+        assert jL[0] and jL[1]
+        assert jL[0].get( 'name' ) == 'sleep'
+        assert jL[1].get( 'name' ) == 'echo'
+
+    def test_running_a_job_that_fails(self):
+        ""
+        jid = runjob.run_job( 'echo "fake failure" ; exit 1', poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 1
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'fake failure' ) ) == 1
+
+    def test_running_a_background_job_that_fails_to_launch(self):
+        ""
+        jid = runjob.run_job( '/an/arbitrary/path/badprogram', '-h',
+                              poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) > 0
+        assert not jb.has( 'exc' )
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'badprogram-*.log' )
+        assert len(fL) == 1
+
+    def test_running_a_shell_job_that_fails_to_launch(self):
+        ""
+        jid = runjob.run_job( '/an/arbitrary/path/badprogram', poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) != None and jb.get( 'exit' ) != 0
+        assert not jb.has( 'exc' )
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'badprogram-*.log' )
+        assert len(fL) == 1
+
+    def test_running_an_ill_formed_job(self):
+        ""
+        jid = runjob.run_job(  )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert not jb.has( 'exit' )
+        assert jb.has( 'exc' )
+
+        jid = runjob.run_job( 'ls', ['-l','uhoh'], poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.has( 'exc' )
+        assert 'arg must be a Command or string' in jb.get( 'exc' )
+
+        fL = fnmatch.filter( os.listdir( '.' ), '*.log' )
+        assert len(fL) == 0
+
+    def test_giving_bad_attributes_to_job_specification(self):
+        ""
+        jid = runjob.run_job( 'ls', machine=' sparky.gov' )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert not jb.has( 'exit' )
+        assert jb.has( 'exc' )
+        jid = runjob.run_job( '' )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert not jb.has( 'exit' )
+        assert jb.has( 'exc' )
+
+        fL = fnmatch.filter( os.listdir( '.' ), '*.log' )
+        assert len(fL) == 0
+
+    def test_running_two_jobs_in_background(self):
+        ""
+        # the first job stalls before touching a file
+        jid1 = runjob.run_job( 'sleep 8 ; touch file1', poll_interval=2 )
+        time.sleep(1)
+        assert not os.path.exists( 'file1' )
+
+        # the second job touches a file quickly
+        jid2 = runjob.run_job( 'sleep 1 ; touch file2', poll_interval=2 )
+        time.sleep(1)
+        assert not os.path.exists( 'file1' )
+        assert os.path.exists( 'file2' )
+
+        time.sleep(1)
+        assert not runjob.poll_job( jid1 )
+        assert runjob.poll_job( jid2 )
+
+        jb2 = runjob.wait_job( jid2, poll_interval=2 )
+        assert jb2.get( 'exit' ) == 0
+
+        jb1 = runjob.wait_job( jid1, poll_interval=2 )
+        assert jb1.get( 'exit' ) == 0
+
+        assert os.path.exists( 'file1' )
+        assert os.path.exists( 'file2' )
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'sleep-*.log' )
+        assert len(fL) == 2
+
+    def test_log_output_markers(self):
+        ""
+        util.writescript( 'scr', '#!/usr/bin/env python', """
+            import os, sys, time
+            sys.path.insert( 0, '"""+srcdir+"""' )
+            import runjob
+            x = runjob.run_wait( 'echo hello', poll_interval=2 )
+            assert x == 0
+            """ )
+        time.sleep(1)
+
+        out = util.runout( './scr', raise_on_failure=True )
+        print3( out )
+
+        pat = re.compile(
+            r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? RunJob: ' )
+        L = util.grep( out, 'RunJob:' )
+        assert len(L) == 1 and pat.match( L[0] ) != None
+
+        pat = re.compile(
+            r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? JobID: ' )
+        L = util.grep( out, 'JobID:' )
+        assert len(L) == 1
+        m = pat.match( L[0] )
+        assert m != None
+        jid = L[0][m.end():].strip()
+
+        pat = re.compile(
+            r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? LogFile: ' )
+        L = util.grep( out, 'LogFile:' )
+        assert len(L) == 1
+        m = pat.match( L[0] )
+        assert m != None
+        logf = L[0][m.end():].strip()
+        assert os.path.exists( logf )
+
+        pat = re.compile(
+            r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? JobDone: ' )
+        L = util.grep( out, 'JobDone:' )
+        assert len(L) == 1
+        m = pat.match( L[0] )
+        assert m != None
+        s = L[0][m.end():].strip()
+        s1,s2 = s.split('exit=0')
+        assert s1.strip() == 'jobid='+jid
+        assert s2.strip() == 'exc='
+
+    def test_giving_the_run_directory_to_a_job(self):
+        ""
+        os.mkdir( 'wdir' )
+        cd = os.path.join( os.getcwd(), 'wdir' )
+        time.sleep(1)
+
+        jid = runjob.run_job( 'echo hello > afile.txt',
+                              chdir=cd, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
+        assert len(fL) == 1
+        fn = os.path.join( cd, 'afile.txt' )
+        assert os.path.exists( fn )
+        assert len( util.filegrep( fn, "hello" ) ) == 1
+
+    def test_casting_a_Job_instance_to_true(self):
+        ""
+        jid = runjob.run_job( 'echo hello > afile.txt', poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+        if jb:
+            pass
+        else:
+            raise Exception( "cast should be True" )
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
+        assert len(fL) == 1
+        assert os.path.exists( 'afile.txt' )
+        assert len( util.filegrep( 'afile.txt', "hello" ) ) == 1
+
+    def test_casting_a_Job_instance_to_false(self):
+        ""
+        jid = runjob.run_job( 'echo hello > afile.txt ; exit 1',
+                              poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.has( 'exit' )
+        if jb:
+            raise Exception( "cast should be False" )
+        else:
+            pass
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
+        assert len(fL) == 1
+        assert os.path.exists( 'afile.txt' )
+        assert len( util.filegrep( 'afile.txt', "hello" ) ) == 1
+
+    def test_running_a_remote_job(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'rdir' )
+        os.mkdir( 'ldir' )
+        rd = os.path.abspath( 'rdir' )  # remote run directory
+        ld = os.path.abspath( 'ldir' )  # local run and log directory
+        time.sleep(1)
+
+        os.chdir( ld )
+
+        jid = runjob.run_job( 'echo hello',
+                              machine=sshmach, sshexe=sshprog,
+                              chdir=rd, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
+        assert len(fL) == 1
+        lf = os.path.join( ld, fL[0] )
+
+        fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
+        assert len(fL) == 1
+        rf = os.path.join( rd, fL[0] )
+
+        assert os.path.basename(lf) == os.path.basename(rf)
+        assert filecmp.cmp( lf, rf, False )
+
+        L = util.filegrep( lf, 'hello' )
+        assert len(L) == 2
+        assert L[1].strip() == 'hello'
+
+    def test_running_a_remote_job_that_fails(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'rdir' )
+        os.mkdir( 'ldir' )
+        rd = os.path.abspath( 'rdir' )  # remote run directory
+        ld = os.path.abspath( 'ldir' )  # local run and log directory
+        time.sleep(1)
+
+        os.chdir( ld )
+
+        jid = runjob.run_job( '/bad/program',
+                              machine=sshmach, sshexe=sshprog,
+                              chdir=rd, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) != 0
+        time.sleep(2)
+
+        fL = fnmatch.filter( os.listdir( ld ), 'program-*.log' )
+        assert len(fL) == 1
+        lf = os.path.join( ld, fL[0] )
+
+        fL = fnmatch.filter( os.listdir( rd ), 'program-*.log' )
+        assert len(fL) == 1
+        rf = os.path.join( rd, fL[0] )
+
+        assert os.path.basename(lf) == os.path.basename(rf)
+        assert filecmp.cmp( lf, rf, False )
+
+    def test_running_two_remote_jobs(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'rdir' )
+        os.mkdir( 'ldir' )
+        rd = os.path.abspath( 'rdir' )  # remote run directory
+        ld = os.path.abspath( 'ldir' )  # local run and log directory
+        time.sleep(1)
+
+        os.chdir( ld )
+
+        jid1 = runjob.run_job( 'sleep 1; echo hello',
+                               machine=sshmach, sshexe=sshprog,
+                               chdir=rd, poll_interval=2 )
+        jid2 = runjob.run_job( 'sleep 4; echo world',
+                               machine=sshmach, sshexe=sshprog,
+                               chdir=rd, poll_interval=2 )
+        jb = runjob.wait_job( jid1, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+        jb = runjob.wait_job( jid2, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+     
+        fL = fnmatch.filter( os.listdir( ld ), 'sleep-*.log' )
+        assert len(fL) == 2
+        fL.sort()
+        lf1,lf2 = os.path.join( ld, fL[0] ), os.path.join( ld, fL[1] )
+
+        fL = fnmatch.filter( os.listdir( rd ), 'sleep-*.log' )
+        assert len(fL) == 2
+        fL.sort()
+        rf1,rf2 = os.path.join( rd, fL[0] ), os.path.join( rd, fL[1] )
+
+        assert os.path.basename(lf1) == os.path.basename(rf1)
+        assert filecmp.cmp( lf1, rf1, False )
+        assert os.path.basename(lf2) == os.path.basename(rf2)
+        assert filecmp.cmp( lf2, rf2, False )
+        
+        L = util.filegrep( lf1, 'hello' )
+        assert len(L) == 2
+        assert L[1].strip() == 'hello'
+        L = util.filegrep( lf2, 'world' )
+        assert len(L) == 2
+        assert L[1].strip() == 'world'
+
+    def test_running_remote_jobs_with_logdir_and_sharedlog_attributes(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'rdir1' )
+        os.mkdir( 'rdir2' )
+        os.mkdir( 'ldir' )
+        rd1 = os.path.abspath( 'rdir1' )  # remote run directory
+        rd2 = os.path.abspath( 'rdir2' )  # remote run directory
+        ld = os.path.abspath( 'ldir' )  # local run and log directory
+        time.sleep(1)
+
+        os.chdir( ld )
+
+        jid1 = runjob.run_job( 'sleep 1; echo hello',
+                               machine=sshmach, sshexe=sshprog,
+                               logdir=rd1, poll_interval=2 )
+        jid2 = runjob.run_job( 'sleep 4; echo world',
+                               machine=sshmach, sshexe=sshprog,
+                               logdir=rd2, sharedlog=True, poll_interval=2 )
+        jb1,jb2 = runjob.wait_all( jid1, jid2, poll_interval=2 )
+        assert jb1.get( 'exit' ) == 0
+        assert jb1.get( 'exit' ) == 0
+     
+        fL = fnmatch.filter( os.listdir( ld ), 'sleep-*.log' )
+        assert len(fL) == 2
+        fL.sort()
+        lf1,lf2 = os.path.join( ld, fL[0] ), os.path.join( ld, fL[1] )
+
+        fL = fnmatch.filter( os.listdir( rd1 ), 'sleep-*.log' )
+        assert len(fL) == 1
+        rf1 = os.path.join( rd1, fL[0] )
+
+        assert os.path.basename(lf1) == os.path.basename(rf1)
+        assert filecmp.cmp( lf1, rf1, False )
+
+        fL = fnmatch.filter( os.listdir( rd2 ), 'sleep-*.log' )
+        assert len(fL) == 0
+        L = util.filegrep( lf2, 'world' )
+        assert len(L) == 2
+        assert L[1].strip() == 'world'
+
+    def test_running_a_remote_job_using_a_Command_object(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'rdir' )
+        os.mkdir( 'ldir' )
+        rd = os.path.abspath( 'rdir' )  # remote run directory
+        ld = os.path.abspath( 'ldir' )  # local run and log directory
+        time.sleep(1)
+
+        os.chdir( ld )
+
+        cmd = command.Command( 'touch' ).arg( 'file name' )
+        jid = runjob.run_job( cmd,
+                              machine=sshmach, sshexe=sshprog,
+                              chdir=rd, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        fL = fnmatch.filter( os.listdir( rd ), 'touch-*.log' )
+        assert len(fL) == 1
+        assert os.path.exists( os.path.join( rd, 'file name' ) )
+
+    def test_running_a_remote_job_using_a_Command_object_without_shell(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'rdir' )
+        os.mkdir( 'ldir' )
+        rd = os.path.abspath( 'rdir' )  # remote run directory
+        ld = os.path.abspath( 'ldir' )  # local run and log directory
+        time.sleep(1)
+
+        os.chdir( ld )
+
+        cmd = command.Command( 'touch' ).arg( 'file name' )
+        jid = runjob.run_job( cmd, shell=False,
+                              machine=sshmach, sshexe=sshprog,
+                              chdir=rd, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        fL = fnmatch.filter( os.listdir( rd ), 'touch-*.log' )
+        assert len(fL) == 1
+        assert os.path.exists( os.path.join( rd, 'file name' ) )
+
+    def test_timing_out_a_local_job(self):
+        ""
+        t0 = time.time()
+        jid = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
+                              timeout=5, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        t1 = time.time()
+        assert jb.get( 'exit' ) == None
+        assert not jb.has( 'exc' )
+        assert t1 - t0 < 10
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'hello' ) ) == 1
+        assert len( util.filegrep( fL[0], 'world' ) ) == 0
+
+    def test_timing_out_a_remote_job(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'rdir' )
+        os.mkdir( 'ldir' )
+        rd = os.path.abspath( 'rdir' )  # remote run directory
+        ld = os.path.abspath( 'ldir' )  # local run and log directory
+        time.sleep(1)
+
+        os.chdir( ld )
+
+        t0 = time.time()
+        jid = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
+                              machine=sshmach, sshexe=sshprog,
+                              chdir=rd, timeout=5, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        t1 = time.time()
+        assert jb.get( 'exit' ) == None
+
+        assert t1 - t0 < 15
+
+        fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
+        assert len(fL) == 1
+        lf = os.path.join( ld, fL[0] )
+
+        fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
+        assert len(fL) == 1
+        rf = os.path.join( rd, fL[0] )
+
+        assert os.path.basename(lf) == os.path.basename(rf)
+        assert filecmp.cmp( lf, rf, False )
+        
+        L = util.filegrep( lf, 'hello' )
         assert len(L) == 2
         assert L[1].strip() == 'hello'
         # it should timeout before print "world"
-        L = filegrep( lf, 'world' )
+        L = util.filegrep( lf, 'world' )
         assert len(L) == 1
         assert L[0].strip() != 'world'
 
-
-def remotefail1():
-    """
-    failure to connect to remote machine
-    """
-    sshprog,sshmach = get_ssh_pair( connect_failure=True )
-
-    os.mkdir( 'rdir' )
-    os.mkdir( 'ldir' )
-    rd = os.path.abspath( 'rdir' )  # remote run directory
-    ld = os.path.abspath( 'ldir' )  # local run and log directory
-    time.sleep(1)
-
-    os.chdir( ld )
-    jid = runjob.run_job( 'echo hello',
-                          machine=sshmach, sshexe=sshprog,
-                          chdir=rd,
-                          connection_attempts=2, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert not jb.has( 'exit' )
-    assert jb.has( 'exc' )
-
-
-def remotefail2a():
-    """
-    first make sure the 'uptime' fakessh script works
-    """
-    sshprog,sshmach = get_ssh_pair( uptime=30 )
-
-    os.mkdir( 'rdir' )
-    os.mkdir( 'ldir' )
-    rd = os.path.abspath( 'rdir' )  # remote run directory
-    ld = os.path.abspath( 'ldir' )  # local run and log directory
-    time.sleep(1)
-
-    os.chdir( ld )
-
-    jid = runjob.run_job( 'echo hello ; sleep 2 ; echo world',
-                          machine=sshmach, sshexe=sshprog,
-                          chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-    assert not jb.has( 'exc' )
-    
-    fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
-    assert len(fL) == 1
-    lf = os.path.join( ld, fL[0] )
-
-    fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
-    assert len(fL) == 1
-    rf = os.path.join( rd, fL[0] )
-
-    assert os.path.basename(lf) == os.path.basename(rf)
-    assert filecmp.cmp( lf, rf, False )
-    
-    L = filegrep( lf, 'hello' )
-    assert len(L) == 2
-    assert L[1].strip() == 'hello'
-    L = filegrep( lf, 'world' )
-    assert len(L) == 2
-    assert L[1].strip() == 'world'
-
-def remotefail2b():
-    """
-    then cause fakessh to die after 5 seconds
-    """
-    sshprog,sshmach = get_ssh_pair( uptime=5 )
-
-    os.mkdir( 'rdir' )
-    os.mkdir( 'ldir' )
-    rd = os.path.abspath( 'rdir' )  # remote run directory
-    ld = os.path.abspath( 'ldir' )  # local run and log directory
-    time.sleep(1)
-
-    os.chdir( ld )
-
-    jid = runjob.run_job( 'echo hello ; sleep 10 ; echo world',
-                          machine=sshmach, sshexe=sshprog,
-                          chdir=rd,
-                          poll_interval=2, exception_print_interval=3 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-    assert not jb.has( 'exc' )
-
-    fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
-    assert len(fL) == 1
-    lf = os.path.join( ld, fL[0] )
-
-    fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
-    assert len(fL) == 1
-    rf = os.path.join( rd, fL[0] )
-
-    assert os.path.basename(lf) == os.path.basename(rf)
-    assert filecmp.cmp( lf, rf, False )
-    
-    L = filegrep( lf, 'hello' )
-    assert len(L) == 2
-    assert L[1].strip() == 'hello'
-    L = filegrep( lf, 'world' )
-    assert len(L) == 2
-    assert L[1].strip() == 'world'
-
-
-def update1():
-    """
-    exercise incremental log updating
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'rdir' )
-    os.mkdir( 'ldir' )
-    rd = os.path.abspath( 'rdir' )  # remote run directory
-    ld = os.path.abspath( 'ldir' )  # local run and log directory
-
-    scr = os.path.abspath( 'makeout' )
-    writescript( scr, '#!/usr/bin/env python', """
-        import os, sys, time
-        def print3( *args ):
-            sys.stdout.write( ' '.join( [ str(a) for a in args ] ) + os.linesep )
-            sys.stdout.flush()
-        print3( 'This is line one.'*100 )
-        time.sleep(5)
-        print3( 'Now line two.'*100 )
-        time.sleep(5)
-        print3( 'Three!'*100 )
-        """ )
-    time.sleep(1)
-
-    os.chdir( ld )
-
-    jid = runjob.run_job( scr,
-                          machine=sshmach, sshexe=sshprog,
-                          chdir=rd,
-                          poll_interval=2,
-                          getlog_small_file_size=1,  # force updates
-                          getlog_chunk_size=23 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-    assert not jb.has( 'exc' )
-
-    fL = fnmatch.filter( os.listdir( ld ), 'makeout-*.log' )
-    assert len(fL) == 1
-    lf = os.path.join( ld, fL[0] )
-
-    fL = fnmatch.filter( os.listdir( rd ), 'makeout-*.log' )
-    assert len(fL) == 1
-    rf = os.path.join( rd, fL[0] )
-
-    assert os.path.basename(lf) == os.path.basename(rf)
-    assert filecmp.cmp( lf, rf, False )
-    
-    assert abs( os.path.getmtime(lf) - os.path.getmtime(rf) ) < 5
-    m1 = stat.S_IMODE( os.stat(lf)[stat.ST_MODE] )
-    m2 = stat.S_IMODE( os.stat(rf)[stat.ST_MODE] )
-    assert m1 == m2
-
-
-def dryrun1():
-    """
-    defining COMMAND_DRYRUN prevents job execution, local
-    """
-    writescript( 'cmd1.py', "#!"+localpy+" -E", """
-        import os, sys
-        fp = open( 'file1.txt', 'w' ) ; fp.close()
-        """ )
-    cmd1 = os.path.abspath( 'cmd1.py' )
-
-    writescript( 'cmd2.py', "#!"+localpy+" -E", """
-        import os, sys
-        fp = open( 'file2.txt', 'w' ) ; fp.close()
-        """ )
-    cmd2 = os.path.abspath( 'cmd2.py' )
-
-    jid = runjob.run_job( cmd1, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    os.environ['COMMAND_DRYRUN'] = ''
-    jid = runjob.run_job( cmd2, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    time.sleep(1)
-    assert os.path.exists( 'file1.txt' )
-    assert not os.path.exists( 'file2.txt' )
-
-
-def dryrun2():
-    """
-    defining COMMAND_DRYRUN prevents job execution, remote
-    """
-    writescript( 'cmd1.py', "#!"+localpy+" -E", """
-        import os, sys
-        fp = open( 'file1.txt', 'w' ) ; fp.close()
-        """ )
-    cmd1 = os.path.abspath( 'cmd1.py' )
-
-    os.environ['COMMAND_DRYRUN'] = ''
-    jid = runjob.run_job( cmd1, machine='sparky', poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    time.sleep(1)
-    assert not os.path.exists( 'file1.txt' )
-
-
-def dryrun3():
-    """
-    define COMMAND_DRYRUN to "1", local
-    """
-    writescript( 'cmd1.py', "#!"+localpy+" -E", """
-        import os, sys
-        fp = open( 'file1.txt', 'w' ) ; fp.close()
-        """ )
-    cmd1 = os.path.abspath( 'cmd1.py' )
-
-    writescript( 'cmd2.py', "#!"+localpy+" -E", """
-        import os, sys
-        fp = open( 'file2.txt', 'w' ) ; fp.close()
-        """ )
-    cmd2 = os.path.abspath( 'cmd2.py' )
-
-    jid = runjob.run_job( cmd1, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    os.environ['COMMAND_DRYRUN'] = '1'
-    jid = runjob.run_job( cmd2, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    time.sleep(1)
-    assert os.path.exists( 'file1.txt' )
-    assert not os.path.exists( 'file2.txt' )
-
-
-def dryrun4():
-    """
-    define COMMAND_DRYRUN to "1", remote
-    """
-    writescript( 'cmd1.py', "#!"+localpy+" -E", """
-        import os, sys
-        fp = open( 'file1.txt', 'w' ) ; fp.close()
-        """ )
-    cmd1 = os.path.abspath( 'cmd1.py' )
-
-    os.environ['COMMAND_DRYRUN'] = '1'
-    jid = runjob.run_job( cmd1, machine='sparky', poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    time.sleep(1)
-    assert not os.path.exists( 'file1.txt' )
-
-
-def dryrun5():
-    """
-    define COMMAND_DRYRUN to a list of names, local
-    """
-    writescript( 'cmd1.py', "#!"+localpy+" -E", """
-        import os, sys
-        fp = open( 'file1.txt', 'w' ) ; fp.close()
-        """ )
-    cmd1 = os.path.abspath( 'cmd1.py' )
-
-    writescript( 'cmd2.py', "#!"+localpy+" -E", """
-        import os, sys
-        fp = open( 'file2.txt', 'w' ) ; fp.close()
-        """ )
-    cmd2 = os.path.abspath( 'cmd2.py' )
-
-    os.environ['COMMAND_DRYRUN'] = 'junk/cmd2.py/cmd1'
-    jid = runjob.run_job( cmd1, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    jid = runjob.run_job( cmd2, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    assert jb.get( 'exit' ) == 0
-
-    time.sleep(1)
-    assert not os.path.exists( 'file1.txt' )
-    assert os.path.exists( 'file2.txt' )
-
-
-def dryrun6():
-    """
-    define COMMAND_DRYRUN to a list of names, remote
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    writescript( 'cmd1.py', "#!"+localpy+" -E", """
-        import os, sys
-        fp = open( 'file1.txt', 'w' ) ; fp.close()
-        """ )
-    cmd1 = os.path.abspath( 'cmd1.py' )
-
-    writescript( 'cmd2.py', "#!"+localpy+" -E", """
-        import os, sys
-        fp = open( 'file2.txt', 'w' ) ; fp.close()
-        """ )
-    cmd2 = os.path.abspath( 'cmd2.py' )
-
-    writescript( 'cmd3.py', "#!"+localpy+" -E", """
-        import os, sys
-        fp = open( 'file3.txt', 'w' ) ; fp.close()
-        """ )
-    cmd3 = os.path.abspath( 'cmd3.py' )
-
-    os.mkdir( 'rdir' )
-    os.mkdir( 'ldir' )
-    rd = os.path.abspath( 'rdir' )  # remote run directory
-    ld = os.path.abspath( 'ldir' )  # local run and log directory
-    time.sleep(1)
-
-    os.chdir( ld )
-
-    jid = runjob.run_job( cmd1+' -h arg',
-                          machine=sshmach, sshexe=sshprog,
-                          chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    os.environ['COMMAND_DRYRUN'] = 'junk/cmd3.py/cmd2'
-    jid = runjob.run_job( cmd2+' -h arg',
-                          machine=sshmach, sshexe=sshprog,
-                          chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-    jid = runjob.run_job( cmd3+' -h arg',
-                          machine=sshmach, sshexe=sshprog,
-                          chdir=rd, poll_interval=2 )
-    jb = runjob.wait_job( jid, poll_interval=2 )
-
-    time.sleep(1)
-    assert os.path.exists( rd+'/file1.txt' )
-    assert not os.path.exists( rd+'/file2.txt' )
-    assert os.path.exists( rd+'/file3.txt' )
-
-
-def waitfor1():
-    """
-    using waitforjobid
-    """
-    jid1 = runjob.run_job( 'echo hello ; sleep 8', poll_interval=2 )
-    jid2 = runjob.run_job( 'sleep 1', waitforjobid=jid1, poll_interval=2 )
-    time.sleep(3)
-    assert not runjob.poll_job( jid1 )
-    assert not runjob.poll_job( jid2 )
-    j2 = runjob.wait_job( jid2, poll_interval=2 )
-    assert j2
-    assert runjob.poll_job( jid1 )
-    j1 = runjob.wait_job( jid1, poll_interval=2 )
-    assert j1
-
-    assert j1.get( 'name' ) == 'echo'
-    assert j2.get( 'name' ) == 'sleep'
-
-
-def waitfor2():
-    """
-    using waitforjobid, check ordering in logging output
-    """
-    writescript( 'scr', '#!/usr/bin/env python', """
-        import os, sys, time
-        sys.path.insert( 0, '"""+srcdir+"""' )
-        import runjob
-        jid1 = runjob.run_job( 'echo hello ; sleep 8', poll_interval=2 )
-        runjob.run_job( 'sleep 1', waitforjobid=jid1, poll_interval=2 )
-        jbL = runjob.wait_all( poll_interval=2 )
-        assert len(jbL) == 2
-        """ )
-    time.sleep(1)
-
-    out = runout( './scr', raise_on_failure=True )
-    print3( out )
-    #os.system( './scr' )
-
-    L = greplog( '(Submit|RunJob|JobDone)', out )
-    assert len(L) == 6
-    assert 'Submit:' in L[0]
-    assert 'echo hello' in L[0] and 'sleep 1' not in L[0]
-    assert 'RunJob:' in L[1]
-    assert 'echo hello' in L[1] and 'sleep 1' not in L[1]
-    assert 'Submit:' in L[2]
-    assert 'sleep 1' in L[2] and 'echo hello' not in L[2]
-    assert 'JobDone:' in L[3]
-    assert 'echo' in L[3] and 'sleep' not in L[3]
-    assert 'RunJob:' in L[4]
-    assert 'sleep 1' in L[4] and 'echo 8' not in L[4]
-    assert 'JobDone:' in L[5]
-    assert 'sleep' in L[5] and 'echo' not in L[5]
-
-
-def waitfor3():
-    """
-    using waitforjobid, check ordering but wait with wait_job()
-    """
-    writescript( 'scr', '#!/usr/bin/env python', """
-        import os, sys, time
-        sys.path.insert( 0, '"""+srcdir+"""' )
-        import runjob
+    def test_using_timeout_date_on_a_local_job(self):
+        ""
+        t0 = time.time()
+        jid = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
+                              timeout_date=time.time()+5, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        t1 = time.time()
+        assert jb.get( 'exit' ) == None
+        assert not jb.has( 'exc' )
+        assert t1 - t0 < 10
+
+        fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
+        assert len(fL) == 1
+        assert len( util.filegrep( fL[0], 'hello' ) ) == 1
+        assert len( util.filegrep( fL[0], 'world' ) ) == 0
+
+    def test_using_timeout_date_on_a_remote_job(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'rdir' )
+        os.mkdir( 'ldir' )
+        rd = os.path.abspath( 'rdir' )  # remote run directory
+        ld = os.path.abspath( 'ldir' )  # local run and log directory
+        time.sleep(1)
+
+        os.chdir( ld )
+
+        t0 = time.time()
+        jid = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
+                              machine=sshmach, sshexe=sshprog,
+                              chdir=rd, timeout_date=time.time()+5,
+                              poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        t1 = time.time()
+        assert jb.get( 'exit' ) == None
+
+        assert t1 - t0 < 15
+
+        fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
+        assert len(fL) == 1
+        lf = os.path.join( ld, fL[0] )
+
+        fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
+        assert len(fL) == 1
+        rf = os.path.join( rd, fL[0] )
+
+        assert os.path.basename(lf) == os.path.basename(rf)
+        assert filecmp.cmp( lf, rf, False )
+        
+        L = util.filegrep( lf, 'hello' )
+        assert len(L) == 2
+        assert L[1].strip() == 'hello'
+        # it should timeout before print "world"
+        L = util.filegrep( lf, 'world' )
+        assert len(L) == 1
+        assert L[0].strip() != 'world'
+
+    def test_giving_timeout_date_to_a_remote_job_combined_with_waitforjobid(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'rdir' )
+        os.mkdir( 'ldir' )
+        rd = os.path.abspath( 'rdir' )  # remote run directory
+        ld = os.path.abspath( 'ldir' )  # local run and log directory
+        time.sleep(1)
+
+        os.chdir( ld )
+
+        t0 = time.time()
+        jid1 = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
+                               machine=sshmach, sshexe=sshprog,
+                               chdir=rd, timeout_date=time.time()+5,
+                               poll_interval=2 )
+        jid2 = runjob.run_job( 'echo hello ; sleep 60 ; echo world',
+                               machine=sshmach, sshexe=sshprog,
+                               chdir=rd, timeout_date=time.time()+10,
+                               poll_interval=2, waitforjobid=jid1 )
+        jb1,jb2 = runjob.wait_all( jid1, jid2, poll_interval=2 )
+        t1 = time.time()
+        assert jb1.get( 'exit' ) == None
+        assert jb2.get( 'exit' ) == None
+
+        assert t1 - t0 < 17
+
+        fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
+        assert len(fL) == 2
+        for i in range(2):
+            lf = os.path.join( ld, fL[i] )
+
+            L = util.filegrep( lf, 'hello' )
+            assert len(L) == 2
+            assert L[1].strip() == 'hello'
+            # it should timeout before print "world"
+            L = util.filegrep( lf, 'world' )
+            assert len(L) == 1
+            assert L[0].strip() != 'world'
+
+    def test_a_failure_to_connect_to_remote_machine(self):
+        ""
+        sshprog,sshmach = get_ssh_pair( connect_failure=True )
+
+        os.mkdir( 'rdir' )
+        os.mkdir( 'ldir' )
+        rd = os.path.abspath( 'rdir' )  # remote run directory
+        ld = os.path.abspath( 'ldir' )  # local run and log directory
+        time.sleep(1)
+
+        os.chdir( ld )
+        jid = runjob.run_job( 'echo hello',
+                              machine=sshmach, sshexe=sshprog,
+                              chdir=rd,
+                              connection_attempts=2, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert not jb.has( 'exit' )
+        assert jb.has( 'exc' )
+
+    def test_using_uptime_in_the_testing_infrastructure(self):
+        ""
+        sshprog,sshmach = get_ssh_pair( uptime=30 )
+
+        os.mkdir( 'rdir' )
+        os.mkdir( 'ldir' )
+        rd = os.path.abspath( 'rdir' )  # remote run directory
+        ld = os.path.abspath( 'ldir' )  # local run and log directory
+        time.sleep(1)
+
+        os.chdir( ld )
+
+        jid = runjob.run_job( 'echo hello ; sleep 2 ; echo world',
+                              machine=sshmach, sshexe=sshprog,
+                              chdir=rd, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+        assert not jb.has( 'exc' )
+        
+        fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
+        assert len(fL) == 1
+        lf = os.path.join( ld, fL[0] )
+
+        fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
+        assert len(fL) == 1
+        rf = os.path.join( rd, fL[0] )
+
+        assert os.path.basename(lf) == os.path.basename(rf)
+        assert filecmp.cmp( lf, rf, False )
+        
+        L = util.filegrep( lf, 'hello' )
+        assert len(L) == 2
+        assert L[1].strip() == 'hello'
+        L = util.filegrep( lf, 'world' )
+        assert len(L) == 2
+        assert L[1].strip() == 'world'
+
+    def test_when_ssh_dies_in_the_middle_of_a_job(self):
+        ""
+        sshprog,sshmach = get_ssh_pair( uptime=5 )
+
+        os.mkdir( 'rdir' )
+        os.mkdir( 'ldir' )
+        rd = os.path.abspath( 'rdir' )  # remote run directory
+        ld = os.path.abspath( 'ldir' )  # local run and log directory
+        time.sleep(1)
+
+        os.chdir( ld )
+
+        jid = runjob.run_job( 'echo hello ; sleep 10 ; echo world',
+                              machine=sshmach, sshexe=sshprog,
+                              chdir=rd,
+                              poll_interval=2, exception_print_interval=3 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+        assert not jb.has( 'exc' )
+
+        fL = fnmatch.filter( os.listdir( ld ), 'echo-*.log' )
+        assert len(fL) == 1
+        lf = os.path.join( ld, fL[0] )
+
+        fL = fnmatch.filter( os.listdir( rd ), 'echo-*.log' )
+        assert len(fL) == 1
+        rf = os.path.join( rd, fL[0] )
+
+        assert os.path.basename(lf) == os.path.basename(rf)
+        assert filecmp.cmp( lf, rf, False )
+        
+        L = util.filegrep( lf, 'hello' )
+        assert len(L) == 2
+        assert L[1].strip() == 'hello'
+        L = util.filegrep( lf, 'world' )
+        assert len(L) == 2
+        assert L[1].strip() == 'world'
+
+    def test_incremental_log_updating(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'rdir' )
+        os.mkdir( 'ldir' )
+        rd = os.path.abspath( 'rdir' )  # remote run directory
+        ld = os.path.abspath( 'ldir' )  # local run and log directory
+
+        scr = os.path.abspath( 'makeout' )
+        util.writescript( scr, '#!/usr/bin/env python', """
+            import os, sys, time
+            def print3( *args ):
+                sys.stdout.write( ' '.join( [ str(a) for a in args ] ) + os.linesep )
+                sys.stdout.flush()
+            print3( 'This is line one.'*100 )
+            time.sleep(5)
+            print3( 'Now line two.'*100 )
+            time.sleep(5)
+            print3( 'Three!'*100 )
+            """ )
+        time.sleep(1)
+
+        os.chdir( ld )
+
+        jid = runjob.run_job( scr,
+                              machine=sshmach, sshexe=sshprog,
+                              chdir=rd,
+                              poll_interval=2,
+                              getlog_small_file_size=1,  # force updates
+                              getlog_chunk_size=23 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+        assert not jb.has( 'exc' )
+
+        fL = fnmatch.filter( os.listdir( ld ), 'makeout-*.log' )
+        assert len(fL) == 1
+        lf = os.path.join( ld, fL[0] )
+
+        fL = fnmatch.filter( os.listdir( rd ), 'makeout-*.log' )
+        assert len(fL) == 1
+        rf = os.path.join( rd, fL[0] )
+
+        assert os.path.basename(lf) == os.path.basename(rf)
+        assert filecmp.cmp( lf, rf, False )
+        
+        assert abs( os.path.getmtime(lf) - os.path.getmtime(rf) ) < 5
+        m1 = stat.S_IMODE( os.stat(lf)[stat.ST_MODE] )
+        m2 = stat.S_IMODE( os.stat(rf)[stat.ST_MODE] )
+        assert m1 == m2
+
+    def test_defining_COMMAND_DRYRUN_to_prevent_local_job_execution(self):
+        ""
+        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+            import os, sys
+            fp = open( 'file1.txt', 'w' ) ; fp.close()
+            """ )
+        cmd1 = os.path.abspath( 'cmd1.py' )
+
+        util.writescript( 'cmd2.py', "#!"+localpy+" -E", """
+            import os, sys
+            fp = open( 'file2.txt', 'w' ) ; fp.close()
+            """ )
+        cmd2 = os.path.abspath( 'cmd2.py' )
+
+        jid = runjob.run_job( cmd1, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        os.environ['COMMAND_DRYRUN'] = ''
+        jid = runjob.run_job( cmd2, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        time.sleep(1)
+        assert os.path.exists( 'file1.txt' )
+        assert not os.path.exists( 'file2.txt' )
+
+    def test_defining_COMMAND_DRYRUN_to_prevent_remote_job_execution(self):
+        ""
+        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+            import os, sys
+            fp = open( 'file1.txt', 'w' ) ; fp.close()
+            """ )
+        cmd1 = os.path.abspath( 'cmd1.py' )
+
+        os.environ['COMMAND_DRYRUN'] = ''
+        jid = runjob.run_job( cmd1, machine='sparky', poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        time.sleep(1)
+        assert not os.path.exists( 'file1.txt' )
+
+    def test_set_COMMAND_DRYRUN_to_one_on_local_job(self):
+        """
+        define COMMAND_DRYRUN to "1", local
+        """
+        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+            import os, sys
+            fp = open( 'file1.txt', 'w' ) ; fp.close()
+            """ )
+        cmd1 = os.path.abspath( 'cmd1.py' )
+
+        util.writescript( 'cmd2.py', "#!"+localpy+" -E", """
+            import os, sys
+            fp = open( 'file2.txt', 'w' ) ; fp.close()
+            """ )
+        cmd2 = os.path.abspath( 'cmd2.py' )
+
+        jid = runjob.run_job( cmd1, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        os.environ['COMMAND_DRYRUN'] = '1'
+        jid = runjob.run_job( cmd2, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        time.sleep(1)
+        assert os.path.exists( 'file1.txt' )
+        assert not os.path.exists( 'file2.txt' )
+
+    def test_set_COMMAND_DRYRUN_to_one_on_remote_job(self):
+        ""
+        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+            import os, sys
+            fp = open( 'file1.txt', 'w' ) ; fp.close()
+            """ )
+        cmd1 = os.path.abspath( 'cmd1.py' )
+
+        os.environ['COMMAND_DRYRUN'] = '1'
+        jid = runjob.run_job( cmd1, machine='sparky', poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        time.sleep(1)
+        assert not os.path.exists( 'file1.txt' )
+
+    def test_set_COMMAND_DRYRUN_to_list_of_names_on_local_job(self):
+        ""
+        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+            import os, sys
+            fp = open( 'file1.txt', 'w' ) ; fp.close()
+            """ )
+        cmd1 = os.path.abspath( 'cmd1.py' )
+
+        util.writescript( 'cmd2.py', "#!"+localpy+" -E", """
+            import os, sys
+            fp = open( 'file2.txt', 'w' ) ; fp.close()
+            """ )
+        cmd2 = os.path.abspath( 'cmd2.py' )
+
+        os.environ['COMMAND_DRYRUN'] = 'junk/cmd2.py/cmd1'
+        jid = runjob.run_job( cmd1, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        jid = runjob.run_job( cmd2, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        assert jb.get( 'exit' ) == 0
+
+        time.sleep(1)
+        assert not os.path.exists( 'file1.txt' )
+        assert os.path.exists( 'file2.txt' )
+
+    def test_set_COMMAND_DRYRUN_to_list_of_names_on_remote_job(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+            import os, sys
+            fp = open( 'file1.txt', 'w' ) ; fp.close()
+            """ )
+        cmd1 = os.path.abspath( 'cmd1.py' )
+
+        util.writescript( 'cmd2.py', "#!"+localpy+" -E", """
+            import os, sys
+            fp = open( 'file2.txt', 'w' ) ; fp.close()
+            """ )
+        cmd2 = os.path.abspath( 'cmd2.py' )
+
+        util.writescript( 'cmd3.py', "#!"+localpy+" -E", """
+            import os, sys
+            fp = open( 'file3.txt', 'w' ) ; fp.close()
+            """ )
+        cmd3 = os.path.abspath( 'cmd3.py' )
+
+        os.mkdir( 'rdir' )
+        os.mkdir( 'ldir' )
+        rd = os.path.abspath( 'rdir' )  # remote run directory
+        ld = os.path.abspath( 'ldir' )  # local run and log directory
+        time.sleep(1)
+
+        os.chdir( ld )
+
+        jid = runjob.run_job( cmd1+' -h arg',
+                              machine=sshmach, sshexe=sshprog,
+                              chdir=rd, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        os.environ['COMMAND_DRYRUN'] = 'junk/cmd3.py/cmd2'
+        jid = runjob.run_job( cmd2+' -h arg',
+                              machine=sshmach, sshexe=sshprog,
+                              chdir=rd, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+        jid = runjob.run_job( cmd3+' -h arg',
+                              machine=sshmach, sshexe=sshprog,
+                              chdir=rd, poll_interval=2 )
+        jb = runjob.wait_job( jid, poll_interval=2 )
+
+        time.sleep(1)
+        assert os.path.exists( rd+'/file1.txt' )
+        assert not os.path.exists( rd+'/file2.txt' )
+        assert os.path.exists( rd+'/file3.txt' )
+
+    def test_using_waitforjobid(self):
+        ""
         jid1 = runjob.run_job( 'echo hello ; sleep 8', poll_interval=2 )
         jid2 = runjob.run_job( 'sleep 1', waitforjobid=jid1, poll_interval=2 )
+        time.sleep(3)
+        assert not runjob.poll_job( jid1 )
+        assert not runjob.poll_job( jid2 )
+        j2 = runjob.wait_job( jid2, poll_interval=2 )
+        assert j2
+        assert runjob.poll_job( jid1 )
+        j1 = runjob.wait_job( jid1, poll_interval=2 )
+        assert j1
+
+        assert j1.get( 'name' ) == 'echo'
+        assert j2.get( 'name' ) == 'sleep'
+
+    def test_log_ordering_when_using_waitforjobid(self):
+        ""
+        util.writescript( 'scr', '#!/usr/bin/env python', """
+            import os, sys, time
+            sys.path.insert( 0, '"""+srcdir+"""' )
+            import runjob
+            jid1 = runjob.run_job( 'echo hello ; sleep 8', poll_interval=2 )
+            runjob.run_job( 'sleep 1', waitforjobid=jid1, poll_interval=2 )
+            jbL = runjob.wait_all( poll_interval=2 )
+            assert len(jbL) == 2
+            """ )
+        time.sleep(1)
+
+        out = util.runout( './scr', raise_on_failure=True )
+        print3( out )
+        #os.system( './scr' )
+
+        L = greplog( '(Submit|RunJob|JobDone)', out )
+        assert len(L) == 6
+        assert 'Submit:' in L[0]
+        assert 'echo hello' in L[0] and 'sleep 1' not in L[0]
+        assert 'RunJob:' in L[1]
+        assert 'echo hello' in L[1] and 'sleep 1' not in L[1]
+        assert 'Submit:' in L[2]
+        assert 'sleep 1' in L[2] and 'echo hello' not in L[2]
+        assert 'JobDone:' in L[3]
+        assert 'echo' in L[3] and 'sleep' not in L[3]
+        assert 'RunJob:' in L[4]
+        assert 'sleep 1' in L[4] and 'echo 8' not in L[4]
+        assert 'JobDone:' in L[5]
+        assert 'sleep' in L[5] and 'echo' not in L[5]
+
+    def test_log_ordering_when_using_waitforjobid_and_wait_job(self):
+        ""
+        util.writescript( 'scr', '#!/usr/bin/env python', """
+            import os, sys, time
+            sys.path.insert( 0, '"""+srcdir+"""' )
+            import runjob
+            jid1 = runjob.run_job( 'echo hello ; sleep 8', poll_interval=2 )
+            jid2 = runjob.run_job( 'sleep 1', waitforjobid=jid1, poll_interval=2 )
+            jb = runjob.wait_job( jid2, poll_interval=2 )
+            assert jb.get( 'name' ) == 'sleep'
+            """ )
+        time.sleep(1)
+
+        out = util.runout( './scr', raise_on_failure=True )
+        print3( out )
+        #os.system( './scr' )
+
+        L = greplog( '(Submit|RunJob|JobDone)', out )
+        assert len(L) == 6
+        assert 'Submit:' in L[0]
+        assert 'echo hello' in L[0] and 'sleep 1' not in L[0]
+        assert 'RunJob:' in L[1]
+        assert 'echo hello' in L[1] and 'sleep 1' not in L[1]
+        assert 'Submit:' in L[2]
+        assert 'sleep 1' in L[2] and 'echo hello' not in L[2]
+        assert 'JobDone:' in L[3]
+        assert 'echo' in L[3] and 'sleep' not in L[3]
+        assert 'RunJob:' in L[4]
+        assert 'sleep 1' in L[4] and 'echo 8' not in L[4]
+        assert 'JobDone:' in L[5]
+        assert 'sleep' in L[5] and 'echo' not in L[5]
+
+    def test_give_waitforjobid_an_invalid_job_id(self):
+        ""
+        invalidjid = (1,'a')
+        jid1 = runjob.run_job( 'echo "hello" ; sleep 1',
+                               waitforjobid=invalidjid, poll_interval=2 )
+        # second job waiting on the (failed) first should still run
+        jid2 = runjob.run_job( 'sleep 1',
+                               waitforjobid=jid1, poll_interval=2 )
+        jb1,jb2 = runjob.wait_all( jid1, jid2, poll_interval=2 )
+        assert not jb1
+        assert jb1.get('name') == 'echo' and jb1.get( 'exc' )
+        assert jb2 and jb2.get('name') == 'sleep'
+
+    def test_give_waitforjobid_an_job_id_that_already_completed(self):
+        ""
+        jid1 = runjob.run_job( 'echo hello', poll_interval=2 )
+        runjob.wait_job( jid1, poll_interval=2 )
+        jid2 = runjob.run_job( 'sleep 1',
+                               waitforjobid=jid1, poll_interval=2 )
         jb = runjob.wait_job( jid2, poll_interval=2 )
-        assert jb.get( 'name' ) == 'sleep'
-        """ )
-    time.sleep(1)
+        assert jb and jb.get('name') == 'sleep'
 
-    out = runout( './scr', raise_on_failure=True )
-    print3( out )
-    #os.system( './scr' )
+    def test_waitforjobid_with_nested_jobs(self):
+        ""
+        jid1 = runjob.run_job( 'sleep 5', poll_interval=2 )
+        jid2 = runjob.run_job( 'echo hello ; sleep 5',
+                               waitforjobid=jid1, poll_interval=2 )
+        jid3 = runjob.run_job( 'touch junk ; sleep 5',
+                               waitforjobid=jid2, poll_interval=2 )
+        jid4 = runjob.run_job( 'echo world ; sleep 5',
+                               waitforjobid=jid2, poll_interval=2 )
+        jb3 = runjob.wait_job( jid3, poll_interval=2 )
+        assert jb3 and jb3.get('name') == 'touch'
+        runjob.wait_all( poll_interval=2 )
+        jb = runjob.wait_job( jid1 )
+        assert jb and jb.get('name') == 'sleep'
+        jb = runjob.wait_job( jid2 )
+        assert jb and jb.get('name') == 'echo'
+        jb = runjob.wait_job( jid4 )
+        assert jb and jb.get('name') == 'echo'
 
-    L = greplog( '(Submit|RunJob|JobDone)', out )
-    assert len(L) == 6
-    assert 'Submit:' in L[0]
-    assert 'echo hello' in L[0] and 'sleep 1' not in L[0]
-    assert 'RunJob:' in L[1]
-    assert 'echo hello' in L[1] and 'sleep 1' not in L[1]
-    assert 'Submit:' in L[2]
-    assert 'sleep 1' in L[2] and 'echo hello' not in L[2]
-    assert 'JobDone:' in L[3]
-    assert 'echo' in L[3] and 'sleep' not in L[3]
-    assert 'RunJob:' in L[4]
-    assert 'sleep 1' in L[4] and 'echo 8' not in L[4]
-    assert 'JobDone:' in L[5]
-    assert 'sleep' in L[5] and 'echo' not in L[5]
+    def test_using_waitforjobid_value_of_None(self):
+        ""
+        jid1 = runjob.run_job( 'echo hello ; sleep 8', poll_interval=2 )
+        jid2 = runjob.run_job( 'sleep 1', waitforjobid=None, poll_interval=2 )
+        time.sleep(3)
+        assert not runjob.poll_job( jid1 )
+        assert runjob.poll_job( jid2 )  # job2 should not have waited
+        j1,j2 = runjob.wait_all( jid1, jid2, poll_interval=2 )
+        assert j2
+        assert j1
 
-
-def waitfor4():
-    """
-    waitforjobid with invalid job id
-    """
-    invalidjid = (1,'a')
-    jid1 = runjob.run_job( 'echo "hello" ; sleep 1',
-                           waitforjobid=invalidjid, poll_interval=2 )
-    # second job waiting on the (failed) first should still run
-    jid2 = runjob.run_job( 'sleep 1',
-                           waitforjobid=jid1, poll_interval=2 )
-    jb1,jb2 = runjob.wait_all( jid1, jid2, poll_interval=2 )
-    assert not jb1
-    assert jb1.get('name') == 'echo' and jb1.get( 'exc' )
-    assert jb2 and jb2.get('name') == 'sleep'
-
-
-def waitfor5():
-    """
-    waitforjobid where the wait job has already completed
-    """
-    jid1 = runjob.run_job( 'echo hello', poll_interval=2 )
-    runjob.wait_job( jid1, poll_interval=2 )
-    jid2 = runjob.run_job( 'sleep 1',
-                           waitforjobid=jid1, poll_interval=2 )
-    jb = runjob.wait_job( jid2, poll_interval=2 )
-    assert jb and jb.get('name') == 'sleep'
-
-
-def waitfor6():
-    """
-    waitforjobid, chain up more than one level deep
-    """
-    jid1 = runjob.run_job( 'sleep 5', poll_interval=2 )
-    jid2 = runjob.run_job( 'echo hello ; sleep 5',
-                           waitforjobid=jid1, poll_interval=2 )
-    jid3 = runjob.run_job( 'touch junk ; sleep 5',
-                           waitforjobid=jid2, poll_interval=2 )
-    jid4 = runjob.run_job( 'echo world ; sleep 5',
-                           waitforjobid=jid2, poll_interval=2 )
-    jb3 = runjob.wait_job( jid3, poll_interval=2 )
-    assert jb3 and jb3.get('name') == 'touch'
-    runjob.wait_all( poll_interval=2 )
-    jb = runjob.wait_job( jid1 )
-    assert jb and jb.get('name') == 'sleep'
-    jb = runjob.wait_job( jid2 )
-    assert jb and jb.get('name') == 'echo'
-    jb = runjob.wait_job( jid4 )
-    assert jb and jb.get('name') == 'echo'
-
-
-def waitfor7():
-    """
-    using waitforjobid=None
-    """
-    jid1 = runjob.run_job( 'echo hello ; sleep 8', poll_interval=2 )
-    jid2 = runjob.run_job( 'sleep 1', waitforjobid=None, poll_interval=2 )
-    time.sleep(3)
-    assert not runjob.poll_job( jid1 )
-    assert runjob.poll_job( jid2 )  # job2 should not have waited
-    j1,j2 = runjob.wait_all( jid1, jid2, poll_interval=2 )
-    assert j2
-    assert j1
-
-    assert j1.get( 'name' ) == 'echo'
-    assert j2.get( 'name' ) == 'sleep'
+        assert j1.get( 'name' ) == 'echo'
+        assert j2.get( 'name' ) == 'sleep'
 
 
 #######################################################################
@@ -1425,7 +1249,7 @@ def greplog( msg, logoutput ):
     pat = re.compile(
         r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? '+msg+': ' )
     L = []
-    for line in grep( logoutput, msg ):
+    for line in util.grep( logoutput, msg ):
         if pat.match( line ):
             L.append( line.rstrip() )
     return L
@@ -1435,14 +1259,14 @@ def get_ssh_pair( connect_failure=False, uptime=None ):
     """
     Returns a pair ( ssh program, ssh machine ).
     """
-    if use_real_ssh and connect_failure == False and uptime == None:
+    if util.use_this_ssh == 'ssh' and connect_failure == False and uptime == None:
         sshprog = which( 'ssh' )
         import socket
         sshmach = socket.gethostname()
     
     elif uptime != None:
         # make the fake ssh session to die after 'uptime' seconds
-        writescript( 'fakessh', "#!"+localpy+" -E", """
+        util.writescript( 'fakessh', "#!"+localpy+" -E", """
             import os, sys, getopt, time, subprocess, signal
             optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
             mach = argL.pop(0)  # remove the machine name
@@ -1467,7 +1291,7 @@ def get_ssh_pair( connect_failure=False, uptime=None ):
         sshmach = 'sparky'
 
     else:
-        writescript( 'fakessh', "#!"+localpy+" -E", """
+        util.writescript( 'fakessh', "#!"+localpy+" -E", """
             import os, sys, getopt, time
             optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
             mach = argL.pop(0)  # remove the machine name
@@ -1485,4 +1309,4 @@ def get_ssh_pair( connect_failure=False, uptime=None ):
 
 #######################################################################
 
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )

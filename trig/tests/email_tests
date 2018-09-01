@@ -9,86 +9,65 @@
 import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
-import getopt
+import os
+import time
+import unittest
 
-# this will os.chdir() to a subdirectory
-from testutils import *
+import testutils as util
+from testutils import print3
 
 # this is the module we are testing
 import mailmessage as MM
 
 
-def main():
-    """
-    """
-    optL,argL = getopt.getopt( sys.argv[1:], '' )
-    cwd = os.getcwd()
+class utility_functions( unittest.TestCase ):
 
-    if len(argL) == 0:
-        argL = """test_get_user_name 
-                  test_make_sender_address
-                  test_make_list
-                  test_make_message
-                  test_send_basic_text_message
-                  test_setting_the_sender_address
-                  test_using_html_subtype
-               """.split()
+    def setUp(self):
+        util.setup_test()
 
-    for func in argL:
-        os.chdir( cwd )
-        rmallfiles()
-        time.sleep(1)
-        print3( '====> ', func )
-        eval( func+'()' )
+    def test_get_user_name(self):
+        ""
+        usr = MM.get_current_user_name()
+        assert usr and usr != 'unknown'
 
+        usr = MM.get_current_user_name( try_getpass=False )
+        assert usr and usr != 'unknown'
 
-#######################################################################
+        usr = MM.get_current_user_name( try_getpass=False, try_homedir=False )
+        assert usr and usr == 'unknown'
 
-def test_get_user_name():
-    ""
-    usr = MM.get_current_user_name()
-    assert usr and usr != 'unknown'
+    def test_create_sender_address(self):
+        ""
+        assert MM.create_sender_address( 'foo@bar' ) == 'foo@bar'
 
-    usr = MM.get_current_user_name( try_getpass=False )
-    assert usr and usr != 'unknown'
+        addr = MM.create_sender_address( None )
+        assert addr and len( addr.split('@') ) == 2
 
-    usr = MM.get_current_user_name( try_getpass=False, try_homedir=False )
-    assert usr and usr == 'unknown'
+    def test_make_list(self):
+        ""
+        assert MM._make_list( 'foobar' ) == [ 'foobar' ]
 
+        assert MM._make_list( [ 'foo', 'bar' ] ) == [ 'foo', 'bar' ]
 
-def test_make_sender_address():
-    ""
-    assert MM._make_sender_address( 'foo@bar' ) == 'foo@bar'
+    def test_make_message(self):
+        ""
+        msg = MM._make_message( 'line1\nline2\n', 'plain' )
+        assert 'line2' in msg.as_string()
+        assert msg.get_content_subtype() == 'plain'
 
-    addr = MM._make_sender_address( None )
-    assert addr and len( addr.split('@') ) == 2
-
-
-def test_make_list():
-    ""
-    assert MM._make_list( 'foobar' ) == [ 'foobar' ]
-
-    assert MM._make_list( [ 'foo', 'bar' ] ) == [ 'foo', 'bar' ]
-
-
-def test_make_message():
-    ""
-    msg = MM._make_message( 'line1\nline2\n', 'plain' )
-    assert 'line2' in msg.as_string()
-    assert msg.get_content_subtype() == 'plain'
-
-    msg = MM._make_message( 'line1\nline2\n', 'html' )
-    assert 'line2' in msg.as_string()
-    assert msg.get_content_subtype() == 'html'
+        msg = MM._make_message( 'line1\nline2\n', 'html' )
+        assert 'line2' in msg.as_string()
+        assert msg.get_content_subtype() == 'html'
 
 
 class MockSMTP:
 
     cache = {}
 
-    def __init__(self, host):
+    def __init__(self, host, **kwargs):
         ""
         MockSMTP.cache[ 'host' ] = host
+        MockSMTP.cache[ 'timeout' ] = kwargs.get( 'timeout', None )
 
     def sendmail(self, sendaddr, recvaddrs, msg_as_string):
         ""
@@ -101,83 +80,104 @@ class MockSMTP:
         MockSMTP.cache[ 'close' ] = True
 
 
-def test_send_basic_text_message():
-    ""
-    MockSMTP.cache.clear()
+class integration_tests( unittest.TestCase ):
 
-    msg = MM.Message( 'foo@bar', 'my subject' )
-    msg.setContent( 'my content' )
-    msg.send( smtpclass=MockSMTP )
+    def setUp(self):
+        util.setup_test()
 
-    assert MockSMTP.cache['host'] == 'localhost'
+    def test_send_basic_text_message(self):
+        ""
+        MockSMTP.cache.clear()
 
-    assert len( MockSMTP.cache['sendaddr'].split('@') ) == 2
+        msg = MM.Message( 'foo@bar', 'my subject' )
+        msg.setContent( 'my content' )
+        msg.send( smtpclass=MockSMTP )
 
-    rcv = MockSMTP.cache['recvaddrs']
-    assert len(rcv) == 1 and rcv[0] == 'foo@bar'
+        assert MockSMTP.cache['host'] == 'localhost'
 
-    assert 'my content' in MockSMTP.cache['msg_as_string']
+        assert len( MockSMTP.cache['sendaddr'].split('@') ) == 2
 
-    assert MockSMTP.cache['close'] == True
+        rcv = MockSMTP.cache['recvaddrs']
+        assert len(rcv) == 1 and rcv[0] == 'foo@bar'
 
+        assert 'my content' in MockSMTP.cache['msg_as_string']
 
-def test_send_with_more_than_one_receiver():
-    ""
-    MockSMTP.cache.clear()
+        assert MockSMTP.cache['close'] == True
 
-    msg = MM.Message( 'foo@bar another@one ', 'my subject' )
-    msg.setContent( 'my content' )
-    msg.send( smtpclass=MockSMTP )
+    def test_send_with_more_than_one_receiver(self):
+        ""
+        MockSMTP.cache.clear()
 
-    assert len( MockSMTP.cache['sendaddr'].split('@') ) == 2
+        msg = MM.Message( 'foo@bar another@one ', 'my subject' )
+        msg.setContent( 'my content' )
+        msg.send( smtpclass=MockSMTP )
 
-    rcv = MockSMTP.cache['recvaddrs']
-    assert len(rcv) == 2 and rcv[0] == 'foo@bar' and rcv[1] == 'another@one'
+        assert len( MockSMTP.cache['sendaddr'].split('@') ) == 2
 
-    assert MockSMTP.cache['close'] == True
+        rcv = MockSMTP.cache['recvaddrs']
+        assert len(rcv) == 2 and rcv[0] == 'foo@bar' and rcv[1] == 'another@one'
 
+        assert MockSMTP.cache['close'] == True
 
-def test_send_with_python_list_of_receivers():
-    ""
-    MockSMTP.cache.clear()
+    def test_send_with_python_list_of_receivers(self):
+        ""
+        MockSMTP.cache.clear()
 
-    msg = MM.Message( ['foo@bar','another@one'], 'my subject' )
-    msg.setContent( 'my content' )
-    msg.send( smtpclass=MockSMTP )
+        msg = MM.Message( ['foo@bar','another@one'], 'my subject' )
+        msg.setContent( 'my content' )
+        msg.send( smtpclass=MockSMTP )
 
-    assert len( MockSMTP.cache['sendaddr'].split('@') ) == 2
+        assert len( MockSMTP.cache['sendaddr'].split('@') ) == 2
 
-    rcv = MockSMTP.cache['recvaddrs']
-    assert len(rcv) == 2 and rcv[0] == 'foo@bar' and rcv[1] == 'another@one'
+        rcv = MockSMTP.cache['recvaddrs']
+        assert len(rcv) == 2 and rcv[0] == 'foo@bar' and rcv[1] == 'another@one'
 
-    assert MockSMTP.cache['close'] == True
+        assert MockSMTP.cache['close'] == True
 
+    def test_setting_the_sender_address(self):
+        ""
+        MockSMTP.cache.clear()
 
-def test_setting_the_sender_address():
-    ""
-    MockSMTP.cache.clear()
+        msg = MM.Message( 'foo@bar', 'my subject' )
+        msg.set( sendaddr='me@mymachine' )
+        msg.send( smtpclass=MockSMTP )
 
-    msg = MM.Message( 'foo@bar', 'my subject' )
-    msg.set( sendaddr='me@mymachine' )
-    msg.send( smtpclass=MockSMTP )
+        assert MockSMTP.cache['sendaddr'] == 'me@mymachine'
 
-    assert MockSMTP.cache['sendaddr'] == 'me@mymachine'
+    def test_using_html_subtype(self):
+        ""
+        MockSMTP.cache.clear()
 
+        msg = MM.Message( 'foo@bar', 'my subject' )
+        msg.setContent( '<h1>My Heading</h1>', subtype='html' )
+        msg.send( smtpclass=MockSMTP )
 
-def test_using_html_subtype():
-    ""
-    MockSMTP.cache.clear()
+        sm = MockSMTP.cache['msg_as_string']
+        assert '<html>' in sm and '<body>' in sm
+        assert '</html>' in sm and '</body>' in sm
+        assert '<h1>My Heading</h1>' in sm
 
-    msg = MM.Message( 'foo@bar', 'my subject' )
-    msg.setContent( '<h1>My Heading</h1>', subtype='html' )
-    msg.send( smtpclass=MockSMTP )
+    def test_send_a_message_with_timeout_on_smtp_server(self):
+        ""
+        MockSMTP.cache.clear()
 
-    sm = MockSMTP.cache['msg_as_string']
-    assert '<html>' in sm and '<body>' in sm
-    assert '</html>' in sm and '</body>' in sm
-    assert '<h1>My Heading</h1>' in sm
+        msg = MM.Message( 'foo@bar', 'my subject' )
+        msg.setContent( 'my content' )
+        msg.send( timeout=10, smtpclass=MockSMTP )
+
+        assert MockSMTP.cache['host'] == 'localhost'
+        assert MockSMTP.cache['timeout'] == 10
+
+        assert len( MockSMTP.cache['sendaddr'].split('@') ) == 2
+
+        rcv = MockSMTP.cache['recvaddrs']
+        assert len(rcv) == 1 and rcv[0] == 'foo@bar'
+
+        assert 'my content' in MockSMTP.cache['msg_as_string']
+
+        assert MockSMTP.cache['close'] == True
 
 
 #######################################################################
 
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )

@@ -10,14 +10,18 @@
 import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
+import os
 import struct
 import getopt
 import filecmp
 import stat
+import shutil
 import subprocess as sp
+import time
+import unittest
 
-# this will os.chdir() to a subdirectory
-from testutils import *
+import testutils as util
+from testutils import print3
 
 # this is the module we are testing
 import filesync
@@ -26,1115 +30,998 @@ import filesync
 # By default, a "fake" ssh script is used that acts like ssh.  To use
 # an actual ssh, add the -s option to the unit test command line.  In this
 # case, make sure you can ssh to the current machine without a password.
-use_real_ssh = False
 
 
 # default the local and remote python to the current running python
 localpy = sys.executable
 
-
-def main():
-    """
-    """
-    optL,argL = getopt.getopt( sys.argv[1:], 's' )
-    cwd = os.getcwd()
-
-    for n,v in optL:
-        if n == '-s':
-            global use_real_ssh
-            use_real_ssh = True
-
-    if len(argL) == 0:
-        argL = """sha1 flist1 flist2
-                  dsync1 dsync2 dsync3
-                  byage1 byage2 byage3
-                  perms1 perms2 perms3 perms4
-                  over1 over2 over3 over4 over5 over6
-                  err1 err2 err3
-                  cmdline1 cmdline2 cmdline3 cmdline4 cmdline5 cmdline6
-                    cmdline7 cmdline8
-               """.split()
-
-    for func in argL:
-        os.chdir( cwd )
-        rmallfiles()
-        time.sleep(1)
-        print3( '====> ', func )
-        eval( func+'()' )
+fsynccmd = localpy+' '+os.path.dirname(util.testsrcdir)+'/filesync.py'
 
 
 #######################################################################
 
-def sha1():
-    """
-    compute the SHA-1 of a file
-    """
-    writefile( 'file.txt', """
-        my file
-        """ )
-    fn = os.path.abspath( 'file.txt' )
-    time.sleep(1)
+class catchall( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_compute_SHA1_of_a_file(self):
+        ""
+        util.writefile( 'file.txt', """
+            my file
+            """ )
+        fn = os.path.abspath( 'file.txt' )
+        time.sleep(1)
+
+        sha = filesync.filesha1( fn )
+        # can use unix sha1sum to check
+        assert sha == '9879be62c33724955d11b8d47868e51a0714c26a'
+
+    def test_list_files(self):
+        ""
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        util.writefile( 'subdir/file.csv', "my,csv\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        time.sleep(1)
+
+        fL = filesync.list_files( sdir )
+        fL.sort()
+        assert fL == ['file.csv','file.txt','file2.txt']
+
+        fL = filesync.list_files( sdir, 'file*.txt' )
+        fL.sort()
+        assert fL == ['file.txt','file2.txt']
+
+        fL = filesync.list_files( sdir, ['file2.*','*.csv'] )
+        fL.sort()
+        assert fL == ['file.csv','file2.txt']
+
+        fL = filesync.list_files( sdir, age=300 )
+        fL.sort()
+        assert fL == ['file.csv','file.txt']
+
+    def test_long_list_files(self):
+        ""
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        util.writefile( 'subdir/file.csv', "my,csv\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        time.sleep(1)
+
+        fL = filesync.long_list_files( sdir )
+        fL.sort()
+
+        assert [ T[0] for T in fL ] == ['file.csv','file.txt','file2.txt']
+        assert [ T[2] for T in fL ] == [8, 9, 10]
+        assert [ T[3] for T in fL ] == [
+            'd6f89c5d41e8f4ae2182252064e2de253a166917',
+            '8de2ce31c5fea0a20d780de1205f30f173f289be',
+            'e81fbe916c57c4f21b708dc77044a8518e1a21e3' ]
+        assert fL[2][1] + 9*60 < fL[0][1] and fL[2][1] + 11*60 > fL[0][1]
+        assert abs( fL[0][1] - fL[1][1] ) < 30
+
+    def test_sync_two_local_directories(self):
+        ""
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        time.sleep(1)
 
-    sha = filesync.filesha1( fn )
-    # can use unix sha1sum to check
-    assert sha == '9879be62c33724955d11b8d47868e51a0714c26a'
-
-
-def flist1():
-    """
-    list_files test
-    """
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    writefile( 'subdir/file.csv', "my,csv\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    fL = filesync.list_files( sdir )
-    fL.sort()
-    assert fL == ['file.csv','file.txt','file2.txt']
-
-    fL = filesync.list_files( sdir, 'file*.txt' )
-    fL.sort()
-    assert fL == ['file.txt','file2.txt']
-
-    fL = filesync.list_files( sdir, ['file2.*','*.csv'] )
-    fL.sort()
-    assert fL == ['file.csv','file2.txt']
-
-    fL = filesync.list_files( sdir, age=300 )
-    fL.sort()
-    assert fL == ['file.csv','file.txt']
-
-
-def flist2():
-    """
-    long_list_files test
-    """
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    writefile( 'subdir/file.csv', "my,csv\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    fL = filesync.long_list_files( sdir )
-    fL.sort()
-
-    assert [ T[0] for T in fL ] == ['file.csv','file.txt','file2.txt']
-    assert [ T[2] for T in fL ] == [8, 9, 10]
-    assert [ T[3] for T in fL ] == [
-        'd6f89c5d41e8f4ae2182252064e2de253a166917',
-        '8de2ce31c5fea0a20d780de1205f30f173f289be',
-        'e81fbe916c57c4f21b708dc77044a8518e1a21e3' ]
-    assert fL[2][1] + 9*60 < fL[0][1] and fL[2][1] + 11*60 > fL[0][1]
-    assert abs( fL[0][1] - fL[1][1] ) < 30
-
-
-def dsync1():
-    """
-    sync two local directories
-    """
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    fL = filesync.sync_directories( sdir, tgt )
-    fL.sort()
-    assert fL == ['file.txt','file2.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
-
-
-def dsync2():
-    """
-    sync remote to local directory
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    fL = filesync.sync_directories( sdir, sshmach+':'+tgt, sshexe=sshprog )
-    fL.sort()
-    assert fL == ['file.txt','file2.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
-
-
-def dsync3():
-    """
-    sync local to remote directory
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    fL = filesync.sync_directories( sshmach+':'+sdir, tgt, sshexe=sshprog )
-    fL.sort()
-    assert fL == ['file.txt','file2.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
-
-
-def byage1():
-    """
-    two local directories, exclude by age
-    """
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    fL = filesync.sync_directories( sdir, tgt, age=5*60 )
-    fL.sort()
-    assert fL == ['file.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert not os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-
-
-def byage2():
-    """
-    remote to local directory, exclude by age
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    fL = filesync.sync_directories( sdir, sshmach+':'+tgt,
-                                    age=5*60, sshexe=sshprog )
-    fL.sort()
-    assert fL == ['file.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert not os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-
-
-def byage3():
-    """
-    local to remote directory, exclude by age
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    fL = filesync.sync_directories( sshmach+':'+sdir, tgt,
-                                    age=5*60, sshexe=sshprog )
-    fL.sort()
-    assert fL == ['file.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert not os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-
-
-def perms1():
-    """
-    local to local, with permissions
-    """
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    assert sp.call( 'chmod 0644 subdir/file.txt', shell=True ) == 0
-    assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
-    time.sleep(1)
-
-    assert     has_fmode( 'subdir/file.txt', stat.S_IRGRP )
-    assert not has_fmode( 'subdir/file.txt', stat.S_IWGRP )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IRGRP )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IWGRP )
-    assert     has_fmode( 'subdir/file.txt', stat.S_IROTH )
-    assert not has_fmode( 'subdir/file.txt', stat.S_IWOTH )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IROTH )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IWOTH )
-
-    fL = filesync.sync_directories( sdir, tgt, permissions='g+w' )
-    fL.sort()
-    assert fL == ['file.txt','file2.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IRGRP )
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IWGRP )
-    assert not has_fmode( 'targetdir/file2.txt', stat.S_IRGRP )
-    assert     has_fmode( 'targetdir/file2.txt', stat.S_IWGRP )
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IROTH )
-    assert not has_fmode( 'targetdir/file.txt', stat.S_IWOTH )
-    assert not has_fmode( 'targetdir/file2.txt', stat.S_IROTH )
-    assert not has_fmode( 'targetdir/file2.txt', stat.S_IWOTH )
-
-
-def perms2():
-    """
-    local to local, with multiple permissions
-    """
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    assert sp.call( 'chmod 0644 subdir/file.txt', shell=True ) == 0
-    assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
-    time.sleep(1)
-
-    assert     has_fmode( 'subdir/file.txt', stat.S_IRGRP )
-    assert not has_fmode( 'subdir/file.txt', stat.S_IWGRP )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IRGRP )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IWGRP )
-    assert     has_fmode( 'subdir/file.txt', stat.S_IROTH )
-    assert not has_fmode( 'subdir/file.txt', stat.S_IWOTH )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IROTH )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IWOTH )
-
-    fL = filesync.sync_directories( sdir, tgt, permissions=['g+w','o+r'] )
-    fL.sort()
-    assert fL == ['file.txt','file2.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IRGRP )
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IWGRP )
-    assert not has_fmode( 'targetdir/file2.txt', stat.S_IRGRP )
-    assert     has_fmode( 'targetdir/file2.txt', stat.S_IWGRP )
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IROTH )
-    assert not has_fmode( 'targetdir/file.txt', stat.S_IWOTH )
-    assert     has_fmode( 'targetdir/file2.txt', stat.S_IROTH )
-    assert not has_fmode( 'targetdir/file2.txt', stat.S_IWOTH )
-
-
-def perms3():
-    """
-    local to remote, with multiple permissions
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    assert sp.call( 'chmod 0644 subdir/file.txt', shell=True ) == 0
-    assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
-    time.sleep(1)
-
-    assert     has_fmode( 'subdir/file.txt', stat.S_IRGRP )
-    assert not has_fmode( 'subdir/file.txt', stat.S_IWGRP )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IRGRP )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IWGRP )
-    assert     has_fmode( 'subdir/file.txt', stat.S_IROTH )
-    assert not has_fmode( 'subdir/file.txt', stat.S_IWOTH )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IROTH )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IWOTH )
-
-    fL = filesync.sync_directories( sdir, sshmach+':'+tgt,
-                                    permissions=['g+w','o+r'],
-                                    sshexe=sshprog )
-    fL.sort()
-    assert fL == ['file.txt','file2.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IRGRP )
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IWGRP )
-    assert not has_fmode( 'targetdir/file2.txt', stat.S_IRGRP )
-    assert     has_fmode( 'targetdir/file2.txt', stat.S_IWGRP )
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IROTH )
-    assert not has_fmode( 'targetdir/file.txt', stat.S_IWOTH )
-    assert     has_fmode( 'targetdir/file2.txt', stat.S_IROTH )
-    assert not has_fmode( 'targetdir/file2.txt', stat.S_IWOTH )
-
-
-def perms4():
-    """
-    remote to local, with multiple permissions
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    assert sp.call( 'chmod 0644 subdir/file.txt', shell=True ) == 0
-    assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
-    time.sleep(1)
-
-    assert     has_fmode( 'subdir/file.txt', stat.S_IRGRP )
-    assert not has_fmode( 'subdir/file.txt', stat.S_IWGRP )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IRGRP )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IWGRP )
-    assert     has_fmode( 'subdir/file.txt', stat.S_IROTH )
-    assert not has_fmode( 'subdir/file.txt', stat.S_IWOTH )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IROTH )
-    assert not has_fmode( 'subdir/file2.txt', stat.S_IWOTH )
-
-    fL = filesync.sync_directories( sshmach+':'+sdir, tgt,
-                                    permissions=['g+w','o+r'],
-                                    sshexe=sshprog )
-    fL.sort()
-    assert fL == ['file.txt','file2.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IRGRP )
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IWGRP )
-    assert not has_fmode( 'targetdir/file2.txt', stat.S_IRGRP )
-    assert     has_fmode( 'targetdir/file2.txt', stat.S_IWGRP )
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IROTH )
-    assert not has_fmode( 'targetdir/file.txt', stat.S_IWOTH )
-    assert     has_fmode( 'targetdir/file2.txt', stat.S_IROTH )
-    assert not has_fmode( 'targetdir/file2.txt', stat.S_IWOTH )
-
-
-def glob1():
-    """
-    remote to local directory, include by glob
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    fL = filesync.sync_directories( sdir, sshmach+':'+tgt,
-                                    '*2.*', sshexe=sshprog )
-    fL.sort()
-    assert fL == ['file2.txt']
-    time.sleep(1)
-
-    assert not os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
-
-
-def glob2():
-    """
-    local to remote directory, include by glob
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    fL = filesync.sync_directories( sshmach+':'+sdir, tgt,
-                                    '*2.*', sshexe=sshprog )
-    fL.sort()
-    assert fL == ['file2.txt']
-    time.sleep(1)
-
-    assert not os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
-
-
-def over1():
-    """
-    two local directories, overwrite file not equal
-    """
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-
-    shutil.copy2( 'subdir/file.txt', 'targetdir/file.txt' )
-    writefile( 'targetdir/file2.txt', "my file2\n" )  # same contents, new date
-    time.sleep(1)
-
-    fL = filesync.sync_directories( sdir, tgt )
-    fL.sort()
-    assert fL == ['file2.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
-
-
-def over2():
-    """
-    remote to local, overwrite file not equal
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-
-    shutil.copy2( 'subdir/file.txt', 'targetdir/file.txt' )
-    writefile( 'targetdir/file2.txt', "my file2\n" )  # same contents, new date
-    time.sleep(1)
-
-    fL = filesync.sync_directories( sdir, sshmach+':'+tgt, sshexe=sshprog )
-    fL.sort()
-    assert fL == ['file2.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
-
-def over3():
-    """
-    local to remote, overwrite file not equal
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-
-    shutil.copy2( 'subdir/file.txt', 'targetdir/file.txt' )
-    writefile( 'targetdir/file2.txt', "my file2\n" )  # same contents, new date
-    time.sleep(1)
-
-    fL = filesync.sync_directories( sshmach+':'+sdir, tgt, sshexe=sshprog )
-    fL.sort()
-    assert fL == ['file2.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
-
-
-def over4():
-    """
-    two local directories, overwrite sha1 not equal
-    """
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-
-    shutil.copy2( 'subdir/file.txt', 'targetdir/file.txt' )
-    # same time on file but different contents
-    writefile( 'targetdir/file2.txt', "my_file2\n" )
-    t = os.path.getmtime( 'subdir/file2.txt' )
-    os.utime( 'targetdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
-    assert os.path.getsize('subdir/file2.txt') == \
-                os.path.getsize('targetdir/file2.txt')
-
-
-    fL = filesync.sync_directories( sdir, tgt )
-    fL.sort()
-    assert fL == ['file2.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
-
-
-def over5():
-    """
-    remote to local, overwrite sha1 not equal
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-
-    shutil.copy2( 'subdir/file.txt', 'targetdir/file.txt' )
-    # same time on file but different contents
-    writefile( 'targetdir/file2.txt', "my_file2\n" )
-    t = os.path.getmtime( 'subdir/file2.txt' )
-    os.utime( 'targetdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
-    assert os.path.getsize('subdir/file2.txt') == \
-                os.path.getsize('targetdir/file2.txt')
-
-    fL = filesync.sync_directories( sdir, sshmach+':'+tgt, sshexe=sshprog )
-    fL.sort()
-    assert fL == ['file2.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
-
-
-def over6():
-    """
-    local to remote, overwrite sha1 not equal
-    """
-    sshprog,sshmach = get_ssh_pair()
-
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-
-    shutil.copy2( 'subdir/file.txt', 'targetdir/file.txt' )
-    # same time on file but different contents
-    writefile( 'targetdir/file2.txt', "my_file2\n" )
-    t = os.path.getmtime( 'subdir/file2.txt' )
-    os.utime( 'targetdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
-    assert os.path.getsize('subdir/file2.txt') == \
-                os.path.getsize('targetdir/file2.txt')
-
-    fL = filesync.sync_directories( sshmach+':'+sdir, tgt, sshexe=sshprog )
-    fL.sort()
-    assert fL == ['file2.txt']
-    time.sleep(1)
-
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
-
-
-def err1():
-    """
-    two local directories, target dir no exist
-    """
-    tgt = os.path.abspath( 'targetdir' )
-
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    try:
         fL = filesync.sync_directories( sdir, tgt )
-    except:
-        print3( 'exc =', sys.exc_info()[1] )
-    else:
-        raise Exception( 'expected an exception' )
-    time.sleep(1)
+        fL.sort()
+        assert fL == ['file.txt','file2.txt']
+        time.sleep(1)
 
-    assert not os.path.exists( 'targetdir' )
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
 
+    def test_sync_remote_to_local_directory(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
 
-def err2():
-    """
-    remote to local, target dir no exist
-    """
-    sshprog,sshmach = get_ssh_pair()
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
 
-    tgt = os.path.abspath( 'targetdir' )
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        time.sleep(1)
 
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    try:
         fL = filesync.sync_directories( sdir, sshmach+':'+tgt, sshexe=sshprog )
-    except:
-        print3( 'exc =', sys.exc_info()[1] )
-    else:
-        raise Exception( 'expected an exception' )
-    time.sleep(1)
+        fL.sort()
+        assert fL == ['file.txt','file2.txt']
+        time.sleep(1)
 
-    assert not os.path.exists( 'targetdir' )
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
 
+    def test_sync_local_to_remote_directory(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
 
-def err3():
-    """
-    local to remote, target dir no exist
-    """
-    sshprog,sshmach = get_ssh_pair()
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
 
-    tgt = os.path.abspath( 'targetdir' )
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        time.sleep(1)
 
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    time.sleep(1)
-
-    try:
         fL = filesync.sync_directories( sshmach+':'+sdir, tgt, sshexe=sshprog )
-    except:
-        print3( 'exc =', sys.exc_info()[1] )
-    else:
-        raise Exception( 'expected an exception' )
-    time.sleep(1)
+        fL.sort()
+        assert fL == ['file.txt','file2.txt']
+        time.sleep(1)
 
-    assert not os.path.exists( 'targetdir' )
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
+
+    def test_sync_two_local_directories_but_exclude_by_age(self):
+        ""
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        time.sleep(1)
+
+        fL = filesync.sync_directories( sdir, tgt, age=5*60 )
+        fL.sort()
+        assert fL == ['file.txt']
+        time.sleep(1)
+
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert not os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+
+    def test_sync_remote_to_local_directories_but_exclude_by_age(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        time.sleep(1)
+
+        fL = filesync.sync_directories( sdir, sshmach+':'+tgt,
+                                        age=5*60, sshexe=sshprog )
+        fL.sort()
+        assert fL == ['file.txt']
+        time.sleep(1)
+
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert not os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+
+    def test_sync_local_to_remote_directories_but_exclude_by_age(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        time.sleep(1)
+
+        fL = filesync.sync_directories( sshmach+':'+sdir, tgt,
+                                        age=5*60, sshexe=sshprog )
+        fL.sort()
+        assert fL == ['file.txt']
+        time.sleep(1)
+
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert not os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+
+    def test_sync_local_to_local_and_set_permissions(self):
+        ""
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        assert sp.call( 'chmod 0644 subdir/file.txt', shell=True ) == 0
+        assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
+        time.sleep(1)
+
+        assert     has_fmode( 'subdir/file.txt', stat.S_IRGRP )
+        assert not has_fmode( 'subdir/file.txt', stat.S_IWGRP )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IRGRP )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IWGRP )
+        assert     has_fmode( 'subdir/file.txt', stat.S_IROTH )
+        assert not has_fmode( 'subdir/file.txt', stat.S_IWOTH )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IROTH )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IWOTH )
+
+        fL = filesync.sync_directories( sdir, tgt, permissions='g+w' )
+        fL.sort()
+        assert fL == ['file.txt','file2.txt']
+        time.sleep(1)
+
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IRGRP )
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IWGRP )
+        assert not has_fmode( 'targetdir/file2.txt', stat.S_IRGRP )
+        assert     has_fmode( 'targetdir/file2.txt', stat.S_IWGRP )
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IROTH )
+        assert not has_fmode( 'targetdir/file.txt', stat.S_IWOTH )
+        assert not has_fmode( 'targetdir/file2.txt', stat.S_IROTH )
+        assert not has_fmode( 'targetdir/file2.txt', stat.S_IWOTH )
+
+    def test_sync_local_to_local_and_set_multiple_permissions(self):
+        ""
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        assert sp.call( 'chmod 0644 subdir/file.txt', shell=True ) == 0
+        assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
+        time.sleep(1)
+
+        assert     has_fmode( 'subdir/file.txt', stat.S_IRGRP )
+        assert not has_fmode( 'subdir/file.txt', stat.S_IWGRP )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IRGRP )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IWGRP )
+        assert     has_fmode( 'subdir/file.txt', stat.S_IROTH )
+        assert not has_fmode( 'subdir/file.txt', stat.S_IWOTH )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IROTH )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IWOTH )
+
+        fL = filesync.sync_directories( sdir, tgt, permissions=['g+w','o+r'] )
+        fL.sort()
+        assert fL == ['file.txt','file2.txt']
+        time.sleep(1)
+
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IRGRP )
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IWGRP )
+        assert not has_fmode( 'targetdir/file2.txt', stat.S_IRGRP )
+        assert     has_fmode( 'targetdir/file2.txt', stat.S_IWGRP )
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IROTH )
+        assert not has_fmode( 'targetdir/file.txt', stat.S_IWOTH )
+        assert     has_fmode( 'targetdir/file2.txt', stat.S_IROTH )
+        assert not has_fmode( 'targetdir/file2.txt', stat.S_IWOTH )
+
+    def test_sync_local_to_remote_and_set_multiple_permissions(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        assert sp.call( 'chmod 0644 subdir/file.txt', shell=True ) == 0
+        assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
+        time.sleep(1)
+
+        assert     has_fmode( 'subdir/file.txt', stat.S_IRGRP )
+        assert not has_fmode( 'subdir/file.txt', stat.S_IWGRP )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IRGRP )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IWGRP )
+        assert     has_fmode( 'subdir/file.txt', stat.S_IROTH )
+        assert not has_fmode( 'subdir/file.txt', stat.S_IWOTH )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IROTH )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IWOTH )
+
+        fL = filesync.sync_directories( sdir, sshmach+':'+tgt,
+                                        permissions=['g+w','o+r'],
+                                        sshexe=sshprog )
+        fL.sort()
+        assert fL == ['file.txt','file2.txt']
+        time.sleep(1)
+
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IRGRP )
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IWGRP )
+        assert not has_fmode( 'targetdir/file2.txt', stat.S_IRGRP )
+        assert     has_fmode( 'targetdir/file2.txt', stat.S_IWGRP )
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IROTH )
+        assert not has_fmode( 'targetdir/file.txt', stat.S_IWOTH )
+        assert     has_fmode( 'targetdir/file2.txt', stat.S_IROTH )
+        assert not has_fmode( 'targetdir/file2.txt', stat.S_IWOTH )
+
+    def test_sync_remote_to_local_and_set_multiple_permissions(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        assert sp.call( 'chmod 0644 subdir/file.txt', shell=True ) == 0
+        assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
+        time.sleep(1)
+
+        assert     has_fmode( 'subdir/file.txt', stat.S_IRGRP )
+        assert not has_fmode( 'subdir/file.txt', stat.S_IWGRP )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IRGRP )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IWGRP )
+        assert     has_fmode( 'subdir/file.txt', stat.S_IROTH )
+        assert not has_fmode( 'subdir/file.txt', stat.S_IWOTH )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IROTH )
+        assert not has_fmode( 'subdir/file2.txt', stat.S_IWOTH )
+
+        fL = filesync.sync_directories( sshmach+':'+sdir, tgt,
+                                        permissions=['g+w','o+r'],
+                                        sshexe=sshprog )
+        fL.sort()
+        assert fL == ['file.txt','file2.txt']
+        time.sleep(1)
+
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IRGRP )
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IWGRP )
+        assert not has_fmode( 'targetdir/file2.txt', stat.S_IRGRP )
+        assert     has_fmode( 'targetdir/file2.txt', stat.S_IWGRP )
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IROTH )
+        assert not has_fmode( 'targetdir/file.txt', stat.S_IWOTH )
+        assert     has_fmode( 'targetdir/file2.txt', stat.S_IROTH )
+        assert not has_fmode( 'targetdir/file2.txt', stat.S_IWOTH )
+
+    def test_sync_remote_to_local_using_globbing(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        time.sleep(1)
+
+        fL = filesync.sync_directories( sdir, sshmach+':'+tgt,
+                                        '*2.*', sshexe=sshprog )
+        fL.sort()
+        assert fL == ['file2.txt']
+        time.sleep(1)
+
+        assert not os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
+
+    def test_sync_local_to_remote_using_globbing(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        time.sleep(1)
+
+        fL = filesync.sync_directories( sshmach+':'+sdir, tgt,
+                                        '*2.*', sshexe=sshprog )
+        fL.sort()
+        assert fL == ['file2.txt']
+        time.sleep(1)
+
+        assert not os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
+
+    def test_sync_two_local_directories_with_file_overwrite_when_not_the_same(self):
+        ""
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+
+        shutil.copy2( 'subdir/file.txt', 'targetdir/file.txt' )
+        util.writefile( 'targetdir/file2.txt', "my file2\n" )  # same contents, new date
+        time.sleep(1)
+
+        fL = filesync.sync_directories( sdir, tgt )
+        fL.sort()
+        assert fL == ['file2.txt']
+        time.sleep(1)
+
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
+
+    def test_sync_remote_to_local_with_file_overwrite_when_not_the_same(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+
+        shutil.copy2( 'subdir/file.txt', 'targetdir/file.txt' )
+        util.writefile( 'targetdir/file2.txt', "my file2\n" )  # same contents, new date
+        time.sleep(1)
+
+        fL = filesync.sync_directories( sdir, sshmach+':'+tgt, sshexe=sshprog )
+        fL.sort()
+        assert fL == ['file2.txt']
+        time.sleep(1)
+
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
+
+    def test_sync_local_to_remote_with_file_overwrite_when_not_the_same(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+
+        shutil.copy2( 'subdir/file.txt', 'targetdir/file.txt' )
+        util.writefile( 'targetdir/file2.txt', "my file2\n" )  # same contents, new date
+        time.sleep(1)
+
+        fL = filesync.sync_directories( sshmach+':'+sdir, tgt, sshexe=sshprog )
+        fL.sort()
+        assert fL == ['file2.txt']
+        time.sleep(1)
+
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
+
+    def test_sync_local_to_local_with_file_overwrite_when_sha1_not_the_same(self):
+        ""
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+
+        shutil.copy2( 'subdir/file.txt', 'targetdir/file.txt' )
+        # same time on file but different contents
+        util.writefile( 'targetdir/file2.txt', "my_file2\n" )
+        t = os.path.getmtime( 'subdir/file2.txt' )
+        os.utime( 'targetdir/file2.txt', (t,t) )
+        time.sleep(1)
+
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
+        assert os.path.getsize('subdir/file2.txt') == \
+                    os.path.getsize('targetdir/file2.txt')
 
 
-def cmdline1():
-    """
-    sync two local directories using command line
-    """
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
+        fL = filesync.sync_directories( sdir, tgt )
+        fL.sort()
+        assert fL == ['file2.txt']
+        time.sleep(1)
 
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
 
-    sshprog,sshmach = get_ssh_pair()
+    def test_sync_remote_to_local_with_file_overwrite_when_sha1_not_the_same(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
 
-    out = runout( localpy+' '+srcdir+'/filesync.py ' + sdir + ' ' + tgt )
-    #print3( out )
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
 
-    time.sleep(1)
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
 
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
+        shutil.copy2( 'subdir/file.txt', 'targetdir/file.txt' )
+        # same time on file but different contents
+        util.writefile( 'targetdir/file2.txt', "my_file2\n" )
+        t = os.path.getmtime( 'subdir/file2.txt' )
+        os.utime( 'targetdir/file2.txt', (t,t) )
+        time.sleep(1)
 
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
+        assert os.path.getsize('subdir/file2.txt') == \
+                    os.path.getsize('targetdir/file2.txt')
 
-def cmdline2():
-    """
-    sync remote to local directory using command line
-    """
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
+        fL = filesync.sync_directories( sdir, sshmach+':'+tgt, sshexe=sshprog )
+        fL.sort()
+        assert fL == ['file2.txt']
+        time.sleep(1)
 
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
 
-    sshprog,sshmach = get_ssh_pair()
+    def test_sync_local_to_remote_with_file_overwrite_when_sha1_not_the_same(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
 
-    out = runout( localpy+' '+srcdir+'/filesync.py --sshexe '+sshprog + \
-                  ' ' + sdir + ' ' + sshmach+':'+tgt )
-    #print3( out )
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
 
-    time.sleep(1)
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
 
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
+        shutil.copy2( 'subdir/file.txt', 'targetdir/file.txt' )
+        # same time on file but different contents
+        util.writefile( 'targetdir/file2.txt', "my_file2\n" )
+        t = os.path.getmtime( 'subdir/file2.txt' )
+        os.utime( 'targetdir/file2.txt', (t,t) )
+        time.sleep(1)
 
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
+        assert os.path.getsize('subdir/file2.txt') == \
+                    os.path.getsize('targetdir/file2.txt')
 
-def cmdline3():
-    """
-    sync local to remote directory using command line
-    """
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
+        fL = filesync.sync_directories( sshmach+':'+sdir, tgt, sshexe=sshprog )
+        fL.sort()
+        assert fL == ['file2.txt']
+        time.sleep(1)
 
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
 
-    sshprog,sshmach = get_ssh_pair()
+    def test_target_dir_not_exist_error(self):
+        ""
+        tgt = os.path.abspath( 'targetdir' )
 
-    out = runout( localpy+' '+srcdir+'/filesync.py --sshexe '+sshprog + \
-                  ' ' + sshmach+':'+sdir + ' ' + tgt )
-    #print3( out )
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        time.sleep(1)
 
-    time.sleep(1)
+        try:
+            fL = filesync.sync_directories( sdir, tgt )
+        except:
+            print3( 'exc =', sys.exc_info()[1] )
+        else:
+            raise Exception( 'expected an exception' )
+        time.sleep(1)
 
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
+        assert not os.path.exists( 'targetdir' )
 
+    def test_remote_to_local_target_dir_not_exist_error(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
 
-def cmdline4():
-    """
-    cmd line sync with age
-    """
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
 
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        time.sleep(1)
 
-    sshprog,sshmach = get_ssh_pair()
+        try:
+            fL = filesync.sync_directories( sdir, sshmach+':'+tgt, sshexe=sshprog )
+        except:
+            print3( 'exc =', sys.exc_info()[1] )
+        else:
+            raise Exception( 'expected an exception' )
+        time.sleep(1)
 
-    out = runout( localpy+' '+srcdir+'/filesync.py --sshexe '+sshprog + \
-                  ' --age 300' + \
-                  ' ' + sshmach+':'+sdir + ' ' + tgt )
-    #print3( out )
+        assert not os.path.exists( 'targetdir' )
 
-    time.sleep(1)
+    def test_local_to_remote_target_dir_not_exist_error(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
 
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert not os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
+        tgt = os.path.abspath( 'targetdir' )
 
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        time.sleep(1)
 
-def cmdline5():
-    """
-    cmd line sync with glob
-    """
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
+        try:
+            fL = filesync.sync_directories( sshmach+':'+sdir, tgt, sshexe=sshprog )
+        except:
+            print3( 'exc =', sys.exc_info()[1] )
+        else:
+            raise Exception( 'expected an exception' )
+        time.sleep(1)
 
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file.csv', "my,csv\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
+        assert not os.path.exists( 'targetdir' )
 
-    sshprog,sshmach = get_ssh_pair()
+    def test_local_to_local_using_command_line(self):
+        ""
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
 
-    out = runout( localpy+' '+srcdir+'/filesync.py --sshexe '+sshprog + \
-                  ' -g "*.csv" -g "*2.*"' + \
-                  ' ' + sshmach+':'+sdir + ' ' + tgt )
-    #print3( out )
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
 
-    time.sleep(1)
+        sshprog,sshmach = get_ssh_pair()
 
-    assert not os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file.csv' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.csv', 'targetdir/file.csv', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.csv') -
-                os.path.getmtime('targetdir/file.csv') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
+        out = util.runout( fsynccmd+' ' + sdir + ' ' + tgt )
+        #print3( out )
 
+        time.sleep(1)
 
-def cmdline6():
-    """
-    cmd line sync, add timeout (only exercises the handling)
-    """
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
 
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file.csv', "my,csv\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
+    def test_remote_to_local_using_command_line(self):
+        ""
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
 
-    sshprog,sshmach = get_ssh_pair()
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
 
-    out = runout( localpy+' '+srcdir+'/filesync.py --sshexe '+sshprog + \
-                  ' -T 60' + \
-                  ' ' + sshmach+':'+sdir + ' ' + tgt )
-    #print3( out )
+        sshprog,sshmach = get_ssh_pair()
 
-    time.sleep(1)
+        out = util.runout( fsynccmd+' --sshexe '+sshprog + \
+                      ' ' + sdir + ' ' + sshmach+':'+tgt )
+        #print3( out )
 
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file.csv' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file.csv', 'targetdir/file.csv', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file.csv') -
-                os.path.getmtime('targetdir/file.csv') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
+        time.sleep(1)
 
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
 
-def cmdline7():
-    """
-    local to remote, using command line, with perms
-    """
-    sshprog,sshmach = get_ssh_pair()
+    def test_local_to_remote_using_command_line(self):
+        ""
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
 
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
 
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    assert sp.call( 'chmod 0644 subdir/file.txt', shell=True ) == 0
-    assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
-    time.sleep(1)
+        sshprog,sshmach = get_ssh_pair()
 
-    out = runout( localpy+' '+srcdir+'/filesync.py --sshexe '+sshprog + \
-                  ' --perms g+w --perms o+r' + \
-                  ' ' + sshmach+':'+sdir + ' ' + tgt )
-    #print3( out )
-    time.sleep(1)
+        out = util.runout( fsynccmd+' --sshexe '+sshprog + \
+                      ' ' + sshmach+':'+sdir + ' ' + tgt )
+        #print3( out )
 
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
+        time.sleep(1)
 
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IRGRP )
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IWGRP )
-    assert not has_fmode( 'targetdir/file2.txt', stat.S_IRGRP )
-    assert     has_fmode( 'targetdir/file2.txt', stat.S_IWGRP )
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IROTH )
-    assert not has_fmode( 'targetdir/file.txt', stat.S_IWOTH )
-    assert     has_fmode( 'targetdir/file2.txt', stat.S_IROTH )
-    assert not has_fmode( 'targetdir/file2.txt', stat.S_IWOTH )
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
 
+    def test_sync_by_age_using_command_line(self):
+        ""
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
 
-def cmdline8():
-    """
-    local to remote, using command line, with whitespace separated perms
-    """
-    sshprog,sshmach = get_ssh_pair()
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
 
-    os.mkdir( 'targetdir' )
-    tgt = os.path.abspath( 'targetdir' )
+        sshprog,sshmach = get_ssh_pair()
 
-    writefile( 'subdir/file.txt', "my file\n" )
-    writefile( 'subdir/file2.txt', "my file2\n" )
-    sdir = os.path.abspath( 'subdir' )
-    t = time.time() - 600  # make modification & access time 10 minutes ago
-    os.utime( 'subdir/file2.txt', (t,t) )
-    assert sp.call( 'chmod 0644 subdir/file.txt', shell=True ) == 0
-    assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
-    time.sleep(1)
+        out = util.runout( fsynccmd+' --sshexe '+sshprog + \
+                      ' --age 300' + \
+                      ' ' + sshmach+':'+sdir + ' ' + tgt )
+        #print3( out )
 
-    out = runout( localpy+' '+srcdir+'/filesync.py --sshexe '+sshprog + \
-                  ' --perms "g+w o+r"' + \
-                  ' ' + sshmach+':'+sdir + ' ' + tgt )
-    #print3( out )
-    time.sleep(1)
+        time.sleep(1)
 
-    assert os.path.isfile( 'targetdir/file.txt' )
-    assert os.path.isfile( 'targetdir/file2.txt' )
-    assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
-    assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
-    assert abs( os.path.getmtime('subdir/file.txt') -
-                os.path.getmtime('targetdir/file.txt') ) < 2
-    assert abs( os.path.getmtime('subdir/file2.txt') -
-                os.path.getmtime('targetdir/file2.txt') ) < 2
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert not os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
 
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IRGRP )
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IWGRP )
-    assert not has_fmode( 'targetdir/file2.txt', stat.S_IRGRP )
-    assert     has_fmode( 'targetdir/file2.txt', stat.S_IWGRP )
-    assert     has_fmode( 'targetdir/file.txt', stat.S_IROTH )
-    assert not has_fmode( 'targetdir/file.txt', stat.S_IWOTH )
-    assert     has_fmode( 'targetdir/file2.txt', stat.S_IROTH )
-    assert not has_fmode( 'targetdir/file2.txt', stat.S_IWOTH )
+    def test_sync_using_command_line_with_globbing(self):
+        ""
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file.csv', "my,csv\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+
+        sshprog,sshmach = get_ssh_pair()
+
+        out = util.runout( fsynccmd+' --sshexe '+sshprog + \
+                      ' -g "*.csv" -g "*2.*"' + \
+                      ' ' + sshmach+':'+sdir + ' ' + tgt )
+        #print3( out )
+
+        time.sleep(1)
+
+        assert not os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file.csv' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.csv', 'targetdir/file.csv', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.csv') -
+                    os.path.getmtime('targetdir/file.csv') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
+
+    def test_sync_using_command_line_with_timeout(self):
+        ""
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file.csv', "my,csv\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+
+        sshprog,sshmach = get_ssh_pair()
+
+        out = util.runout( fsynccmd+' --sshexe '+sshprog + \
+                      ' -T 60' + \
+                      ' ' + sshmach+':'+sdir + ' ' + tgt )
+        #print3( out )
+
+        time.sleep(1)
+
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file.csv' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file.csv', 'targetdir/file.csv', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file.csv') -
+                    os.path.getmtime('targetdir/file.csv') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
+
+    def test_local_to_remote_using_command_line_with_permissions(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        assert sp.call( 'chmod 0644 subdir/file.txt', shell=True ) == 0
+        assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
+        time.sleep(1)
+
+        out = util.runout( fsynccmd+' --sshexe '+sshprog + \
+                      ' --perms g+w --perms o+r' + \
+                      ' ' + sshmach+':'+sdir + ' ' + tgt )
+        #print3( out )
+        time.sleep(1)
+
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
+
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IRGRP )
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IWGRP )
+        assert not has_fmode( 'targetdir/file2.txt', stat.S_IRGRP )
+        assert     has_fmode( 'targetdir/file2.txt', stat.S_IWGRP )
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IROTH )
+        assert not has_fmode( 'targetdir/file.txt', stat.S_IWOTH )
+        assert     has_fmode( 'targetdir/file2.txt', stat.S_IROTH )
+        assert not has_fmode( 'targetdir/file2.txt', stat.S_IWOTH )
+
+    def test_local_to_remote_using_command_line_with_whitespace_separated_permissions(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        os.mkdir( 'targetdir' )
+        tgt = os.path.abspath( 'targetdir' )
+
+        util.writefile( 'subdir/file.txt', "my file\n" )
+        util.writefile( 'subdir/file2.txt', "my file2\n" )
+        sdir = os.path.abspath( 'subdir' )
+        t = time.time() - 600  # make modification & access time 10 minutes ago
+        os.utime( 'subdir/file2.txt', (t,t) )
+        assert sp.call( 'chmod 0644 subdir/file.txt', shell=True ) == 0
+        assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
+        time.sleep(1)
+
+        out = util.runout( fsynccmd+' --sshexe '+sshprog + \
+                      ' --perms "g+w o+r"' + \
+                      ' ' + sshmach+':'+sdir + ' ' + tgt )
+        #print3( out )
+        time.sleep(1)
+
+        assert os.path.isfile( 'targetdir/file.txt' )
+        assert os.path.isfile( 'targetdir/file2.txt' )
+        assert filecmp.cmp( 'subdir/file.txt', 'targetdir/file.txt', shallow=False )
+        assert filecmp.cmp( 'subdir/file2.txt', 'targetdir/file2.txt', shallow=False )
+        assert abs( os.path.getmtime('subdir/file.txt') -
+                    os.path.getmtime('targetdir/file.txt') ) < 2
+        assert abs( os.path.getmtime('subdir/file2.txt') -
+                    os.path.getmtime('targetdir/file2.txt') ) < 2
+
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IRGRP )
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IWGRP )
+        assert not has_fmode( 'targetdir/file2.txt', stat.S_IRGRP )
+        assert     has_fmode( 'targetdir/file2.txt', stat.S_IWGRP )
+        assert     has_fmode( 'targetdir/file.txt', stat.S_IROTH )
+        assert not has_fmode( 'targetdir/file.txt', stat.S_IWOTH )
+        assert     has_fmode( 'targetdir/file2.txt', stat.S_IROTH )
+        assert not has_fmode( 'targetdir/file2.txt', stat.S_IWOTH )
 
 
 #######################################################################
@@ -1143,17 +1030,17 @@ def get_ssh_pair( fake_ssh_pause=None ):
     """
     Returns a pair ( ssh program, ssh machine ).
     """
-    if use_real_ssh and fake_ssh_pause == None:
-        sshprog = filesync.rpy.which( 'ssh' )
+    if util.use_this_ssh == 'ssh' and fake_ssh_pause == None:
+        sshprog = filecopy.rpy.which( 'ssh' )
         import socket
         sshmach = socket.gethostname()
-    
+
     else:
         st = str(1)
         if fake_ssh_pause != None:
             st = str(fake_ssh_pause)
-        writescript( 'fakessh', "#!"+localpy+" -E", """
-            import os, sys, getopt, time
+        util.writescript( 'fakessh', "#!"+localpy+" -E", """
+            import os, sys, getopt, time, pipes
             optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
             argL.pop(0)  # remove the machine name
             time.sleep( """+st+""" )
@@ -1185,4 +1072,4 @@ def has_fmode( path, fmode ):
 
 #######################################################################
 
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )

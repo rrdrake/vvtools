@@ -11,11 +11,10 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
-import getopt
+import unittest
 
-
-# this will os.chdir() to a subdirectory
-from testutils import *
+import testutils as util
+from testutils import print3
 
 # the module being tested
 import kerberos
@@ -26,66 +25,48 @@ mydir = os.path.dirname( os.path.abspath( sys.argv[0] ) )
 kerbfile = os.path.join( os.path.dirname(mydir), 'kerberos.py' )
 
 
-def main():
-    ""
-    optL,argL = getopt.getopt( sys.argv[1:], '' )
+######################################################################
 
-    if len(argL) == 0:
-        argL = """set_ticket init_ticket destroy_ticket renew_ticket
-                  man_page
-               """.split()
+class catchall( unittest.TestCase ):
 
-    savedir = os.getcwd()
-    for func in argL:
-        os.chdir( savedir )
-        rmallfiles()
-
+    def setUp(self):
+        ""
+        util.setup_test()
         os.environ[ 'COMMAND_DRYRUN' ] = ''
 
-        time.sleep(1)
-        print3( '====> ', func )
-        eval( func+'()' )
+    def test_set_ticket(self):
+        """
+        the set_ticket function sets the KRB5CCNAME environ variable
+        """
+        if 'KRB5CCNAME' in os.environ:
+            os.environ.pop( 'KRB5CCNAME' )
+
+        kerberos.set_ticket()
+
+        assert 'KRB5CCNAME' in os.environ
+
+    def test_init_ticket(self):
+        ""
+        kerberos.init_ticket( echo='none' )
+        kerberos.init_ticket()
+
+    def test_destroy_ticket(self):
+        ""
+        kerberos.destroy_ticket( echo='none' )
+        kerberos.destroy_ticket()
+
+    def test_renew_ticket(self):
+        ""
+        kerberos.renew_ticket( echo='none' )
+        kerberos.renew_ticket()
+
+    def test_man_page(self):
+        ""
+        os.environ.pop( 'COMMAND_DRYRUN' )
+        Command( '$kerbfile -h' ).run( raise_on_error=True )
+        Command( '$kerbfile --help' ).run( raise_on_error=True )
 
 
 ######################################################################
 
-def set_ticket():
-    """
-    the set_ticket function sets the KRB5CCNAME environ variable
-    """
-    if 'KRB5CCNAME' in os.environ:
-        os.environ.pop( 'KRB5CCNAME' )
-
-    kerberos.set_ticket()
-
-    assert 'KRB5CCNAME' in os.environ
-
-
-def init_ticket():
-    ""
-    kerberos.init_ticket( echo='none' )
-    kerberos.init_ticket()
-
-
-def destroy_ticket():
-    ""
-    kerberos.destroy_ticket( echo='none' )
-    kerberos.destroy_ticket()
-
-
-def renew_ticket():
-    ""
-    kerberos.renew_ticket( echo='none' )
-    kerberos.renew_ticket()
-
-
-def man_page():
-    ""
-    os.environ.pop( 'COMMAND_DRYRUN' )
-    Command( '$kerbfile -h' ).run( raise_on_error=True )
-    Command( '$kerbfile --help' ).run( raise_on_error=True )
-
-
-######################################################################
-
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )
