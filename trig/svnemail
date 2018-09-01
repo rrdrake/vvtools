@@ -22,12 +22,42 @@ def timeout_handler( signum, frame ):
 
 
 SEND_MAIL_TIMEOUT = 30
-DEFAULT_SMTPHOSTS = ['mailgate.sandia.gov','mailgate2.sandia.gov']
+DEFAULT_SMTPHOSTS = ['smtp.sandia.gov','localhost']
 EMAIL_DOMAIN = 'sandia.gov'
 POLL_SLEEP = 60
 
 
 help_page = """
+USAGE:
+    svnemail [OPTIONS]
+
+SYNOPSIS:
+    The svnemail program monitors a subversion repository for commits and
+sends email to a list of recipients for each commit made.  A plugin mechanism
+can be used to filter in or out commits to be sent.
+
+OPTIONS:
+    -h,--help : this help page
+    --repo <svn repo url> : specify the subversion repository to monitor
+    --svnexe <svn path> : specify the path to the svn executable to use
+    -n : noop mode; print information about what emails would be sent but
+                    do not actually send them
+
+PLUGIN:
+    If a file called svnemail_plugin.py exists in the import path, then it
+is imported and probed for these functions:
+
+    should_email_be_sent( commit ) : return true if an email should be sent
+                                     for the given commit; 'commit' is a
+                                     Commit object defined in this file
+
+    make_subject( commit ) : return the subject line for the commit email
+
+    get_recipient_addrs( commit ) : return a list of email addresses to send
+                                    the commit email to
+
+    get_smtp_hosts() : return a list of hostnames to use in sending email,
+                       defaults to """ + ', '.join( DEFAULT_SMTPHOSTS ) + """
 """
 
 

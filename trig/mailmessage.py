@@ -12,6 +12,9 @@ except Exception:
   from io import StringIO
 
 
+DEFAULT_SMTP_HOSTS = ['localhost']
+
+
 class Message:
 
     def __init__(self, recvaddrs=None, subject=None, sendaddr=None):
@@ -35,7 +38,7 @@ class Message:
         self.content = content
         self.subtype = subtype
 
-    def send(self, smtphosts=['localhost'], smtpclass=smtplib.SMTP):
+    def send(self, smtphosts=None, timeout=None, smtpclass=smtplib.SMTP ):
         """
         Note: Using "localhost" for 'smtphosts' can work, but if the receiver
               email is unknown, then the mail can appear to succeed but just
@@ -50,11 +53,15 @@ class Message:
             msg['To']      = ', '.join( self.recvaddrs )
             msg['Subject'] = self.subject
 
-            self._send_mail_message( smtphosts, smtpclass, msg.as_string() )
+            body = msg.as_string()
+            self._send_mail_message( smtphosts, smtpclass, body, timeout )
 
-    def _send_mail_message(self, smtphosts, smtpclass, msg_as_string):
+    def _send_mail_message(self, smtphosts, smtpclass, msg_as_string, timeout):
         ""
         sender = create_sender_address( self.sendaddr )
+
+        if not smtphosts:
+            smtphosts = DEFAULT_SMTP_HOSTS
 
         err = ''
 
@@ -62,8 +69,14 @@ class Message:
 
             tbfile = StringIO()
             try:
-                sm = smtpclass( host )
+                if timeout:
+                    sm = smtpclass( host, timeout=timeout )
+                else:
+                    sm = smtpclass( host )
+
+                #sm.set_debuglevel( 1 )
                 sm.sendmail( sender, self.recvaddrs, msg_as_string )
+
                 sm.close()
 
             except Exception:
