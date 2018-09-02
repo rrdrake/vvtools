@@ -9,6 +9,18 @@ import stat
 import itertools
 
 
+class DummyPermissionSetter:
+
+    def __init__(self):
+        pass
+
+    def set(self, path):
+        pass
+
+    def recurse(self, path):
+        pass
+
+
 class PermissionSetter:
     
     def __init__(self, topdir, spec):
@@ -207,3 +219,5 @@ class PermissionSetter:
                         fm |= stat.S_IWOTH
             
             os.chmod( path, fm )
+
+

@@ -535,7 +535,7 @@ def relative_execute_directory( tst, testdir, cwd ):
 ##############################################################################
 #
 # generation of tests
- 
+
 def generateTestList( dirs, plat, rtconfig ):
     """
     """
@@ -559,9 +559,7 @@ def generateTestList( dirs, plat, rtconfig ):
     testdirname = testResultsDir( optdict, plat.getName() )
     test_dir = os.path.join( cwd, testdirname )
 
-    perms = None
-    if '--perms' in optdict:
-        perms = PermissionSetter( test_dir, optdict['--perms'] )
+    perms = make_PermissionSetter( test_dir, optdict )
     
     createTestDir( testdirname, perms )
     writeCommandInfo( test_dir, plat, perms )
@@ -572,8 +570,7 @@ def generateTestList( dirs, plat, rtconfig ):
     tlist.stringFileWrite( tf )
     tlist.writeFinished()
 
-    if perms != None:
-        perms.set( os.path.abspath( tf ) )
+    perms.set( os.path.abspath( tf ) )
     
     print3( "Test directory:", testdirname )
 
@@ -749,8 +746,7 @@ def createTestDir( testdirname, perms ):
                 os.remove( testdirname )  # remove broken softlink
             os.mkdir( testdirname )
 
-        if perms:
-            perms.set( os.path.abspath( testdirname ) )
+        perms.set( os.path.abspath( testdirname ) )
 
 
 def makeMirrorDirectory( Mval, testdirname, perms ):
@@ -815,8 +811,7 @@ def makeMirrorDirectory( Mval, testdirname, perms ):
             os.remove( mirdir )  # remove broken softlink
         os.mkdir( mirdir )
     
-    if perms:
-        perms.set( os.path.abspath( mirdir ) )
+    perms.set( os.path.abspath( mirdir ) )
 
     if os.path.islink( testdirname ):
         path = os.readlink( testdirname )
@@ -872,8 +867,7 @@ def writeCommandInfo( test_dir, plat, perms ):
         fp.write( 'CHECK=' + ' '.join( optdict['--check'] ) + '\n' )
       fp.close()
 
-    if perms != None:
-        perms.set( os.path.abspath(f) )
+    perms.set( os.path.abspath(f) )
 
 
 def readCommandInfo():
@@ -968,9 +962,7 @@ def runTests( dirs, plat, rtconfig ):
     # this variable allows vvtest tests to run vvtest (ie, allows recursion)
     os.environ['VVTEST_TEST_ROOT'] = os.path.normpath( os.path.abspath( test_dir ) )
 
-    perms = None
-    if '--perms' in optdict:
-      perms = PermissionSetter( test_dir, optdict['--perms'] )
+    perms = make_PermissionSetter( test_dir, optdict )
     
     createTestDir( testdirname, perms )
     
@@ -1024,8 +1016,7 @@ def runTests( dirs, plat, rtconfig ):
 
     try:
         
-        if perms != None:
-            perms.set( os.path.abspath( tfile ) )
+        perms.set( os.path.abspath( tfile ) )
         
         if len(tlist.active) > 0:
           
@@ -1178,8 +1169,7 @@ def printHTMLResults( sumstr, test_dir, perms,
     fp.write( "</body>\n</html>\n" )
     fp.close()
 
-    if perms != None:
-        perms.set( os.path.abspath( 'summary.htm' ) )
+    perms.set( os.path.abspath( 'summary.htm' ) )
 
 
 def writeHTMLTestList( fp, test_dir, tlist ):
@@ -1236,8 +1226,7 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
     
     # execute tests
 
-    if perms != None:
-        perms.set( os.path.abspath( tfile ) )
+    perms.set( os.path.abspath( tfile ) )
 
     cwd = os.getcwd()
 
@@ -1623,10 +1612,9 @@ class Batcher:
           incl = self.namer.getTestListName( i, relative=True )
           self.tlist.AddIncludeFile( incl )
         
-        if self.perms != None:
-            for i in qidL:
-                d = self.namer.getSubdir( i )
-                self.perms.recurse( d )
+        for i in qidL:
+            d = self.namer.getSubdir( i )
+            self.perms.recurse( d )
 
         return len( qsubids )
     
@@ -1815,16 +1803,13 @@ def restartTests( test_dir, plat, rtconfig ):
         print3( 'Note: there were', cntmax, 'tests that exceeded the',
                 'maximum number of processors - they will not be run' )
 
-    perms = None
-    if '--perms' in optdict:
-        perms = PermissionSetter( test_dir, optdict['--perms'] )
+    perms = make_PermissionSetter( test_dir, optdict )
 
     tlist.stringFileWrite( tfile )
 
     try:
         
-        if perms != None:
-            perms.set( os.path.abspath( tfile ) )
+        perms.set( os.path.abspath( tfile ) )
         
         if len(tlist.active) > 0:
           
@@ -1887,10 +1872,8 @@ def baselineTests( test_dir, plat, rtconfig ):
       
       print3( "Baselining these tests:" )
       printResults( tlist, test_dir, None, short=False )
-      
-      perms = None
-      if '--perms' in optdict:
-          perms = PermissionSetter( test_dir, optdict['--perms'] )
+
+      perms = make_PermissionSetter( test_dir, optdict )
       
       tlist.createTestExecs( test_dir, plat, config, perms )
       
@@ -2505,6 +2488,16 @@ def insert_configdir_into_sys_path( toolsdir, config ):
         sys.path.insert( 1, d1 )
 
 
+def make_PermissionSetter( test_dir, optdict ):
+    ""
+    if '--perms' in optdict:
+        perms = PermissionSetter( test_dir, optdict['--perms'] )
+    else:
+        perms = DummyPermissionSetter()
+
+    return perms
+
+
 ##############################################################################
 
 
@@ -2523,8 +2516,9 @@ if __name__ == '__main__':
   import libvvtest.FilterExpressions as FilterExpressions
   from libvvtest.RuntimeConfig import RuntimeConfig
   import results
+  from libvvtest.PermissionSetter import DummyPermissionSetter
   from libvvtest.PermissionSetter import PermissionSetter
-  
+
   keyword_expr = FilterExpressions.WordExpression()
 
   check_for_bootstrap_file()

@@ -129,7 +129,7 @@ class TestSuiteAccumulator:
 
         try:
             suite = self.loader.loadTestsFromName( test_name, module=self.testmod )
-        except:
+        except Exception:
             return False
 
         if haserrors and len(self.loader.errors) > 0:
@@ -150,7 +150,7 @@ def get_TestCase_classes( test_module ):
         try:
             if issubclass( obj, unittest.TestCase ):
                 tcD[name] = obj
-        except:
+        except Exception:
             pass
 
     return tcD
@@ -248,7 +248,7 @@ def writescript( fname, content ):
     perm = stat.S_IMODE( os.stat(fname)[stat.ST_MODE] )
     perm = perm | stat.S_IXUSR
     try: os.chmod(fname, perm)
-    except: pass
+    except Exception: pass
 
 
 def run_cmd( cmd, directory=None ):
@@ -705,7 +705,7 @@ def testtimes(out):
             t = time.mktime( time.strptime( s, fmt ) )
             e = t + int( L[3][:-1] )
             timesL.append( [ L[-1], t, e ] )
-        except:
+        except Exception:
             pass
 
     return timesL

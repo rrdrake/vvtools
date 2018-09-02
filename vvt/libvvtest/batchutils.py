@@ -111,7 +111,7 @@ class BatchScheduler:
             if elapsed > 30 or os.path.exists( bjob.outfile ):
                 started = True
 
-        if self.perms != None and os.path.exists( bjob.outfile ):
+        if os.path.exists( bjob.outfile ):
             self.perms.set( bjob.outfile )
 
         return started

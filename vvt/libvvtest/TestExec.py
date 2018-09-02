@@ -31,7 +31,7 @@ class TestExec:
     def __init__(self, atest, perms, has_dependent):
         """
         Constructs a test execution object which references a TestSpec obj.
-        The 'perms' argument is a Permissions object, or None.
+        The 'perms' argument is a PermissionsSetter object.
         """
         self.atest = atest
         self.perms = perms
@@ -66,8 +66,7 @@ class TestExec:
         if not os.path.exists( self.xdir ):
           os.makedirs( self.xdir )
         
-        if self.perms != None:
-          self.perms.set( self.atest.getExecuteDirectory() )
+        self.perms.set( self.atest.getExecuteDirectory() )
         
         lang = self.atest.getForm( 'lang' )
         
@@ -93,8 +92,7 @@ class TestExec:
                                          config.get('onopts'),
                                          config.get('offopts'),
                                          script_file )
-            if self.perms != None:
-              self.perms.set( os.path.abspath( script_file ) )
+            self.perms.set( os.path.abspath( script_file ) )
         
         else:
           
@@ -108,8 +106,7 @@ class TestExec:
                                             lang, config, self.platform,
                                             test_dir,
                                             self.getDependencyDirectories() )
-                  if self.perms != None:
-                      self.perms.set( os.path.abspath( script_file ) )
+                  self.perms.set( os.path.abspath( script_file ) )
 
           # may also need to write a util fragment for a baseline script
           blinelang = self.atest.getBaseline( 'lang', lang )
@@ -120,8 +117,7 @@ class TestExec:
                                             blinelang, config, self.platform,
                                             test_dir,
                                             self.getDependencyDirectories() )
-                  if self.perms != None:
-                      self.perms.set( os.path.abspath( script_file ) )
+                  self.perms.set( os.path.abspath( script_file ) )
 
     def start(self, baseline=0):
         """
@@ -203,8 +199,7 @@ class TestExec:
                 os.dup2(ofile.fileno(), sys.stdout.fileno())
                 os.dup2(ofile.fileno(), sys.stderr.fileno())
                 
-                if self.perms != None:
-                  self.perms.set( os.path.abspath( logfname ) )
+                self.perms.set( os.path.abspath( logfname ) )
               
               sys.stdout.write( "Starting test: "+self.atest.getName()+'\n' )
               sys.stdout.write( "Directory    : "+os.getcwd()+'\n' )
@@ -223,8 +218,7 @@ class TestExec:
                 f = open("machinefile", "w")
                 f.write(self.plugin_obj.machinefile)
                 f.close()
-                if self.perms != None:
-                  self.perms.set( os.path.abspath( "machinefile" ) )
+                self.perms.set( os.path.abspath( "machinefile" ) )
               
               if not baseline:
                 # establish soft links and make copies of working files
@@ -326,8 +320,7 @@ class TestExec:
           if self.timedout > 0:
             self.atest.setAttr('result', "timeout")
 
-          if self.perms != None:
-            self.perms.recurse( self.xdir )
+          self.perms.recurse( self.xdir )
 
           if self.config.get('postclean') and \
              self.atest.getAttr('result') == 'pass' and \
