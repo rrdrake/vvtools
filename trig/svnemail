@@ -236,12 +236,13 @@ def send_message( msg, plugin ):
     ""
     signal.signal( signal.SIGALRM, timeout_handler )
 
+    timeout = int( SEND_MAIL_TIMEOUT * 0.9 )
     signal.alarm( SEND_MAIL_TIMEOUT )
     try:
         if plugin != None and hasattr( plugin, 'get_smtp_hosts' ):
-            msg.send( smtphosts=plugin.get_smtp_hosts() )
+            msg.send( smtphosts=plugin.get_smtp_hosts(), timeout=timeout )
         else:
-            msg.send( smtphosts=DEFAULT_SMTPHOSTS )
+            msg.send( smtphosts=DEFAULT_SMTPHOSTS, timeout=timeout )
 
     finally:
         signal.alarm(0)
