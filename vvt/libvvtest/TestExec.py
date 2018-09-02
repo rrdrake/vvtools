@@ -60,64 +60,20 @@ class TestExec:
         self.platform = platform
         self.config = config
         self.timeout = self.atest.getAttr( 'timeout', 0 )
-        
+
         self.xdir = os.path.join( test_dir, self.atest.getExecuteDirectory() )
-        
+
         if not os.path.exists( self.xdir ):
-          os.makedirs( self.xdir )
-        
+            os.makedirs( self.xdir )
+
         self.perms.set( self.atest.getExecuteDirectory() )
-        
+
         lang = self.atest.getForm( 'lang' )
-        
+
         if lang == 'xml':
-          
-          # no 'form' defaults to the XML test specification format
-
-          script_file = os.path.join( self.xdir, self.atest.getForm('file') )
-          
-          if config.get('refresh') or not os.path.exists( script_file ):
-            
-            troot = self.atest.getRootpath()
-            assert os.path.isabs( troot )
-            tdir = os.path.dirname( self.atest.getFilepath() )
-            srcdir = os.path.normpath( os.path.join( troot, tdir ) )
-            
-            # note that this writes a different sequence if the test is an
-            # analyze test
-            cshScriptWriter.writeScript( self.atest, commondb, self.platform,
-                                         config.get('toolsdir'),
-                                         config.get('exepath'),
-                                         srcdir,
-                                         config.get('onopts'),
-                                         config.get('offopts'),
-                                         script_file )
-            self.perms.set( os.path.abspath( script_file ) )
-        
+            self._write_xml_run_script( commondb )
         else:
-          
-          lang = self.atest.getForm( 'lang', None )
-
-          if lang:
-              #  write utility script fragment
-              script_file = os.path.join( self.xdir, 'vvtest_util.'+lang )
-              if config.get('refresh') or not os.path.exists( script_file ):
-                  ScriptWriter.writeScript( self.atest, script_file,
-                                            lang, config, self.platform,
-                                            test_dir,
-                                            self.getDependencyDirectories() )
-                  self.perms.set( os.path.abspath( script_file ) )
-
-          # may also need to write a util fragment for a baseline script
-          blinelang = self.atest.getBaseline( 'lang', lang )
-          if blinelang != lang:
-              script_file = os.path.join( self.xdir, 'vvtest_util.'+blinelang )
-              if config.get('refresh') or not os.path.exists( script_file ):
-                  ScriptWriter.writeScript( self.atest, script_file,
-                                            blinelang, config, self.platform,
-                                            test_dir,
-                                            self.getDependencyDirectories() )
-                  self.perms.set( os.path.abspath( script_file ) )
+            self._write_script_utils( test_dir )
 
     def start(self, baseline=0):
         """
@@ -168,118 +124,8 @@ class TestExec:
         self.pid = os.fork()
         
         if self.pid == 0:  # child
-          
-          try:
-            os.chdir(self.xdir)
-            
-            if self.timeout > 0:
-              # add a timeout environ variable so the test can take steps to
-              # shutdown a running application that is taking too long;  add
-              # a bump factor so it won't shutdown before the test harness
-              # recognizes it as a timeout
-              if self.timeout < 30: t = 60
-              if self.timeout < 120: t = self.timeout * 1.4
-              else: t = self.timeout * 1.2
-              os.environ['TIMEOUT'] = str( int( t ) )
-            
-            if hasattr( self.plugin_obj, 'run' ):
-              self.plugin_obj.run( self.plugin_obj, self.timeout,
-                                   self.xdir, logfname, cmd_list )
-              sys.stdout.flush() ; sys.stderr.flush()
-              os._exit(1)
-            
-            else:
-              
-              if logfname != None:
-                
-                # open the output files
-                ofile = open( logfname, "w+" )
-                
-                # reassign stdout & stderr to the log file
-                os.dup2(ofile.fileno(), sys.stdout.fileno())
-                os.dup2(ofile.fileno(), sys.stderr.fileno())
-                
-                self.perms.set( os.path.abspath( logfname ) )
-              
-              sys.stdout.write( "Starting test: "+self.atest.getName()+'\n' )
-              sys.stdout.write( "Directory    : "+os.getcwd()+'\n' )
-              if cmd_list != None:
-                sys.stdout.write( "Command      : "+' '.join( cmd_list )+'\n' )
-              sys.stdout.write( "Timeout      : "+str(self.timeout)+'\n' )
-              sys.stdout.write( '\n' )
-              sys.stdout.flush()
-              
-              if self.config.get('preclean') and \
-                 not self.config.get('analyze') and \
-                 not baseline:
-                self.preclean()
-              
-              if hasattr(self.plugin_obj, 'machinefile'):
-                f = open("machinefile", "w")
-                f.write(self.plugin_obj.machinefile)
-                f.close()
-                self.perms.set( os.path.abspath( "machinefile" ) )
-              
-              if not baseline:
-                # establish soft links and make copies of working files
-                if not self.setWorkingFiles():
-                  sys.stdout.flush() ; sys.stderr.flush()
-                  os._exit(1)
+            self._prepare_and_execute_test( lang, logfname, baseline, cmd_list )
 
-              if hasattr(self.plugin_obj, 'sshcmd'):
-                
-                # turn off X11 forwarding by unsetting the DISPLAY env variable
-                # (should eliminate X authorization errors)
-                if 'DISPLAY' in os.environ:
-                  del os.environ['DISPLAY']
-                
-                safecmd = ''
-                for arg in cmd_list:
-                  if len( arg.split() ) > 1:
-                    safecmd = safecmd + ' "' + arg + '"'
-                  else:
-                    safecmd = safecmd + ' ' + arg
-                sshcmd = self.plugin_obj.sshcmd
-                sshcmd.append('cd ' + os.getcwd() + ' &&' + safecmd)
-                cmd_list = sshcmd
-              
-              if lang == 'py':
-                # set up python pathing to make import of script utils easy
-                pth = os.getcwd()
-                if self.config.get('configdir'):
-                    # make sure the config dir comes before vvtest/config
-                    pth += ':'+self.config.get('configdir')
-                d = self.config.get('toolsdir')
-                pth += ':'+os.path.join( d, 'config' )
-                pth += ':'+d
-                val = os.environ.get( 'PYTHONPATH', '' )
-                if val: os.environ['PYTHONPATH'] = pth + ':' + val
-                else:   os.environ['PYTHONPATH'] = pth
-
-              sys.stdout.write( '\n' )
-              sys.stdout.flush()
-
-              if baseline:
-                  self.copyBaselineFiles()
-
-              if cmd_list == None:
-                # this can only happen in baseline mode
-                sys.stdout.flush() ; sys.stderr.flush()
-                os._exit(0)
-
-              # replace this process with the command
-              if os.path.isabs( cmd_list[0] ):
-                  os.execve( cmd_list[0], cmd_list, os.environ )
-              else:
-                  os.execvpe( cmd_list[0], cmd_list, os.environ )
-              raise Exception( "os.exec should not return" )
-
-          except:
-            sys.stdout.flush() ; sys.stderr.flush()
-            traceback.print_exc()
-            sys.stdout.flush() ; sys.stderr.flush()
-            os._exit(1)
-    
     def poll(self):
         """
         """
@@ -420,6 +266,64 @@ class TestExec:
 
         return L
 
+    def _prepare_and_execute_test(self, lang, logfname, baseline, cmd_list):
+        ""
+        try:
+            os.chdir(self.xdir)
+
+            set_timeout_environ_variable( self.timeout )
+
+            if hasattr( self.plugin_obj, 'run' ):
+                self._execute_plugin_run_function( logfname, cmd_list )
+
+            else:
+
+              if logfname != None:
+                  redirect_stdout_stderr_to_filename( logfname )
+                  self.perms.set( os.path.abspath( logfname ) )
+
+              echo_test_execution_info( self.atest.getName(),
+                                        cmd_list, self.timeout )
+
+              self._check_run_preclean( baseline )
+              self._check_write_mpi_machine_file()
+              self._check_set_working_files( baseline )
+
+              cmd_list = self._check_prepare_for_ssh_command( cmd_list )
+
+              self._check_set_environ_for_python_execution( lang )
+
+              sys.stdout.write( '\n' )
+              sys.stdout.flush()
+
+              if baseline:
+                  self.copyBaselineFiles()
+
+              if cmd_list == None:
+                  # this can only happen in baseline mode
+                  sys.stdout.flush() ; sys.stderr.flush()
+                  os._exit(0)
+
+              # replace this process with the command
+              if os.path.isabs( cmd_list[0] ):
+                  os.execve( cmd_list[0], cmd_list, os.environ )
+              else:
+                  os.execvpe( cmd_list[0], cmd_list, os.environ )
+              raise Exception( "os.exec should not return" )
+
+        except:
+            sys.stdout.flush() ; sys.stderr.flush()
+            traceback.print_exc()
+            sys.stdout.flush() ; sys.stderr.flush()
+            os._exit(1)
+
+    def _check_run_preclean(self, baseline):
+        ""
+        if self.config.get('preclean') and \
+           not self.config.get('analyze') and \
+           not baseline:
+            self.preclean()
+
     def preclean(self):
         """
         Should only be run just prior to launching the test script.  It
@@ -446,7 +350,29 @@ class TestExec:
             else:
               sys.stdout.write( "rm "+f+"\n" ) ; sys.stdout.flush()
               os.remove( f )
-    
+
+    def _check_write_mpi_machine_file(self):
+        ""
+        if hasattr( self.plugin_obj, 'machinefile' ):
+
+            fp = open( "machinefile", "w" )
+            try:
+                fp.write( self.plugin_obj.machinefile )
+            finally:
+                fp.close()
+
+            self.perms.set( os.path.abspath( "machinefile" ) )
+
+    def _check_set_working_files(self, baseline):
+        """
+        establish soft links and make copies of working files
+        """
+        if not baseline:
+            if not self.setWorkingFiles():
+                sys.stdout.flush()
+                sys.stderr.flush()
+                os._exit(1)
+
     def setWorkingFiles(self):
         """
         Called before the test script is executed, this sets the link and
@@ -579,6 +505,50 @@ class TestExec:
             sys.stdout.flush()
             shutil.copy2( fromfile, dst )
 
+    def _check_prepare_for_ssh_command(self, cmd_list):
+        """
+        returns a possibly modified cmd_list
+        """
+        if hasattr( self.plugin_obj, 'sshcmd' ):
+
+            # turn off X11 forwarding by unsetting the DISPLAY env variable
+            # (should eliminate X authorization errors)
+            if 'DISPLAY' in os.environ:
+                del os.environ['DISPLAY']
+
+            safecmd = ''
+            for arg in cmd_list:
+                if len( arg.split() ) > 1:
+                    safecmd = safecmd + ' "' + arg + '"'
+                else:
+                    safecmd = safecmd + ' ' + arg
+
+            sshcmd = self.plugin_obj.sshcmd
+            sshcmd.append('cd ' + os.getcwd() + ' &&' + safecmd)
+
+            cmd_list = sshcmd
+
+        return cmd_list
+
+    def _check_set_environ_for_python_execution(self, lang):
+        """
+        set up python pathing to make import of script utils easy
+        """
+        if lang == 'py':
+
+            pth = os.getcwd()
+            if self.config.get('configdir'):
+                # make sure the config dir comes before vvtest/config
+                pth += ':'+self.config.get('configdir')
+
+            d = self.config.get('toolsdir')
+            pth += ':'+os.path.join( d, 'config' )
+            pth += ':'+d
+
+            val = os.environ.get( 'PYTHONPATH', '' )
+            if val: os.environ['PYTHONPATH'] = pth + ':' + val
+            else:   os.environ['PYTHONPATH'] = pth
+
     def postclean(self):
         """
         Should only be run right after the test script finishes.  It removes
@@ -673,6 +643,70 @@ class TestExec:
         
         return None
 
+    def _write_xml_run_script(self, commondb):
+        ""
+        # no 'form' defaults to the XML test specification format
+
+        script_file = os.path.join( self.xdir, self.atest.getForm('file') )
+
+        if self.config.get('refresh') or not os.path.exists( script_file ):
+
+            troot = self.atest.getRootpath()
+            assert os.path.isabs( troot )
+            tdir = os.path.dirname( self.atest.getFilepath() )
+            srcdir = os.path.normpath( os.path.join( troot, tdir ) )
+
+            # note that this writes a different sequence if the test is an
+            # analyze test
+            cshScriptWriter.writeScript( self.atest, commondb, self.platform,
+                                         self.config.get('toolsdir'),
+                                         self.config.get('exepath'),
+                                         srcdir,
+                                         self.config.get('onopts'),
+                                         self.config.get('offopts'),
+                                         script_file )
+
+            self.perms.set( os.path.abspath( script_file ) )
+
+    def _write_script_utils(self, test_dir):
+        ""
+        lang = self.atest.getForm( 'lang' )
+
+        if lang:
+
+            #  write utility script fragment
+            script_file = os.path.join( self.xdir, 'vvtest_util.'+lang )
+
+            if self.config.get('refresh') or not os.path.exists( script_file ):
+                ScriptWriter.writeScript( self.atest, script_file,
+                                          lang, self.config, self.platform,
+                                          test_dir,
+                                          self.getDependencyDirectories() )
+
+                self.perms.set( os.path.abspath( script_file ) )
+
+        # may also need to write a util fragment for a baseline script
+        blinelang = self.atest.getBaseline( 'lang', lang )
+        if blinelang != lang:
+
+            script_file = os.path.join( self.xdir, 'vvtest_util.'+blinelang )
+
+            if self.config.get('refresh') or not os.path.exists( script_file ):
+                ScriptWriter.writeScript( self.atest, script_file,
+                                          blinelang, self.config, self.platform,
+                                          test_dir,
+                                          self.getDependencyDirectories() )
+
+                self.perms.set( os.path.abspath( script_file ) )
+
+    def _execute_plugin_run_function(self, logfname, cmd_list):
+        ""
+        self.plugin_obj.run( self.plugin_obj, self.timeout,
+                             self.xdir, logfname, cmd_list )
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(1)
+
     def __cmp__(self, rhs):
         if rhs == None: return 1  # None objects are always less
         return cmp( self.atest, rhs.atest )
@@ -680,6 +714,29 @@ class TestExec:
     def __lt__(self, rhs):
         if rhs == None: return False  # None objects are always less
         return self.atest < rhs.atest
+
+
+def redirect_stdout_stderr_to_filename( filename ):
+    ""
+    ofile = open( filename, "w+" )
+
+    # reassign stdout & stderr file descriptors to the file
+    os.dup2( ofile.fileno(), sys.stdout.fileno() )
+    os.dup2( ofile.fileno(), sys.stderr.fileno() )
+
+
+def echo_test_execution_info( testname, cmd_list, timeout ):
+    ""
+    sys.stdout.write( "Starting test: "+testname+'\n' )
+    sys.stdout.write( "Directory    : "+os.getcwd()+'\n' )
+
+    if cmd_list != None:
+        sys.stdout.write( "Command      : "+' '.join( cmd_list )+'\n' )
+
+    sys.stdout.write( "Timeout      : "+str(timeout)+'\n' )
+
+    sys.stdout.write( '\n' )
+    sys.stdout.flush()
 
 
 def deplist_contains_test_object( testexec, deps_triples ):
@@ -726,3 +783,20 @@ def find_testobj( xdir, deps_triples ):
             return tx
 
     return None
+
+
+def set_timeout_environ_variable( timeout ):
+    """
+    add a timeout environ variable so the test can take steps to
+    shutdown a running application that is taking too long;  add
+    a bump factor so it won't shutdown before the test harness
+    recognizes it as a timeout
+    """
+    if timeout > 0:
+
+        if timeout < 30: t = 60
+        if timeout < 120: t = timeout * 1.4
+        else: t = timeout * 1.2
+
+        os.environ['TIMEOUT'] = str( int( t ) )
+
