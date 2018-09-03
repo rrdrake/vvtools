@@ -80,51 +80,24 @@ class TestExec:
         Launches the child process.
         """
         assert self.pid == 0
-        
+
         np = int( self.atest.getParameters().get('np', 0) )
-        
+
         self.plugin_obj = self.platform.obtainProcs( np )
-        
-        logfname = 'execute.log'
-        
-        cmd_list = [] + self.atest.getForm( 'cmd' )
-        lang = self.atest.getForm( 'lang', None )
 
-        if baseline:
-          cmd = self.atest.getBaseline( 'cmd', None )
-          if cmd == None:
-            cmd_list = None
-          else:
-            cmd_list = [] + cmd
-          lang = self.atest.getBaseline( 'lang', lang )
-          logfname = 'baseline.log'
-        
-        elif not self.config.get('logfile'):
-          logfname = None
-        
-        if cmd_list != None:
-          if hasattr(self.plugin_obj, "mpi_opts") and self.plugin_obj.mpi_opts:
-            cmd_list.extend(['--mpirun_opts', self.plugin_obj.mpi_opts])
-          
-          if self.config.get('analyze'):
-            cmd_list.append('--execute_analysis_sections')
-
-          cmd_list.extend( self.config.get( 'testargs' ) )
-        
         self.tzero = time.time()
-        
+
         self.timedout = 0  # holds time.time() if the test times out
-        
+
         self.atest.setAttr( 'state', "notdone" )
         self.atest.setAttr( 'xtime', -1 )
         self.atest.setAttr( 'xdate', int(time.time()) )
-        
+
         sys.stdout.flush() ; sys.stderr.flush()
-        
+
         self.pid = os.fork()
-        
         if self.pid == 0:  # child
-            self._prepare_and_execute_test( lang, logfname, baseline, cmd_list )
+            self._prepare_and_execute_test( baseline )
 
     def poll(self):
         """
@@ -266,56 +239,84 @@ class TestExec:
 
         return L
 
-    def _prepare_and_execute_test(self, lang, logfname, baseline, cmd_list):
+    def _prepare_and_execute_test(self, baseline):
         ""
         try:
             os.chdir(self.xdir)
 
+            self._check_redirect_output_to_log_file( baseline )
+
             set_timeout_environ_variable( self.timeout )
 
-            if hasattr( self.plugin_obj, 'run' ):
-                self._execute_plugin_run_function( logfname, cmd_list )
+            cmd_list = self._make_execute_command( baseline )
 
+            echo_test_execution_info( self.atest.getName(),
+                                      cmd_list, self.timeout )
+
+            self._check_run_preclean( baseline )
+            self._check_write_mpi_machine_file()
+            self._check_set_working_files( baseline )
+
+            self._check_set_environ_for_python_execution( baseline )
+
+            sys.stdout.write( '\n' )
+            sys.stdout.flush()
+
+            if baseline:
+                self.copyBaselineFiles()
+
+            if cmd_list == None:
+                # this can only happen in baseline mode
+                sys.stdout.flush() ; sys.stderr.flush()
+                os._exit(0)
+
+            # replace this process with the command
+            if os.path.isabs( cmd_list[0] ):
+                os.execve( cmd_list[0], cmd_list, os.environ )
             else:
-
-              if logfname != None:
-                  redirect_stdout_stderr_to_filename( logfname )
-                  self.perms.set( os.path.abspath( logfname ) )
-
-              echo_test_execution_info( self.atest.getName(),
-                                        cmd_list, self.timeout )
-
-              self._check_run_preclean( baseline )
-              self._check_write_mpi_machine_file()
-              self._check_set_working_files( baseline )
-
-              cmd_list = self._check_prepare_for_ssh_command( cmd_list )
-
-              self._check_set_environ_for_python_execution( lang )
-
-              sys.stdout.write( '\n' )
-              sys.stdout.flush()
-
-              if baseline:
-                  self.copyBaselineFiles()
-
-              if cmd_list == None:
-                  # this can only happen in baseline mode
-                  sys.stdout.flush() ; sys.stderr.flush()
-                  os._exit(0)
-
-              # replace this process with the command
-              if os.path.isabs( cmd_list[0] ):
-                  os.execve( cmd_list[0], cmd_list, os.environ )
-              else:
-                  os.execvpe( cmd_list[0], cmd_list, os.environ )
-              raise Exception( "os.exec should not return" )
+                os.execvpe( cmd_list[0], cmd_list, os.environ )
+            raise Exception( "os.exec should not return" )
 
         except:
             sys.stdout.flush() ; sys.stderr.flush()
             traceback.print_exc()
             sys.stdout.flush() ; sys.stderr.flush()
             os._exit(1)
+
+    def _make_execute_command(self, baseline):
+        ""
+        cmdL = [] + self.atest.getForm( 'cmd' )
+
+        if baseline:
+            cmd = self.atest.getBaseline( 'cmd', None )
+            if cmd == None:
+                cmdL = None
+            else:
+                cmdL = [] + cmd
+
+        if cmdL != None:
+            if hasattr(self.plugin_obj, "mpi_opts") and self.plugin_obj.mpi_opts:
+                cmdL.extend(['--mpirun_opts', self.plugin_obj.mpi_opts])
+
+            if self.config.get('analyze'):
+                cmdL.append('--execute_analysis_sections')
+
+            cmdL.extend( self.config.get( 'testargs' ) )
+
+        return cmdL
+
+    def _check_redirect_output_to_log_file(self, baseline):
+        ""
+        if baseline:
+            logfname = 'baseline.log'
+        elif not self.config.get('logfile'):
+            logfname = None
+        else:
+            logfname = 'execute.log'
+
+        if logfname != None:
+            redirect_stdout_stderr_to_filename( logfname )
+            self.perms.set( os.path.abspath( logfname ) )
 
     def _check_run_preclean(self, baseline):
         ""
@@ -505,35 +506,14 @@ class TestExec:
             sys.stdout.flush()
             shutil.copy2( fromfile, dst )
 
-    def _check_prepare_for_ssh_command(self, cmd_list):
-        """
-        returns a possibly modified cmd_list
-        """
-        if hasattr( self.plugin_obj, 'sshcmd' ):
-
-            # turn off X11 forwarding by unsetting the DISPLAY env variable
-            # (should eliminate X authorization errors)
-            if 'DISPLAY' in os.environ:
-                del os.environ['DISPLAY']
-
-            safecmd = ''
-            for arg in cmd_list:
-                if len( arg.split() ) > 1:
-                    safecmd = safecmd + ' "' + arg + '"'
-                else:
-                    safecmd = safecmd + ' ' + arg
-
-            sshcmd = self.plugin_obj.sshcmd
-            sshcmd.append('cd ' + os.getcwd() + ' &&' + safecmd)
-
-            cmd_list = sshcmd
-
-        return cmd_list
-
-    def _check_set_environ_for_python_execution(self, lang):
+    def _check_set_environ_for_python_execution(self, baseline):
         """
         set up python pathing to make import of script utils easy
         """
+        lang = self.atest.getForm( 'lang', None )
+        if baseline:
+            lang = self.atest.getBaseline( 'lang', lang )
+
         if lang == 'py':
 
             pth = os.getcwd()
@@ -698,14 +678,6 @@ class TestExec:
                                           self.getDependencyDirectories() )
 
                 self.perms.set( os.path.abspath( script_file ) )
-
-    def _execute_plugin_run_function(self, logfname, cmd_list):
-        ""
-        self.plugin_obj.run( self.plugin_obj, self.timeout,
-                             self.xdir, logfname, cmd_list )
-        sys.stdout.flush()
-        sys.stderr.flush()
-        os._exit(1)
 
     def __cmp__(self, rhs):
         if rhs == None: return 1  # None objects are always less
