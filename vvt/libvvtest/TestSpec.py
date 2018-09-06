@@ -61,13 +61,15 @@ class TestSpec:
         """
         return self.xdir
 
-    def getForm(self, key, *default):
+    def getSpecificationForm(self):
         """
-        Gets test form information for a given 'key'.
+        Returns "xml" if the test was specified using XML, or "script" if the
+        test is a script.
         """
-        if len(default) > 0:
-            return self.form.get( key, default[0] )
-        return self.form[ key ]
+        if os.path.splitext( self.getFilepath() )[1] == '.xml':
+            return 'xml'
+        else:
+            return 'script'
 
     def getOrigin(self):
         """
@@ -147,20 +149,25 @@ class TestSpec:
 
         return False
 
-    def getAnalyze(self, key, *default):
+    def getAnalyzeScript(self):
         """
-        An analyze script can be specified by the contents of the script,
-        by a file name, or by a command line option to the test file.  Which
-        one of these and the information for each are contained in a dict.
-        This function allows access to that dict.
+        Returns None, or a string if this is an analyze test.  The string is
+        is one of the following:
 
-        Returns the value for the given key.  If 'default' is given and the
-        key is not in the dict, then 'default' is reterned.
+            1. If this test is specified with XML, then the returned string
+               is a csh script fragment.
+
+            2. If this is a script test, and the returned string starts with
+               a hyphen, then the test script should be run with the string
+               as an option to the base script file.
+
+            3. If this is a script test, and the returned string does not start
+               with a hyphen, then the string is a filename of a separate
+               script to run.  The filename is a relative path to
+               getDirectory().
         """
-        if len(default) > 0:
-            return self.analyze.get( key, default[0] )
-        return self.analyze[key]
-    
+        return self.analyze_spec
+
     def getTimeout(self):
         """
         Returns a timeout specification, in seconds (an integer).  Or None if
@@ -185,35 +192,6 @@ class TestSpec:
         be the same as the name in the source directory).
         """
         return [] + self.cpfiles
-    
-    def hasBaseline(self):
-        """
-        Returns true if this test has a baseline specification.
-        """
-        return len(self.baseline) > 0
-
-    def getBaselineFiles(self):
-        """
-        Returns a list of pairs (test directory name, source directory name)
-        of files to be copied from the testing directory to the source
-        directory.
-        """
-        return self.baseline.get( 'files', [] )
-
-    def getBaselineFragments(self):
-        """
-        Returns a list of script fragments to be executed during baselining.
-        """
-        return self.baseline.get( 'scriptfrag', [] )
-    
-    def getBaseline(self, key, *default):
-        """
-        Returns the baseline value for the given key.  If 'default' is given
-        and the key is not in the dict, then 'default' is reterned.
-        """
-        if len(default) > 0:
-            return self.baseline.get( key, default[0] )
-        return self.baseline[key]
 
     def getExecutionList(self):
         """
@@ -223,6 +201,38 @@ class TestSpec:
         where 'name' is None for raw fragments and 'exit status' is a string.
         """
         return [] + self.execL
+
+    def hasBaseline(self):
+        """
+        Returns true if this test has a baseline specification.
+        """
+        return len(self.baseline_files) > 0 or self.baseline_spec
+
+    def getBaselineFiles(self):
+        """
+        Returns a list of pairs (test directory name, source directory name)
+        of files to be copied from the testing directory to the source
+        directory.
+        """
+        return self.baseline_files
+
+    def getBaselineScript(self):
+        """
+        Returns None if this test has no baseline script, or a string which
+        is one of the following:
+
+            1. If this test is specified with XML, then the returned string
+               is a csh script fragment.
+
+            2. If this is a script test, and the returned string starts with
+               a hyphen, then the test script should be run with the string
+               as an option to the base script file.
+
+            3. If this is a script test, and the returned string does not start
+               with a hyphen, then the string is a filename of a separate
+               script to run.  The file path is a relative to getDirectory().
+        """
+        return self.baseline_spec
 
     def getDependencies(self):
         """
@@ -296,8 +306,6 @@ class TestSpec:
 
         self.data = {}
 
-        self.form = {}
-
         self.origin = []  # strings, such as "file", "string", "copy"
         if origin:
             self.origin.append( origin )
@@ -308,7 +316,7 @@ class TestSpec:
 
         self.keywords = []         # list of strings
         self.params = {}           # name string to value string
-        self.analyze = {}          # analyze script specifications
+        self.analyze_spec = None
         self.timeout = None        # timeout value in seconds (an integer)
         self.execL = []            # list of
                                    #   (name, fragment, exit status, analyze)
@@ -317,7 +325,8 @@ class TestSpec:
                                    # is any string, and analyze is true/false
         self.lnfiles = []          # list of (src name, test name)
         self.cpfiles = []          # list of (src name, test name)
-        self.baseline = {}         # baseline specifications
+        self.baseline_files = []   # list of (test name, src name)
+        self.baseline_spec = None
         self.src_files = []        # extra source files listed by the test
         self.deps = []             # list of (xdir pattern, result expr)
         self.attrs = {}            # maps name string to value string; the
@@ -365,22 +374,6 @@ class TestSpec:
     ##########################################################
     
     # construction methods
-    
-    def setForm(self, key, value):
-        """
-        Add the given 'key'='value' pair to the test form information.
-        If both 'key' and 'value' are None, then all information is removed
-        (the default state).  If just 'value' is None, then 'key' is removed.
-        """
-        if key == None:
-            if value == None:
-                self.form.clear()
-        else:
-            if value == None:
-                if key in self.form:
-                    self.form.pop( key )
-            else:
-                self.form[ key ] = value
 
     def addOrigin(self, origin):
         """
@@ -441,18 +434,11 @@ class TestSpec:
         parameter values.
         """
         self.paramset = param_set
-    
-    def setAnalyze(self, key, value):
-        """
-        Add the given 'key'='value' pair to the analyze information.
-        If 'value' is None, then 'key' is removed.
-        """
-        if value == None:
-            if key in self.analyze:
-                self.analyze.pop( key )
-        else:
-            self.analyze[ key ] = value
-    
+
+    def setAnalyzeScript(self, script_spec):
+        ""
+        self.analyze_spec = script_spec
+
     def setTimeout(self, timeout):
         """
         Adds a timeout specification.  Sending in None will remove the timeout.
@@ -515,38 +501,11 @@ class TestSpec:
         directory during baselining.
         """
         assert test_dir_name and source_dir_name
-        L = self.baseline.get( 'files', None )
-        if L == None:
-            L = []
-            self.baseline[ 'files' ] = L
-        L.append( (test_dir_name, source_dir_name) )
+        self.baseline_files.append( (test_dir_name, source_dir_name) )
 
-    def addBaselineFragment(self, script_fragment):
-        """
-        Add a script fragment to be executed during baselining.
-        """
-        L = self.baseline.get( 'scriptfrag', None )
-        if L == None:
-            L = []
-            self.baseline[ 'scriptfrag' ] = L
-        L.append( script_fragment )
-    
-    def setBaseline(self, key, value):
-        """
-        Add the given 'key'='value' pair to the baseline information.
-        If both 'key' and 'value' are None, then all baseline information is
-        removed (the default state).  If just 'value' is None, then 'key' is
-        removed.
-        """
-        if key == None:
-            if value == None:
-                self.baseline.clear()
-        else:
-            if value == None:
-                if key in self.baseline:
-                    self.baseline.pop( key )
-            else:
-                self.baseline[ key ] = value
+    def setBaselineScript(self, script_spec):
+        ""
+        self.baseline_spec = script_spec
 
     def setSourceFiles(self, files):
         """
@@ -585,15 +544,15 @@ class TestSpec:
         """
         ts = TestSpec( self.name, self.rootpath, self.filepath )
         ts.origin = self.origin + ["copy"]
-        ts.form = self.__copy_dictionary( self.form )
         ts.keywords = self.__copy_list(self.keywords)
         ts.setParameters({})  # skip ts.params
-        ts.analyze = self.__copy_dictionary( self.analyze )
+        ts.analyze_spec = self.analyze_spec
         ts.timeout = self.timeout
         ts.execL = self.__copy_list(self.execL)
         ts.lnfiles = self.__copy_list(self.lnfiles)
         ts.cpfiles = self.__copy_list(self.cpfiles)
-        ts.baseline = self.__copy_dictionary(self.baseline)
+        ts.baseline_files = self.__copy_list(self.baseline_files)
+        ts.baseline_spec = self.baseline_spec
         ts.deps = self.__copy_list( self.deps )
         ts.attrs = self.__copy_dictionary(self.attrs)
         return ts

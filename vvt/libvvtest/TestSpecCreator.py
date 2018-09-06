@@ -272,9 +272,9 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
 
         t = testL[0]
 
-        has_analyze = parseAnalyze( t, filedoc, evaluator )
+        analyze_spec = parseAnalyze( t, filedoc, evaluator )
 
-        if has_analyze:
+        if analyze_spec:
             if numparams == 0:
                 raise TestSpecError( 'an analyze requires at least one ' + \
                                      'parameter to be defined' )
@@ -283,6 +283,8 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
             parent = t.makeParent()
             parent.setParameterSet( paramset )
             testL.append( parent )
+
+            parent.setAnalyzeScript( analyze_spec )
 
     # parse and set the rest of the XML file for each test
     
@@ -293,7 +295,6 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
         parseExecuteList       ( t, filedoc, evaluator )
         parseFiles             ( t, filedoc, evaluator )
         parseBaseline          ( t, filedoc, evaluator )
-        set_test_form          ( t )
     
     return testL
 
@@ -328,9 +329,10 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
 
         t = testL[0]
 
-        has_analyze = parseAnalyze_scr( t, vspecs, evaluator )
+        analyze_spec = parseAnalyze_scr( t, vspecs, evaluator )
 
-        if has_analyze:
+
+        if analyze_spec:
 
             if numparams == 0:
                 raise TestSpecError( 'an analyze requires at least one ' + \
@@ -341,6 +343,10 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
             parent.setParameterSet( paramset )
             testL.append( parent )
 
+            parent.setAnalyzeScript( analyze_spec )
+            if not analyze_spec.startswith('-'):
+                parent.addLinkFile( analyze_spec )
+
     for t in testL:
 
         parse_enable_platform ( t, vspecs )
@@ -349,66 +355,7 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
         parseBaseline_scr     ( t, vspecs, evaluator )
         parseDependencies_scr ( t, vspecs, evaluator )
 
-        set_test_form         ( t, vspecs )
-
     return testL
-
-
-def set_test_form( tspec, vspecs=None ):
-    """
-    """
-    if vspecs == None:
-        tspec.setForm( 'lang', 'xml' )
-        tspec.setForm( 'file', 'runscript' )
-        cmdL = ['/bin/csh', '-f', './runscript']
-        tspec.setForm( 'cmd', cmdL )
-        if tspec.hasBaseline():
-            tspec.setBaseline( 'cmd', cmdL+['--baseline'] )
-    
-    else:
-        
-        fname = vspecs.filename
-        shebang = vspecs.shebang
-
-        lang,cmdL = get_script_language( fname, True, shebang )
-
-        if not cmdL:
-            raise TestSpecError( "Could not determine the script " + \
-                                 "test command line: "+fname )
-
-        tspec.setForm( 'file', fname )
-
-        if tspec.isAnalyze():
-            # an analyze test may be a separate script
-            zfile = tspec.getAnalyze( 'file', None )
-            if zfile != None:
-                # execute the analyze script rather than the test file
-                lang = tspec.getAnalyze( 'lang' )
-                cmdL = tspec.getAnalyze( 'cmd' )
-                # add the analyze script to the link file list
-                tspec.addLinkFile( zfile )
-            else:
-                # execute the test file but add the analyze command line option
-                arg = tspec.getAnalyze( 'arg', None )
-                if arg:
-                    cmdL = cmdL + [ arg ]
-        
-        if lang: tspec.setForm( 'lang', lang )
-        tspec.setForm( 'cmd', cmdL )
-
-        if tspec.hasBaseline():
-          arg = tspec.getBaseline( 'arg', None )
-          if arg:
-              basecmdL = tspec.getBaseline( 'cmd', None )
-              if basecmdL == None:
-                  # use the test script itself for the baseline script
-                  basecmdL = cmdL
-                  if lang: tspec.setBaseline( 'lang', lang )
-              tspec.setBaseline( 'cmd', basecmdL+[arg] )
-
-        bfile = tspec.getBaseline( 'file', None )
-        if bfile:
-            tspec.addLinkFile( bfile )
 
 
 def reparse_test_object( testobj, evaluator ):
@@ -434,9 +381,9 @@ def reparse_test_object( testobj, evaluator ):
         keywords = parseKeywords( filedoc, tname )
         testobj.setKeywords( keywords )
 
-        has_analyze = parseAnalyze( testobj, filedoc, evaluator )
+        analyze_spec = parseAnalyze( testobj, filedoc, evaluator )
 
-        if has_analyze and len( testobj.getParameters() ) == 0:
+        if analyze_spec and len( testobj.getParameters() ) == 0:
 
             paramset = parseTestParameters( filedoc, tname, evaluator, None )
 
@@ -445,13 +392,12 @@ def reparse_test_object( testobj, evaluator ):
                                'parameter to be defined' )
 
             testobj.setParameterSet( paramset )
+            testobj.setAnalyzeScript( analyze_spec )
 
         parseFiles       ( testobj, filedoc, evaluator )
         parseTimeouts    ( testobj, filedoc, evaluator )
         parseExecuteList ( testobj, filedoc, evaluator )
         parseBaseline    ( testobj, filedoc, evaluator )
-
-        set_test_form( testobj )
 
     elif ext == '.vvt':
 
@@ -467,9 +413,9 @@ def reparse_test_object( testobj, evaluator ):
         keywords = parseKeywords_scr( vspecs, tname )
         testobj.setKeywords( keywords )
 
-        has_analyze = parseAnalyze_scr( testobj, vspecs, evaluator )
+        analyze_spec = parseAnalyze_scr( testobj, vspecs, evaluator )
 
-        if has_analyze and len( testobj.getParameters() ) == 0:
+        if analyze_spec and len( testobj.getParameters() ) == 0:
 
             paramset = parseTestParameters_scr( vspecs, tname, evaluator, None )
 
@@ -479,12 +425,14 @@ def reparse_test_object( testobj, evaluator ):
 
             testobj.setParameterSet( paramset )
 
+            testobj.setAnalyzeScript( analyze_spec )
+            if not analyze_spec.startswith('-'):
+                testobj.addLinkFile( analyze_spec )
+
         parseFiles_scr    ( testobj, vspecs, evaluator )
         parseTimeouts_scr ( testobj, vspecs, evaluator )
         parseBaseline_scr ( testobj, vspecs, evaluator )
         parseDependencies_scr ( testobj, vspecs, evaluator )
-        
-        set_test_form( testobj, vspecs )
 
     else:
         raise Exception( "invalid file extension: "+ext )
@@ -658,109 +606,6 @@ def escape_file(s):
 
 
 ###########################################################################
-
-def get_script_language( filename, usebase, shebang ):
-    """
-    Given the full path to the script file and the #!/path/prog string from
-    the script (without the #! and if it exists), this function determines the
-    language that the script is written in and the command line that should be
-    used to launch the script.
-
-    Returns a pair lang,cmdL which is the language and command line (as a
-    list).  The known languages are
-
-        py, pl, sh, bash, csh, tcsh
-    """
-    lang = None
-    cmdL = None
-
-    bname = os.path.basename( filename )
-
-    if shebang:
-        
-        import shlex
-        L = shlex.split( shebang )
-        xf = os.path.basename( L[0] )
-
-        if xf.startswith( 'python' ):
-            lang = 'py'
-        elif xf.startswith( 'perl' ):
-            lang = 'pl'
-        elif xf in ['sh','bash','csh','tcsh']:
-            lang = xf
-        elif xf == 'env':
-            # TODO: could use getopt here if options to the env program
-            #       are given and need to be handled
-            n = None
-            for arg in L[1:]:
-                # try to ignore VARNAME=value arguments
-                if '=' not in arg:
-                    n = arg
-                    break
-            if n:
-                n = os.path.basename( n )
-                if n.startswith( 'python' ):
-                    lang = 'py'
-                elif n.startswith( 'perl' ):
-                    lang = 'pl'
-                elif n in ['sh','bash','csh','tcsh']:
-                    lang = n
-
-        if os.access( filename, os.X_OK ):
-            if usebase:
-                cmdL = [ './'+bname ]
-            else:
-                cmdL = [ filename ]
-        else:
-            cmdL = L
-            if usebase:
-                cmdL.append( bname )
-            else:
-                cmdL.append( filename )
-
-    if not lang:
-        
-        # look at the extension
-        b1,x1 = os.path.splitext( bname )
-        if b1 and x1 in ['.py']:
-            lang = 'py'
-        elif b1 and x1 in ['.pl']:
-            lang = 'pl'
-        elif b1 and x1 in ['.sh','.bash','.csh','.tcsh']:
-            lang = x1[1:]
-        
-        if lang == None:
-            # look for an embedded extension, such as name.py.vvt
-            b2,x2 = os.path.splitext( b1 )
-            if b2 and x2 in ['.py']:
-                lang = 'py'
-            elif b2 and x2 in ['.pl']:
-                lang = 'pl'
-            elif b2 and x2 in ['.sh','.bash','.csh','.tcsh']:
-                lang = x2[1:]
-
-    if not cmdL:
-        
-        if os.access( filename, os.X_OK ):
-            if usebase:
-                cmdL = [ './'+bname ]
-            else:
-                cmdL = [ filename ]
-        
-        elif lang:
-            if usebase: fn = bname
-            else:    fn = filename
-            if lang == 'py':
-                cmdL = [ sys.executable, fn ]
-            elif lang == 'pl':
-                cmdL = [ 'perl', fn ]
-            elif lang in ['sh','bash','perl']:
-                cmdL = [ lang, fn ]
-            elif lang in ['csh','tcsh']:
-                cmdL = [ lang, '-f', fn ]
-
-    return lang,cmdL
-
 
 def testNameList_scr( vspecs ):
     """
@@ -955,14 +800,11 @@ def parseAnalyze_scr( t, vspecs, evaluator ):
     Parse any analyze specifications.
     
         #VVT: analyze : analyze.py
-        #VVT: analyze (file) : analyze.py
         #VVT: analyze : --analyze
-        #VVT: analyze (argument) : --analyze
-        #VVT: analyze (argument, testname=not mytest_fast) : --analyze
+        #VVT: analyze (testname=not mytest_fast) : --analyze
 
-    If neither (file) nor (argument) is given as an attribute, then
-        - if the value starts with a dash, then (argument) is assumed
-        - otherwise, (file) is assumed
+        - if the value starts with a hyphen, then an option is assumed
+        - otherwise, a script file is assumed
 
     Returns true if an analyze specification was found.
     """
@@ -979,81 +821,24 @@ def parseAnalyze_scr( t, vspecs, evaluator ):
                                evaluator, spec.lineno ):
             continue
 
+        if spec.attrs and 'file' in spec.attrs:
+            raise TestSpecError( 'the "file" analyze attribute is ' + \
+                                 'no longer supported, ' + \
+                                 'line ' + str(spec.lineno) )
+
+        if spec.attrs and 'argument' in spec.attrs:
+            raise TestSpecError( 'the "argument" analyze attribute is ' + \
+                                 'no longer supported, ' + \
+                                 'line ' + str(spec.lineno) )
+
         sval = spec.value
         if not sval or not sval.strip():
             raise TestSpecError( 'missing or invalid analyze value, ' + \
                                  'line ' + str(spec.lineno) )
-        
+
         specval = sval.strip()
-        if spec.attrs and 'file' in spec.attrs:
-            form = 'file'
-        elif spec.attrs and 'argument' in spec.attrs:
-            form = 'arg'
-            if specval == '--execute_analysis_sections':
-                raise TestSpecError( "cannot use reserved word for " + \
-                    "analyze argument '"+specval+"', " + \
-                    "line " + str(spec.lineno) )
-        elif specval.startswith('-'):
-            form = 'arg'
-            if specval == '--execute_analysis_sections':
-                raise TestSpecError( "cannot use reserved word for " + \
-                    "analyze argument '"+specval+"', " + \
-                    "line " + str(spec.lineno) )
-        else:
-            form = 'file'
 
-    if form == 'file':
-        fname = os.path.normpath( specval )
-        lang,cmdL = configure_auxiliary_script( t, fname, vspecs.filename )
-
-        if not cmdL:
-            raise TestSpecError( "Could not determine the script " + \
-                         "command line for analyze script: "+specval )
-        
-        t.setAnalyze( 'file', fname )
-        t.setAnalyze( 'lang', lang )
-        t.setAnalyze( 'cmd', cmdL )
-
-        return True
-
-    elif form == 'arg':
-        t.setAnalyze( 'arg', specval )
-        return True
-
-    else:
-        return False
-
-
-def configure_auxiliary_script( testobj, scriptname, test_filename ):
-    """
-    """
-    if os.path.isabs( scriptname ):
-        # absolute path names are NOT soft linked into the test
-        # execution directory
-        usebase = False
-    else:
-        usebase = True
-        # relative paths are relative to the test file directory
-        d = os.path.dirname( test_filename )
-        scriptname = os.path.normpath( os.path.join( d, scriptname ) )
-    
-    if os.path.exists( scriptname ):
-        
-        # to determine the execution command, look for shebang and
-        # then leverage the logic used to invoke the test script itself
-        fp = open( scriptname, 'r' )
-        line = fp.readline()
-        fp.close()
-        shebang = None
-        if line[:2] == '#!':
-            shebang = line[2:]
-        
-        lang,cmdL = get_script_language( scriptname, usebase, shebang )
-        
-        return lang,cmdL
-    
-    else:
-        raise TestSpecError( 'script file does not exist: ' + scriptname )
+    return specval
 
 
 def parseFiles_scr( t, vspecs, evaluator ):
@@ -1152,15 +937,13 @@ def parseTimeouts_scr( t, vspecs, evaluator ):
 
 def parseBaseline_scr( t, vspecs, evaluator ):
     """
-      #VVT: baseline (attrs) : copyfrom,copyto copyfrom,copyto
-      #VVT: baseline (file) : baseline.py
-      #VVT: baseline (argument) : --baseline
+      #VVT: baseline : copyfrom,copyto copyfrom,copyto
+      #VVT: baseline : --option-name
+      #VVT: baseline : baseline.py
     
-    where default behavior is:
-      - if no "file" and no "argument" attribute
-        - if at least one comma, assume simple file copy
-        - elif value starts with a dash, assume argument
-        - else assume name of script
+    where the existence of a comma triggers the first form
+    otherwise, if the value starts with a hyphen then the second form
+    otherwise, the value is the name of a filename
     """
     tname = t.getName()
     params = t.getParameters()
@@ -1178,17 +961,23 @@ def parseBaseline_scr( t, vspecs, evaluator ):
                                      'line ' + str(spec.lineno) )
 
             if spec.attrs and 'file' in spec.attrs:
-                form = 'file'
-            elif spec.attrs and 'argument' in spec.attrs:
-                form = 'arg'
-            elif ',' in sval:
+                raise TestSpecError( 'the "file" baseline attribute is ' + \
+                                     'no longer supported, ' + \
+                                     'line ' + str(spec.lineno) )
+
+            if spec.attrs and 'argument' in spec.attrs:
+                raise TestSpecError( 'the "argument" baseline attribute is ' + \
+                                     'no longer supported, ' + \
+                                     'line ' + str(spec.lineno) )
+
+            if ',' in sval:
                 form = 'copy'
             elif sval.startswith( '-' ):
                 form = 'arg'
             else:
                 form = 'file'
 
-            if form == 'copy':
+            if ',' in sval:
                 fL = []
                 for s in cpat.sub( ',', sval ).split():
                     L = s.split(',')
@@ -1206,24 +995,10 @@ def parseBaseline_scr( t, vspecs, evaluator ):
                 for fsrc,fdst in fL:
                     t.addBaselineFile( fsrc, fdst )
 
-            elif form == 'file':
-                # for baseline specifications that use a separate file, need to
-                # determine the script language and command line for execution
-                fname = os.path.normpath( sval )
-                lang,cmdL = configure_auxiliary_script( t, fname, vspecs.filename )
-                
-                if not cmdL:
-                    raise TestSpecError( "Could not determine the script " + \
-                                 "command line for baseline script: "+sval )
-                
-                if lang:  t.setBaseline( 'lang', lang )
-                t.setBaseline( 'cmd', cmdL )
-                t.setBaseline( 'file', fname )
-            
             else:
-                assert form == 'arg'
-                # set the arg here; the cmd and lang are set in set_test_form()
-                t.setBaseline( 'arg', sval )
+                t.setBaselineScript( sval )
+                if not sval.startswith( '-' ):
+                    t.addLinkFile( sval )
 
 
 def parseDependencies_scr( t, vspecs, evaluator ):
@@ -1652,7 +1427,7 @@ def parseAnalyze( t, filedoc, evaluator ):
 
     Returns true if the test specifies an analyze script.
     """
-    a = None
+    analyze_spec = None
     
     ndL = filedoc.matchNodes(['analyze$'])
     
@@ -1678,14 +1453,12 @@ def parseAnalyze( t, filedoc, evaluator ):
         except:
           raise TestSpecError( 'the content in an <analyze> block must be ' + \
                                'ASCII characters, line ' + str(nd.getLineNumber()) )
-        if a == None:
-          a = content.strip()
+        if analyze_spec == None:
+          analyze_spec = content.strip()
         else:
-          a += os.linesep + content.strip()
-    
-    t.setAnalyze( 'scriptfrag', a )
+          analyze_spec += os.linesep + content.strip()
 
-    return a != None
+    return analyze_spec
 
 
 def parseTimeouts( t, filedoc, evaluator ):
@@ -2029,6 +1802,8 @@ def parseBaseline( t, filedoc, evaluator ):
         script language here
       </baseline>
     """
+    scriptfrag = ''
+
     for nd in filedoc.matchNodes(['baseline$']):
       
       skip = 0
@@ -2071,7 +1846,10 @@ def parseBaseline( t, filedoc, evaluator ):
         
         script = nd.getContent().strip()
         if script:
-          t.addBaselineFragment( script )
+          scriptfrag += '\n' + script
+
+    if scriptfrag:
+        t.setBaselineScript( scriptfrag )
 
 
 ###########################################################################

@@ -1,0 +1,459 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import unittest
+
+import testutils as util
+from testutils import print3
+
+import libvvtest.TestExec as TE
+
+from libvvtest.TestSpec import TestSpec
+from libvvtest.ParameterSet import ParameterSet
+
+
+class function_make_file_execute_command( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_an_executable_script_is_executed_directly(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writescript( 'ascript', """
+            #!/bin/csh
+            echo hello
+            """ )
+        util.writescript( 'subdir/ascript', """
+            #!/bin/csh
+            echo hello
+            """ )
+        time.sleep(1)
+
+        cwd = os.getcwd()
+
+        cmdL = TE.make_file_execute_command( cwd, 'ascript' )
+        assert len(cmdL) == 1 and cmdL[0] == './ascript'
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_file_execute_command( cwd, 'subdir/ascript' )
+        assert len(cmdL) == 1 and cmdL[0] == './subdir/ascript'
+
+    def test_a_file_is_executed_using_python(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'ascript', """
+            print ( 'hello' )
+            """ )
+        util.writefile( 'subdir/ascript', """
+            print ( 'hello' )
+            """ )
+        time.sleep(1)
+
+        cwd = os.getcwd()
+
+        cmdL = TE.make_file_execute_command( cwd, 'ascript' )
+        assert len(cmdL) == 2
+        assert cmdL[0] == sys.executable
+        assert cmdL[1] == 'ascript'
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_file_execute_command( cwd, 'subdir/ascript' )
+        assert len(cmdL) == 2
+        assert cmdL[0] == sys.executable
+        assert cmdL[1] == 'subdir/ascript'
+
+    def test_an_executable_abs_file_ignores_srcdir(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writescript( 'subdir/ascript', """
+            #!/bin/csh
+            echo hello
+            """ )
+        abscript = os.path.abspath( 'subdir/ascript' )
+        time.sleep(1)
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_file_execute_command( '/foo/bar', abscript )
+        assert len(cmdL) == 1 and cmdL[0] == abscript
+
+    def test_a_file_ignores_srcdir(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/ascript', """
+            print ( 'hello' )
+            """ )
+        absfile = os.path.abspath( 'subdir/ascript' )
+        time.sleep(1)
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_file_execute_command( '/foo/bar', absfile )
+        assert len(cmdL) == 2
+        assert cmdL[0] == sys.executable
+        assert cmdL[1] == absfile
+
+
+class function_make_test_script_command( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_an_xml_test_specification_is_hard_coded_to_runscript(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.xml', """
+            <rtest name="atest">
+            </rtest>""" )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.xml' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_test_script_command( tspec )
+        assert len(cmdL) > 1
+        cmdstr = ' '.join( cmdL )
+        assert 'csh' in cmdstr and 'runscript' in cmdstr
+
+    def test_a_script_test_runs_the_script_file(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.vvt', """
+            print ( 'hello' )
+            """ )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.vvt' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_test_script_command( tspec )
+        assert len(cmdL) > 1
+        cmdstr = ' '.join( cmdL )
+        assert 'python' in cmdstr and 'atest.vvt' in cmdstr
+
+
+class function_command_from_filename_or_option( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_command_from_a_filename_specification(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.vvt', """
+            print ( 'hello' )
+            """ )
+        util.writescript( 'subdir/auxscript', """
+            #!/bin/bash
+            echo hello
+            """ )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.vvt' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.command_from_filename_or_option( tspec, 'auxscript' )
+        cmdstr = ' '.join( cmdL )
+        assert './auxscript' in cmdstr
+
+    def test_command_from_an_option_specification(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.vvt', """
+            print ( 'hello' )
+            """ )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.vvt' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.command_from_filename_or_option( tspec, '--foobar' )
+        cmdstr = ' '.join( cmdL )
+        assert 'atest.vvt ' in cmdstr and '--foobar' in cmdstr
+
+
+class make_baseline_commands( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_make_nominal_baseline_command(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.vvt', """
+            print ( 'hello' )
+            """ )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.vvt' )
+        tspec.setBaselineScript( '--run-baseline' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.check_make_script_baseline_command( tspec )
+        cmdstr = ' '.join( cmdL )
+        assert 'atest.vvt ' in cmdstr and '--run-baseline' in cmdstr
+
+    def test_baseline_analyze_command_with_baseline_option(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.vvt', """
+            print ( 'hello' )
+            """ )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.vvt' )
+
+        pset = ParameterSet()
+        pset.addParameter( 'myparam', ['myvalue'] )
+        tspec.setParameterSet( pset )
+
+        tspec.setAnalyzeScript( '--do-analyze' )
+        tspec.setBaselineScript( '--run-baseline' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_baseline_analyze_command( tspec )
+        cmdstr = ' '.join( cmdL )
+        assert 'atest.vvt ' in cmdstr
+        assert '--do-analyze' in cmdstr
+        assert '--run-baseline' in cmdstr
+
+    def test_baseline_analyze_command_with_baseline_filename(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.vvt', """
+            print ( 'hello' )
+            """ )
+        util.writefile( 'subdir/atest_bline.py', """
+            print ( 'hello' )
+            """ )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.vvt' )
+
+        pset = ParameterSet()
+        pset.addParameter( 'myparam', ['myvalue'] )
+        tspec.setParameterSet( pset )
+
+        tspec.setAnalyzeScript( '--do-analyze' )
+        tspec.setBaselineScript( 'atest_bline.py' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_baseline_analyze_command( tspec )
+        cmdstr = ' '.join( cmdL )
+        assert 'atest_bline.py ' in cmdstr
+        assert '--do-analyze' in cmdstr
+
+    def test_baseline_analyze_command_with_baseline_and_analyze_filename(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.vvt', """
+            print ( 'hello' )
+            """ )
+        util.writefile( 'subdir/atest_analyze.py', """
+            print ( 'hello' )
+            """ )
+        util.writefile( 'subdir/atest_bline.py', """
+            print ( 'hello' )
+            """ )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.vvt' )
+
+        pset = ParameterSet()
+        pset.addParameter( 'myparam', ['myvalue'] )
+        tspec.setParameterSet( pset )
+
+        tspec.setAnalyzeScript( 'atest_analyze.py' )
+        tspec.setBaselineScript( 'atest_bline.py' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_baseline_analyze_command( tspec )
+        cmdstr = ' '.join( cmdL )
+        assert 'atest_bline.py' in cmdstr
+        assert 'atest_analyze' not in cmdstr
+
+    def test_make_baseline_command_with_analyze_test(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.vvt', """
+            print ( 'hello' )
+            """ )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.vvt' )
+
+        pset = ParameterSet()
+        pset.addParameter( 'myparam', ['myvalue'] )
+        tspec.setParameterSet( pset )
+
+        tspec.setAnalyzeScript( '--do-analyze' )
+        tspec.setBaselineScript( '--run-baseline' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.check_make_script_baseline_command( tspec )
+        cmdstr = ' '.join( cmdL )
+        assert 'atest.vvt ' in cmdstr
+        assert '--do-analyze' in cmdstr and '--run-baseline' in cmdstr
+
+    def test_baseline_xml_test_without_script_fragment(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.xml', """
+            <rtest name="atest">
+            </rtest>""" )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.xml' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.check_make_script_baseline_command( tspec )
+        assert cmdL == None
+
+
+class the_core_make_execute_command_function( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_xml_test_not_baseline(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.xml', """
+            <rtest name="atest">
+            </rtest>""" )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.xml' )
+        tspec.setBaselineScript( 'echo hello\n' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_core_execute_command( tspec, 0 )
+        cmdstr = ' '.join( cmdL )
+        assert 'runscript' in cmdstr
+        assert '--baseline' not in cmdstr
+
+    def test_xml_test_with_baseline(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.xml', """
+            <rtest name="atest">
+            </rtest>""" )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.xml' )
+        tspec.setBaselineScript( 'echo hello\n' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_core_execute_command( tspec, 1 )
+        cmdstr = ' '.join( cmdL )
+        assert 'runscript' in cmdstr
+        assert '--baseline' in cmdstr
+
+    def test_script_test_with_baseline(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.vvt', """
+            print ( 'hello' )
+            """ )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.vvt' )
+
+        tspec.setBaselineScript( '--run-baseline' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_core_execute_command( tspec, 1 )
+        cmdstr = ' '.join( cmdL )
+        assert 'atest.vvt ' in cmdstr
+        assert '--run-baseline' in cmdstr
+
+    def test_analyze_script_test_no_baseline(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.vvt', """
+            print ( 'hello' )
+            """ )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.vvt' )
+
+        pset = ParameterSet()
+        pset.addParameter( 'myparam', ['myvalue'] )
+        tspec.setParameterSet( pset )
+
+        tspec.setAnalyzeScript( '--do-analyze' )
+        tspec.setBaselineScript( '--run-baseline' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_core_execute_command( tspec, 0 )
+        cmdstr = ' '.join( cmdL )
+        assert 'atest.vvt ' in cmdstr
+        assert '--do-analyze' in cmdstr
+        assert '--run-baseline' not in cmdstr
+
+    def test_plain_script_test_no_baseline(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.vvt', """
+            print ( 'hello' )
+            """ )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.vvt' )
+
+        tspec.setBaselineScript( '--run-baseline' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_core_execute_command( tspec, 0 )
+        cmdstr = ' '.join( cmdL )
+        assert 'atest.vvt' in cmdstr
+        assert '--run-baseline' not in cmdstr
+
+    def test_baseline_an_xml_test_without_a_baseline_script_fragment(self):
+        ""
+        os.mkdir( 'rundir' )
+        util.writefile( 'subdir/atest.xml', """
+            <rtest name="atest">
+            </rtest>""" )
+        time.sleep(1)
+
+        tspec = TestSpec( 'atest', os.getcwd(), 'subdir/atest.xml' )
+
+        os.chdir( 'rundir' )
+
+        cmdL = TE.make_core_execute_command( tspec, 1 )
+        assert cmdL == None
+
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

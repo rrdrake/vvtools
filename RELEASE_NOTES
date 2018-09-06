@@ -1,4 +1,47 @@
 
+Improvements:
+
+Fixes:
+
+Changes:
+
+    - The (argument) and (file) attributes to the "baseline" directive are no
+      longer supported, such as
+
+          #VVT: baseline (argument) : my-option
+          #VVT: baseline (file) : filename
+
+      Now an option can only start with a hyphen, such as
+
+          #VVT: baseline : --my-option
+
+      and a baseline script filename cannot contain a comma (because a comma
+      is used to decide if you are specifying pairs of files).
+
+    - The (argument) and (file) attributes to the "analyze" directive are no
+      longer supported, such as
+
+          #VVT: analyze (file) : analyze_script
+          #VVT: analyze (argument) : analyze-option
+
+      Now an option can only start with a hyphen, such as
+
+          #VVT: analyze : --analyze-option
+
+      otherwise a script file name is assumed.
+
+    - Language selection of script tests has been simplified.  The new logic
+      is that if the test file is executable, it is run directly.  If it is
+      not executable, the python interpreter is run on the file.  This applies
+      to the "analyze" and "baseline" directive keywords.
+
+      A related aspect of this is that only (and always both) python and bash
+      script util fragments are written to the test run directory.  Before
+      this, other languages were supported, such as csh.
+
+
+==============================================================================
+
 Release 1.0
 -----------
 

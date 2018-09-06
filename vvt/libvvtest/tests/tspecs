@@ -1196,9 +1196,8 @@ def test08():
     bL = tL[0].getBaselineFiles()
     assert len(bL) == 1
     assert bL[0] == ('afile.exo', 'bfile.exo')
-    bL = tL[0].getBaselineFragments()
-    assert len(bL) == 1
-    assert bL[0] == "set dummy = 10"
+    bscr = tL[0].getBaselineScript()
+    assert bscr != None and bscr.strip() and 'set dummy = 10' in bscr
 
     writefile( 'ok32.xml', """
         <rtest name="atest">
@@ -1210,7 +1209,7 @@ def test08():
     assert len(tL) == 2
     for t in tL:
       bL = t.getBaselineFiles()
-      assert len( t.getBaselineFragments() ) == 0
+      assert not t.getBaselineScript()
       if t.getParameterValue('np') == '1':
         assert len(bL) == 1
         assert bL[0] == ('file.exo', 'file.base_exo')
@@ -1227,14 +1226,14 @@ def test08():
     uf = RuntimeConfig( platform_name='SunOS' )
     tL = TestSpecCreator.createTestObjects( '.', 'ok33.xml', None, uf )
     assert len(tL) == 1
-    assert len( tL[0].getBaselineFragments() ) == 0
+    assert not tL[0].getBaselineScript()
     bL = tL[0].getBaselineFiles()
     assert len(bL) == 1
     assert bL[0] == ('file.exo', 'file.SunOS_exo')
     uf = RuntimeConfig( platform_name='Linux' )
     tL = TestSpecCreator.createTestObjects( '.', 'ok33.xml', None, uf )
     assert len(tL) == 1
-    assert len( tL[0].getBaselineFragments() ) == 0
+    assert not tL[0].getBaselineScript()
     bL = tL[0].getBaselineFiles()
     assert len(bL) == 1
     assert bL[0] == ('file.exo', 'file.base_exo')
@@ -1488,7 +1487,7 @@ def test12():
     tL.sort()
     print3( "print3( with parameterize/analyze 4:", tL )
     assert tL[0].isAnalyze()
-    assert tL[0].getAnalyze( 'scriptfrag' )
+    assert tL[0].getAnalyzeScript()
     assert not tL[1].isAnalyze()
     assert not tL[2].isAnalyze()
 

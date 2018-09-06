@@ -476,6 +476,7 @@ def run_vvtest( args='', ignore_errors=0, directory=None ):
     if directory:
         os.chdir( curdir )
     if not x and not ignore_errors:
+        print3( out )
         raise Exception( "vvtest command failed: " + cmd )
     return out,numpass(out),numdiff(out),numfail(out),numnotrun(out)
 

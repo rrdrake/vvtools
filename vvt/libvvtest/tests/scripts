@@ -27,7 +27,9 @@ def main():
     global argL
 
     if len(argL) == 0:
-        argL = """test01 test01b test02 test03 test04 test05 test06
+        argL = """test01 test01b
+                  test_that_python_is_always_used_to_run_non_executable_scripts
+                  test04 test05 test06
                   test07 test08 test09 test10 test11 test12 test13
                   test14 test15 test16 test17 test18 test19 test20
                   test21
@@ -90,13 +92,11 @@ def test01b():
 
 ########################################################################
 
-def test02():
-    """
-    script is not executable but contains a shebang
-    """
-    writefile( 'hello.vvt', """#!/bin/sh
-        echo "hello from the hello test script"
-        """ )
+def test_that_python_is_always_used_to_run_non_executable_scripts():
+    ""
+    writefile( 'hello.vvt',
+        "#!/bin/sh\n" + \
+        "print ( 'hello from the hello test script' )\n" )
 
     out,np,nd,nf,nn = run_vvtest()
     tdir = results_dir()
@@ -105,34 +105,6 @@ def test02():
 
     assert len( filegrep( tdir+'/hello/execute.log',
                           "hello from the hello test script" ) ) == 1
-
-
-########################################################################
-
-def test03():
-    """
-    script has an embedded extension
-    """
-    writefile( 'hello.py.vvt', """
-        import os, sys
-        print ( "hello from the python test script" )
-        """ )
-    writefile( 'hello.csh.vvt', """
-        setenv HELLO "world"
-        echo "hello $HELLO from the csh script"
-        """ )
-
-    out,np,nd,nf,nn = run_vvtest()
-    tdir = results_dir()
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    assert len( greptestlist(out,'pass.*hello') ) == 2
-    assert len( greptestlist(out,'pass.*hello.py') ) == 1
-    assert len( greptestlist(out,'pass.*hello.csh') ) == 1
-
-    assert len( filegrep( tdir+'/hello.py/execute.log',
-                          "hello from the python test script" ) ) == 1
-    assert len( filegrep( tdir+'/hello.csh/execute.log',
-                          "hello world from the csh script" ) ) == 1
 
 
 ########################################################################
@@ -439,55 +411,33 @@ def test09():
         source ./vvtest_util.sh
         exit_diff
         """ )
-    writescript( 'cshpass.vvt', """
-        #!/bin/csh
-        source ./vvtest_util.csh
-        if_diff_exit_diff
-        """ )
-    writescript( 'cshdiff.vvt', """
-        #!/bin/csh
-        source ./vvtest_util.csh
-        set_have_diff
-        if_diff_exit_diff
-        """ )
-    writescript( 'cshdiff2.vvt', """
-        #!/bin/csh
-        source ./vvtest_util.csh
-        exit_diff
-        """ )
 
     out,np,nd,nf,nn = run_vvtest()
-    assert np == 3 and nd == 6 and nf == 0 and nn == 0
+    assert np == 2 and nd == 4 and nf == 0 and nn == 0
     platname = platform_name( out )
     tdir = results_dir()
     assert len( filegrep( tdir+'/pydiff/execute.log', 'exiting diff' ) ) == 1
     assert len( filegrep( tdir+'/shdiff/execute.log', 'exiting diff' ) ) == 1
-    assert len( filegrep( tdir+'/cshdiff/execute.log', 'exiting diff' ) ) == 1
     assert len( filegrep( tdir+'/pypass/execute.log', 'exiting diff' ) ) == 0
     assert len( filegrep( tdir+'/shpass/execute.log', 'exiting diff' ) ) == 0
-    assert len( filegrep( tdir+'/cshpass/execute.log', 'exiting diff' ) ) == 0
 
     if platname in nonqueued_platform_names:
         remove_results()
         
         out,np,nd,nf,nn = run_vvtest( '--batch' )
-        assert np == 3 and nd == 6 and nf == 0 and nn == 0
+        assert np == 2 and nd == 4 and nf == 0 and nn == 0
         assert len( filegrep( tdir+'/pydiff/execute.log', 'exiting diff' ) ) == 1
         assert len( filegrep( tdir+'/shdiff/execute.log', 'exiting diff' ) ) == 1
-        assert len( filegrep( tdir+'/cshdiff/execute.log', 'exiting diff' ) ) == 1
         assert len( filegrep( tdir+'/pypass/execute.log', 'exiting diff' ) ) == 0
         assert len( filegrep( tdir+'/shpass/execute.log', 'exiting diff' ) ) == 0
-        assert len( filegrep( tdir+'/cshpass/execute.log', 'exiting diff' ) ) == 0
 
     os.chdir( tdir )
     out,np,nd,nf,nn = run_vvtest( '-R' )
-    assert np == 3 and nd == 6 and nf == 0 and nn == 0
+    assert np == 2 and nd == 4 and nf == 0 and nn == 0
     assert len( filegrep( 'pydiff/execute.log', 'exiting diff' ) ) == 1
     assert len( filegrep( 'shdiff/execute.log', 'exiting diff' ) ) == 1
-    assert len( filegrep( 'cshdiff/execute.log', 'exiting diff' ) ) == 1
     assert len( filegrep( 'pypass/execute.log', 'exiting diff' ) ) == 0
     assert len( filegrep( 'shpass/execute.log', 'exiting diff' ) ) == 0
-    assert len( filegrep( 'cshpass/execute.log', 'exiting diff' ) ) == 0
 
 
 def test10():

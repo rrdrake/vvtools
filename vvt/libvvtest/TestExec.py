@@ -68,9 +68,7 @@ class TestExec:
 
         self.perms.set( self.atest.getExecuteDirectory() )
 
-        lang = self.atest.getForm( 'lang' )
-
-        if lang == 'xml':
+        if self.atest.getSpecificationForm() == 'xml':
             self._write_xml_run_script( commondb )
         else:
             self._write_script_utils( test_dir )
@@ -257,7 +255,7 @@ class TestExec:
             self._check_write_mpi_machine_file()
             self._check_set_working_files( baseline )
 
-            self._check_set_environ_for_python_execution( baseline )
+            self._set_environ_for_python_execution( baseline )
 
             sys.stdout.write( '\n' )
             sys.stdout.flush()
@@ -285,14 +283,7 @@ class TestExec:
 
     def _make_execute_command(self, baseline):
         ""
-        cmdL = [] + self.atest.getForm( 'cmd' )
-
-        if baseline:
-            cmd = self.atest.getBaseline( 'cmd', None )
-            if cmd == None:
-                cmdL = None
-            else:
-                cmdL = [] + cmd
+        cmdL = make_core_execute_command( self.atest, baseline )
 
         if cmdL != None:
             if hasattr(self.plugin_obj, "mpi_opts") and self.plugin_obj.mpi_opts:
@@ -335,11 +326,9 @@ class TestExec:
         sys.stdout.flush()
 
         xL = [ 'execute.log', 'baseline.log' ]
-        # exclude the test 'file' because it may have been generated earlier,
-        # which happens for the xml form
-        f = self.atest.getForm( 'file', None )
-        if f != None:
-          xL.append( f )
+
+        if self.atest.getSpecificationForm() == 'xml':
+            xL.append( 'runscript' )
 
         for f in os.listdir('.'):
           if f not in xL and not f.startswith( 'vvtest_util' ):
@@ -506,28 +495,22 @@ class TestExec:
             sys.stdout.flush()
             shutil.copy2( fromfile, dst )
 
-    def _check_set_environ_for_python_execution(self, baseline):
+    def _set_environ_for_python_execution(self, baseline):
         """
         set up python pathing to make import of script utils easy
         """
-        lang = self.atest.getForm( 'lang', None )
-        if baseline:
-            lang = self.atest.getBaseline( 'lang', lang )
+        pth = os.getcwd()
+        if self.config.get('configdir'):
+            # make sure the config dir comes before vvtest/config
+            pth += ':'+self.config.get('configdir')
 
-        if lang == 'py':
+        d = self.config.get('toolsdir')
+        pth += ':'+os.path.join( d, 'config' )
+        pth += ':'+d
 
-            pth = os.getcwd()
-            if self.config.get('configdir'):
-                # make sure the config dir comes before vvtest/config
-                pth += ':'+self.config.get('configdir')
-
-            d = self.config.get('toolsdir')
-            pth += ':'+os.path.join( d, 'config' )
-            pth += ':'+d
-
-            val = os.environ.get( 'PYTHONPATH', '' )
-            if val: os.environ['PYTHONPATH'] = pth + ':' + val
-            else:   os.environ['PYTHONPATH'] = pth
+        val = os.environ.get( 'PYTHONPATH', '' )
+        if val: os.environ['PYTHONPATH'] = pth + ':' + val
+        else:   os.environ['PYTHONPATH'] = pth
 
     def postclean(self):
         """
@@ -535,12 +518,15 @@ class TestExec:
         all files in the execute directory except for a few vvtest files.
         """
         xL = [ 'execute.log', 'baseline.log', 'machinefile' ]
-        f = self.atest.getForm( 'file', None )
-        if f != None: xL.append( os.path.basename(f) )
-        f = self.atest.getBaseline( 'file', None )
-        if f != None: xL.append( os.path.basename(f) )
-        f = self.atest.getAnalyze( 'file', None )
-        if f != None: xL.append( os.path.basename(f) )
+
+        if self.atest.getSpecificationForm() == 'xml':
+            xL.append( 'runscript' )
+
+        # might as well keep the linked files
+        for sf,tf in self.atest.getLinkFiles():
+            if tf == None:
+                tf = os.path.basename( sf )
+            xL.append( tf )
         
         for f in os.listdir( self.xdir ):
           if f not in xL and not f.startswith( 'vvtest_util' ):
@@ -627,7 +613,7 @@ class TestExec:
         ""
         # no 'form' defaults to the XML test specification format
 
-        script_file = os.path.join( self.xdir, self.atest.getForm('file') )
+        script_file = os.path.join( self.xdir, 'runscript' )
 
         if self.config.get('refresh') or not os.path.exists( script_file ):
 
@@ -650,30 +636,13 @@ class TestExec:
 
     def _write_script_utils(self, test_dir):
         ""
-        lang = self.atest.getForm( 'lang' )
+        for lang in ['py','sh']:
 
-        if lang:
-
-            #  write utility script fragment
             script_file = os.path.join( self.xdir, 'vvtest_util.'+lang )
 
             if self.config.get('refresh') or not os.path.exists( script_file ):
                 ScriptWriter.writeScript( self.atest, script_file,
                                           lang, self.config, self.platform,
-                                          test_dir,
-                                          self.getDependencyDirectories() )
-
-                self.perms.set( os.path.abspath( script_file ) )
-
-        # may also need to write a util fragment for a baseline script
-        blinelang = self.atest.getBaseline( 'lang', lang )
-        if blinelang != lang:
-
-            script_file = os.path.join( self.xdir, 'vvtest_util.'+blinelang )
-
-            if self.config.get('refresh') or not os.path.exists( script_file ):
-                ScriptWriter.writeScript( self.atest, script_file,
-                                          blinelang, self.config, self.platform,
                                           test_dir,
                                           self.getDependencyDirectories() )
 
@@ -772,3 +741,108 @@ def set_timeout_environ_variable( timeout ):
 
         os.environ['TIMEOUT'] = str( int( t ) )
 
+
+def make_file_execute_command( srcdir, path ):
+    ""
+    if os.path.isabs( path ):
+        if os.access( path, os.X_OK ):
+            return [ path ]
+        else:
+            return [ sys.executable, path ]
+
+    else:
+        full = os.path.join( srcdir, path )
+        if os.access( full, os.X_OK ):
+            return [ './'+path ]
+        else:
+            return [ sys.executable, path ]
+
+
+def make_test_script_command( atest ):
+    ""
+    if atest.getSpecificationForm() == 'xml':
+        cmdL = ['/bin/csh', '-f', './runscript']
+    else:
+        srcdir,fname = os.path.split( atest.getFilename() )
+        cmdL = make_file_execute_command( srcdir, fname )
+
+    return cmdL
+
+
+def command_from_filename_or_option( atest, spec ):
+    ""
+    if spec.startswith('-'):
+        cmdL = make_test_script_command( atest )
+        cmdL.append( spec )
+    else:
+        srcdir = atest.getDirectory()
+        cmdL = make_file_execute_command( srcdir, spec )
+
+    return cmdL
+
+
+def make_baseline_analyze_command( atest ):
+    ""
+    bscr = atest.getBaselineScript()
+    ascr = atest.getAnalyzeScript()
+
+    if bscr.startswith('-'):
+        # add the baseline option to the analyze script command
+        cmdL = command_from_filename_or_option( atest, ascr )
+        cmdL.append( bscr )
+
+    else:
+        # start with the baseline script command
+        cmdL = command_from_filename_or_option( atest, bscr )
+
+        # if there is an analyze script AND a baseline script, just use the
+        # baseline script; but if there is an analyze option then add it
+        if ascr.startswith('-'):
+            cmdL.append( ascr )
+
+    return cmdL
+
+
+def make_script_baseline_command( atest ):
+    ""
+    if atest.isAnalyze():
+        cmdL = make_baseline_analyze_command( atest )
+    else:
+        scr = atest.getBaselineScript()
+        cmdL = command_from_filename_or_option( atest, scr )
+
+    return cmdL
+
+
+def check_make_script_baseline_command( atest ):
+    ""
+    if atest.getBaselineScript():
+        cmdL = make_script_baseline_command( atest )
+    else:
+        cmdL = None
+
+    return cmdL
+
+
+def make_core_execute_command( atest, baseline ):
+    ""
+    if atest.getSpecificationForm() == 'xml':
+        cmdL = make_test_script_command( atest )
+        if baseline:
+            if atest.getBaselineScript():
+                cmdL.append( '--baseline' )
+            else:
+                cmdL = None
+
+    else:
+        if baseline:
+            cmdL = check_make_script_baseline_command( atest )
+
+        elif atest.isAnalyze():
+            ascr = atest.getAnalyzeScript()
+            cmdL = command_from_filename_or_option( atest, ascr )
+
+        else:
+            cmdL = make_test_script_command( atest )
+
+    return cmdL

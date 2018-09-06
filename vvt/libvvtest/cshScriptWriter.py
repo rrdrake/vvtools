@@ -181,11 +181,11 @@ def writeScript( tspec, xdb, plat, \
     line_list.extend( [ \
       'if ($?newbaseline) then',
       '  set echo', '' ] )
-    
-    # TODO: add file globbing for baseline files
-    for frag in tspec.getBaselineFragments():
+
+    frag = tspec.getBaselineScript()
+    if frag:
       line_list.append( frag )
-    
+
     line_list.extend( [ \
       '  exit 0',
       'endif', '' ] )
@@ -263,7 +263,7 @@ def writeScript( tspec, xdb, plat, \
                   line_list.append( 'echo "PARAM_'+n2+' = $PARAM_'+n2+'"' )
               line_list.append('')
 
-      line_list.extend( tspec.getAnalyze('scriptfrag').split( os.linesep ) )
+      line_list.extend( tspec.getAnalyzeScript().split( os.linesep ) )
       line_list.append('')
       line_list.append('################ end analyze script')
       line_list.append('')
