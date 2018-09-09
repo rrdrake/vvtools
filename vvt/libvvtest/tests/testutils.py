@@ -352,6 +352,38 @@ def run_redirect( cmd, redirect_filename ):
     return x == 0
 
 
+class RedirectStdout:
+    """
+    A convenience class to redirect the current process's stdout to a file.
+    Constructor initiates the redirection, close() stops it.
+    """
+
+    def __init__(self, filename, stderr_filename=None):
+        """
+        If 'stderr_filename' is not None, stderr goes to that filename.
+        """
+        self.filep = open( filename, 'w' )
+        self.save_stdout_fd = os.dup(1)
+        os.dup2( self.filep.fileno(), 1 )
+        self.filep2 = None
+        if stderr_filename:
+            self.filep2 = open( stderr_filename, 'w' )
+            self.save_stderr_fd = os.dup(2)
+            os.dup2( self.filep2.fileno(), 2 )
+
+    def close(self):
+        ""
+        sys.stdout.flush()
+        os.dup2( self.save_stdout_fd, 1 )
+        os.close( self.save_stdout_fd )
+        self.filep.close()
+        if self.filep2 != None:
+            sys.stderr.flush()
+            os.dup2( self.save_stderr_fd, 2 )
+            os.close( self.save_stderr_fd )
+            self.filep2.close()
+
+
 def shell_escape( cmd ):
     """
     Returns a string with shell special characters escaped so they are not
@@ -374,6 +406,17 @@ def rmallfiles( not_these=None ):
             else:
                 os.remove(f)
 
+
+def readfile( filename ):
+    ""
+    fp = open( filename, 'r' )
+    try:
+        buf = fp.read()
+    finally:
+        fp.close()
+    return buf
+
+
 def filegrep(fname, pat):
     L = []
     fp = open(fname,"r")
@@ -385,6 +428,7 @@ def filegrep(fname, pat):
     fp.close()
     return L
 
+
 def grep(out, pat):
     L = []
     repat = re.compile(pat)
@@ -393,6 +437,7 @@ def grep(out, pat):
         if repat.search(line):
             L.append(line)
     return L
+
 
 class vvtestRunner:
     """

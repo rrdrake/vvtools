@@ -13,6 +13,7 @@ import traceback
 
 from . import cshScriptWriter
 from . import ScriptWriter
+from . import pgexec
 
 # this is the exit status that tests use to indicate a diff
 diffExitStatus = 64
@@ -94,95 +95,79 @@ class TestExec:
         sys.stdout.flush() ; sys.stderr.flush()
 
         self.pid = os.fork()
-        if self.pid == 0:  # child
+        if self.pid == 0:
+            # child process is the test itself
             self._prepare_and_execute_test( baseline )
 
     def poll(self):
         """
         """
         if self.atest.getAttr('state') == "notrun": return 0
-        
+
         if self.atest.getAttr('state') == "done": return 1
-        
+
         assert self.pid > 0
-        
-        (cpid, code) = os.waitpid(self.pid, os.WNOHANG)
-        
+
+        cpid,code = os.waitpid(self.pid, os.WNOHANG)
+
         if cpid > 0:
-          
-          # test finished
-          
-          self.platform.giveProcs( self.plugin_obj )
-          
-          self.atest.setAttr('state', "done")
-          self.atest.setAttr('xtime', int(time.time()-self.tzero))
-          
-          # handle the resulting code
-          if os.WIFEXITED(code):
-            if os.WEXITSTATUS(code) == 0:
-              self.atest.setAttr('result', 'pass')
-            elif os.WEXITSTATUS(code) == diffExitStatus:
-              self.atest.setAttr('result', 'diff')
-            else:
-              self.atest.setAttr('result', 'fail')
-          elif os.WIFSIGNALED(code) or os.WIFSTOPPED(code):
-            self.atest.setAttr('result', 'fail')
-          else:
-            # could not translate exit code
-            if code == 0:
-              self.atest.setAttr('result', 'pass')  # assume pass
-            else:
-              self.atest.setAttr('result', 'fail')  # assume fail
-          
-          if self.timedout > 0:
-            self.atest.setAttr('result', "timeout")
 
-          self.perms.recurse( self.xdir )
+            # test finished
 
-          if self.config.get('postclean') and \
-             self.atest.getAttr('result') == 'pass' and \
-             not self.has_dependent:
-            self.postclean()
-          
+            self.platform.giveProcs( self.plugin_obj )
+
+            self.atest.setAttr('state', "done")
+            self.atest.setAttr('xtime', int(time.time()-self.tzero))
+
+            result = translate_exit_status_to_test_result( code )
+            self.atest.setAttr( 'result', result )
+
+            if self.timedout > 0:
+                self.atest.setAttr( 'result', "timeout" )
+
+            self.perms.recurse( self.xdir )
+
+            if self.config.get('postclean') and \
+               self.atest.getAttr('result') == 'pass' and \
+               not self.has_dependent:
+                self.postclean()
+
         # not done .. check for timeout
         elif self.timeout > 0 and (time.time() - self.tzero) > self.timeout:
-          if self.timedout == 0:
-            # interrupt all processes in the process group
-            self.signalJob()
-            self.timedout = time.time()
-          elif (time.time() - self.timedout) > interrupt_to_kill_timeout:
-            # SIGINT isn't killing fast enough, use SIGKILL
-            self.signalJob(signal.SIGKILL)
-        
+            if self.timedout == 0:
+                # interrupt all processes in the process group
+                self.signalJob( signal.SIGINT )
+                self.timedout = time.time()
+            elif (time.time() - self.timedout) > interrupt_to_kill_timeout:
+                # SIGINT isn't killing fast enough, use stronger method
+                self.signalJob( signal.SIGTERM )
+
         return self.atest.getAttr('state') == "done"
-    
+
     def isDone(self):
         return self.atest.getAttr('state') == "done"
     
-    def signalJob(self, sig=signal.SIGINT):
+    def signalJob(self, sig):
         """
-        Sends all the process in the job a signal.
+        Sends a signal to the job, such as signal.SIGINT.
         """
-        for p in self._get_processes():
-          try: os.kill(p, sig)
-          except OSError: pass
+        try:
+            os.kill( self.pid, sig )
+        except Exception:
+            pass
     
     def killJob(self):
         """
         Sends the job a SIGINT signal, waits a little, and if the job
-        has not shutdown, sends it a SIGKILL signal.
+        has not shutdown, sends it SIGTERM followed by SIGKILL.
         """
-        pids = self._get_processes()
-        for p in pids:
-          try: os.kill(p, signal.SIGINT)
-          except OSError: pass
+        self.signalJob( signal.SIGINT )
         time.sleep(2)
-        if not self.poll():
-          for p in pids:
-            try: os.kill(p, signal.SIGKILL)
-            except: pass
-          time.sleep(5)
-          self.poll()
+
+        if self.poll() == None:
+            self.signalJob( signal.SIGTERM )
+            time.sleep(5)
+            self.poll()
     
     def addDependency(self, testexec, match_pattern=None, expr=None):
         """
@@ -263,17 +248,14 @@ class TestExec:
             if baseline:
                 self.copyBaselineFiles()
 
+            sys.stdout.flush() ; sys.stderr.flush()
+
             if cmd_list == None:
                 # this can only happen in baseline mode
-                sys.stdout.flush() ; sys.stderr.flush()
                 os._exit(0)
-
-            # replace this process with the command
-            if os.path.isabs( cmd_list[0] ):
-                os.execve( cmd_list[0], cmd_list, os.environ )
             else:
-                os.execvpe( cmd_list[0], cmd_list, os.environ )
-            raise Exception( "os.exec should not return" )
+                x = pgexec.group_exec_subprocess( cmd_list )
+                os._exit(x)
 
         except:
             sys.stdout.flush() ; sys.stderr.flush()
@@ -538,77 +520,6 @@ class TestExec:
             else:
               os.remove( fp )
 
-    pscmd = None
-    
-    def _get_processes(self, rpid=None, psdict=None, pidlist=None):
-        """
-        Retrieves all descendent processes of the job and returns them
-        in a list.  The rpid, psdict, and pidlist arguments are for
-        internal use.
-        """
-        if TestExec.pscmd == None:
-          if os.system( "ps -ef > /dev/null" ) == 0:
-            TestExec.pscmd = [ 'ps', '-ef' ]
-          elif os.system( "ps -Ao user,pid,ppid > /dev/null" ) == 0:
-            TestExec.pscmd = [ 'ps', '-Ao', 'user,pid,ppid' ]
-          else:
-            TestExec.pscmd = [ 'ps', '-ef' ]
-        
-        if rpid == None:
-          
-          if self.pid <= 0:
-            return []
-          
-          # run the platform's ps command to get a list of all processes
-          
-          sys.stdout.flush()
-          
-          outRead, outWrite = os.pipe()
-          pspid = os.fork()
-          
-          if pspid == 0:
-            os.close(outRead)
-            os.dup2(outWrite, sys.stdout.fileno())
-            os.execvp( TestExec.pscmd[0], TestExec.pscmd )
-            assert 0, "execvp should not return"
-          
-          os.close(outWrite)
-          
-          psdict = {}
-          lineno = 0
-          for line in os.fdopen(outRead).readlines():
-            if lineno > 0:
-              linelist = line.split()
-              try:
-                cpid = int(linelist[1])
-                ppid = int(linelist[2])
-              except:
-                # if the ps output is not "name pid parentpid ..." then ignore
-                pass
-              else:
-                # skip the init process
-                if ppid > 1:
-                  if ppid in psdict:
-                    psdict[ppid].append(cpid)
-                  else:
-                    psdict[ppid] = [cpid]
-            
-            lineno = lineno + 1
-          
-          os.waitpid(pspid, 0)
-          
-          pidlist = [self.pid]
-          self._get_processes(self.pid, psdict, pidlist)
-          return pidlist
-        
-        else: # this is a recursive call
-          pids = psdict.get(rpid, [])
-          pidlist.extend(pids)
-          for p in pids:
-            self._get_processes(p, psdict, pidlist)
-        
-        return None
-
     def _write_xml_run_script(self, commondb):
         ""
         # no 'form' defaults to the XML test specification format
@@ -846,3 +757,27 @@ def make_core_execute_command( atest, baseline ):
             cmdL = make_test_script_command( atest )
 
     return cmdL
+
+
+def translate_exit_status_to_test_result( exit_status ):
+    ""
+    if os.WIFEXITED( exit_status ):
+
+        if os.WEXITSTATUS( exit_status ) == 0:
+            result = 'pass'
+        elif os.WEXITSTATUS( exit_status ) == diffExitStatus:
+            result = 'diff'
+        else:
+            result = 'fail'
+
+    elif os.WIFSIGNALED(exit_status) or os.WIFSTOPPED(exit_status):
+        result = 'fail'
+
+    else:
+        # could not translate exit_status
+        if exit_status == 0:
+            result = 'pass'  # assume pass
+        else:
+            result = 'fail'  # assume fail
+
+    return result

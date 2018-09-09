@@ -1869,43 +1869,49 @@ def baselineTests( test_dir, plat, rtconfig ):
                          baseline=True )
     
     if len(tlist.active) > 0:
-      
-      print3( "Baselining these tests:" )
-      printResults( tlist, test_dir, None, short=False )
 
-      perms = make_PermissionSetter( test_dir, optdict )
-      
-      tlist.createTestExecs( test_dir, plat, config, perms )
-      
-      failures = 0
-      for tx in tlist.getTestExecList():
-        if isinstance(tx, TestExec.TestExec): ref = tx.atest
-        else:                         ref = tx
-        sys.stdout.write("baselining " + ref.getExecuteDirectory() + "...")
-        sys.stdout.flush()
-        tx.start( baseline=1 )
-        for i in range(30):
-          time.sleep(1)
-          if tx.poll():
-            if tx.atest.getAttr('result') == "pass":
-              sys.stdout.write("done\n")
-              sys.stdout.flush()
+        print3( "Baselining these tests:" )
+        printResults( tlist, test_dir, None, short=False )
+
+        perms = make_PermissionSetter( test_dir, optdict )
+
+        tlist.createTestExecs( test_dir, plat, config, perms )
+
+        failures = False
+        for tx in tlist.getTestExecList():
+
+            if isinstance(tx, TestExec.TestExec):
+                ref = tx.atest
             else:
-              failures = 1
-              sys.stdout.write("FAILED\n")
-              sys.stdout.flush()
-            break
-        if not tx.isDone():
-          tx.killJob()
-          failures = 1
-          sys.stdout.write("TIMED OUT\n")
-          sys.stdout.flush()
-      
-      if failures:
-        print3( "\n\n !!!!!!!!!!!!!!  THERE WERE FAILURES  !!!!!!!!!!!!! \n\n" )
-    
+                ref = tx
+
+            sys.stdout.write( "baselining "+ref.getExecuteDirectory()+"..." )
+
+            tx.start( baseline=1 )
+
+            tm = int( os.environ.get( 'VVTEST_BASELINE_TIMEOUT', 30 ) )
+            for i in range(tm):
+
+                time.sleep(1)
+
+                if tx.poll():
+                    if tx.atest.getAttr('result') == "pass":
+                        print3( "done" )
+                    else:
+                        failures = True
+                        print3("FAILED")
+                    break
+
+            if not tx.isDone():
+                tx.killJob()
+                failures = True
+                print3( "TIMED OUT" )
+
+        if failures:
+          print3( "\n\n !!!!!!!!!!!  THERE WERE FAILURES  !!!!!!!!!! \n\n" )
+
     else:
-      print3( "\n--------- no tests to baseline -----------\n" )
+        print3( "\n--------- no tests to baseline -----------\n" )
 
 
 ###########################################################################

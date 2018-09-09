@@ -1,0 +1,354 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import traceback
+import signal
+import unittest
+
+import testutils as util
+from testutils import print3
+
+import libvvtest.pgexec as pgexec
+
+
+class Timeout_when_baselining( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+        # this env var used in vvtest as the time to wait for each test
+        # to finish a rebaseline execution
+        if 'VVTEST_BASELINE_TIMEOUT' in os.environ:
+            del os.environ['VVTEST_BASELINE_TIMEOUT']
+
+    def test_that_a_hung_baseline_script_will_be_killed(self):
+        ""
+        util.writefile( 'sleeper.vvt', """
+            #VVT: baseline : baseliner.py
+            import script_util as util
+            util.exit_diff()
+            """ )
+        util.writefile( 'baseliner.py', """
+            import time
+            time.sleep(30)
+            """ )
+        time.sleep(1)
+
+        os.environ['VVTEST_BASELINE_TIMEOUT'] = '3'
+
+        vrun = util.vvtestRunner()
+        assert vrun.num_pass == 0 and vrun.num_diff == 1
+
+        t0 = time.time()
+
+        vrun = util.vvtestRunner( '-b' )
+
+        assert 'TIMED OUT' in vrun.out
+        assert time.time() - t0 < 8
+
+
+class process_group_execution( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+        pgexec.register_signal_handlers( reset=True )
+
+    def test_signal_exception_class_stores_the_signal_number(self):
+        ""
+        try:
+            pgexec.signal_handler( 42, None )
+        except pgexec.SignalException:
+            exc = sys.exc_info()[1]
+            assert exc.sig == 42
+
+    def test_running_a_script_with_group_exec_subprocess(self):
+        ""
+        util.writescript( 'myscript', """
+            #!"""+sys.executable+"""
+            print ( 'hello from myscript' )
+            """ )
+        time.sleep(1)
+
+        x,out,err = run_script_using_group_exec_subprocess( 'myscript' )
+
+        assert x == 0
+        assert len( util.grep( out, 'hello from myscript' ) ) == 1
+        assert len( err.strip() ) == 0
+
+    def write_file_touch_script(self, scriptname):
+        ""
+        util.writescript( scriptname, """
+            #!"""+sys.executable+"""
+            import os, time
+            os.chdir( '"""+os.getcwd()+"""' )
+            fp = open( 'touch1.txt', 'w' ) ; fp.close()
+            time.sleep(10)
+            fp = open( 'touch2.txt', 'w' ) ; fp.close()
+            time.sleep(1)
+            """ )
+
+    def run_signal_interrupt_test(self, signum):
+        ""
+        self.write_file_touch_script( 'myscript' )
+        time.sleep(1)
+
+        t0 = time.time()
+        x,out,err = run_script_using_group_exec_subprocess(
+                            'myscript', timeout=2, signum=signum )
+        t1 = time.time()
+        time.sleep(11)
+
+        assert t1-t0 < 10
+        assert x != 0
+        if signum == signal.SIGINT:
+            assert 'KeyboardInterrupt' in err
+        else:
+            assert 'KeyboardInterrupt' not in err
+        assert os.path.exists( 'touch1.txt' )
+        assert not os.path.exists( 'touch2.txt' )
+
+    def test_interrupting_script_with_core_signals(self):
+        ""
+        for signum in [ signal.SIGINT, signal.SIGTERM, signal.SIGHUP ]:
+            self.run_signal_interrupt_test( signum )
+
+    def test_that_all_process_decendents_are_given_the_signal(self):
+        ""
+        self.write_file_touch_script( 'script2' )
+        script2 = os.path.abspath( 'script2' )
+        util.writescript( 'script1', """
+            #!"""+sys.executable+"""
+            import subprocess
+            p = subprocess.Popen( '"""+script2+"""', shell=True )
+            x = p.wait()
+            assert x != None
+            sys.exit( abs(x) )
+            """ )
+        time.sleep(1)
+
+        t0 = time.time()
+        x,out,err = run_script_using_group_exec_subprocess(
+                            'script1', timeout=2, signum=signal.SIGINT )
+        t1 = time.time()
+        time.sleep(11)
+
+        assert t1-t0 < 10
+        assert x != 0
+        assert os.path.exists( 'touch1.txt' )
+        assert not os.path.exists( 'touch2.txt' )
+
+    def write_touch_script_that_ignores_signals(self, scriptname):
+        ""
+        util.writescript( scriptname, """
+            #!"""+sys.executable+"""
+            import os, time, signal
+            os.chdir( '"""+os.getcwd()+"""' )
+
+            fp = open( 'touch1.txt', 'w' ) ; fp.close()
+
+            def signaltouch( signum, frame ):
+                fp = open( 'sigxxx.txt', 'w' ) ; fp.close()
+
+            signal.signal( signal.SIGTERM, signaltouch )
+            signal.signal( signal.SIGHUP, signaltouch )
+
+            t0 = time.time()
+            while True:
+                try:
+                    if time.time()-t0 > 10:
+                        break
+                    time.sleep(1)
+                except KeyboardInterrupt:
+                    fp = open( 'sigint.txt', 'w' ) ; fp.close()
+
+            fp = open( 'touch2.txt', 'w' ) ; fp.close()
+            time.sleep(1)
+            """ )
+
+    def test_send_SIGINT_to_a_subprocess_that_ignores_signals(self):
+        ""
+        self.write_touch_script_that_ignores_signals( 'script2' )
+        script2 = os.path.abspath( 'script2' )
+        util.writescript( 'script1', """
+            #!"""+sys.executable+"""
+            import subprocess
+            p = subprocess.Popen( '"""+script2+"""', shell=True )
+            x = p.wait()
+            assert x != None
+            sys.exit( abs(x) )
+            """ )
+        time.sleep(1)
+
+        x,out,err = run_script_using_group_exec_subprocess(
+                            'script1', timeout=4, signum=signal.SIGINT )
+        time.sleep(11)
+
+        assert x != 0
+        assert os.path.exists( 'touch1.txt' )
+        assert os.path.exists( 'sigint.txt' )
+        assert not os.path.exists( 'sigxxx.txt' )
+        assert os.path.exists( 'touch2.txt' )
+
+    def test_send_SIGTERM_to_a_subprocess_that_ignores_signals(self):
+        ""
+        self.write_touch_script_that_ignores_signals( 'script2' )
+        script2 = os.path.abspath( 'script2' )
+        util.writescript( 'script1', """
+            #!"""+sys.executable+"""
+            import subprocess
+            p = subprocess.Popen( '"""+script2+"""', shell=True )
+            x = p.wait()
+            assert x != None
+            sys.exit( abs(x) )
+            """ )
+        time.sleep(1)
+
+        x,out,err = run_script_using_group_exec_subprocess(
+                            'script1', timeout=4, signum=signal.SIGTERM )
+        time.sleep(11)
+
+        assert x != 0
+        assert os.path.exists( 'touch1.txt' )
+        assert not os.path.exists( 'sigint.txt' )
+        assert os.path.exists( 'sigxxx.txt' )
+        assert not os.path.exists( 'touch2.txt' )
+
+
+class integration_signalling_tests( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+        pgexec.register_signal_handlers( reset=True )
+
+    def test_sub_sub_process_signalling_in_a_test_script(self):
+        ""
+        util.writefile( 'script.vvt', """
+            #VVT: link : subscript
+            import subprocess
+            p = subprocess.Popen( './subscript', shell=True )
+            x = p.wait()
+            assert x != None
+            sys.exit( abs(x) )
+            """ )
+        util.writescript( 'subscript', """
+            #!"""+sys.executable+"""
+            import time
+            fp = open( 'touch1.txt', 'w' ) ; fp.close()
+            time.sleep(10)
+            fp=open( 'touch2.txt', 'w' ) ; fp.close()
+            """ )
+        time.sleep(1)
+
+        vrun = util.vvtestRunner( '-T 2' )
+        assert vrun.num_pass == 0
+        assert vrun.num_timeout == 1
+
+        time.sleep(11)
+
+        t1 = os.path.join( vrun.testdir, 'script', 'touch1.txt' )
+        assert os.path.exists( t1 )
+
+        t2 = os.path.join( vrun.testdir, 'script', 'touch2.txt' )
+        assert not os.path.exists( t2 )
+
+        timeL = util.testtimes( vrun.out )
+        assert len( timeL ) == 1
+        xdir,t0,t1 = timeL[0]
+        assert t1-t0 < 5
+
+
+############################################################################
+
+def run_script_using_group_exec_subprocess( scriptname,
+                                            timeout=None,
+                                            signum=signal.SIGINT ):
+    ""
+    fname = os.path.abspath( scriptname )
+
+    redir = util.RedirectStdout( 'outfile', 'errfile' )
+    try:
+        x = fork_and_run_script( fname, timeout, signum )
+    finally:
+        redir.close()
+
+    time.sleep(1)
+
+    out = util.readfile( 'outfile' )
+    err = util.readfile( 'errfile' )
+
+    return x, out, err
+
+
+def fork_and_run_script( scriptname, timeout=None, signum=signal.SIGINT ):
+    ""
+    def run_script():
+        x = pgexec.group_exec_subprocess( scriptname, shell=True )
+        os._exit(x)
+
+    newpid = os.fork()
+    if newpid == 0:
+        try:
+            x = run_script()
+        except:
+            traceback.print_exc()
+            x = 1
+        os._exit(x)
+
+    if timeout and timeout > 0:
+        x = poll_process_id( newpid, timeout )
+        if x == None:
+            os.kill( newpid, signum )
+            x = wait_process_id( newpid )
+    else:
+        x = wait_process_id( newpid )
+
+    return x
+
+
+def wait_process_id( pid ):
+    ""
+    p,xval = os.waitpid( pid, 0 )
+    return exit_code_to_status_value( xval )
+
+
+def poll_process_id( pid, timeout ):
+    ""
+    t0 = time.time()
+
+    x = None
+    while time.time() - t0 < timeout:
+        p,xval = os.waitpid( pid, os.WNOHANG )
+        if p and xval:
+            x = exit_code_to_status_value( xval )
+            break
+        time.sleep(1)
+
+    return x
+
+
+def exit_code_to_status_value( exit_status ):
+    ""
+    if os.WIFEXITED( exit_status ):
+        x = os.WEXITSTATUS( exit_status )
+    else:
+        x = 1
+
+    return x
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
