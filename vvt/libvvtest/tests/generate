@@ -12,13 +12,10 @@ sys.excepthook = sys.__excepthook__
 import os
 import glob
 import time
+import unittest
 
 import testutils as util
-optD,argL = util.initialize( sys.argv )
-if 'TESTUTILS_RUNDIR' not in os.environ:
-    os.chdir( util.working_directory )
-
-from testutils import *
+from testutils import print3
 
 
 def main():
@@ -42,336 +39,324 @@ def main():
 
 ########################################################################
 
-def test01():
-    """
-    generate a simple test
-    """
-    writefile( "null.xml", """
-        <rtest name="null">
-        </rtest>""" )
+class generate_tests( unittest.TestCase ):
 
-    out,np,nd,nf,nn = run_vvtest( '-g' )
-    tdirname = results_dir()
-    L = filegrep( tdirname+'/testlist', 'null' )
-    assert len(L) == 1
+    def setUp(self):
+        util.setup_test()
 
+    def test_simple_generate(self):
+        ""
+        util.writefile( "null.xml", """
+            <rtest name="null">
+            </rtest>""" )
 
-def test02():
-    """
-    a parameterized test
-    """
-    writefile( "null.xml", """
-        <rtest name="null">
-        </rtest>""" )
-    
-    writefile( "param.xml", """
-        <rtest name="param">
-          <parameterize hello="world mars"/>
-          <execute>
-        sleep 1
-        echo "parm=$hello"
-          </execute>
-        </rtest>""" )
+        out,np,nd,nf,nn = util.run_vvtest( '-g' )
+        tdirname = util.results_dir()
+        L = util.filegrep( tdirname+'/testlist', 'null' )
+        assert len(L) == 1
 
-    out,np,nd,nf,nn = run_vvtest( '-g' )
-    tdirname = results_dir()
-    assert len( filegrep( tdirname+'/testlist', 'null' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'param' ) ) == 2
-    assert len( filegrep( tdirname+'/testlist', 'hello=world' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'hello=mars' ) ) == 1
+    def test_generating_a_parameterized_test(self):
+        """
+        a parameterized test
+        """
+        util.writefile( "null.xml", """
+            <rtest name="null">
+            </rtest>""" )
+        
+        util.writefile( "boom.xml", """
+            <rtest name="boom">
+              <parameterize hello="world mars"/>
+              <execute>
+            sleep 1
+            echo "parm=$hello"
+              </execute>
+            </rtest>""" )
 
-    writefile( "double.xml", """
-        <rtest name="double">
-          <parameterize one="val1 val2"/>
-          <parameterize two="spot skip gimp"/>
-        </rtest>""")
+        out,np,nd,nf,nn = util.run_vvtest( '-g' )
+        tdirname = util.results_dir()
+        assert len( util.filegrep( tdirname+'/testlist', 'null' ) ) == 1
+        assert len( util.filegrep( tdirname+'/testlist', 'boom' ) ) == 2
+        assert len( util.filegrep( tdirname+'/testlist', 'hello.*world' ) ) == 1
+        assert len( util.filegrep( tdirname+'/testlist', 'hello.*mars' ) ) == 1
 
-    out,np,nd,nf,nn = run_vvtest( '-g' )
-    assert len( filegrep( tdirname+'/testlist', 'null' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'param' ) ) == 2
-    assert len( filegrep( tdirname+'/testlist', 'double' ) ) == 6  # 2 params times 3 values
-    assert len( filegrep( tdirname+'/testlist', 'hello=world' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'hello=mars' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'one=val2.*two=gimp' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'val1.*val2' ) ) == 0
-    assert len( filegrep( tdirname+'/testlist', 'val2.*val1' ) ) == 0
+        util.writefile( "double.xml", """
+            <rtest name="double">
+              <parameterize one="val1 val2"/>
+              <parameterize two="spot skip gimp"/>
+            </rtest>""")
 
+        out,np,nd,nf,nn = util.run_vvtest( '-g' )
+        assert len( util.filegrep( tdirname+'/testlist', 'null' ) ) == 1
+        assert len( util.filegrep( tdirname+'/testlist', 'boom' ) ) == 2
+        assert len( util.filegrep( tdirname+'/testlist', 'double' ) ) == 6  # 2 params times 3 values
+        assert len( util.filegrep( tdirname+'/testlist', 'hello.*world' ) ) == 1
+        assert len( util.filegrep( tdirname+'/testlist', 'hello.*mars' ) ) == 1
+        assert len( util.filegrep( tdirname+'/testlist', 'one.*val1' ) ) == 3
+        assert len( util.filegrep( tdirname+'/testlist', 'one.*val2' ) ) == 3
+        assert len( util.filegrep( tdirname+'/testlist', 'two.*gimp' ) ) == 2
+        assert len( util.filegrep( tdirname+'/testlist', 'val1.*val2' ) ) == 0
+        assert len( util.filegrep( tdirname+'/testlist', 'val2.*val1' ) ) == 0
 
-def test03():
-    """
-    move test xml files into a subdirectory and check the same thing
-    """
-    writefile( "subdir/null.xml", """
-        <rtest name="null">
-        </rtest>""" )
-    
-    writefile( "subdir/param.xml", """
-        <rtest name="param">
-          <parameterize hello="world mars"/>
-          <execute>
-        sleep 1
-        echo "parm=$hello"
-          </execute>
-        </rtest>""" )
-    writefile( "subdir/double.xml", """
-        <rtest name="double">
-          <parameterize one="val1 val2"/>
-          <parameterize two="spot skip gimp"/>
-        </rtest>""")
+    def test_when_xml_files_are_in_a_subdirectory(self):
+        ""
+        util.writefile( "subdir/null.xml", """
+            <rtest name="null">
+            </rtest>""" )
+        
+        util.writefile( "subdir/param.xml", """
+            <rtest name="boom">
+              <parameterize hello="world mars"/>
+              <execute>
+            sleep 1
+            echo "parm=$hello"
+              </execute>
+            </rtest>""" )
+        util.writefile( "subdir/double.xml", """
+            <rtest name="double">
+              <parameterize one="val1 val2"/>
+              <parameterize two="spot skip gimp"/>
+            </rtest>""")
 
-    out,np,nd,nf,nn = run_vvtest( '-g' )
-    tdirname = results_dir()
-    assert len( filegrep( tdirname+'/testlist', 'subdir' ) ) == 9
-    assert len( filegrep( tdirname+'/testlist', 'null' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'param' ) ) == 2
-    assert len( filegrep( tdirname+'/testlist', 'double' ) ) == 6  # 2 params times 3 values
-    assert len( filegrep( tdirname+'/testlist', 'hello=world' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'hello=mars' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'one=val2.*two=gimp' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'val1.*val2' ) ) == 0
-    assert len( filegrep( tdirname+'/testlist', 'val2.*val1' ) ) == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-g' )
+        tdirname = util.results_dir()
+        assert len( util.filegrep( tdirname+'/testlist', 'subdir' ) ) == 9
+        assert len( util.filegrep( tdirname+'/testlist', 'null' ) ) == 1
+        assert len( util.filegrep( tdirname+'/testlist', 'boom' ) ) == 2
+        assert len( util.filegrep( tdirname+'/testlist', 'double' ) ) == 6  # 2 params times 3 values
+        assert len( util.filegrep( tdirname+'/testlist', 'hello.*world' ) ) == 1
+        assert len( util.filegrep( tdirname+'/testlist', 'hello.*mars' ) ) == 1
+        assert len( util.filegrep( tdirname+'/testlist', 'one.*val2' ) ) == 3
+        assert len( util.filegrep( tdirname+'/testlist', 'two.*gimp' ) ) == 2
+        assert len( util.filegrep( tdirname+'/testlist', 'val1.*val2' ) ) == 0
+        assert len( util.filegrep( tdirname+'/testlist', 'val2.*val1' ) ) == 0
 
-    remove_results()
+        util.remove_results()
 
-    # put the name of the subdir on the command line
+        # put the name of the subdir on the command line
 
-    cwd = os.getcwd()
-    os.mkdir('temp')
-    os.chdir('temp')
+        cwd = os.getcwd()
+        os.mkdir('temp')
+        os.chdir('temp')
 
-    out,np,nd,nf,nn = run_vvtest( '-g ../subdir' )
-    assert len( filegrep( tdirname+'/testlist', 'subdir' ) ) == 9
-    assert len( filegrep( tdirname+'/testlist', 'null' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'param' ) ) == 2
-    assert len( filegrep( tdirname+'/testlist', 'double' ) ) == 6  # 2 params times 3 values
-    assert len( filegrep( tdirname+'/testlist', 'hello=world' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'hello=mars' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'one=val2.*two=gimp' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'val1.*val2' ) ) == 0
-    assert len( filegrep( tdirname+'/testlist', 'val2.*val1' ) ) == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-g ../subdir' )
+        assert len( util.filegrep( tdirname+'/testlist', 'subdir' ) ) == 9
+        assert len( util.filegrep( tdirname+'/testlist', 'null' ) ) == 1
+        assert len( util.filegrep( tdirname+'/testlist', 'boom' ) ) == 2
+        assert len( util.filegrep( tdirname+'/testlist', 'double' ) ) == 6  # 2 params times 3 values
+        assert len( util.filegrep( tdirname+'/testlist', 'hello.*world' ) ) == 1
+        assert len( util.filegrep( tdirname+'/testlist', 'hello.*mars' ) ) == 1
+        assert len( util.filegrep( tdirname+'/testlist', 'one.*val2' ) ) == 3
+        assert len( util.filegrep( tdirname+'/testlist', 'two.*gimp' ) ) == 2
+        assert len( util.filegrep( tdirname+'/testlist', 'val1.*val2' ) ) == 0
+        assert len( util.filegrep( tdirname+'/testlist', 'val2.*val1' ) ) == 0
 
-    # try an absolute path
+        # try an absolute path
 
-    cdir = cwd+'/subdir'
-    remove_results()
-    out,np,nd,nf,nn = run_vvtest( '-g '+cdir )
-    assert len( filegrep( tdirname+'/testlist', 'subdir' ) ) == 9
-    assert len( filegrep( tdirname+'/testlist', 'null' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'param' ) ) == 2
-    assert len( filegrep( tdirname+'/testlist', 'double' ) ) == 6  # 2 params times 3 values
-    assert len( filegrep( tdirname+'/testlist', 'hello=world' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'hello=mars' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'one=val2.*two=gimp' ) ) == 1
-    assert len( filegrep( tdirname+'/testlist', 'val1.*val2' ) ) == 0
-    assert len( filegrep( tdirname+'/testlist', 'val2.*val1' ) ) == 0
-    
-    assert not os.path.exists('testlist')
+        cdir = cwd+'/subdir'
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( '-g '+cdir )
+        assert len( util.filegrep( tdirname+'/testlist', 'subdir' ) ) == 9
+        assert len( util.filegrep( tdirname+'/testlist', 'null' ) ) == 1
+        assert len( util.filegrep( tdirname+'/testlist', 'boom' ) ) == 2
+        assert len( util.filegrep( tdirname+'/testlist', 'double' ) ) == 6  # 2 params times 3 values
+        assert len( util.filegrep( tdirname+'/testlist', 'hello.*world' ) ) == 1
+        assert len( util.filegrep( tdirname+'/testlist', 'hello.*mars' ) ) == 1
+        assert len( util.filegrep( tdirname+'/testlist', 'one.*val2' ) ) == 3
+        assert len( util.filegrep( tdirname+'/testlist', 'two.*gimp' ) ) == 2
+        assert len( util.filegrep( tdirname+'/testlist', 'val1.*val2' ) ) == 0
+        assert len( util.filegrep( tdirname+'/testlist', 'val2.*val1' ) ) == 0
+        
+        assert not os.path.exists('testlist')
 
-    # check the runscript with -g
-    os.chdir( cwd )
-    out,np,nd,nf,nn = run_vvtest( '-g -o dbg' )
-    assert os.path.exists( results_dir('dbg') + '/subdir/null/runscript' )
+        # check the runscript with -g
+        os.chdir( cwd )
+        out,np,nd,nf,nn = util.run_vvtest( '-g -o dbg' )
+        assert os.path.exists( util.results_dir('dbg') + '/subdir/null/runscript' )
 
-    # try out the -S option with -g
-    out,np,nd,nf,nn = run_vvtest( '-gS hello=jupiter subdir' )
-    assert len( grep(out, 'param[.]hello=jupiter' ) ) == 1
+        # try out the -S option with -g
+        out,np,nd,nf,nn = util.run_vvtest( '-gS hello=jupiter subdir' )
+        assert len( util.grep(out, 'boom[.]hello=jupiter' ) ) == 1
 
+    def test_that_TestResults_and_Build_directories_are_excluded_from_scans(self):
+        ""
+        util.writefile( "one.xml", """
+            <rtest name="one">
+              <execute> echo "one ran" </execute>
+            </rtest>""" )
 
-def test04():
-    """
-    check the exclusion of TestResults.* and Build_* directories
-    """
-    writefile( "one.xml", """
-        <rtest name="one">
-          <execute> echo "one ran" </execute>
-        </rtest>""" )
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        tdirname = util.results_dir()
+        util.writefile( tdirname+"/two.xml", """
+            <rtest name="two">
+              <execute> echo "two ran" </execute>
+            </rtest>""" )
 
-    tdirname = results_dir()
-    writefile( tdirname+"/two.xml", """
-        <rtest name="two">
-          <execute> echo "two ran" </execute>
-        </rtest>""" )
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-R' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-R' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        os.mkdir( 'Build_gnu4_opt' )
+        util.writefile( "Build_gnu4_opt/three.xml", """
+            <rtest name="three">
+              <execute> echo "three ran" </execute>
+            </rtest>""" )
 
-    os.mkdir( 'Build_gnu4_opt' )
-    writefile( "Build_gnu4_opt/three.xml", """
-        <rtest name="three">
-          <execute> echo "three ran" </execute>
-        </rtest>""" )
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-R' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-R' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+    def test_that_soft_links_are_followed(self):
+        ""
+        util.writefile( "one/one.xml", """
+            <rtest name="one">
+              <execute> echo "one ran" </execute>
+            </rtest>""" )
 
+        util.writefile( "two/two.xml", """
+            <rtest name="two">
+              <execute> echo "two ran" </execute>
+            </rtest>""" )
 
-def test05():
-    """
-    check using soft links (they should be followed)
-    """
-    writefile( "one/one.xml", """
-        <rtest name="one">
-          <execute> echo "one ran" </execute>
-        </rtest>""" )
+        util.writefile( "three/three.xml", """
+            <rtest name="three">
+              <execute> echo "three ran" </execute>
+            </rtest>""" )
 
-    writefile( "two/two.xml", """
-        <rtest name="two">
-          <execute> echo "two ran" </execute>
-        </rtest>""" )
+        os.symlink( '../two/two.xml', 'one/two.xml' )
 
-    writefile( "three/three.xml", """
-        <rtest name="three">
-          <execute> echo "three ran" </execute>
-        </rtest>""" )
+        os.mkdir( 'subdir' )
+        os.symlink( '../three', 'subdir/symthree' )
 
-    os.symlink( '../two/two.xml', 'one/two.xml' )
+        os.symlink( '../subdir', 'one/symdir' )
 
-    os.mkdir( 'subdir' )
-    os.symlink( '../three', 'subdir/symthree' )
+        out,np,nd,nf,nn = util.run_vvtest( 'one' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
 
-    os.symlink( '../subdir', 'one/symdir' )
+    def test_that_multiple_tests_in_one_xml_file_works(self):
+        ""
+        util.writefile( "multi.xml", """
+            <rtest name="multi">
+              <rtest name="multi_2nd"/>
+              <keywords> common </keywords>
+              <keywords testname="multi"> justmulti </keywords>
+              <keywords testname="multi_2nd"> just2nd </keywords>
+              <execute> echo "test name ${NAME}XXX" </execute>
+            </rtest>""" )
+        
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        aL = glob.glob( tdir+'/multi/execute.log' )
+        bL = glob.glob( tdir+'/multi_2nd/execute.log' )
+        assert len(aL) == 1 and len(bL) == 1
+        assert len( util.filegrep( aL[0], 'test name multiXXX' ) ) == 1
+        assert len( util.filegrep( bL[0], 'test name multi_2ndXXX' ) ) == 1
 
-    out,np,nd,nf,nn = run_vvtest( 'one' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
+    def test_selection_by_keyword_when_multiple_tests_are_in_one_file(self):
+        ""
+        util.writefile( "multi.xml", """
+            <rtest name="multi">
+              <rtest name="multi_2nd"/>
+              <keywords> common </keywords>
+              <keywords testname="multi"> justmulti </keywords>
+              <keywords testname="multi_2nd"> just2nd </keywords>
+              <execute> echo "test name ${NAME}XXX" </execute>
+            </rtest>""" )
+        
+        out,np,nd,nf,nn = util.run_vvtest( '-k justmulti' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        aL = glob.glob( tdir+'/multi/execute.log' )
+        bL = glob.glob( tdir+'/multi_2nd/execute.log' )
+        assert len(aL) == 1 and len(bL) == 0
+        assert len( util.filegrep( aL[0], 'test name multiXXX' ) ) == 1
 
+        out,np,nd,nf,nn = util.run_vvtest( '-w -k just2nd' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        aL = glob.glob( tdir+'/multi/execute.log' )
+        bL = glob.glob( tdir+'/multi_2nd/execute.log' )
+        assert len(aL) == 0 and len(bL) == 1
+        assert len( util.filegrep( bL[0], 'test name multi_2ndXXX' ) ) == 1
+        
+        out,np,nd,nf,nn = util.run_vvtest( '-w -k common' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        aL = glob.glob( tdir+'/multi/execute.log' )
+        bL = glob.glob( tdir+'/multi_2nd/execute.log' )
+        assert len(aL) == 1 and len(bL) == 1
+        assert len( util.filegrep( aL[0], 'test name multiXXX' ) ) == 1
+        assert len( util.filegrep( bL[0], 'test name multi_2ndXXX' ) ) == 1
 
-def test07():
-    """
-    multiple tests in one xml
-    """
-    writefile( "multi.xml", """
-        <rtest name="multi">
-          <rtest name="multi_2nd"/>
-          <keywords> common </keywords>
-          <keywords testname="multi"> justmulti </keywords>
-          <keywords testname="multi_2nd"> just2nd </keywords>
-          <execute> echo "test name ${NAME}XXX" </execute>
-        </rtest>""" )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    aL = glob.glob( tdir+'/multi/execute.log' )
-    bL = glob.glob( tdir+'/multi_2nd/execute.log' )
-    assert len(aL) == 1 and len(bL) == 1
-    assert len( filegrep( aL[0], 'test name multiXXX' ) ) == 1
-    assert len( filegrep( bL[0], 'test name multi_2ndXXX' ) ) == 1
-
-
-def test08():
-    """
-    multiple tests; select by keyword
-    """
-    writefile( "multi.xml", """
-        <rtest name="multi">
-          <rtest name="multi_2nd"/>
-          <keywords> common </keywords>
-          <keywords testname="multi"> justmulti </keywords>
-          <keywords testname="multi_2nd"> just2nd </keywords>
-          <execute> echo "test name ${NAME}XXX" </execute>
-        </rtest>""" )
-    
-    out,np,nd,nf,nn = run_vvtest( '-k justmulti' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    aL = glob.glob( tdir+'/multi/execute.log' )
-    bL = glob.glob( tdir+'/multi_2nd/execute.log' )
-    assert len(aL) == 1 and len(bL) == 0
-    assert len( filegrep( aL[0], 'test name multiXXX' ) ) == 1
-
-    out,np,nd,nf,nn = run_vvtest( '-w -k just2nd' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    aL = glob.glob( tdir+'/multi/execute.log' )
-    bL = glob.glob( tdir+'/multi_2nd/execute.log' )
-    assert len(aL) == 0 and len(bL) == 1
-    assert len( filegrep( bL[0], 'test name multi_2ndXXX' ) ) == 1
-    
-    out,np,nd,nf,nn = run_vvtest( '-w -k common' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    aL = glob.glob( tdir+'/multi/execute.log' )
-    bL = glob.glob( tdir+'/multi_2nd/execute.log' )
-    assert len(aL) == 1 and len(bL) == 1
-    assert len( filegrep( aL[0], 'test name multiXXX' ) ) == 1
-    assert len( filegrep( bL[0], 'test name multi_2ndXXX' ) ) == 1
-
-
-def test09():
-    """
-    multiple tests; parameterize by test name
-    """
-    writefile( "multi.xml", """
-        <rtest name="multi">
-          <rtest name="multi_2nd"/>
-          <parameterize testname="multi" paramA="one two"/>
-          <parameterize testname="multi_2nd" paramA="three four five"/>
-          <execute> echo "test name ${NAME}XXX" </execute>
-        </rtest>""" )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 5 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    aL = glob.glob( tdir+'/multi.*/execute.log' )
-    bL = glob.glob( tdir+'/multi_2nd.*/execute.log' )
-    assert len(aL) == 2 and len(bL) == 3
-    assert len( grep( os.linesep.join( aL ), 'paramA=one' ) ) == 1
-    assert len( grep( os.linesep.join( aL ), 'paramA=two' ) ) == 1
-    for f in aL:
-        assert len( filegrep( f, 'test name multiXXX' ) ) == 1
-    for f in bL:
-        assert len( filegrep( f, 'test name multi_2ndXXX' ) ) == 1
-    assert len( grep( os.linesep.join( bL ), 'paramA=three' ) ) == 1
-    assert len( grep( os.linesep.join( bL ), 'paramA=four' ) ) == 1
-    assert len( grep( os.linesep.join( bL ), 'paramA=five' ) ) == 1
-    
-    writefile( "multi.xml", """
-        <rtest name="multi">
-          <rtest name="multi_2nd"/>
-          <parameterize testname="multi" paramA="one two"/>
-          <parameterize testname="multi_2nd" paramB="three four five"/>
-          <execute> echo "test name ${NAME}XXX" </execute>
-        </rtest>""" )
-    
-    out,np,nd,nf,nn = run_vvtest( '-w' )
-    assert np == 5 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    aL = glob.glob( tdir+'/multi.*/execute.log' )
-    bL = glob.glob( tdir+'/multi_2nd.*/execute.log' )
-    assert len(aL) == 2 and len(bL) == 3
-    for f in aL:
-        assert len( filegrep( f, 'test name multiXXX' ) ) == 1
-    assert len( grep( os.linesep.join( aL ), 'paramA=one' ) ) == 1
-    assert len( grep( os.linesep.join( aL ), 'paramA=two' ) ) == 1
-    for f in bL:
-        assert len( filegrep( f, 'test name multi_2ndXXX' ) ) == 1
-    assert len( grep( os.linesep.join( bL ), 'paramB=three' ) ) == 1
-    assert len( grep( os.linesep.join( bL ), 'paramB=four' ) ) == 1
-    assert len( grep( os.linesep.join( bL ), 'paramB=five' ) ) == 1
-    
-    out,np,nd,nf,nn = run_vvtest( '-w -p paramB' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    aL = glob.glob( tdir+'/multi.*/execute.log' )
-    bL = glob.glob( tdir+'/multi_2nd.*/execute.log' )
-    assert len(aL) == 0 and len(bL) == 3
-    for f in bL:
-        assert len( filegrep( f, 'test name multi_2ndXXX' ) ) == 1
-    assert len( grep( os.linesep.join( bL ), 'paramB=three' ) ) == 1
-    assert len( grep( os.linesep.join( bL ), 'paramB=four' ) ) == 1
-    assert len( grep( os.linesep.join( bL ), 'paramB=five' ) ) == 1
-
+    def test_parameters_that_depend_on_test_name(self):
+        ""
+        util.writefile( "multi.xml", """
+            <rtest name="multi">
+              <rtest name="multi_2nd"/>
+              <parameterize testname="multi" paramA="one two"/>
+              <parameterize testname="multi_2nd" paramA="three four five"/>
+              <execute> echo "test name ${NAME}XXX" </execute>
+            </rtest>""" )
+        
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 5 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        aL = glob.glob( tdir+'/multi.*/execute.log' )
+        bL = glob.glob( tdir+'/multi_2nd.*/execute.log' )
+        assert len(aL) == 2 and len(bL) == 3
+        assert len( util.grep( os.linesep.join( aL ), 'paramA=one' ) ) == 1
+        assert len( util.grep( os.linesep.join( aL ), 'paramA=two' ) ) == 1
+        for f in aL:
+            assert len( util.filegrep( f, 'test name multiXXX' ) ) == 1
+        for f in bL:
+            assert len( util.filegrep( f, 'test name multi_2ndXXX' ) ) == 1
+        assert len( util.grep( os.linesep.join( bL ), 'paramA=three' ) ) == 1
+        assert len( util.grep( os.linesep.join( bL ), 'paramA=four' ) ) == 1
+        assert len( util.grep( os.linesep.join( bL ), 'paramA=five' ) ) == 1
+        
+        util.writefile( "multi.xml", """
+            <rtest name="multi">
+              <rtest name="multi_2nd"/>
+              <parameterize testname="multi" paramA="one two"/>
+              <parameterize testname="multi_2nd" paramB="three four five"/>
+              <execute> echo "test name ${NAME}XXX" </execute>
+            </rtest>""" )
+        
+        out,np,nd,nf,nn = util.run_vvtest( '-w' )
+        assert np == 5 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        aL = glob.glob( tdir+'/multi.*/execute.log' )
+        bL = glob.glob( tdir+'/multi_2nd.*/execute.log' )
+        assert len(aL) == 2 and len(bL) == 3
+        for f in aL:
+            assert len( util.filegrep( f, 'test name multiXXX' ) ) == 1
+        assert len( util.grep( os.linesep.join( aL ), 'paramA=one' ) ) == 1
+        assert len( util.grep( os.linesep.join( aL ), 'paramA=two' ) ) == 1
+        for f in bL:
+            assert len( util.filegrep( f, 'test name multi_2ndXXX' ) ) == 1
+        assert len( util.grep( os.linesep.join( bL ), 'paramB=three' ) ) == 1
+        assert len( util.grep( os.linesep.join( bL ), 'paramB=four' ) ) == 1
+        assert len( util.grep( os.linesep.join( bL ), 'paramB=five' ) ) == 1
+        
+        out,np,nd,nf,nn = util.run_vvtest( '-w -p paramB' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        aL = glob.glob( tdir+'/multi.*/execute.log' )
+        bL = glob.glob( tdir+'/multi_2nd.*/execute.log' )
+        assert len(aL) == 0 and len(bL) == 3
+        for f in bL:
+            assert len( util.filegrep( f, 'test name multi_2ndXXX' ) ) == 1
+        assert len( util.grep( os.linesep.join( bL ), 'paramB=three' ) ) == 1
+        assert len( util.grep( os.linesep.join( bL ), 'paramB=four' ) ) == 1
+        assert len( util.grep( os.linesep.join( bL ), 'paramB=five' ) ) == 1
 
 
 ########################################################################
 
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )

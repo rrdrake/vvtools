@@ -18,9 +18,9 @@ class TestList:
     Stores a set of TestSpec objects.  Has utilities to read/write to a text
     file and to read from a test XML file.
     """
-    
-    version = '31'
-    
+
+    version = '32'
+
     def __init__(self, runtime_config=None):
         
         self.filename = None
@@ -67,7 +67,7 @@ class TestList:
         fp.write( "#VVT: Date = " + time.ctime( datestamp ) + "\n\n" )
 
         for t in self.tspecs.values():
-            fp.write( TestSpecCreator.toString(t) + os.linesep )
+            fp.write( test_to_string(t) + os.linesep )
         
         fp.close()
 
@@ -103,7 +103,7 @@ class TestList:
         """
         assert self.filename
         fp = open( self.filename, 'a' )
-        fp.write( TestSpecCreator.toString( tspec ) + '\n' )
+        fp.write( test_to_string( tspec ) + '\n' )
         fp.close()
     
     def writeFinished(self, datestamp=None):
@@ -140,9 +140,10 @@ class TestList:
 
         vers,lineL = self._read_file_lines(filename)
 
-        if len(lineL) > 0 and vers < 12:
+        if len(lineL) > 0 and vers < 32:
             raise Exception( "invalid test list file format version, " + \
-                             str( vers ) + '; corrupt file? ' + filename )
+                str(vers) + '; corrupt file or vvtest was upgraded, ' + \
+                'file='+filename )
 
         # record all the test lines in the file
 
@@ -156,13 +157,13 @@ class TestList:
                 else:
                     self._create_test_from_string( line, count_entries )
 
-            except:
+            except Exception:
                 print3( 'WARNING: reading file', filename,
                     'at line "'+line+'":', sys.exc_info()[1] )
 
     def _create_test_from_string(self, line, count_entries):
         ""
-        t = TestSpecCreator.fromString(line)
+        t = string_to_test(line)
 
         xdir = t.getExecuteDirectory()
         if count_entries != None:
@@ -955,6 +956,49 @@ def find_tests_by_execute_directory_match( xdir, pattern, xdir_list ):
             return set(L)
 
     return set()
+
+
+def test_to_string( tspec ):
+    """
+    Returns a string with no newlines containing the file path, parameter
+    names/values, and attribute names/values.
+    """
+    assert tspec.getName() and tspec.getRootpath() and tspec.getFilepath()
+
+    testdict = {}
+
+    testdict['name'] = tspec.getName()
+    testdict['root'] = tspec.getRootpath()
+    testdict['path'] = tspec.getFilepath()
+    testdict['keywords'] = tspec.getKeywords()
+    testdict['params'] = tspec.getParameters()
+    testdict['attrs'] = tspec.getAttrs()
+
+    s = repr( testdict )
+
+    return s
+
+
+def string_to_test( strid ):
+    """
+    Creates and returns a partially filled TestSpec object from a string
+    produced by the test_to_string() method.
+    """
+    testdict = eval( strid.strip() )
+
+    name = testdict['name']
+    root = testdict['root']
+    path = testdict['path']
+    
+    tspec = TestSpec.TestSpec( name, root, path, "string" )
+
+    tspec.setParameters( testdict['params'] )
+    tspec.setKeywords( testdict['keywords'] )
+
+    for k,v in testdict['attrs'].items():
+        tspec.setAttr( k, v )
+
+    return tspec
 
 
 def print3( *args ):

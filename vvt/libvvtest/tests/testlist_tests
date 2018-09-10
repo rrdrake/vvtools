@@ -1,0 +1,63 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import unittest
+import time
+import glob
+
+import testutils as util
+from testutils import print3
+
+import libvvtest.TestList as TestList
+import libvvtest.TestSpec as TestSpec
+
+class TestSpec_to_and_from_string( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test( cleanout=False )
+
+    def test_converting_a_test_to_a_string_and_back(self):
+        ""
+        ts = TestSpec.TestSpec( 'atest', os.getcwd(), 'atest.xml' )
+        ts.setKeywords( ['key1','key2'] )
+        ts.setParameters( { 'P1':'V1', 'P2':'V2' } )
+        ts.setAttr("aname1", "a value")
+        ts.setAttr("aname2", "a\nvalue")
+        ts.setAttr("aname3", 'a"value"')
+        ts.setAttr("aname4", "a'value'")
+        ts.setAttr('aname5', 23)
+        ts.setAttr('aname6', 23.23)
+        ts.setAttr('aname7', None)
+
+        sid = TestList.test_to_string(ts)
+        assert '\n' not in sid
+        print3( "test string id", sid )
+        ts2 = TestList.string_to_test(sid)
+
+        assert ts.getName() == ts2.getName()
+        assert ts.getRootpath() == ts2.getRootpath()
+        assert ts.getFilename() == ts2.getFilename()
+        for n,v in ts.getParameters().items():
+          assert v == ts2.getParameterValue(n)
+        assert ts2.getAttr('aname1') == "a value"
+        assert ts2.getAttr('aname2') == 'a\nvalue'
+        assert ts2.getAttr('aname3') == 'a"value"'
+        assert ts2.getAttr('aname4') == "a'value'"
+        assert ts2.getAttr('aname5') == 23
+        assert ts2.getAttr('aname6') == 23.23
+        assert ts2.getAttr('aname7') == None
+
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

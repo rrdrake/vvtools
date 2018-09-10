@@ -246,16 +246,13 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
     """
     paramset = parseTestParameters( filedoc, tname, evaluator, force_params )
     numparams = len( paramset.getParameters() )
-    
-    keywords = parseKeywords( filedoc, tname )
-    
+
     # create the test instances
     
     testL = []
 
     if numparams == 0:
         t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
-        t.setKeywords( keywords )
         testL.append(t)
 
     else:
@@ -264,7 +261,6 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
             # create the test and add to test list
             t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
             t.setParameters( pdict )
-            t.setKeywords( keywords )
             testL.append(t)
 
     if len(testL) > 0:
@@ -290,6 +286,7 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
     
     for t in testL:
 
+        parseKeywords          ( t, filedoc, tname )
         parse_include_platform ( t, filedoc )
         parseTimeouts          ( t, filedoc, evaluator )
         parseExecuteList       ( t, filedoc, evaluator )
@@ -305,14 +302,11 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
     """
     paramset = parseTestParameters_scr( vspecs, tname, evaluator, force_params )
     numparams = len( paramset.getParameters() )
-    
-    keywords = parseKeywords_scr( vspecs, tname )
-    
+
     testL = []
 
     if numparams == 0:
         t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
-        t.setKeywords( keywords )
         testL.append(t)
 
     else:
@@ -321,7 +315,6 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
             # create the test and add to test list
             t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
             t.setParameters( pdict )
-            t.setKeywords( keywords )
             testL.append(t)
     
     if len(testL) > 0:
@@ -349,6 +342,7 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
 
     for t in testL:
 
+        parseKeywords_scr     ( t, vspecs, tname )
         parse_enable_platform ( t, vspecs )
         parseFiles_scr        ( t, vspecs, evaluator )
         parseTimeouts_scr     ( t, vspecs, evaluator )
@@ -378,9 +372,6 @@ def reparse_test_object( testobj, evaluator ):
 
         parse_include_platform( testobj, filedoc )
 
-        keywords = parseKeywords( filedoc, tname )
-        testobj.setKeywords( keywords )
-
         analyze_spec = parseAnalyze( testobj, filedoc, evaluator )
 
         if analyze_spec and len( testobj.getParameters() ) == 0:
@@ -394,6 +385,7 @@ def reparse_test_object( testobj, evaluator ):
             testobj.setParameterSet( paramset )
             testobj.setAnalyzeScript( analyze_spec )
 
+        parseKeywords    ( testobj, filedoc, tname )
         parseFiles       ( testobj, filedoc, evaluator )
         parseTimeouts    ( testobj, filedoc, evaluator )
         parseExecuteList ( testobj, filedoc, evaluator )
@@ -409,9 +401,6 @@ def reparse_test_object( testobj, evaluator ):
         tname = testobj.getName()
 
         parse_enable_platform( testobj, vspecs )
-
-        keywords = parseKeywords_scr( vspecs, tname )
-        testobj.setKeywords( keywords )
 
         analyze_spec = parseAnalyze_scr( testobj, vspecs, evaluator )
 
@@ -429,6 +418,7 @@ def reparse_test_object( testobj, evaluator ):
             if not analyze_spec.startswith('-'):
                 testobj.addLinkFile( analyze_spec )
 
+        parseKeywords_scr ( testobj, vspecs, tname )
         parseFiles_scr    ( testobj, vspecs, evaluator )
         parseTimeouts_scr ( testobj, vspecs, evaluator )
         parseBaseline_scr ( testobj, vspecs, evaluator )
@@ -441,171 +431,6 @@ def reparse_test_object( testobj, evaluator ):
 
 
 ##########################################################################
-
-def toString( tspec ):
-    """
-    Returns a string with no newlines containing the file path, parameter
-    names/values, and attribute names/values.
-    """
-    assert tspec.getName() and tspec.getRootpath() and tspec.getFilepath()
-    
-    s = tspec.getName() + \
-        ' "' + escape_file( tspec.getRootpath() ) + '" "' + \
-               escape_file( tspec.getFilepath() ) + '"'
-
-    L = tspec.getKeywords()
-    if len(L) > 0:
-      s = s + ' "_keywords_=' + ' '.join(L) + '"'
-    
-    L = list( tspec.getParameters().items() )
-    L.sort()
-    for n,v in L:
-      s = s + ' ' + n + '=' + v
-    
-    L = list( tspec.getAttrs().keys() )
-    L.sort()
-    for n in L:
-      v = tspec.getAttr(n)
-      if type(v) == type(''):
-        v1 = ''
-        for c in v:
-          v1 = v1 + inout_chars.get(c,' ')
-        s = s + ' "' + n + '=S' + v1 + '"'
-      elif type(v) == type(2):
-        s = s + ' "' + n + '=I' + str(v) + '"'
-      elif type(v) == type(2.2):
-        s = s + ' "' + n + '=F' + str(v) + '"'
-      elif type(v) == type(True):
-        s = s + ' "' + n + '=B'
-        if v: s += '1"'
-        else: s += '0"'
-      elif v == None:
-        s = s + ' "' + n + '=N"'
-      else:
-        raise ValueError( "unsupported attribute value type for " + \
-                          n + ": " + str(type(v)) )
-    
-    return s
-
-
-def fromString( strid ):
-    """
-    Creates and returns a partially filled TestSpec object from a string
-    produced by the toString() method.  The values that are filled in are the
-    name, root path, file path, parameter names/values, and attribute
-    names/values.
-    """
-    qtoks, toks = special_tokenize(strid)
-    
-    if len(toks) < 1 or len(qtoks) < 2:
-      raise TestSpecError( "fromString(): corrupt or unknown string format" )
-    
-    name = toks.pop(0)
-    root = qtoks.pop(0)
-    path = qtoks.pop(0)
-    
-    tspec = TestSpec.TestSpec( name, root, path, "string" )
-    
-    if len(toks) > 0:
-      params = {}
-      for tok in toks:
-        L = tok.split( '=', 1 )
-        if len(L) != 2:
-          raise TestSpecError( \
-                  "fromString(): corrupt or unknown string format: " + tok )
-        params[ L[0] ] = L[1]
-      tspec.setParameters( params )
-    
-    for tok in qtoks:
-      nvL = tok.split( '=', 1 )
-      if len(nvL) != 2 or len(nvL[0]) == 0 or len(nvL[1]) == 0:
-        raise TestSpecError( \
-                "fromString(): corrupt or unknown string format: " + tok )
-      if nvL[0] == '_keywords_':
-        tspec.setKeywords( nvL[1].split() )
-      elif nvL[0] == '_parent_':
-        pass  # backward compatibility; remove after a few months [Feb 2018]
-      elif nvL[1][0] == 'I': tspec.setAttr( nvL[0], int(nvL[1][1:]) )
-      elif nvL[1][0] == 'F': tspec.setAttr( nvL[0], float(nvL[1][1:]) )
-      elif nvL[1][0] == 'N': tspec.setAttr( nvL[0], None )
-      elif nvL[1][0] == 'B': tspec.setAttr( nvL[0], nvL[1][1:] == '1' )
-      else:                  tspec.setAttr( nvL[0], nvL[1][1:] )
-    
-    return tspec
-
-
-def special_tokenize(s):
-    """
-    """
-    toks = []
-    qtoks = []
-    inquote = 0
-    tok = None
-    slen = len(s)
-    i = 0
-    while i < slen:
-      c = s[i]
-      if c == '"':
-        if inquote:
-          inquote = 0
-          qtoks.append(tok)
-          tok = None
-        else:
-          inquote = 1
-          tok = ''
-      elif inquote:
-        if c == '\\':
-          i = i + 1
-          if i < slen:
-            if s[i] == 't':
-              tok = tok + '\t'
-            elif s[i] == 'n':
-              tok = tok + os.linesep
-            else:
-              tok = tok + s[i]
-          else:
-            tok = tok + '\\'
-        else:
-          tok = tok + c
-      elif c == ' ':
-        if tok:
-          toks.append(tok)
-          tok = ""
-      else:
-        if tok == None:
-          tok = ''
-        tok = tok + c
-      i = i + 1
-    
-    if tok != None:
-      if inquote: qtoks.append(tok)
-      else:       toks.append(tok)
-    
-    return qtoks, toks
-
-
-inout_chars = {}
-for c in """0123456789abcdefghijklmnopqrstuvwxyz""" + \
-         """ABCDEFGHIJKLMNOPQRSTUVWXYZ!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~""" + \
-         string.whitespace:
-  if   c == '"':               inout_chars[c] = '\\"'
-  elif c == '\\':              inout_chars[c] = '\\\\'
-  elif c == '\t':              inout_chars[c] = '\\t'
-  elif c == '\n':              inout_chars[c] = '\\n'
-  elif c == '\r':              inout_chars[c] = ''
-  elif c in string.whitespace: inout_chars[c] = ' '
-  else:                        inout_chars[c] = c
-
-def escape_file(s):
-    s2 = ''
-    for c in s:
-      if   c == '"':  s2 = s2 + '\\"'
-      elif c == '\\': s2 = s2 + '\\\\'
-      else:           s2 = s2 + c
-    return s2
-
-
-###########################################################################
 
 def testNameList_scr( vspecs ):
     """
@@ -633,7 +458,7 @@ def testNameList_scr( vspecs ):
     return L
 
 
-def parseKeywords_scr( vspecs, tname ):
+def parseKeywords_scr( tspec, vspecs, tname ):
     """
     Parse the test keywords for the test script file.
     
@@ -643,9 +468,7 @@ def parseKeywords_scr( vspecs, tname ):
     Also includes the test name and the parameterize names.
     TODO: what other implicit keywords ??
     """
-    keyD = {}
-
-    keyD[tname] = None
+    keys = [ tname ]
 
     for spec in vspecs.getSpecList( 'keywords' ):
 
@@ -664,7 +487,7 @@ def parseKeywords_scr( vspecs, tname ):
 
         for key in spec.value.strip().split():
             if allowableString(key):
-                keyD[key] = None
+                keys.append( key )
             else:
                 raise TestSpecError( 'invalid keyword: "'+key+'", line ' + \
                                      str(spec.lineno) )
@@ -676,11 +499,9 @@ def parseKeywords_scr( vspecs, tname ):
         L = spec.value.split( '=', 1 )
         if len(L) == 2 and L[0].strip():
             for k in [ n.strip() for n in L[0].strip().split(',') ]:
-                keyD[k] = None
+                keys.append( k )
 
-    L = list( keyD.keys() )
-    L.sort()
-    return L
+    tspec.setKeywords( keys )
 
 
 def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
@@ -1271,7 +1092,7 @@ def testname_ok( xmlnode, tname ):
     return True
 
 
-def parseKeywords( filedoc, tname ):
+def parseKeywords( tspec, filedoc, tname ):
     """
     Parse the test keywords for the test XML file.
     
@@ -1281,17 +1102,15 @@ def parseKeywords( filedoc, tname ):
     Also includes the name="..." on <execute> blocks and the parameter names
     in <parameterize> blocks.
     """
-    keyD = {}
-    
-    keyD[tname] = None
-    
+    keys = [ tname ]
+
     for nd in filedoc.matchNodes(['keywords$']):
       if not testname_ok( nd, tname ):
         # skip this keyword set (filtered out based on test name)
         continue
       for key in nd.getContent().split():
         if allowableString(key):
-          keyD[key] = None
+          keys.append( key )
         else:
           raise TestSpecError( 'invalid keyword: "' + key + '", line ' + \
                                str(nd.getLineNumber()) )
@@ -1306,16 +1125,14 @@ def parseKeywords( filedoc, tname ):
                    'platform','platforms','option','options']:
             pass
           elif allowableVariable(n):
-            keyD[ str(n) ] = None
+            keys.append( str(n) )
       elif nd.getName() == 'execute':
         # the execute name is included in the test keywords
         n = nd.getAttr('name', None)
         if n != None:
-          keyD[ str(n) ] = None
+          keys.append( str(n) )
 
-    L = list( keyD.keys() )
-    L.sort()
-    return L
+    tspec.setKeywords( keys )
 
 
 def parse_include_platform( testobj, xmldoc ):

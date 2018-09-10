@@ -86,7 +86,7 @@ class TestSpec:
         Returns the list of keyword strings.  If 'result_attrs' is true, the
         attribute values for "state" and "result" are included if they exist.
         """
-        kL = [] + self.keywords
+        kL = list( self.keywords )
         if result_attrs:
           if 'state' in self.attrs: kL.append( self.attrs['state'] )
           if 'result' in self.attrs: kL.append( self.attrs['result'] )
@@ -314,7 +314,7 @@ class TestSpec:
         self.rootpath = rootpath
         self.filepath = filepath
 
-        self.keywords = []         # list of strings
+        self.keywords = set()      # set of strings
         self.params = {}           # name string to value string
         self.analyze_spec = None
         self.timeout = None        # timeout value in seconds (an integer)
@@ -404,7 +404,7 @@ class TestSpec:
         """
         A list of strings.
         """
-        self.keywords = [] + keyword_list
+        self.keywords = set( keyword_list )
 
         # transfer TDD marks to the attributes
         if 'TDD' in self.keywords:
@@ -544,7 +544,7 @@ class TestSpec:
         """
         ts = TestSpec( self.name, self.rootpath, self.filepath )
         ts.origin = self.origin + ["copy"]
-        ts.keywords = self.__copy_list(self.keywords)
+        ts.keywords = set( self.keywords )
         ts.setParameters({})  # skip ts.params
         ts.analyze_spec = self.analyze_spec
         ts.timeout = self.timeout
