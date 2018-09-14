@@ -17,8 +17,10 @@ import glob
 import testutils as util
 from testutils import print3
 
+import libvvtest.testlistio as tio
 import libvvtest.TestList as TestList
 import libvvtest.TestSpec as TestSpec
+
 
 class TestSpec_to_and_from_string( unittest.TestCase ):
 
@@ -27,27 +29,24 @@ class TestSpec_to_and_from_string( unittest.TestCase ):
 
     def test_converting_a_test_to_a_string_and_back(self):
         ""
-        ts = TestSpec.TestSpec( 'atest', os.getcwd(), 'atest.xml' )
-        ts.setKeywords( ['key1','key2'] )
-        ts.setParameters( { 'P1':'V1', 'P2':'V2' } )
-        ts.setAttr("aname1", "a value")
-        ts.setAttr("aname2", "a\nvalue")
-        ts.setAttr("aname3", 'a"value"')
-        ts.setAttr("aname4", "a'value'")
-        ts.setAttr('aname5', 23)
-        ts.setAttr('aname6', 23.23)
-        ts.setAttr('aname7', None)
+        ts = make_fake_TestSpec()
 
-        sid = TestList.test_to_string(ts)
+        sid = tio.test_to_string( ts, include_keywords=True )
         assert '\n' not in sid
         print3( "test string id", sid )
-        ts2 = TestList.string_to_test(sid)
+        ts2 = tio.string_to_test(sid)
 
         assert ts.getName() == ts2.getName()
         assert ts.getRootpath() == ts2.getRootpath()
         assert ts.getFilename() == ts2.getFilename()
-        for n,v in ts.getParameters().items():
+
+        kL1 = ts.getKeywords() ; kL1.sort()
+        kL2 = ts2.getKeywords() ; kL2.sort()
+        assert kL1 == kL2
+
+        for n,v in ts2.getParameters().items():
           assert v == ts2.getParameterValue(n)
+
         assert ts2.getAttr('aname1') == "a value"
         assert ts2.getAttr('aname2') == 'a\nvalue'
         assert ts2.getAttr('aname3') == 'a"value"'
@@ -56,6 +55,97 @@ class TestSpec_to_and_from_string( unittest.TestCase ):
         assert ts2.getAttr('aname6') == 23.23
         assert ts2.getAttr('aname7') == None
 
+
+def make_fake_TestSpec():
+    ""
+    ts = TestSpec.TestSpec( 'atest', os.getcwd(), 'atest.xml' )
+
+    ts.setKeywords( ['key1','key2'] )
+
+    ts.setParameters( { 'P1':'V1', 'P2':'V2' } )
+
+    ts.setAttr("aname1", "a value")
+    ts.setAttr("aname2", "a\nvalue")
+    ts.setAttr("aname3", 'a"value"')
+    ts.setAttr("aname4", "a'value'")
+    ts.setAttr('aname5', 23)
+    ts.setAttr('aname6', 23.23)
+    ts.setAttr('aname7', None)
+
+    return ts
+
+
+class TestList_read_write( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_writing_a_test_list_file(self):
+        ""
+        tlw = tio.TestListWriter( 'tests.out' )
+        tlw.start()
+        tspec = make_fake_TestSpec()
+        tlw.append( tspec )
+        tlw.finish()
+
+        time.sleep(1)
+
+        assert os.path.exists( 'tests.out' )
+        assert len( util.filegrep( 'tests.out', 'atest.xml' ) ) == 1
+
+    def test_write_test_list_then_read_it(self):
+        ""
+        tlw = tio.TestListWriter( 'tests.out' )
+        tlw.start()
+        time.sleep(2)
+        tlw.finish()
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'tests.out' )
+        tlr.read()
+        d1 = tlr.getStartDate()
+        d2 = tlr.getFinishDate()
+        assert d2-d1 > 1 and d2-d1 < 5
+        assert time.time() - d1 < 10
+
+    def test_write_and_read_test_list_attrs(self):
+        ""
+        tlw = tio.TestListWriter( 'tests.out' )
+        tlw.start( strname='some value', intname=101, floatname=1.01 )
+        tlw.finish()
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'tests.out' )
+        tlr.read()
+
+        assert tlr.getAttr( 'foobar', 'default value' ) == 'default value'
+        self.assertRaises( Exception, tlr.getAttr, 'foobar' )
+        assert tlr.getAttr( 'strname' ) == 'some value'
+        assert tlr.getAttr( 'intname' ) == 101
+        assert tlr.getAttr( 'floatname' ) == 1.01
+
+    def test_write_and_read_a_test(self):
+        ""
+        tlw = tio.TestListWriter( 'tests.out' )
+        tlw.start()
+        tspec1 = make_fake_TestSpec()
+        tlw.append( tspec1 )
+        tlw.finish()
+
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'tests.out' )
+        tlr.read()
+
+        tD = tlr.getTests()
+        assert len(tD) == 1
+        tspec2 = list( tD.values() )[0]
+
+        assert tspec1.getName() == tspec2.getName()
+        assert tspec1.getRootpath() == tspec2.getRootpath()
+        assert tspec1.getFilepath() == tspec2.getFilepath()
+        assert tspec1.getExecuteDirectory() == tspec2.getExecuteDirectory()
+        assert tspec1.getParameters() == tspec2.getParameters()
 
 
 ############################################################################

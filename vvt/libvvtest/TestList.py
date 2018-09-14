@@ -12,6 +12,7 @@ from . import TestSpec
 from . import TestExec
 from . import TestSpecCreator
 from . import CommonSpec
+from . import testlistio
 
 class TestList:
     """
@@ -67,7 +68,8 @@ class TestList:
         fp.write( "#VVT: Date = " + time.ctime( datestamp ) + "\n\n" )
 
         for t in self.tspecs.values():
-            fp.write( test_to_string(t) + os.linesep )
+            ts = testlistio.test_to_string( t, include_keywords=True )
+            fp.write( ts + os.linesep )
         
         fp.close()
 
@@ -103,7 +105,8 @@ class TestList:
         """
         assert self.filename
         fp = open( self.filename, 'a' )
-        fp.write( test_to_string( tspec ) + '\n' )
+        ts = testlistio.test_to_string( tspec, include_keywords=True )
+        fp.write( ts + '\n' )
         fp.close()
     
     def writeFinished(self, datestamp=None):
@@ -163,7 +166,7 @@ class TestList:
 
     def _create_test_from_string(self, line, count_entries):
         ""
-        t = string_to_test(line)
+        t = testlistio.string_to_test(line)
 
         xdir = t.getExecuteDirectory()
         if count_entries != None:
@@ -956,49 +959,6 @@ def find_tests_by_execute_directory_match( xdir, pattern, xdir_list ):
             return set(L)
 
     return set()
-
-
-def test_to_string( tspec ):
-    """
-    Returns a string with no newlines containing the file path, parameter
-    names/values, and attribute names/values.
-    """
-    assert tspec.getName() and tspec.getRootpath() and tspec.getFilepath()
-
-    testdict = {}
-
-    testdict['name'] = tspec.getName()
-    testdict['root'] = tspec.getRootpath()
-    testdict['path'] = tspec.getFilepath()
-    testdict['keywords'] = tspec.getKeywords()
-    testdict['params'] = tspec.getParameters()
-    testdict['attrs'] = tspec.getAttrs()
-
-    s = repr( testdict )
-
-    return s
-
-
-def string_to_test( strid ):
-    """
-    Creates and returns a partially filled TestSpec object from a string
-    produced by the test_to_string() method.
-    """
-    testdict = eval( strid.strip() )
-
-    name = testdict['name']
-    root = testdict['root']
-    path = testdict['path']
-    
-    tspec = TestSpec.TestSpec( name, root, path, "string" )
-
-    tspec.setParameters( testdict['params'] )
-    tspec.setKeywords( testdict['keywords'] )
-
-    for k,v in testdict['attrs'].items():
-        tspec.setAttr( k, v )
-
-    return tspec
 
 
 def print3( *args ):
