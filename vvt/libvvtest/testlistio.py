@@ -30,6 +30,14 @@ class TestListWriter:
         finally:
             fp.close()
 
+    def addIncludeFile(self, filename):
+        ""
+        fp = open( self.filename, 'a' )
+        try:
+            fp.write( 'INCLUDE='+filename+'\n' )
+        finally:
+            fp.close()
+
     def append(self, tspec):
         ""
         fp = open( self.filename, 'a' )
@@ -101,6 +109,8 @@ class TestListReader:
                 self.start = eval( keyval[1] )[1]
             elif keyval[0] == 'ATTRS':
                 self.attrs = eval( keyval[1] )
+            elif keyval[0] == 'INCLUDE':
+                self._read_include_file( keyval[1] )
             elif keyval[0] == 'FINISH':
                 self.finish = eval( keyval[1] )[1]
             elif line:
@@ -110,8 +120,16 @@ class TestListReader:
         except Exception:
             pass
 
+    def _read_include_file(self, filename):
+        ""
+        tlr = TestListReader( filename )
+        tlr.read()
 
-def test_to_string( tspec, include_keywords=False ):
+        for xdir,tspec in tlr.getTests().items():
+            self.tests[ xdir ] = tspec
+
+
+def test_to_string( tspec ):
     """
     Returns a string with no newlines containing the file path, parameter
     names/values, and attribute names/values.
@@ -123,8 +141,7 @@ def test_to_string( tspec, include_keywords=False ):
     testdict['name'] = tspec.getName()
     testdict['root'] = tspec.getRootpath()
     testdict['path'] = tspec.getFilepath()
-    if include_keywords:
-        testdict['keywords'] = tspec.getKeywords()
+    testdict['keywords'] = tspec.getKeywords()
     testdict['params'] = tspec.getParameters()
     testdict['attrs'] = tspec.getAttrs()
 
@@ -147,8 +164,7 @@ def string_to_test( strid ):
     tspec = TestSpec.TestSpec( name, root, path, "string" )
 
     tspec.setParameters( testdict['params'] )
-
-    tspec.setKeywords( testdict.get( 'keywords', [] ) )
+    tspec.setKeywords( testdict['keywords'] )
 
     for k,v in testdict['attrs'].items():
         tspec.setAttr( k, v )

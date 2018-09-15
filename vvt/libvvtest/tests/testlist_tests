@@ -31,30 +31,119 @@ class TestSpec_to_and_from_string( unittest.TestCase ):
         ""
         ts = make_fake_TestSpec()
 
-        sid = tio.test_to_string( ts, include_keywords=True )
+        sid = tio.test_to_string( ts )
         assert '\n' not in sid
         print3( "test string id", sid )
         ts2 = tio.string_to_test(sid)
 
-        assert ts.getName() == ts2.getName()
-        assert ts.getRootpath() == ts2.getRootpath()
-        assert ts.getFilename() == ts2.getFilename()
+        assert_TestSpec_same_as_fake( ts2 )
 
-        kL1 = ts.getKeywords() ; kL1.sort()
-        kL2 = ts2.getKeywords() ; kL2.sort()
-        assert kL1 == kL2
 
-        for n,v in ts2.getParameters().items():
-          assert v == ts2.getParameterValue(n)
+class TestList_read_write( unittest.TestCase ):
 
-        assert ts2.getAttr('aname1') == "a value"
-        assert ts2.getAttr('aname2') == 'a\nvalue'
-        assert ts2.getAttr('aname3') == 'a"value"'
-        assert ts2.getAttr('aname4') == "a'value'"
-        assert ts2.getAttr('aname5') == 23
-        assert ts2.getAttr('aname6') == 23.23
-        assert ts2.getAttr('aname7') == None
+    def setUp(self):
+        util.setup_test()
 
+    def test_write_test_list_file_then_read_it(self):
+        ""
+        tlw = tio.TestListWriter( 'tests.out' )
+        tlw.start()
+        time.sleep(2)
+        tlw.finish()
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'tests.out' )
+        tlr.read()
+        d1 = tlr.getStartDate()
+        d2 = tlr.getFinishDate()
+        assert d2-d1 > 1 and d2-d1 < 5
+        assert time.time() - d1 < 10
+
+    def test_write_then_read_test_list_attributes(self):
+        ""
+        tlw = tio.TestListWriter( 'tests.out' )
+        tlw.start( strname='some value', intname=101, floatname=1.01 )
+        tlw.finish()
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'tests.out' )
+        tlr.read()
+
+        assert tlr.getAttr( 'foobar', 'default value' ) == 'default value'
+        self.assertRaises( Exception, tlr.getAttr, 'foobar' )
+        assert tlr.getAttr( 'strname' ) == 'some value'
+        assert tlr.getAttr( 'intname' ) == 101
+        assert tlr.getAttr( 'floatname' ) == 1.01
+
+    def test_write_and_read_a_test(self):
+        ""
+        write_test_list_with_fake_test( 'tests.out' )
+
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'tests.out' )
+        tlr.read()
+
+        tspec = get_single_test_from_test_list( tlr )
+        assert_TestSpec_same_as_fake( tspec )
+
+    def test_write_and_read_using_an_include_file(self):
+        ""
+        tlw = tio.TestListWriter( 'tests.out' )
+        tlw.start()
+        tlw.addIncludeFile( 'tests.0' )
+
+        t1 = time.time()
+        time.sleep(2)
+
+        write_test_list_with_fake_test( 'tests.0' )
+
+        t2 = time.time()
+        time.sleep(2)
+
+        tlw.finish()
+
+        t3 = time.time()
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'tests.out' )
+        tlr.read()
+
+        tspec = get_single_test_from_test_list( tlr )
+        assert_TestSpec_same_as_fake( tspec )
+
+        tm = tlr.getStartDate()
+        assert t1 >= tm and t1-tm < 2
+        tm = tlr.getFinishDate()
+        assert t3 >= tm and t3-tm < 2
+
+
+class TestList_results_file( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_writing_a_results_file(self):
+        ""
+        write_test_results_using_TestList( 'results' )
+        time.sleep(1)
+        read_test_list_and_check_fake_results_test( 'results' )
+
+    def test_writing_a_results_file_with_an_include(self):
+        ""
+        tl = TestList.TestList()
+        tl.initializeResultsFile( 'results' )
+        tl.AddIncludeFile( 'results.0' )
+
+        write_test_results_using_TestList( 'results.0' )
+
+        tl.writeFinished()
+        time.sleep(1)
+
+        read_test_list_and_check_fake_results_test( 'results' )
+
+
+############################################################################
 
 def make_fake_TestSpec():
     ""
@@ -75,77 +164,82 @@ def make_fake_TestSpec():
     return ts
 
 
-class TestList_read_write( unittest.TestCase ):
+def assert_TestSpec_same_as_fake( tspec ):
+    ""
+    assert tspec.getName() == 'atest'
+    assert tspec.getRootpath() == os.getcwd()
+    assert tspec.getFilename() == os.path.abspath('atest.xml')
 
-    def setUp(self):
-        util.setup_test()
+    kL = tspec.getKeywords()
+    kL.sort()
+    assert kL == [ 'key1', 'key2' ]
 
-    def test_writing_a_test_list_file(self):
-        ""
-        tlw = tio.TestListWriter( 'tests.out' )
-        tlw.start()
-        tspec = make_fake_TestSpec()
-        tlw.append( tspec )
-        tlw.finish()
+    pD = {}
+    for n,v in tspec.getParameters().items():
+        pD[n] = v
+    assert pD == { 'P1':'V1', 'P2':'V2' }
 
-        time.sleep(1)
+    assert tspec.getAttr('aname1') == "a value"
+    assert tspec.getAttr('aname2') == 'a\nvalue'
+    assert tspec.getAttr('aname3') == 'a"value"'
+    assert tspec.getAttr('aname4') == "a'value'"
+    assert tspec.getAttr('aname5') == 23
+    assert tspec.getAttr('aname6') == 23.23
+    assert tspec.getAttr('aname7') == None
 
-        assert os.path.exists( 'tests.out' )
-        assert len( util.filegrep( 'tests.out', 'atest.xml' ) ) == 1
 
-    def test_write_test_list_then_read_it(self):
-        ""
-        tlw = tio.TestListWriter( 'tests.out' )
-        tlw.start()
-        time.sleep(2)
-        tlw.finish()
-        time.sleep(1)
+def make_fake_TestSpec_with_results():
+    ""
+    ts = TestSpec.TestSpec( 'atest', os.getcwd(), 'atest.xml' )
 
-        tlr = tio.TestListReader( 'tests.out' )
-        tlr.read()
-        d1 = tlr.getStartDate()
-        d2 = tlr.getFinishDate()
-        assert d2-d1 > 1 and d2-d1 < 5
-        assert time.time() - d1 < 10
+    ts.setAttr( 'state', "notdone" )
+    ts.setAttr( 'xtime', -1 )
+    ts.setAttr( 'xdate', int(time.time()) )
 
-    def test_write_and_read_test_list_attrs(self):
-        ""
-        tlw = tio.TestListWriter( 'tests.out' )
-        tlw.start( strname='some value', intname=101, floatname=1.01 )
-        tlw.finish()
-        time.sleep(1)
+    return ts
 
-        tlr = tio.TestListReader( 'tests.out' )
-        tlr.read()
 
-        assert tlr.getAttr( 'foobar', 'default value' ) == 'default value'
-        self.assertRaises( Exception, tlr.getAttr, 'foobar' )
-        assert tlr.getAttr( 'strname' ) == 'some value'
-        assert tlr.getAttr( 'intname' ) == 101
-        assert tlr.getAttr( 'floatname' ) == 1.01
+def get_single_test_from_test_list( testlist ):
+    ""
+    tD = testlist.getTests()
+    assert len(tD) == 1
+    tspec = list( tD.values() )[0]
+    return tspec
 
-    def test_write_and_read_a_test(self):
-        ""
-        tlw = tio.TestListWriter( 'tests.out' )
-        tlw.start()
-        tspec1 = make_fake_TestSpec()
-        tlw.append( tspec1 )
-        tlw.finish()
 
-        time.sleep(1)
+def write_test_list_with_fake_test( filename ):
+    ""
+    tlw = tio.TestListWriter( filename )
+    tlw.start()
+    tspec = make_fake_TestSpec()
+    tlw.append( tspec )
+    tlw.finish()
 
-        tlr = tio.TestListReader( 'tests.out' )
-        tlr.read()
 
-        tD = tlr.getTests()
-        assert len(tD) == 1
-        tspec2 = list( tD.values() )[0]
+def write_test_results_using_TestList( filename ):
+    ""
+    tl = TestList.TestList()
+    tl.initializeResultsFile( filename )
+    tspec = make_fake_TestSpec_with_results()
+    tl.AppendTestResult( tspec )
+    tl.writeFinished()
 
-        assert tspec1.getName() == tspec2.getName()
-        assert tspec1.getRootpath() == tspec2.getRootpath()
-        assert tspec1.getFilepath() == tspec2.getFilepath()
-        assert tspec1.getExecuteDirectory() == tspec2.getExecuteDirectory()
-        assert tspec1.getParameters() == tspec2.getParameters()
+
+def read_test_list_and_check_fake_results_test( filename ):
+    ""
+    tlr = tio.TestListReader( filename )
+    tlr.read()
+
+    d1 = tlr.getStartDate()
+    d2 = tlr.getFinishDate()
+    assert d1 <= d2 and d2-d1 < 5
+    assert time.time() - d1 < 10
+
+    tD = tlr.getTests()
+    assert len(tD) == 1
+    tspec = list( tD.values() )[0]
+    assert tspec.getAttr( 'state' ) == 'notdone'
+    assert time.time() - tspec.getAttr( 'xdate' ) < 10
 
 
 ############################################################################
