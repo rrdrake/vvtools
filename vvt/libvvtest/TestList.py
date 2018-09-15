@@ -25,6 +25,7 @@ class TestList:
     def __init__(self, runtime_config=None):
         
         self.filename = None
+        self.results_file = None
         self.datestamp = None
         self.finish = None
 
@@ -40,7 +41,7 @@ class TestList:
         
         self.rtconfig = runtime_config
     
-    def stringFileWrite(self, filename, datestamp=None):
+    def stringFileWrite(self, filename):
         """
         Writes the tests in this container to the given filename.  All tests
         are written, even those that were not executed (were filtered out).
@@ -48,30 +49,28 @@ class TestList:
         The given filename is recorded in this object and is used for
         subsequent write actions, such as AddIncludeFile() and writeFinished().
 
-        A date stamp is written to the file.  If 'datestamp' is None, then
-        the current time is used.
+        A current date stamp is written to the file.
         """
         self.filename = os.path.normpath( filename )
 
-        d,b = os.path.split( self.filename )
-        if d and d != '.':
-          # allow that one directory level must be created
-          if not os.path.exists(d):
-            os.mkdir( d )
-        
+        check_make_directory_containing_file( self.filename )
+
         fp = open( self.filename, 'w' )
         fp.write( "\n#VVT: Version = " + TestList.version + "\n" )
 
-        if datestamp == None:
-          datestamp = time.time()
-        self.datestamp = datestamp
-        fp.write( "#VVT: Date = " + time.ctime( datestamp ) + "\n\n" )
+        self.datestamp = time.time()
+        fp.write( "#VVT: Date = " + time.ctime( self.datestamp ) + "\n\n" )
 
         for t in self.tspecs.values():
-            ts = testlistio.test_to_string( t, include_keywords=True )
+            ts = testlistio.test_to_string( t )
             fp.write( ts + os.linesep )
         
         fp.close()
+
+    def initializeResultsFile(self, filename):
+        ""
+        self.results_file = testlistio.TestListWriter( filename )
+        self.results_file.start()
 
     def writeDependencies(self, superset):
         """
@@ -93,35 +92,44 @@ class TestList:
         Appends the file 'filename' with a marker that causes the
         _read_file_lines() method to also read the given file 'include_file'.
         """
-        assert self.filename
-        fp = open( self.filename, 'a' )
-        fp.write( '\n# INCLUDE ' + include_file + '\n' )
-        fp.close()
-    
+        if self.results_file:
+            self.results_file.addIncludeFile( include_file+'.magic' )
+
+        else:
+            assert self.filename
+            fp = open( self.filename, 'a' )
+            fp.write( '\n# INCLUDE ' + include_file + '\n' )
+            fp.close()
+
     def AppendTestResult(self, tspec):
         """
         Appends the current filename with the name and attributes of the given
         TestSpec object.
         """
-        assert self.filename
-        fp = open( self.filename, 'a' )
-        ts = testlistio.test_to_string( tspec, include_keywords=True )
-        fp.write( ts + '\n' )
-        fp.close()
-    
-    def writeFinished(self, datestamp=None):
+        if self.results_file:
+            self.results_file.append( tspec )
+
+        else:
+            assert self.filename
+            fp = open( self.filename, 'a' )
+            ts = testlistio.test_to_string( tspec )
+            fp.write( ts + '\n' )
+            fp.close()
+
+    def writeFinished(self):
         """
         Appends the current filename with a finish marker that contains the
-        given 'datestamp', or the current date if that is None.
+        current date.
         """
-        assert self.filename
+        if self.results_file:
+            self.results_file.finish()
 
-        if datestamp == None:
-          datestamp = time.time()
-        
-        fp = open( self.filename, 'a' )
-        fp.write( '\n#VVT: Finish = ' + time.ctime( datestamp ) + '\n' )
-        fp.close()
+        else:
+            assert self.filename
+            fp = open( self.filename, 'a' )
+            fp.write( '\n#VVT: Finish = ' + time.ctime() + '\n' )
+            fp.close()
+            self.filename = None
 
     def readFile(self, filename, count_entries=None):
         """
@@ -905,6 +913,15 @@ def is_subdir(parent_dir, subdir):
     if ls > lp and parent_dir + '/' == subdir[0:lp+1]:
       return subdir[lp+1:]
     return None
+
+
+def check_make_directory_containing_file( filename ):
+    ""
+    d,b = os.path.split( filename )
+    if d and d != '.':
+        if not os.path.exists(d):
+            os.mkdir( d )
+
 
 def testruntime( testobj ):
     """
