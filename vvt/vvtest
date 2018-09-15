@@ -501,21 +501,7 @@ def main():
 
     results_dir = testResultsDir( optdict, plat.getName() )
 
-    rtconfig = RuntimeConfig( \
-                  param_expr_list=optdict.get('-p', None),
-                  keyword_expr=keyword_expr,
-                  option_list=optdict.get('-o', []) + [plat.getCompiler()],
-                  platform_name=plat.getName(),
-                  ignore_platforms='-A' in optdict,
-                  platform_expr_list=optdict.get('-x', None),
-                  search_file_globs=search_fnmatch,
-                  search_patterns=optdict.get('-s',None),
-                  include_tdd='--include-tdd' in optdict,
-                  runtime_range=[optdict.get('--tmin',None),
-                                 optdict.get('--tmax',None)],
-                  runtime_sum=optdict.get( '--tsum', None ) )
-    if '--qsub-id' in optdict:
-        rtconfig.setAttr( 'include_all', True )
+    rtconfig = construct_RuntimeConfig( plat )
 
     info = ( '-i' in optdict or \
              '--files' in optdict or \
@@ -526,43 +512,7 @@ def main():
         generateTestList( dirs, plat, rtconfig )
 
     elif info:
-
-        tlist = TestList.TestList( rtconfig )
-        if test_dir != None:
-            tfile = os.path.join( test_dir, testlist_name )
-            tlist.readFile( tfile )
-            tlist.loadAndFilter( plat.getMaxProcs(),
-                        filter_dir=computeRelativePath( test_dir, os.getcwd() ) )
-        elif os.path.exists( results_dir ):
-            test_dir = os.path.join( os.getcwd(), results_dir )
-            tfile = os.path.join( test_dir, testlist_name )
-            rtconfig.setAttr( 'include_tdd', True )  # always include tdd with -i
-            tlist.readFile( tfile )
-            tlist.loadAndFilter( plat.getMaxProcs() )
-        elif '--keys' in optdict or '--files' in optdict:
-            if len(dirs) == 0:
-                dirs = ['.']
-            for d in dirs:
-                if os.path.exists(d):
-                    tlist.scanDirectory( d, optdict.get('-S',None) )
-            tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
-        else:
-            print3( "*** warning: previous TestResults directory not found" )
-            test_dir = os.path.join( os.getcwd(), results_dir )
-            tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
-
-        if '--keys' in optdict or '--files' in optdict:
-            keywordInformation(tlist)
-        elif '--save-results' in optdict:
-            saveResults( tlist, plat, test_dir )
-        else:
-            do_stdout = True
-            do_html = ( '--html' in optdict )
-            do_junit = optdict.get('--junit','')
-            if do_html or do_junit:
-                do_stdout = False
-            printResults( tlist, test_dir, None,
-                          tostdout=do_stdout, tohtml=do_html, tojunit=do_junit )
+        print_info_mode( plat, rtconfig, dirs, test_dir, results_dir )
 
     elif '-b' in optdict:
 
@@ -586,6 +536,85 @@ def main():
             restartTests( toolsdir, test_dir, plat, rtconfig )
         else:
             runTests( toolsdir, dirs, plat, rtconfig )
+
+
+def construct_RuntimeConfig( plat ):
+    ""
+    rtconfig = RuntimeConfig( \
+                  param_expr_list=optdict.get('-p', None),
+                  keyword_expr=keyword_expr,
+                  option_list=optdict.get('-o', []) + [plat.getCompiler()],
+                  platform_name=plat.getName(),
+                  ignore_platforms='-A' in optdict,
+                  platform_expr_list=optdict.get('-x', None),
+                  search_file_globs=search_fnmatch,
+                  search_patterns=optdict.get('-s',None),
+                  include_tdd='--include-tdd' in optdict,
+                  runtime_range=[optdict.get('--tmin',None),
+                                 optdict.get('--tmax',None)],
+                  runtime_sum=optdict.get( '--tsum', None ) )
+
+    if '--qsub-id' in optdict:
+        rtconfig.setAttr( 'include_all', True )
+
+    return rtconfig
+
+
+def print_info_mode( plat, rtconfig, scan_dirs, test_dir, results_dir ):
+    ""
+    tlist = construct_info_test_list( plat, rtconfig, scan_dirs, test_dir, results_dir )
+
+    if not test_dir and results_dir:
+        test_dir = os.path.abspath( results_dir )
+
+    if '--keys' in optdict or '--files' in optdict:
+        keywordInformation(tlist)
+
+    elif '--save-results' in optdict:
+        saveResults( tlist, plat, test_dir )
+
+    else:
+        do_html = ( '--html' in optdict )
+        do_junit = optdict.get('--junit','')
+        if do_html or do_junit:
+            do_stdout = False
+        else:
+            do_stdout = True
+
+        printResults( tlist, test_dir, None,
+                      tostdout=do_stdout, tohtml=do_html, tojunit=do_junit )
+
+
+def construct_info_test_list( plat, rtconfig, scan_dirs, test_dir, results_dir ):
+    ""
+    tlist = TestList.TestList( rtconfig )
+
+    if test_dir != None:
+        tfile = os.path.join( test_dir, testlist_name )
+        tlist.readFile( tfile )
+        tlist.loadAndFilter( plat.getMaxProcs(),
+                    filter_dir=computeRelativePath( test_dir, os.getcwd() ) )
+
+    elif os.path.exists( results_dir ):
+        test_dir = os.path.abspath( results_dir )
+        tfile = os.path.join( test_dir, testlist_name )
+        rtconfig.setAttr( 'include_tdd', True )  # always include tdd with -i
+        tlist.readFile( tfile )
+        tlist.loadAndFilter( plat.getMaxProcs() )
+
+    elif '--keys' in optdict or '--files' in optdict:
+        if len(scan_dirs) == 0:
+            scan_dirs = ['.']
+        for d in scan_dirs:
+            if os.path.exists(d):
+                tlist.scanDirectory( d, optdict.get('-S',None) )
+        tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
+
+    else:
+        print3( "*** warning: previous TestResults directory not found" )
+        tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
+
+    return tlist
 
 
 ############################################################################
