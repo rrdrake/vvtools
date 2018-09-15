@@ -451,6 +451,143 @@ class Configuration:
 config = Configuration()
 
 
+def main():
+    ""
+    # get directory containing this script and the script name itself
+    toolsdir, exeName = getExeDirAndName()
+
+    global keyword_expr
+    keyword_expr = FilterExpressions.WordExpression()
+
+    check_for_bootstrap_file()
+
+    # set this before options are parsed
+    config.set( 'toolsdir', toolsdir )
+
+    # this creates the global "optdict" dictionary and returns non-option args
+    dirs = parseOptionsAndGenerateOptionDictionary()
+
+    # do this after options are parsed
+    insert_configdir_into_sys_path( toolsdir, config )
+
+    # the help option quits immediately
+    if '-h' in optdict:
+        print3( usagepage )
+        sys.exit(0)
+    if '-H' in optdict:
+        print3( manpage )
+        sys.exit(0)
+
+    # 'test_dir' non-None only if the CWD is in a TestResults.* directory
+    test_dir = readCommandInfo()
+
+    if '--check' in optdict:
+        for n in optdict['--check']:
+            os.environ[ 'CHECK_' + n.upper() ] = ''
+
+    if '--vg' in optdict:
+        os.environ[ 'CHECK_VALGRIND' ] = ''
+
+    if test_dir and '-S' in optdict:
+        print3( "*** error: cannot use -S in a TestResults directory" )
+        sys.exit(1)
+
+    if test_dir and '-g' in optdict:
+        print3( "*** error: cannot use -g in a TestResults directory" )
+        sys.exit(1)
+
+    # construct platform
+    plat = vvplatform.construct_Platform( toolsdir, optdict )
+
+    results_dir = testResultsDir( optdict, plat.getName() )
+
+    rtconfig = RuntimeConfig( \
+                  param_expr_list=optdict.get('-p', None),
+                  keyword_expr=keyword_expr,
+                  option_list=optdict.get('-o', []) + [plat.getCompiler()],
+                  platform_name=plat.getName(),
+                  ignore_platforms='-A' in optdict,
+                  platform_expr_list=optdict.get('-x', None),
+                  search_file_globs=search_fnmatch,
+                  search_patterns=optdict.get('-s',None),
+                  include_tdd='--include-tdd' in optdict,
+                  runtime_range=[optdict.get('--tmin',None),
+                                 optdict.get('--tmax',None)],
+                  runtime_sum=optdict.get( '--tsum', None ) )
+    if '--qsub-id' in optdict:
+        rtconfig.setAttr( 'include_all', True )
+
+    info = ( '-i' in optdict or \
+             '--files' in optdict or \
+             '--keys' in optdict )
+
+    if '-g' in optdict and not info:
+        assert test_dir == None
+        generateTestList( dirs, plat, rtconfig )
+
+    elif info:
+
+        tlist = TestList.TestList( rtconfig )
+        if test_dir != None:
+            tfile = os.path.join( test_dir, testlist_name )
+            tlist.readFile( tfile )
+            tlist.loadAndFilter( plat.getMaxProcs(),
+                        filter_dir=computeRelativePath( test_dir, os.getcwd() ) )
+        elif os.path.exists( results_dir ):
+            test_dir = os.path.join( os.getcwd(), results_dir )
+            tfile = os.path.join( test_dir, testlist_name )
+            rtconfig.setAttr( 'include_tdd', True )  # always include tdd with -i
+            tlist.readFile( tfile )
+            tlist.loadAndFilter( plat.getMaxProcs() )
+        elif '--keys' in optdict or '--files' in optdict:
+            if len(dirs) == 0:
+                dirs = ['.']
+            for d in dirs:
+                if os.path.exists(d):
+                    tlist.scanDirectory( d, optdict.get('-S',None) )
+            tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
+        else:
+            print3( "*** warning: previous TestResults directory not found" )
+            test_dir = os.path.join( os.getcwd(), results_dir )
+            tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
+
+        if '--keys' in optdict or '--files' in optdict:
+            keywordInformation(tlist)
+        elif '--save-results' in optdict:
+            saveResults( tlist, plat, test_dir )
+        else:
+            do_stdout = True
+            do_html = ( '--html' in optdict )
+            do_junit = optdict.get('--junit','')
+            if do_html or do_junit:
+                do_stdout = False
+            printResults( tlist, test_dir, None,
+                          tostdout=do_stdout, tohtml=do_html, tojunit=do_junit )
+
+    elif '-b' in optdict:
+
+        if '-R' in optdict or '-w' in optdict:
+            print3( "*** error: cannot use -R or -w with -b (baseline)" )
+            sys.exit(1)
+
+        baselineTests( test_dir, plat, rtconfig )
+
+    elif '--extract' in optdict:
+        extractTestFiles( dirs, plat, optdict['--extract'], rtconfig )
+
+    else:
+
+        # if no results keywords are specified, then add -k notrun/notdone
+        if not keyword_expr.containsResultsKeywords() and \
+           '-w' not in optdict and '-R' not in optdict:
+            keyword_expr.append( ['notrun/notdone'], 'and' )
+
+        if test_dir != None:
+            restartTests( toolsdir, test_dir, plat, rtconfig )
+        else:
+            runTests( toolsdir, dirs, plat, rtconfig )
+
+
 ############################################################################
 
 def XstatusString( t, add_date, test_dir, cwd ):
@@ -941,7 +1078,7 @@ def readCommandInfo():
     return None
 
 
-def runTests( dirs, plat, rtconfig ):
+def runTests( toolsdir, dirs, plat, rtconfig ):
     """
     Executes a list of tests.
     """
@@ -1033,7 +1170,7 @@ def runTests( dirs, plat, rtconfig ):
             executeTestList( tlist, test_dir, plat, perms, tfile )
           
           else:
-            batchTestList( tlist, test_dir, plat, perms )
+            batchTestList( toolsdir, tlist, test_dir, plat, perms )
         
           print3( "Test directory:", testdirname )
           
@@ -1043,10 +1180,8 @@ def runTests( dirs, plat, rtconfig ):
         else:
           print3( "\n--------- no tests to run -----------\n" )
     
-    except:
+    finally:
         tlist.writeFinished()
-        raise
-    tlist.writeFinished()
 
 
 def printResults( atestlist, test_dir, perms,
@@ -1286,7 +1421,7 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
     print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
 
 
-def batchTestList( tlist, test_dir, plat, perms ):
+def batchTestList( toolsdir, tlist, test_dir, plat, perms ):
     """
     The 'tlist' is a TestList class instance.
     """
@@ -1294,7 +1429,7 @@ def batchTestList( tlist, test_dir, plat, perms ):
 
     qsublimit = optdict.get( '--qsub-limit', plat.getDefaultQsubLimit() )
     
-    batch = Batcher( plat, test_dir, tlist, perms, qsublimit )
+    batch = Batcher( toolsdir, plat, test_dir, tlist, perms, qsublimit )
     
     plat.display()
     starttime = time.time()
@@ -1502,10 +1637,11 @@ def loadRunTimes( tlist, plat ):
 
 class Batcher:
     
-    def __init__(self, plat, test_dir, tlist, perms, maxjobs):
+    def __init__(self, toolsdir, plat, test_dir, tlist, perms, maxjobs):
         """
         The 'tlist' is a TestList class instance.
         """
+        self.toolsdir = toolsdir
         self.plat = plat
         self.test_dir = test_dir
         self.tlist = tlist
@@ -1684,7 +1820,7 @@ class Batcher:
           if qtime < 600: taopts += ' -T ' + str(qtime*0.90)
           else:           taopts += ' -T ' + str(qtime-120)
         
-        cmd = toolsdir+'/vvtest ' + taopts + ' || exit 1'
+        cmd = self.toolsdir+'/vvtest ' + taopts + ' || exit 1'
         fp.writelines( [ cmd+'\n\n' ] )
         
         # echo a marker to determine when a clean batch job exit has occurred
@@ -1754,7 +1890,7 @@ def saveResults( tlist, plat, test_dir, inprogress=False ):
     tr.writeResults( fname, pname, cplr, mach, test_dir, inprogress )
 
 
-def restartTests( test_dir, plat, rtconfig ):
+def restartTests( toolsdir, test_dir, plat, rtconfig ):
     ""
     assert test_dir != None
 
@@ -1826,7 +1962,7 @@ def restartTests( test_dir, plat, rtconfig ):
           
           else:
             tlist.createTestExecs( test_dir, plat, config, perms )
-            batchTestList( tlist, test_dir, plat, perms )
+            batchTestList( toolsdir, tlist, test_dir, plat, perms )
         
           if '--save-results' in optdict:
             saveResults( tlist, plat, test_dir )
@@ -2506,151 +2642,19 @@ def make_PermissionSetter( test_dir, optdict ):
 
 ##############################################################################
 
-
 if __name__ == '__main__':
   
-  # get directory containing this script and the script name itself
-  toolsdir, exeName = getExeDirAndName()
-  
-  import libvvtest.vvplatform as vvplatform
-  import libvvtest.misc as misc
-  import libvvtest.TestSpec as TestSpec
-  import libvvtest.TestExec as TestExec
-  import libvvtest.TestList as TestList
-  import libvvtest.batchutils as batchutils
-  import libvvtest.TestSpecCreator as TestSpecCreator
-  import libvvtest.FilterExpressions as FilterExpressions
-  from libvvtest.RuntimeConfig import RuntimeConfig
-  import results
-  from libvvtest.PermissionSetter import DummyPermissionSetter
-  from libvvtest.PermissionSetter import PermissionSetter
+    import libvvtest.vvplatform as vvplatform
+    import libvvtest.misc as misc
+    import libvvtest.TestSpec as TestSpec
+    import libvvtest.TestExec as TestExec
+    import libvvtest.TestList as TestList
+    import libvvtest.batchutils as batchutils
+    import libvvtest.TestSpecCreator as TestSpecCreator
+    import libvvtest.FilterExpressions as FilterExpressions
+    from libvvtest.RuntimeConfig import RuntimeConfig
+    import results
+    from libvvtest.PermissionSetter import DummyPermissionSetter
+    from libvvtest.PermissionSetter import PermissionSetter
 
-  keyword_expr = FilterExpressions.WordExpression()
-
-  check_for_bootstrap_file()
-
-  # set this before options are parsed
-  config.set( 'toolsdir', toolsdir )
-  
-  # this creates the global "optdict" dictionary and returns non-option args
-  dirs = parseOptionsAndGenerateOptionDictionary()
-  
-  # do this after options are parsed
-  insert_configdir_into_sys_path( toolsdir, config )
-  
-  # the help option quits immediately
-  if '-h' in optdict:
-    print3( usagepage )
-    sys.exit(0)
-  if '-H' in optdict:
-    print3( manpage )
-    sys.exit(0)
-  
-  # 'test_dir' non-None only if the CWD is in a TestResults.* directory
-  test_dir = readCommandInfo()
-  
-  if '--check' in optdict:
-    for n in optdict['--check']:
-      os.environ[ 'CHECK_' + n.upper() ] = ''
-  
-  if '--vg' in optdict:
-    os.environ[ 'CHECK_VALGRIND' ] = ''
-  
-  if test_dir and '-S' in optdict:
-    print3( "*** error: cannot use -S in a TestResults directory" )
-    sys.exit(1)
-  
-  if test_dir and '-g' in optdict:
-    print3( "*** error: cannot use -g in a TestResults directory" )
-    sys.exit(1)
-  
-  # construct platform
-  plat = vvplatform.construct_Platform( toolsdir, optdict )
-
-  results_dir = testResultsDir( optdict, plat.getName() )
-  
-  rtconfig = RuntimeConfig( \
-                param_expr_list=optdict.get('-p', None),
-                keyword_expr=keyword_expr,
-                option_list=optdict.get('-o', []) + [plat.getCompiler()],
-                platform_name=plat.getName(),
-                ignore_platforms='-A' in optdict,
-                platform_expr_list=optdict.get('-x', None),
-                search_file_globs=search_fnmatch,
-                search_patterns=optdict.get('-s',None),
-                include_tdd='--include-tdd' in optdict,
-                runtime_range=[optdict.get('--tmin',None),
-                               optdict.get('--tmax',None)],
-                runtime_sum=optdict.get( '--tsum', None ) )
-  if '--qsub-id' in optdict:
-    rtconfig.setAttr( 'include_all', True )
-  
-  info = ( '-i' in optdict or \
-           '--files' in optdict or \
-           '--keys' in optdict )
-  
-  if '-g' in optdict and not info:
-    assert test_dir == None
-    generateTestList( dirs, plat, rtconfig )
-  
-  elif info:
-    
-    tlist = TestList.TestList( rtconfig )
-    if test_dir != None:
-      tfile = os.path.join( test_dir, testlist_name )
-      tlist.readFile( tfile )
-      tlist.loadAndFilter( plat.getMaxProcs(),
-                    filter_dir=computeRelativePath( test_dir, os.getcwd() ) )
-    elif os.path.exists( results_dir ):
-      test_dir = os.path.join( os.getcwd(), results_dir )
-      tfile = os.path.join( test_dir, testlist_name )
-      rtconfig.setAttr( 'include_tdd', True )  # always include tdd with -i
-      tlist.readFile( tfile )
-      tlist.loadAndFilter( plat.getMaxProcs() )
-    elif '--keys' in optdict or '--files' in optdict:
-      if len(dirs) == 0:
-        dirs = ['.']
-      for d in dirs:
-        if os.path.exists(d):
-          tlist.scanDirectory( d, optdict.get('-S',None) )
-      tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
-    else:
-      print3( "*** warning: previous TestResults directory not found" )
-      test_dir = os.path.join( os.getcwd(), results_dir )
-      tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
-    
-    if '--keys' in optdict or '--files' in optdict:
-        keywordInformation(tlist)
-    elif '--save-results' in optdict:
-        saveResults( tlist, plat, test_dir )
-    else:
-        do_stdout = True
-        do_html = ( '--html' in optdict )
-        do_junit = optdict.get('--junit','')
-        if do_html or do_junit:
-            do_stdout = False
-        printResults( tlist, test_dir, None,
-                      tostdout=do_stdout, tohtml=do_html, tojunit=do_junit )
- 
-  elif '-b' in optdict:
-    
-    if '-R' in optdict or '-w' in optdict:
-      print3( "*** error: cannot use -R or -w with -b (baseline)" )
-      sys.exit(1)
-    
-    baselineTests( test_dir, plat, rtconfig )
-  
-  elif '--extract' in optdict:
-    extractTestFiles( dirs, plat, optdict['--extract'], rtconfig )
-  
-  else:
-    
-    # if no results keywords are specified, then add -k notrun/notdone
-    if not keyword_expr.containsResultsKeywords() and \
-       '-w' not in optdict and '-R' not in optdict:
-      keyword_expr.append( ['notrun/notdone'], 'and' )
-    
-    if test_dir != None:
-      restartTests( test_dir, plat, rtconfig )
-    else:
-      runTests( dirs, plat, rtconfig )
+    main()
