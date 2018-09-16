@@ -603,11 +603,7 @@ def construct_info_test_list( plat, rtconfig, scan_dirs, test_dir, results_dir )
         tlist.loadAndFilter( plat.getMaxProcs() )
 
     elif '--keys' in optdict or '--files' in optdict:
-        if len(scan_dirs) == 0:
-            scan_dirs = ['.']
-        for d in scan_dirs:
-            if os.path.exists(d):
-                tlist.scanDirectory( d, optdict.get('-S',None) )
+        scan_test_source_directories( tlist, scan_dirs )
         tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
 
     else:
@@ -702,19 +698,27 @@ def relative_execute_directory( tst, testdir, cwd ):
 #
 # generation of tests
 
+
+def scan_test_source_directories( tlist, scan_dirs ):
+    ""
+    # default scan directory is the current working directory
+    if len(scan_dirs) == 0:
+        scan_dirs = ['.']
+
+    for d in scan_dirs:
+        if not os.path.exists(d):
+            sys.stderr.write('*** ' + exeName + \
+                ': error: directory does not exist: ' + d + '\n')
+            sys.exit(1);
+        tlist.scanDirectory( d, optdict.get('-S',None) )
+
+
 def generateTestList( dirs, plat, rtconfig ):
     """
     """
-    # default scan directory is the current working directory
-    if len(dirs) == 0: dirs = ['.']
-    
     tlist = TestList.TestList( rtconfig )
-    for d in dirs:
-      if not os.path.exists(d):
-        sys.stderr.write('*** ' + exeName + \
-            ': error: directory does not exist: ' + d + '\n')
-        sys.exit(1);
-      tlist.scanDirectory( d, optdict.get('-S',None) )
+
+    scan_test_source_directories( tlist, dirs )
 
     loadRunTimes( tlist, plat )
 
@@ -747,16 +751,9 @@ def extractTestFiles( dirs, plat, target_dir, rtconfig ):
     source area and copies the files used for each test into a separate
     directory.
     """
-    # default scan directory is the current working directory
-    if len(dirs) == 0: dirs = ['.']
-    
     tlist = TestList.TestList( rtconfig )
-    for d in dirs:
-      if not os.path.exists(d):
-        sys.stderr.write('*** ' + exeName + \
-            ': error: directory does not exist: ' + d + '\n')
-        sys.exit(1);
-      tlist.scanDirectory( d, optdict.get('-S',None) )
+
+    scan_test_source_directories( tlist, dirs )
 
     loadRunTimes( tlist, plat )
 
@@ -1116,14 +1113,7 @@ def runTests( toolsdir, dirs, plat, rtconfig ):
     test_dir = os.path.join( os.getcwd(), testdirname )
     tfile = os.path.join( test_dir, testlist_name )
 
-    if os.path.exists( tfile ):
-        tl = TestList.TestList()
-        tl.scanFile( tfile )
-        if tl.getFinishDate() == None and '--force' not in optdict:
-            print3( '*** error: tests are currently running in another process' )
-            print3( '    (or a previous run crashed); use --force to run anyway' )
-            sys.exit(1)
-        tl = None
+    check_for_currently_running_vvtest( tfile )
 
     # this variable allows vvtest tests to run vvtest (ie, allows recursion)
     os.environ['VVTEST_TEST_ROOT'] = os.path.normpath( os.path.abspath( test_dir ) )
@@ -1133,29 +1123,14 @@ def runTests( toolsdir, dirs, plat, rtconfig ):
     createTestDir( testdirname, perms )
     
     if '-w' in optdict:
-      print3( '/bin/rm -rf ' + testdirname + '/*' )
-      for f in os.listdir(testdirname):
-        df = os.path.join( testdirname, f )
-        if os.path.isdir(df):
-          shutil.rmtree( df, 0 )
-        else:
-          try: os.remove(df)
-          except: pass
-    
+        remove_directory_contents( testdirname )
+
     writeCommandInfo( test_dir, plat, perms )
-    
+
     tlist = TestList.TestList( rtconfig )
 
-    # generate test list by scanning directories
-    if len(dirs) == 0:
-      dirs = ['.']
-    for d in dirs:
-      if not os.path.exists(d):
-        sys.stderr.write('*** ' + exeName + \
-            ': error: directory does not exist: ' + d + '\n')
-        sys.exit(1);
-      tlist.scanDirectory( d, optdict.get('-S',None) )
-    
+    scan_test_source_directories( tlist, dirs )
+
     if os.path.exists( tfile ):
         tlist.readFile( tfile )  # merge in existing test results
     
@@ -2667,6 +2642,30 @@ def make_PermissionSetter( test_dir, optdict ):
         perms = DummyPermissionSetter()
 
     return perms
+
+
+def remove_directory_contents( path ):
+    ""
+    print3( '/bin/rm -rf ' + path + '/*' )
+    for f in os.listdir(path):
+        df = os.path.join( path, f )
+        if os.path.isdir(df):
+            shutil.rmtree( df, 0 )
+        else:
+            try: os.remove(df)
+            except Exception: pass
+
+
+def check_for_currently_running_vvtest( testlistfile ):
+    ""
+    if '--force' not in optdict and os.path.exists( testlistfile ):
+        tl = TestList.TestList()
+        tl.scanFile( testlistfile )
+        if tl.getFinishDate() == None:
+            print3( '*** error: tests are currently running in another process' )
+            print3( '    (or a previous run crashed); use --force to run anyway' )
+            sys.exit(1)
+        tl = None
 
 
 ##############################################################################
