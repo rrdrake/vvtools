@@ -177,9 +177,14 @@ class SimpleAprepro:
                                               self.safe_globals,
                                               self.eval_locals)
 
-            return repr(self.eval_locals[name])
+            val = self.eval_locals[name]
         else:
-            return repr(eval(txt, self.safe_globals, self.eval_locals))
+            val = eval(txt, self.safe_globals, self.eval_locals)
+
+        if type(val) is str:
+            return val
+
+        return repr(val)
 
 
     def load_file(self):
