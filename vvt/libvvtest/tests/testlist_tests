@@ -33,7 +33,7 @@ class TestSpec_to_and_from_string( unittest.TestCase ):
 
         sid = tio.test_to_string( ts )
         assert '\n' not in sid
-        print3( "test string id", sid )
+        #print3( "test string id", sid )
         ts2 = tio.string_to_test(sid)
 
         assert_TestSpec_same_as_fake( ts2 )
@@ -87,6 +87,24 @@ class TestList_read_write( unittest.TestCase ):
         tspec = get_single_test_from_test_list( tlr )
         assert_TestSpec_same_as_fake( tspec )
 
+    def test_read_an_unfinished_test_list_file(self):
+        ""
+        tl = TestList.TestList()
+        tl.initializeResultsFile( 'tests.out' )
+        tspec = make_fake_TestSpec()
+        tl.AppendTestResult( tspec )
+
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'tests.out' )
+        tlr.read()
+
+        tm = time.time()
+        assert tm - tlr.getStartDate() < 5
+        assert tlr.getFinishDate() == None
+        tspec = get_single_test_from_test_list( tlr )
+        assert_TestSpec_same_as_fake( tspec )
+
     def test_write_and_read_using_an_include_file(self):
         ""
         tlw = tio.TestListWriter( 'tests.out' )
@@ -117,6 +135,33 @@ class TestList_read_write( unittest.TestCase ):
         tm = tlr.getFinishDate()
         assert t3 >= tm and t3-tm < 2
 
+    def test_write_a_test_file_then_scan_it_for_the_finish_date(self):
+        ""
+        write_test_list_with_fake_test( 'tests.out' )
+
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'tests.out' )
+        tm = tlr.scanForFinishDate()
+        assert tm and (time.time() - tm) < 10
+
+        tlr = tio.TestListReader( 'tests.out' )
+        tlr.read()
+        assert abs( tlr.getFinishDate() - tm ) < 2
+
+    def test_scan_an_unfinished_test_list_file(self):
+        ""
+        tl = TestList.TestList()
+        tl.initializeResultsFile( 'tests.out' )
+        tspec = make_fake_TestSpec_with_results()
+        tl.AppendTestResult( tspec )
+
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'tests.out' )
+        tm = tlr.scanForFinishDate()
+        assert tm == None
+
 
 class TestList_results_file( unittest.TestCase ):
 
@@ -133,7 +178,7 @@ class TestList_results_file( unittest.TestCase ):
         ""
         tl = TestList.TestList()
         tl.initializeResultsFile( 'results' )
-        tl.AddIncludeFile( 'results.0' )
+        tl.addIncludeFile( 'results.0' )
 
         write_test_results_using_TestList( 'results.0' )
 

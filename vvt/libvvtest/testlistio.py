@@ -24,9 +24,9 @@ class TestListWriter:
 
         fp = open( self.filename, 'w' )
         try:
-            fp.write( 'VERSION=testlist'+str(version)+'\n' )
-            fp.write( 'START='+datestamp+'\n' )
-            fp.write( 'ATTRS='+repr( file_attrs )+'\n\n' )
+            fp.write( '#VVT: Version = testlist'+str(version)+'\n' )
+            fp.write( '#VVT: Start = '+datestamp+'\n' )
+            fp.write( '#VVT: Attrs = '+repr( file_attrs )+'\n\n' )
         finally:
             fp.close()
 
@@ -34,7 +34,7 @@ class TestListWriter:
         ""
         fp = open( self.filename, 'a' )
         try:
-            fp.write( 'INCLUDE='+filename+'\n' )
+            fp.write( '#VVT: Include = '+filename+'\n' )
         finally:
             fp.close()
 
@@ -52,7 +52,7 @@ class TestListWriter:
 
         fp = open( self.filename, 'a' )
         try:
-            fp.write( '\nFINISH='+datestamp+'\n' )
+            fp.write( '\n#VVT: Finish = '+datestamp+'\n' )
         finally:
             fp.close()
 
@@ -70,14 +70,24 @@ class TestListReader:
 
     def read(self):
         ""
-        fp = open( self.filename, 'r' )
-        try:
-            line = fp.readline()
-            while line:
-                self._parse_line( line.strip() )
-                line = fp.readline()
-        finally:
-            fp.close()
+        for key,val in self._iterate_file_lines():
+            try:
+                if key == 'Version':
+                    self.vers = int( val )
+                elif key == 'Start':
+                    self.start = eval( val )[1]
+                elif key == 'Attrs':
+                    self.attrs = eval( val )
+                elif key == 'Include':
+                    self._read_include_file( val )
+                elif key == 'Finish':
+                    self.finish = eval( val )[1]
+                else:
+                    tspec = string_to_test( val )
+                    self.tests[ tspec.getExecuteDirectory() ] = tspec
+
+            except Exception:
+                pass
 
     def getStartDate(self):
         ""
@@ -99,26 +109,42 @@ class TestListReader:
         """
         return self.tests
 
-    def _parse_line(self, line):
-        ""
-        keyval = line.split('=',1)
-        try:
-            if keyval[0] == 'VERSION':
-                self.vers = int( keyval[1] )
-            elif keyval[0] == 'START':
-                self.start = eval( keyval[1] )[1]
-            elif keyval[0] == 'ATTRS':
-                self.attrs = eval( keyval[1] )
-            elif keyval[0] == 'INCLUDE':
-                self._read_include_file( keyval[1] )
-            elif keyval[0] == 'FINISH':
-                self.finish = eval( keyval[1] )[1]
-            elif line:
-                tspec = string_to_test( line )
-                self.tests[ tspec.getExecuteDirectory() ] = tspec
+    def scanForFinishDate(self):
+        """
+        If the file has a finish date it is returned, otherwise None.
+        """
+        finish = None
 
-        except Exception:
-            pass
+        for key,val in self._iterate_file_lines():
+            try:
+                if key == 'Finish':
+                    finish = eval( val )[1]
+            except Exception:
+                pass
+
+        return finish
+
+    def _iterate_file_lines(self):
+        ""
+        fp = open( self.filename, 'r' )
+        try:
+            for line in fp:
+
+                line = line.strip()
+
+                try:
+                    if line.startswith( '#VVT: ' ):
+                        n,v = line[5:].split( '=', 1 )
+                        yield ( n.strip(), v.strip() )
+
+                    elif line:
+                        yield ( None, line )
+
+                except Exception:
+                    pass
+
+        finally:
+            fp.close()
 
     def _read_include_file(self, filename):
         ""
