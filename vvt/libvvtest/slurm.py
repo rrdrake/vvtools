@@ -7,7 +7,7 @@
 import os, sys
 import time
 
-from runcmd import runcmd
+from .runcmd import runcmd
 
 class BatchSLURM:
 
