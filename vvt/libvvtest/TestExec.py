@@ -172,10 +172,20 @@ class TestExec:
     def addDependency(self, testexec, match_pattern=None, expr=None):
         """
         A dependency can be either a TestExec object or a TestSpec object.
+        A TestExec object will replace a TestSpec object with the same
+        execute directory.
         """
-        if not deplist_contains_test_object( testexec, self.deps ):
+        append = True
+        for i,tup in enumerate( self.deps ):
+            if same_execute_directory( testexec, tup[0] ):
+                if isinstance( testexec, TestExec ):
+                    self.deps[i] = ( testexec, match_pattern, expr )
+                append = False
+                break
+
+        if append:
             self.deps.append( (testexec,match_pattern,expr) )
-    
+
     def hasDependency(self):
         """
         """
@@ -591,50 +601,19 @@ def echo_test_execution_info( testname, cmd_list, timeout ):
     sys.stdout.flush()
 
 
-def deplist_contains_test_object( testexec, deps_triples ):
-    """
-    Returns True if
-
-        1. 'testexec' is a TestExec object and a dependency is also a
-           TestExec object with the same execute dir
-
-        or
-
-        2. 'testexec' is a TestSpec object and either a TestExec or a
-           TestSpec object has the same execute dir
-    """
-    if isinstance( testexec, TestExec ):
-        xdir = testexec.atest.getExecuteDirectory()
-        if find_testexec( xdir, deps_triples ):
-            return True
+def same_execute_directory( testobj1, testobj2 ):
+    ""
+    if isinstance( testobj1, TestExec ):
+        xdir1 = testobj1.atest.getExecuteDirectory()
     else:
-        xdir = testexec.getExecuteDirectory()
-        if find_testobj( xdir, deps_triples ):
-            return True
+        xdir1 = testobj1.getExecuteDirectory()
 
-    return False
+    if isinstance( testobj2, TestExec ):
+        xdir2 = testobj2.atest.getExecuteDirectory()
+    else:
+        xdir2 = testobj2.getExecuteDirectory()
 
-
-def find_testexec( xdir, deps_triples ):
-    ""
-    for tx,pat,exp in deps_triples:
-        if isinstance( tx, TestExec ):
-            if tx.atest.getExecuteDirectory() == xdir:
-                return tx
-
-    return None
-
-
-def find_testobj( xdir, deps_triples ):
-    ""
-    for tx,pat,exp in deps_triples:
-        if isinstance( tx, TestExec ):
-            if tx.atest.getExecuteDirectory() == xdir:
-                return tx
-        elif tx.getExecuteDirectory() == xdir:
-            return tx
-
-    return None
+    return xdir1 == xdir2
 
 
 def set_timeout_environ_variable( timeout ):

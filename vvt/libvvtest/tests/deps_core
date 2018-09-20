@@ -21,6 +21,7 @@ import libvvtest.TestSpecCreator as creator
 from libvvtest.RuntimeConfig import RuntimeConfig
 from libvvtest.TestList import find_tests_by_execute_directory_match
 from libvvtest.TestSpec import TestSpec
+from libvvtest.TestExec import TestExec
 
 
 class Parse_Dependencies( unittest.TestCase ):
@@ -272,6 +273,72 @@ class Function_find_tests_by_execute_directory_match( unittest.TestCase ):
                             'subdir3/testA', '../sub*/*B', xL )
         assert has_same_values( S, ['subdir1/testB','subdir2/testB'] )
 
+
+#######################################
+
+class dependency_related_functions( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test( cleanout=False )
+
+    def test_addDependency_uniquifies_multiple_TestSpec(self):
+        ""
+        ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
+        tx = TestExec( ts, None, False )
+
+        ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
+        tx.addDependency( ts1 )
+
+        ts2 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
+        tx.addDependency( ts2 )
+
+        assert len( tx.getDependencies() ) == 1
+
+    def test_addDependency_uniquifies_multiple_TestExec(self):
+        ""
+        ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
+        tx = TestExec( ts, None, False )
+
+        ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
+        tx1 = TestExec( ts1, None, False )
+        tx.addDependency( tx1 )
+
+        ts2 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
+        tx2 = TestExec( ts2, None, False )
+        tx.addDependency( tx2 )
+
+        assert len( tx.getDependencies() ) == 1
+
+    def test_addDependency_uniquifies_TestSpec_then_TestExec(self):
+        ""
+        ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
+        tx = TestExec( ts, None, False )
+
+        ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
+        tx.addDependency( ts1 )
+
+        ts2 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
+        tx2 = TestExec( ts2, None, False )
+        tx.addDependency( tx2 )
+
+        assert len( tx.getDependencies() ) == 1
+
+    def test_addDependency_uniquifies_TestExec_then_TestSpec(self):
+        ""
+        ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
+        tx = TestExec( ts, None, False )
+
+        ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
+        tx1 = TestExec( ts1, None, False )
+        tx.addDependency( tx1 )
+
+        ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
+        tx.addDependency( ts1 )
+
+        assert len( tx.getDependencies() ) == 1
+
+
+#######################################
 
 def has_same_values( container1, container2 ):
     ""
