@@ -6,6 +6,9 @@
 
 import os, sys
 import time
+import stat
+import tempfile
+import shutil
 
 from . import TestSpec
 
@@ -58,6 +61,7 @@ class TestListWriter:
         finally:
             fp.close()
 
+# magic: add a "num includes" in the reader class
 
 class TestListReader:
 
@@ -161,6 +165,105 @@ class TestListReader:
 
             for xdir,tspec in tlr.getTests().items():
                 self.tests[ xdir ] = tspec
+
+
+def inline_include_files( filename ):
+    """
+    For each "include" line in the given test list file, the include statement
+    is replaced with the test specifications from the included file.  If the
+    file contains no include lines, the file is not touched.
+    """
+    fdir = os.path.dirname( filename )
+
+    tmpfp = TempFile( '.vvtest' )
+    try:
+        numincl = 0
+
+        fp = open( filename, 'r' )
+        for line in fp:
+            if line.startswith( '#VVT: ' ):
+                numincl += process_inline_vvt_directive( tmpfp, fdir, line )
+            else:
+                tmpfp.write( line )
+
+        if numincl > 0:
+            tmpfp.copyto( filename )
+
+    finally:
+        tmpfp.remove()
+
+
+def process_inline_vvt_directive( tmpfp, fdir, line ):
+    ""
+    numincl = 0
+
+    kvL = line[5:].split( '=', 1 )
+    if len(kvL) == 1:
+        tmpfp.write( line )
+    else:
+        n,v = kvL
+        if n.strip() == 'Include':
+            numincl = 1
+            try:
+                insert_include_file( tmpfp, fdir, v.strip() )
+            except Exception:
+                pass
+        else:
+            tmpfp.write( line )
+
+    return numincl
+
+
+def insert_include_file( tmpfp, fdir, inclfname ):
+    ""
+    if not os.path.isabs( inclfname ):
+        inclfname = os.path.join( fdir, inclfname )
+
+    if os.path.exists( inclfname ):
+        fp = open( inclfname, 'r' )
+        try:
+            for incline in fp:
+                sline = incline.strip()
+                if sline and not sline.startswith( '#VVT: ' ):
+                    tmpfp.write( incline )
+        finally:
+            fp.close()
+
+
+class TempFile:
+
+    def __init__(self, suffix):
+        ""
+        fd, self.fname = tempfile.mkstemp( suffix=suffix )
+        self.fp = os.fdopen( fd, 'w' )
+
+    def getFilename(self):
+        ""
+        return self.fname
+
+    def write(self, buf):
+        ""
+        self.fp.write( buf )
+
+    def copyto(self, filename):
+        ""
+        self.fp.close()
+        self.fp = None
+
+        if os.path.exists( filename ):
+            fmode = stat.S_IMODE( os.stat(filename)[stat.ST_MODE] )
+            shutil.copyfile( self.fname, filename )
+            os.chmod( filename, fmode )
+        else:
+            shutil.copyfile( self.fname, filename )
+
+    def remove(self):
+        ""
+        try:
+            if self.fp != None:
+                self.fp.close()
+        finally:
+            os.remove( self.fname )
 
 
 def remove_attrs_with_None_for_a_value( attrdict ):
