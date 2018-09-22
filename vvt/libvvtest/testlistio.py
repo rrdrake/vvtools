@@ -22,6 +22,8 @@ class TestListWriter:
         ""
         datestamp = repr( [ time.ctime(), time.time() ] )
 
+        remove_attrs_with_None_for_a_value( file_attrs )
+
         fp = open( self.filename, 'w' )
         try:
             fp.write( '#VVT: Version = testlist'+str(version)+'\n' )
@@ -146,13 +148,26 @@ class TestListReader:
         finally:
             fp.close()
 
-    def _read_include_file(self, filename):
+    def _read_include_file(self, fname):
         ""
-        tlr = TestListReader( filename )
-        tlr.read()
+        if not os.path.isabs( fname ):
+            # include file is relative to self.filename
+            fname = os.path.join( os.path.dirname( self.filename ), fname )
 
-        for xdir,tspec in tlr.getTests().items():
-            self.tests[ xdir ] = tspec
+        if os.path.exists( fname ):
+
+            tlr = TestListReader( fname )
+            tlr.read()
+
+            for xdir,tspec in tlr.getTests().items():
+                self.tests[ xdir ] = tspec
+
+
+def remove_attrs_with_None_for_a_value( attrdict ):
+    ""
+    for k,v in list( attrdict.items() ):
+        if v == None:
+            attrdict.pop( k )
 
 
 def test_to_string( tspec ):

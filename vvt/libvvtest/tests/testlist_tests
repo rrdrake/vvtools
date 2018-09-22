@@ -39,7 +39,7 @@ class TestSpec_to_and_from_string( unittest.TestCase ):
         assert_TestSpec_same_as_fake( ts2 )
 
 
-class TestList_read_write( unittest.TestCase ):
+class test_list_file_read_write( unittest.TestCase ):
 
     def setUp(self):
         util.setup_test()
@@ -87,12 +87,12 @@ class TestList_read_write( unittest.TestCase ):
         tspec = get_single_test_from_test_list( tlr )
         assert_TestSpec_same_as_fake( tspec )
 
-    def test_read_an_unfinished_test_list_file(self):
+    def test_read_an_unfinished_test_results_file(self):
         ""
-        tl = TestList.TestList()
-        tl.initializeResultsFile( 'tests.out' )
+        tlw = tio.TestListWriter( 'tests.out' )
+        tlw.start()
         tspec = make_fake_TestSpec()
-        tl.AppendTestResult( tspec )
+        tlw.append( tspec )
 
         time.sleep(1)
 
@@ -135,6 +135,30 @@ class TestList_read_write( unittest.TestCase ):
         tm = tlr.getFinishDate()
         assert t3 >= tm and t3-tm < 2
 
+    def test_include_files_are_relative_to_parent_file_directory(self):
+        ""
+        os.mkdir( 'subdir' )
+        os.mkdir( 'rundir' )
+        time.sleep(1)
+
+        tlw = tio.TestListWriter( 'tests.out' )
+        tlw.start()
+        tlw.addIncludeFile( 'subdir/tests.0' )
+
+        write_test_list_with_fake_test( 'subdir/tests.0' )
+
+        tlw.finish()
+        time.sleep(1)
+
+        rootdir = os.getcwd()
+        tfile = os.path.abspath( 'tests.out' )
+        os.chdir( 'rundir' )
+        tlr = tio.TestListReader( tfile )
+        tlr.read()
+
+        tspec = get_single_test_from_test_list( tlr )
+        assert_TestSpec_same_as_fake( tspec, rootdir )
+
     def test_write_a_test_file_then_scan_it_for_the_finish_date(self):
         ""
         write_test_list_with_fake_test( 'tests.out' )
@@ -149,12 +173,12 @@ class TestList_read_write( unittest.TestCase ):
         tlr.read()
         assert abs( tlr.getFinishDate() - tm ) < 2
 
-    def test_scan_an_unfinished_test_list_file(self):
+    def test_scan_an_unfinished_test_results_file(self):
         ""
-        tl = TestList.TestList()
-        tl.initializeResultsFile( 'tests.out' )
+        tlw = tio.TestListWriter( 'tests.out' )
+        tlw.start()
         tspec = make_fake_TestSpec_with_results()
-        tl.AppendTestResult( tspec )
+        tlw.append( tspec )
 
         time.sleep(1)
 
@@ -162,30 +186,131 @@ class TestList_read_write( unittest.TestCase ):
         tm = tlr.scanForFinishDate()
         assert tm == None
 
+    def test_read_unfinished_results_file_with_include(self):
+        ""
+        tlw = tio.TestListWriter( 'tests.out' )
+        tlw.start()
+        tlw.addIncludeFile( 'tests.0' )
+
+        write_test_list_with_fake_test( 'tests.0' )
+
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'tests.out' )
+        tlr.read()
+
+        tspec = get_single_test_from_test_list( tlr )
+        assert_TestSpec_same_as_fake( tspec )
+
+        tm = tlr.getStartDate()
+        assert tm != None and time.time() - tm < 10
+        assert tlr.getFinishDate() == None
+
 
 class TestList_results_file( unittest.TestCase ):
 
     def setUp(self):
         util.setup_test()
 
-    def test_writing_a_results_file(self):
+    def test_write_a_test_list_file_then_read_it(self):
         ""
-        write_test_results_using_TestList( 'results' )
+        write_TestList_with_fake_test( 'testlist' )
         time.sleep(1)
-        read_test_list_and_check_fake_results_test( 'results' )
+        read_TestList_and_check_fake_test( 'testlist' )
 
-    def test_writing_a_results_file_with_an_include(self):
+    def test_write_a_test_list_then_results_then_read_it(self):
         ""
-        tl = TestList.TestList()
-        tl.initializeResultsFile( 'results' )
-        tl.addIncludeFile( 'results.0' )
+        tl = write_TestList_with_fake_test( 'testlist' )
+        time.sleep(1)
+        rfile = write_TestList_fake_results( tl )
+        time.sleep(1)
 
-        write_test_results_using_TestList( 'results.0' )
+        assert rfile.startswith( 'testlist' ) and rfile != 'testlist'
+
+        fL = glob.glob( 'testlist.*' )
+        assert len(fL) == 1 and fL[0] == rfile
+
+        read_TestList_and_check_fake_test( rfile )
+
+    def test_a_workflow_using_a_results_suffix(self):
+        ""
+        tl = write_TestList_with_fake_test( 'testlist', results_suffix=True )
+        sfx = tl.getResultsSuffix()
+        time.sleep(2)
+
+        tl = TestList.TestList()
+        tl.readFile( 'testlist' )
+        assert tl.getResultsSuffix() == sfx
+        rfile = write_TestList_fake_results( tl )
+        time.sleep(1)
+
+        assert rfile.endswith( sfx )
+        read_TestList_and_check_fake_test( 'testlist.'+sfx )
+
+    def test_results_workflow_with_include_file(self):
+        ""
+        # the origin test list
+        tl = write_TestList_with_fake_test( 'testlist' )
+        time.sleep(1)
+
+        # create suffix for the include files
+        sfx = tl.setResultsSuffix()
+
+        # write include test list file containing suffix attribute
+        ts = list( tl.getTests() )[0]
+        tlincl = TestList.TestList()
+        tlincl.setResultsSuffix( sfx )
+        tl.addTest( ts )
+        tlincl.stringFileWrite( 'subtests', include_results_suffix=True )
+        time.sleep(1)
+
+        # start the comprehensive results file (with the include in it)
+        rfile = tl.initializeResultsFile()
+        tl.addIncludeFile( 'subtests' )
+        time.sleep(1)
+
+        # create the sublist test results
+        tlsub = TestList.TestList()
+        tlsub.readFile( 'subtests' )
+        rfile = write_TestList_fake_results( tlsub )
+        time.sleep(1)
 
         tl.writeFinished()
         time.sleep(1)
 
-        read_test_list_and_check_fake_results_test( 'results.0' )
+        # should be able to read comprehensive results file
+        read_TestList_and_check_fake_test( rfile )
+
+    def test_read_an_unfinished_test_list_file(self):
+        ""
+        tl = TestList.TestList( filename='testlist' )
+        rfile = tl.initializeResultsFile()
+        tspec = make_fake_TestSpec()
+        tl.appendTestResult( tspec )
+
+        time.sleep(1)
+
+        tl = TestList.TestList()
+        tl.readFile( rfile )
+
+        tm = tl.getDateStamp()
+        assert tm != None and time.time() - tm < 10
+        assert tl.getFinishDate() == None
+
+        read_TestList_and_check_fake_test( rfile )
+
+    def test_scan_an_unfinished_test_list_file(self):
+        ""
+        tl = TestList.TestList( filename='testlist' )
+        rfile = tl.initializeResultsFile()
+        tspec = make_fake_TestSpec()
+        tl.appendTestResult( tspec )
+
+        time.sleep(1)
+
+        tlr = tio.TestListReader( rfile )
+        tm = tlr.scanForFinishDate()
+        assert tm == None
 
 
 ############################################################################
@@ -209,11 +334,14 @@ def make_fake_TestSpec():
     return ts
 
 
-def assert_TestSpec_same_as_fake( tspec ):
+def assert_TestSpec_same_as_fake( tspec, rootdir=None ):
     ""
+    if not rootdir:
+        rootdir = os.getcwd()
+
     assert tspec.getName() == 'atest'
-    assert tspec.getRootpath() == os.getcwd()
-    assert tspec.getFilename() == os.path.abspath('atest.xml')
+    assert tspec.getRootpath() == rootdir
+    assert tspec.getFilename() == os.path.join( rootdir, 'atest.xml' )
 
     kL = tspec.getKeywords()
     kL.sort()
@@ -235,7 +363,7 @@ def assert_TestSpec_same_as_fake( tspec ):
 
 def make_fake_TestSpec_with_results():
     ""
-    ts = TestSpec.TestSpec( 'atest', os.getcwd(), 'atest.xml' )
+    ts = make_fake_TestSpec()
 
     ts.setAttr( 'state', "notdone" )
     ts.setAttr( 'xtime', -1 )
@@ -252,39 +380,53 @@ def get_single_test_from_test_list( testlist ):
     return tspec
 
 
-def write_test_list_with_fake_test( filename ):
+def write_test_list_with_fake_test( filename, **kwargs ):
     ""
     tlw = tio.TestListWriter( filename )
     tlw.start()
     tspec = make_fake_TestSpec()
+    for k,v in kwargs.items():
+        tspec.setAttr( k, v )
     tlw.append( tspec )
     tlw.finish()
 
 
-def write_test_results_using_TestList( filename ):
+def write_TestList_with_fake_test( filename, **kwargs ):
+    ""
+    dosuffix = kwargs.pop( 'results_suffix', False )
+
+    tl = TestList.TestList()
+
+    if dosuffix:
+        tl.setResultsSuffix()
+
+    tspec = make_fake_TestSpec()
+    for k,v in kwargs.items():
+        tspec.setAttr( k, v )
+    tl.addTest( tspec )
+
+    tl.stringFileWrite( filename, include_results_suffix=dosuffix )
+
+    return tl
+
+
+def write_TestList_fake_results( testlistobj ):
+    ""
+    rfile = testlistobj.initializeResultsFile()
+    tsr = make_fake_TestSpec_with_results()
+    testlistobj.appendTestResult( tsr )
+    testlistobj.writeFinished()
+
+    return rfile
+
+
+def read_TestList_and_check_fake_test( filename ):
     ""
     tl = TestList.TestList()
-    tl.initializeResultsFile( filename )
-    tspec = make_fake_TestSpec_with_results()
-    tl.AppendTestResult( tspec )
-    tl.writeFinished()
-
-
-def read_test_list_and_check_fake_results_test( filename ):
-    ""
-    tlr = tio.TestListReader( filename )
-    tlr.read()
-
-    d1 = tlr.getStartDate()
-    d2 = tlr.getFinishDate()
-    assert d1 <= d2 and d2-d1 < 5
-    assert time.time() - d1 < 10
-
-    tD = tlr.getTests()
-    assert len(tD) == 1
-    tspec = list( tD.values() )[0]
-    assert tspec.getAttr( 'state' ) == 'notdone'
-    assert time.time() - tspec.getAttr( 'xdate' ) < 10
+    tl.readFile( filename )
+    tL = list( tl.getTests() )
+    assert len(tL) == 1
+    assert_TestSpec_same_as_fake( tL[0] )
 
 
 ############################################################################
