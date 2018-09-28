@@ -18,6 +18,8 @@ import signal
 import shlex
 import pipes
 import getopt
+import random
+import string
 import unittest
 
 # this file is expected to be imported from a script that was run
@@ -403,12 +405,56 @@ def shell_escape( cmd ):
 def rmallfiles( not_these=None ):
     for f in os.listdir("."):
         if not_these == None or not fnmatch.fnmatch( f, not_these ):
+            fault_tolerant_remove( f )
+
+
+def remove_results():
+    """
+    Removes all TestResults from the current working directory.
+    If a TestResults directory is a soft link, the link destination is
+    removed as well.
+    """
+    for f in os.listdir('.'):
+        if f.startswith( 'TestResults.' ):
             if os.path.islink(f):
+                dest = os.readlink(f)
+                print3( 'rm -rf ' + dest )
+                fault_tolerant_remove( dest )
+                print3( 'rm ' + f )
                 os.remove(f)
-            elif os.path.isdir(f):
-                shutil.rmtree(f)
             else:
-                os.remove(f)
+                print3( 'rm -rf ' + f )
+                fault_tolerant_remove( f )
+
+
+def random_string( numchars=8 ):
+    ""
+    seq = string.ascii_uppercase + string.digits
+    cL = [ random.choice( seq ) for _ in range(numchars) ]
+    return ''.join( cL )
+
+
+def fault_tolerant_remove( path, num_attempts=5 ):
+    ""
+    dn,fn = os.path.split( path )
+
+    rmpath = os.path.join( dn, 'remove_'+fn + '_'+ random_string() )
+
+    os.rename( path, rmpath )
+
+    for i in range( num_attempts ):
+        try:
+            if os.path.islink( rmpath ):
+                os.remove( rmpath )
+            elif os.path.isdir( rmpath ):
+                shutil.rmtree( rmpath )
+            else:
+                os.remove( rmpath )
+            break
+        except Exception:
+            pass
+
+        time.sleep(1)
 
 
 def readfile( filename ):
@@ -572,24 +618,6 @@ def get_results_dir( out ):
 
     return tdir
 
-
-def remove_results():
-    """
-    Removes all TestResults from the current working directory.
-    If a TestResults directory is a soft link, the link destination is
-    removed as well.
-    """
-    for f in os.listdir('.'):
-        if f[:12] == 'TestResults.':
-            if os.path.islink(f):
-                dest = os.readlink(f)
-                print3( 'rm -r ' + dest )
-                shutil.rmtree(dest)
-                print3( 'rm ' + f )
-                os.remove(f)
-            else:
-                print3( 'rm -r ' + f )
-                shutil.rmtree( f, 1 )
 
 # these have to be modified if/when the output format changes in vvtest
 def check_pass(L): return len(L) >= 5 and L[2] == 'pass'

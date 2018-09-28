@@ -16,6 +16,8 @@ import shutil
 import types
 import glob
 import shlex
+import string
+import random
 
 version = '29'  # version number; used to check format and for information
 
@@ -1728,7 +1730,7 @@ class Batcher:
         """
         for d in self.namer.globBatchDirectories():
             print3( 'rm -rf '+d )
-            shutil.rmtree( d )
+            fault_tolerant_remove( d )
 
     def createTestGroups(self):
         """
@@ -2675,14 +2677,44 @@ def make_PermissionSetter( test_dir, optdict ):
 
 def remove_directory_contents( path ):
     ""
-    print3( '/bin/rm -rf ' + path + '/*' )
+    sys.stdout.write( 'rm -rf ' + path + '/* ...' )
+    sys.stdout.flush()
+
     for f in os.listdir(path):
         df = os.path.join( path, f )
-        if os.path.isdir(df):
-            shutil.rmtree( df, 0 )
-        else:
-            try: os.remove(df)
-            except Exception: pass
+        fault_tolerant_remove( df )
+
+    print3( 'done' )
+
+
+def random_string( numchars=8 ):
+    ""
+    seq = string.ascii_uppercase + string.digits
+    cL = [ random.choice( seq ) for _ in range(numchars) ]
+    return ''.join( cL )
+
+
+def fault_tolerant_remove( path, num_attempts=5 ):
+    ""
+    dn,fn = os.path.split( path )
+
+    rmpath = os.path.join( dn, 'remove_'+fn + '_'+ random_string() )
+
+    os.rename( path, rmpath )
+
+    for i in range( num_attempts ):
+        try:
+            if os.path.islink( rmpath ):
+                os.remove( rmpath )
+            elif os.path.isdir( rmpath ):
+                shutil.rmtree( rmpath )
+            else:
+                os.remove( rmpath )
+            break
+        except Exception:
+            pass
+
+        time.sleep(1)
 
 
 ##############################################################################
