@@ -587,29 +587,31 @@ def print_info_mode( plat, rtconfig, scan_dirs, test_dir, results_dir ):
 
 def construct_info_test_list( plat, rtconfig, scan_dirs, test_dir, results_dir ):
     ""
-    tlist = TestList.TestList( rtconfig )
-
     if test_dir != None:
         tfile = os.path.join( test_dir, testlist_name )
-        tlist.readFile( tfile )
-        read_and_merge_test_results( tlist, tfile )
+        tlist = TestList.TestList( tfile, rtconfig )
+        tlist.readTestList()
+        tlist.readTestResults()
         tlist.loadAndFilter( plat.getMaxProcs(),
                     filter_dir=computeRelativePath( test_dir, os.getcwd() ) )
 
     elif os.path.exists( results_dir ):
         test_dir = os.path.abspath( results_dir )
         tfile = os.path.join( test_dir, testlist_name )
+        tlist = TestList.TestList( tfile, rtconfig )
         rtconfig.setAttr( 'include_tdd', True )  # always include tdd with -i
-        tlist.readFile( tfile )
-        read_and_merge_test_results( tlist, tfile )
+        tlist.readTestList()
+        tlist.readTestResults()
         tlist.loadAndFilter( plat.getMaxProcs() )
 
     elif '--keys' in optdict or '--files' in optdict:
+        tlist = TestList.TestList( None, rtconfig )
         scan_test_source_directories( tlist, scan_dirs )
         tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
 
     else:
         print3( "*** warning: previous TestResults directory not found" )
+        tlist = TestList.TestList( None, rtconfig )
         tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
 
     return tlist
@@ -718,7 +720,14 @@ def scan_test_source_directories( tlist, scan_dirs ):
 def generateTestList( dirs, plat, rtconfig ):
     """
     """
-    tlist = TestList.TestList( rtconfig )
+    test_dir = None
+    cwd = os.getcwd()
+    testdirname = testResultsDir( optdict, plat.getName() )
+    test_dir = os.path.join( cwd, testdirname )
+
+    tfile = os.path.join( test_dir, testlist_name )
+
+    tlist = TestList.TestList( tfile, rtconfig )
 
     scan_test_source_directories( tlist, dirs )
 
@@ -726,11 +735,6 @@ def generateTestList( dirs, plat, rtconfig ):
 
     tlist.loadAndFilter( plat.getMaxProcs() )
     
-    test_dir = None
-    cwd = os.getcwd()
-    testdirname = testResultsDir( optdict, plat.getName() )
-    test_dir = os.path.join( cwd, testdirname )
-
     perms = make_PermissionSetter( test_dir, optdict )
     
     createTestDir( testdirname, perms )
@@ -738,10 +742,9 @@ def generateTestList( dirs, plat, rtconfig ):
     printResults( tlist, test_dir, perms, add_date=False )
     tlist.createTestExecs( test_dir, plat, config, perms )
 
-    tf = os.path.join( test_dir, testlist_name )
-    tlist.stringFileWrite( tf )
+    tlist.stringFileWrite()
 
-    perms.set( os.path.abspath( tf ) )
+    perms.set( os.path.abspath( tfile ) )
     
     print3( "Test directory:", testdirname )
 
@@ -752,7 +755,7 @@ def extractTestFiles( dirs, plat, target_dir, rtconfig ):
     source area and copies the files used for each test into a separate
     directory.
     """
-    tlist = TestList.TestList( rtconfig )
+    tlist = TestList.TestList( None, rtconfig )
 
     scan_test_source_directories( tlist, dirs )
 
@@ -1134,7 +1137,9 @@ def runTests( toolsdir, dirs, plat, rtconfig ):
     test_dir = os.path.abspath( testdirname )
     tfile = os.path.join( test_dir, testlist_name )
 
-    check_for_currently_running_vvtest( tfile )
+    tlist = TestList.TestList( tfile, rtconfig )
+
+    check_for_currently_running_vvtest( tlist.getResultsFilenames() )
 
     # this variable allows vvtest tests to run vvtest (ie, allows recursion)
     os.environ['VVTEST_TEST_ROOT'] = os.path.normpath( os.path.abspath( test_dir ) )
@@ -1148,15 +1153,13 @@ def runTests( toolsdir, dirs, plat, rtconfig ):
 
     writeCommandInfo( test_dir, plat, perms )
 
-    tlist = TestList.TestList( rtconfig )
-
     scan_test_source_directories( tlist, dirs )
 
     # save the test list in the TestResults directory
-    tlist.stringFileWrite( tfile )
+    tlist.stringFileWrite()
     perms.set( os.path.abspath( tfile ) )
 
-    read_and_merge_test_results( tlist, tfile )
+    tlist.readTestResults()
 
     loadRunTimes( tlist, plat )
 
@@ -1188,36 +1191,16 @@ def runTests( toolsdir, dirs, plat, rtconfig ):
         print3( "\n--------- no tests to run -----------\n" )
 
 
-def read_test_list_if_no_test_results( tlist, baselistfname ):
-    ""
-    fL = glob.glob( baselistfname+'.*' )
-
-    if len(fL) == 0:
-        tlist.readFile( baselistfname )
-
-
-def read_and_merge_test_results( tlist, baselistfname ):
-    ""
-    fL = glob.glob( baselistfname+'.*' )
-    fL.sort()
-
-    for fn in fL:
-        tlist.readFile( fn )
-
-
-def check_for_currently_running_vvtest( testlistfile ):
+def check_for_currently_running_vvtest( resultsfiles ):
     ""
     if '--force' not in optdict:
 
         msg = '*** error: tests are currently running in another process\n' + \
               '    (or a previous run crashed); use --force to run anyway'
 
-        fL = glob.glob( testlistfile+'.*' )
-        fL.sort()
+        if len(resultsfiles) > 0:
 
-        if len(fL) > 0:
-
-            rfile = fL[-1]
+            rfile = resultsfiles[-1]
 
             tlr = testlistio.TestListReader( rfile )
             fin = tlr.scanForFinishDate()
@@ -1830,8 +1813,10 @@ class Batcher:
         """
         """
         qidstr = str(qnumber)
-        
-        tl = TestList.TestList()
+
+        testlistfname = self.namer.getTestListName( qidstr )
+
+        tl = TestList.TestList( testlistfname )
         tl.setResultsSuffix( results_suffix )
 
         tL = []
@@ -1868,8 +1853,7 @@ class Batcher:
                                   self.read_interval, self.read_timeout )
         self.accountant.addJob( qnumber, jb )
         
-        fn = self.namer.getTestListName( qidstr )
-        tl.stringFileWrite( fn, include_results_suffix=True )
+        tl.stringFileWrite( include_results_suffix=True )
         
         fn = self.namer.getBatchScriptName( qidstr )
         fp = open( fn, "w" )
@@ -1981,12 +1965,12 @@ def restartTests( toolsdir, test_dir, plat, rtconfig ):
         # prevent the run scripts from being written again
         config.set( 'refresh', False )
 
-    tlist = TestList.TestList( rtconfig )
+    tlist = TestList.TestList( tfile, rtconfig )
 
-    read_test_list_if_no_test_results( tlist, tfile )
-    read_and_merge_test_results( tlist, tfile )
+    tlist.readTestListIfNoTestResults()
+    tlist.readTestResults()
 
-    check_for_currently_running_vvtest( tfile )
+    check_for_currently_running_vvtest( tlist.getResultsFilenames() )
 
     if qid == None:
         loadRunTimes( tlist, plat )
@@ -2035,10 +2019,10 @@ def baselineTests( test_dir, plat, rtconfig ):
     
     tfile = os.path.join( test_dir, testlist_name )
 
-    tlist = TestList.TestList( rtconfig )
+    tlist = TestList.TestList( tfile, rtconfig )
 
-    read_test_list_if_no_test_results( tlist, tfile )
-    read_and_merge_test_results( tlist, tfile )
+    tlist.readTestListIfNoTestResults()
+    tlist.readTestResults()
 
     filter_dir = None
     if path_filter != None:

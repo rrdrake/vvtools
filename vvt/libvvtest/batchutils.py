@@ -220,7 +220,7 @@ class BatchScheduler:
             if mark == None:
                 mark = 'notdone'
 
-            self.tlist.readFile( bjob.resultsfile )
+            self.tlist.readTestResults( bjob.resultsfile )
 
             tlr = testlistio.TestListReader( bjob.resultsfile )
             tlr.read()

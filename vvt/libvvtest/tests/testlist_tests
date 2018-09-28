@@ -336,8 +336,8 @@ class TestList_results_file( unittest.TestCase ):
         sfx = tl.getResultsSuffix()
         time.sleep(2)
 
-        tl = TestList.TestList()
-        tl.readFile( 'testlist' )
+        tl = TestList.TestList( 'testlist' )
+        tl.readTestList()
         assert tl.getResultsSuffix() == sfx
         rfile = write_TestList_fake_results( tl )
         time.sleep(1)
@@ -356,10 +356,10 @@ class TestList_results_file( unittest.TestCase ):
 
         # write include test list file containing suffix attribute
         ts = list( tl.getTests() )[0]
-        tlincl = TestList.TestList()
+        tlincl = TestList.TestList( 'subtests' )
         tlincl.setResultsSuffix( sfx )
         tl.addTest( ts )
-        tlincl.stringFileWrite( 'subtests', include_results_suffix=True )
+        tlincl.stringFileWrite( include_results_suffix=True )
         time.sleep(1)
 
         # start the comprehensive results file (with the include in it)
@@ -368,8 +368,8 @@ class TestList_results_file( unittest.TestCase ):
         time.sleep(1)
 
         # create the sublist test results
-        tlsub = TestList.TestList()
-        tlsub.readFile( 'subtests' )
+        tlsub = TestList.TestList( 'subtests' )
+        tlsub.readTestList()
         rfile = write_TestList_fake_results( tlsub )
         time.sleep(1)
 
@@ -381,15 +381,15 @@ class TestList_results_file( unittest.TestCase ):
 
     def test_read_an_unfinished_test_list_file(self):
         ""
-        tl = TestList.TestList( filename='testlist' )
+        tl = TestList.TestList( 'testlist' )
         rfile = tl.initializeResultsFile()
         tspec = make_fake_TestSpec()
         tl.appendTestResult( tspec )
 
         time.sleep(1)
 
-        tl = TestList.TestList()
-        tl.readFile( rfile )
+        tl = TestList.TestList( None )
+        tl.readTestResults( rfile )
 
         tm = tl.getDateStamp()
         assert tm != None and time.time() - tm < 10
@@ -399,7 +399,7 @@ class TestList_results_file( unittest.TestCase ):
 
     def test_scan_an_unfinished_test_list_file(self):
         ""
-        tl = TestList.TestList( filename='testlist' )
+        tl = TestList.TestList( 'testlist' )
         rfile = tl.initializeResultsFile()
         tspec = make_fake_TestSpec()
         tl.appendTestResult( tspec )
@@ -510,7 +510,7 @@ def write_TestList_with_fake_test( filename, **kwargs ):
     ""
     dosuffix = kwargs.pop( 'results_suffix', False )
 
-    tl = TestList.TestList()
+    tl = TestList.TestList( filename )
 
     if dosuffix:
         tl.setResultsSuffix()
@@ -520,7 +520,7 @@ def write_TestList_with_fake_test( filename, **kwargs ):
         tspec.setAttr( k, v )
     tl.addTest( tspec )
 
-    tl.stringFileWrite( filename, include_results_suffix=dosuffix )
+    tl.stringFileWrite( include_results_suffix=dosuffix )
 
     return tl
 
@@ -537,8 +537,8 @@ def write_TestList_fake_results( testlistobj ):
 
 def read_TestList_and_check_fake_test( filename ):
     ""
-    tl = TestList.TestList()
-    tl.readFile( filename )
+    tl = TestList.TestList( filename )
+    tl.readTestResults( filename )
     tL = list( tl.getTests() )
     assert len(tL) == 1
     assert_TestSpec_same_as_fake( tL[0] )

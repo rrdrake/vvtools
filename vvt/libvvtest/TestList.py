@@ -7,12 +7,14 @@
 import os, sys
 import time
 import fnmatch
+import glob
 
 from . import TestSpec
 from . import TestExec
 from . import TestSpecCreator
 from . import CommonSpec
 from . import testlistio
+
 
 class TestList:
     """
@@ -22,9 +24,14 @@ class TestList:
 
     version = '32'
 
-    def __init__(self, runtime_config=None, filename=None):
+    def __init__(self, filename, runtime_config=None):
         ""
-        self.filename = filename
+        if filename:
+            self.filename = os.path.normpath( filename )
+        else:
+            # use case: scanning tests, but never reading or writing
+            self.filename = None
+
         self.results_suffix = None
         self.results_file = None
 
@@ -55,15 +62,13 @@ class TestList:
         ""
         return self.results_suffix
 
-    def stringFileWrite(self, filename, include_results_suffix=False):
+    def stringFileWrite(self, include_results_suffix=False):
         """
-        Writes the tests in this container to the given filename.  All tests
-        are written, even those that are not or will not be executed (were
-        filtered out).
-
-        A current date stamp is written to the file.
+        Writes all the tests in this container to the test list file.  If
+        'include_results_suffix' is True, the results suffix is written as
+        an attribute in the file.
         """
-        self.filename = os.path.normpath( filename )
+        assert self.filename
 
         check_make_directory_containing_file( self.filename )
 
@@ -94,8 +99,7 @@ class TestList:
 
     def addIncludeFile(self, testlist_path):
         """
-        Appends the file 'filename' with a marker that causes the
-        _read_file_lines() method to also read the given file 'include_file'.
+        Appends the given filename to the test results file.
         """
         assert self.results_suffix, 'suffix must have already been set'
         inclf = testlist_path + '.' + self.results_suffix
@@ -103,47 +107,68 @@ class TestList:
 
     def appendTestResult(self, tspec):
         """
-        Appends the current filename with the name and attributes of the given
+        Appends the results file with the name and attributes of the given
         TestSpec object.
         """
         self.results_file.append( tspec )
 
     def writeFinished(self):
         """
-        Appends the current filename with a finish marker that contains the
+        Appends the results file with a finish marker that contains the
         current date.
         """
         self.results_file.finish()
 
-    def readFile(self, filename):
-        """
-        Read test list from a file.  New tests are added, but existing TestSpec
-        objects with the same execute directory have their attributes
-        overwritten.
-        """
-        # magic: instead of "first filename wins", maybe have a dedicated
-        #        "read results" function in this class (which automatically
-        #        loads the results files
-        if not self.filename:
-            self.filename = os.path.normpath( filename )
+    def readTestList(self):
+        ""
+        assert self.filename
 
-        tlr = testlistio.TestListReader( filename )
+        self.tspecs.clear()
+
+        tlr = testlistio.TestListReader( self.filename )
         tlr.read()
 
-        self.datestamp = tlr.getStartDate()
-        self.finish = tlr.getFinishDate()
+        self.results_suffix = tlr.getAttr( 'results_suffix', None )
 
-        if not self.results_suffix:
-            self.results_suffix = tlr.getAttr( 'results_suffix', None )
+        self.tspecs.update( tlr.getTests() )
 
-        for xdir,tspec in tlr.getTests().items():
+    def readTestListIfNoTestResults(self):
+        ""
+        if len( self.getResultsFilenames() ) == 0:
+            self.readTestList()
 
-            t = self.tspecs.get( xdir, None )
-            if t == None:
-                self.tspecs[ xdir ] = tspec
-            else:
-                for k,v in tspec.getAttrs().items():
-                    t.setAttr( k, v )
+    def readTestResults(self, resultsfilename=None):
+        ""
+        if resultsfilename == None:
+            self._read_file_list( self.getResultsFilenames() )
+        else:
+            self._read_file_list( [ resultsfilename ] )
+
+    def getResultsFilenames(self):
+        ""
+        assert self.filename
+        fileL = glob.glob( self.filename+'.*' )
+        fileL.sort()
+        return fileL
+
+    def _read_file_list(self, files):
+        ""
+        for fn in files:
+
+            tlr = testlistio.TestListReader( fn )
+            tlr.read()
+
+            self.datestamp = tlr.getStartDate()
+            self.finish = tlr.getFinishDate()
+
+            for xdir,tspec in tlr.getTests().items():
+
+                t = self.tspecs.get( xdir, None )
+                if t == None:
+                    self.tspecs[ xdir ] = tspec
+                else:
+                    for k,v in tspec.getAttrs().items():
+                        t.setAttr( k, v )
 
     def inlineIncludeFiles(self):
         ""
@@ -152,21 +177,23 @@ class TestList:
 
     def getDateStamp(self, default=None):
         """
-        Return the date of the last stringFileWrite() or the date read in by
-        the last readFile().  If neither of those were issued, the 'default'
+        Return the start date from the last test results file read using the
+        readTestResults() function.  If a read has not been done, the 'default'
         argument is returned.
         """
         if self.datestamp:
-          return self.datestamp
+            return self.datestamp
         return default
 
     def getFinishDate(self, default=None):
         """
-        Return the date on the finish mark as contained in the file and read
-        in by readFile().  If no finish mark was found, 'default' is returned.
+        Return the finish date from the last test results file read using the
+        readTestResults() function.  If a read has not been done, or vvtest is
+        still running, or vvtest got killed in the middle of running, the
+        'default' argument is returned.
         """
         if self.finish:
-          return self.finish
+            return self.finish
         return default
 
     def getTests(self):
@@ -409,26 +436,6 @@ class TestList:
                 return True
 
         return False
-
-    def _write_analyze_dependency(self, fp, testobj):
-        ""
-        key = ( testobj.getFilepath(), testobj.getName() )
-
-        grpL = self.groups.get( key, None )
-
-        # only write dependencies if at least one parameterize test is in
-        # the current list of tests
-
-        if grpL != None:
-
-            L = [ testobj.getExecuteDirectory() ]
-
-            for gt in grpL:
-                if not gt.isAnalyze():
-                    L.append( gt.getExecuteDirectory() )
-
-            if len(L) > 1:
-                fp.write( 'DEP: '+repr(L)+'\n' )
 
     def getActiveTests(self, sorting=''):
         """
