@@ -254,13 +254,17 @@ def writescript( fname, content ):
 def run_cmd( cmd, directory=None ):
     """
     """
+    dstr = ''
+    if directory:
+        dstr = ' cd '+directory+' &&'
+
     if type(cmd) == type(''):
-        print3( 'RUN:', cmd )
+        print3( 'RUN:'+dstr, cmd )
         cmdL = shlex.split(cmd)
     else:
-        print3( 'RUN:', ' '.join( cmd ) )
+        print3( 'RUN:'+dstr, ' '.join( cmd ) )
         cmdL = cmd
-    
+
     saved = None
     if directory:
         saved = os.getcwd()
@@ -285,7 +289,7 @@ def run_cmd( cmd, directory=None ):
     os.close(pread)  # free up file descriptor
     pid,x = os.waitpid(pid,0)
     print3( out )
-    
+
     if saved:
         os.chdir( saved )
 

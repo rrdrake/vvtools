@@ -12,6 +12,8 @@ sys.excepthook = sys.__excepthook__
 import os
 import time
 import unittest
+import signal
+import subprocess
 
 import testutils as util
 from testutils import print3
@@ -22,53 +24,77 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
     def setUp(self):
         util.setup_test()
 
+    def test_vvtest_closes_files_ok_under_KeyboardInterrupt(self):
+        ""
+        util.writefile( "sleeper.xml", """
+            <rtest name="sleeper">
+                <execute> sleep 10 </execute>
+            </rtest>""" )
+        time.sleep(1)
+
+        run_command_then_terminate_it( util.vvtest, signum=signal.SIGINT )
+        time.sleep(1)
+
+        out = util.readfile( 'run.log' )
+        print3( out )
+
+        np,nd = util.numpass(out), util.numdiff(out)
+        nf,nn = util.numfail(out), util.numnotrun(out)
+        assert np == 0 and nd == 0 and nf == 0 and nn == 1
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nn == 0
+
+        assert len( util.grep( out, 'rror.*another process' ) ) == 0
+
     def test_vvtest_fails_to_run_if_a_previous_run_was_killed(self):
         ""
         util.writefile( "sleeper.xml", """
             <rtest name="sleeper">
                 <execute> sleep 10 </execute>
             </rtest>""" )
+        time.sleep(1)
+        
+        run_command_then_terminate_it( util.vvtest )
+        time.sleep(1)
 
-        bg = Background( util.vvtest, 'log' )
-        bg.wait()
-        fp = open( 'log', 'r' ) ; out = fp.read() ; fp.close()
+        out = util.readfile( 'run.log' )
         print3( out )
+
         np,nd = util.numpass(out), util.numdiff(out)
         nf,nn = util.numfail(out), util.numnotrun(out)
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert np == 0 and nd == 0 and nf == 0 and nn == 1
 
-        util.remove_results()
+        xok,out = util.run_cmd( util.vvtest )
 
-        bg = Background( util.vvtest, 'log' )
-        time.sleep(4)
-        xok,out = util.run_cmd( util.vvtest + ' -R' )
-
-        bg.wait( 10 )
         assert not xok
         assert len( util.grep( out, 'rror.*another process' ) ) == 1
+        assert util.numpass(out) == 0
 
     def test_running_vvtest_after_killed_but_in_TestResults_directory(self):
         ""
-        util.writefile( "null.xml", """
-            <rtest name="null">
-            </rtest>""" )
-        out,np,nd,nf,nn = util.run_vvtest()
-        tdir = util.results_dir()
-        os.remove( 'null.xml' )
-        util.remove_results()
-
         util.writefile( "sleeper.xml", """
             <rtest name="sleeper">
                 <execute> sleep 10 </execute>
             </rtest>""" )
+        time.sleep(1)
+        
+        run_command_then_terminate_it( util.vvtest )
+        time.sleep(1)
+        tdir = util.results_dir()
 
-        bg = Background( util.vvtest, 'log' )
-        time.sleep(4)
-        xok,out = util.run_cmd( util.vvtest + ' -R', directory=tdir )
+        out = util.readfile( 'run.log' )
+        print3( out )
 
-        bg.wait( 10 )
+        np,nd = util.numpass(out), util.numdiff(out)
+        nf,nn = util.numfail(out), util.numnotrun(out)
+        assert np == 0 and nd == 0 and nf == 0 and nn == 1
+
+        xok,out = util.run_cmd( util.vvtest, directory=tdir )
+
         assert not xok
         assert len( util.grep( out, 'rror.*another process' ) ) == 1
+        assert util.numpass(out) == 0
 
     def test_forcing_vvtest_to_run_after_previous_was_killed(self):
         ""
@@ -83,12 +109,14 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
                 <execute> sleep 5 </execute>
             </rtest>""" )
 
-        # using SIGKILL prevents the "finished" mark from getting placed
+        # using SIGTERM prevents the "finished" mark from getting placed
         os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
-        os.environ['VVTEST_SIGNAL'] = 'SIGKILL'
-        xok,out = util.run_cmd( util.vvtest + ' -n 1' )
-        del os.environ['VVTEST_INTERRUPT_COUNT']
-        del os.environ['VVTEST_SIGNAL']
+        os.environ['VVTEST_SIGNAL'] = 'SIGTERM'
+        try:
+            xok,out = util.run_cmd( util.vvtest + ' -n 1' )
+        finally:
+            del os.environ['VVTEST_INTERRUPT_COUNT']
+            del os.environ['VVTEST_SIGNAL']
 
         # this one should fail
         xok,out = util.run_cmd( util.vvtest + ' -R' )
@@ -102,70 +130,50 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
 
         util.remove_results()
 
-        # using SIGKILL prevents the "finished" mark from getting placed
         os.environ['VVTEST_INTERRUPT_BATCH'] = '1'
-        os.environ['VVTEST_SIGNAL_BATCH'] = 'SIGKILL'
-        cmd = util.vvtest + ' --plat '+util.core_platform_name() + \
-                       ' --batch --qsub-limit 1 --qsub-length 1'
-        xok,out = util.run_cmd( cmd )
-        del os.environ['VVTEST_INTERRUPT_BATCH']
-        del os.environ['VVTEST_SIGNAL_BATCH']
+        os.environ['VVTEST_SIGNAL_BATCH'] = 'SIGTERM'
+        try:
+            cmd = util.vvtest + ' --plat '+util.core_platform_name() + \
+                           ' --batch --qsub-limit 1 --qsub-length 1'
+            xok,out = util.run_cmd( cmd )
+        finally:
+            del os.environ['VVTEST_INTERRUPT_BATCH']
+            del os.environ['VVTEST_SIGNAL_BATCH']
+
+        platname = util.core_platform_name()
 
         # this one should fail
-        xok,out = util.run_cmd( util.vvtest + ' --plat '+util.core_platform_name() + \
+        xok,out = util.run_cmd( util.vvtest + ' --plat '+platname + \
                                     ' --batch -R' )
         assert not xok
         assert len( util.grep( out, 'rror.*another process' ) ) == 1
 
         # this one should be forced to run
-        xok,out = util.run_cmd( util.vvtest + ' --plat '+util.core_platform_name() + \
+        xok,out = util.run_cmd( util.vvtest + ' --plat '+platname + \
                                     ' --batch -R --force' )
         assert xok
         assert len( util.grep( out, 'rror.*another process' ) ) == 0
 
 
+def run_command_then_terminate_it( command,
+                                   signum=signal.SIGTERM,
+                                   wait_before_signaling=4,
+                                   logfilename='run.log' ):
+    ""
+    fp = open( logfilename, 'w' )
+    try:
+        pop = subprocess.Popen( command, shell=True,
+                    stdout=fp.fileno(), stderr=fp.fileno(),
+                    preexec_fn=lambda:os.setpgid(os.getpid(),os.getpid()) )
 
+        time.sleep( wait_before_signaling )
 
-# magic: remove this
-import subprocess
+        os.kill( -pop.pid, signum )
 
-class Background:
+        pop.wait()
 
-    def __init__(self, cmd, logfile=None):
-        """
-        """
-        self.cmd = cmd
-        if logfile != None:
-            fp = open( logfile, 'w' )
-            self.p = subprocess.Popen( cmd, shell=True,
-                                       stdout=fp.fileno(), 
-                                       stderr=fp.fileno() )
-            fp.close()
-        else:
-            self.p = subprocess.Popen( cmd, shell=True, close_fds=True )
-
-    def wait(self, timeout=30):
-        """
-        """
-        if timeout == None:
-            self.p.wait()
-            return self.p.returncode
-        for i in range(timeout):
-            self.p.poll()
-            if self.p.returncode != None:
-                return self.p.returncode
-            time.sleep(1)
-        self.stop()
-        return None
-    
-    def stop(self):
-        try:
-            os.kill( self.p.pid, signal.SIGINT )
-            self.p.wait()
-        except:
-            if hasattr( self.p, 'terminate' ):
-                try: self.p.terminate()
-                except: pass
+    finally:
+        fp.close()
 
 
 ########################################################################
