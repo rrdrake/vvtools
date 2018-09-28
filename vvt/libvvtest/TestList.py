@@ -22,15 +22,16 @@ class TestList:
 
     version = '32'
 
-    def __init__(self, runtime_config=None):
-        
-        self.filename = None
+    def __init__(self, runtime_config=None, filename=None):
+        ""
+        self.filename = filename
+        self.results_suffix = None
         self.results_file = None
+
         self.datestamp = None
         self.finish = None
 
         self.groups = {}  # (test filepath, test name) -> list of TestSpec
-        self.deps = {}  # xdir -> list of dependency xdir
 
         self.tspecs = {}  # TestSpec xdir -> TestSpec object
         self.active = {}  # TestSpec xdir -> TestSpec object
@@ -40,14 +41,25 @@ class TestList:
         self.stopped = {}  # TestSpec xdir -> TestExec object
         
         self.rtconfig = runtime_config
-    
-    def stringFileWrite(self, filename):
+
+    def setResultsSuffix(self, suffix=None):
+        ""
+        if suffix:
+            self.results_suffix = suffix
+        elif not self.results_suffix:
+            self.results_suffix = time.strftime( "%Y-%m-%d_%H:%M:%S" )
+
+        return self.results_suffix
+
+    def getResultsSuffix(self):
+        ""
+        return self.results_suffix
+
+    def stringFileWrite(self, filename, include_results_suffix=False):
         """
         Writes the tests in this container to the given filename.  All tests
-        are written, even those that were not executed (were filtered out).
-
-        The given filename is recorded in this object and is used for
-        subsequent write actions, such as AddIncludeFile() and writeFinished().
+        are written, even those that are not or will not be executed (were
+        filtered out).
 
         A current date stamp is written to the file.
         """
@@ -55,146 +67,93 @@ class TestList:
 
         check_make_directory_containing_file( self.filename )
 
-        fp = open( self.filename, 'w' )
-        fp.write( "\n#VVT: Version = " + TestList.version + "\n" )
+        tlw = testlistio.TestListWriter( self.filename )
 
-        self.datestamp = time.time()
-        fp.write( "#VVT: Date = " + time.ctime( self.datestamp ) + "\n\n" )
+        if include_results_suffix:
+            assert self.results_suffix
+            tlw.start( results_suffix=self.results_suffix )
+        else:
+            tlw.start()
 
         for t in self.tspecs.values():
-            ts = testlistio.test_to_string( t )
-            fp.write( ts + os.linesep )
-        
-        fp.close()
+            tlw.append( t )
 
-    def initializeResultsFile(self, filename):
+        tlw.finish()
+
+    def initializeResultsFile(self):
         ""
-        self.results_file = testlistio.TestListWriter( filename )
+        self.setResultsSuffix()
+
+        rfile = self.filename + '.' + self.results_suffix
+        
+        self.results_file = testlistio.TestListWriter( rfile )
+
         self.results_file.start()
 
-    def writeDependencies(self, superset):
-        """
-        Write test dependency information to the file.  The given list of
-        TestSpec instances should be a superset of the tests in this list.
-        """
-        self._create_parameterize_analyze_group_map()
+        return rfile
 
-        fp = open( self.filename, 'a' )
-        try:
-            for t in superset:
-                if t.isAnalyze():
-                    self._write_analyze_dependency( fp, t )
-        finally:
-            fp.close()
-
-    def AddIncludeFile(self, include_file):
+    def addIncludeFile(self, testlist_path):
         """
         Appends the file 'filename' with a marker that causes the
         _read_file_lines() method to also read the given file 'include_file'.
         """
-        if self.results_file:
-            self.results_file.addIncludeFile( include_file+'.magic' )
+        assert self.results_suffix, 'suffix must have already been set'
+        inclf = testlist_path + '.' + self.results_suffix
+        self.results_file.addIncludeFile( inclf )
 
-        else:
-            assert self.filename
-            fp = open( self.filename, 'a' )
-            fp.write( '\n# INCLUDE ' + include_file + '\n' )
-            fp.close()
-
-    def AppendTestResult(self, tspec):
+    def appendTestResult(self, tspec):
         """
         Appends the current filename with the name and attributes of the given
         TestSpec object.
         """
-        if self.results_file:
-            self.results_file.append( tspec )
-
-        else:
-            assert self.filename
-            fp = open( self.filename, 'a' )
-            ts = testlistio.test_to_string( tspec )
-            fp.write( ts + '\n' )
-            fp.close()
+        self.results_file.append( tspec )
 
     def writeFinished(self):
         """
         Appends the current filename with a finish marker that contains the
         current date.
         """
-        if self.results_file:
-            self.results_file.finish()
+        self.results_file.finish()
 
-        else:
-            assert self.filename
-            fp = open( self.filename, 'a' )
-            fp.write( '\n#VVT: Finish = ' + time.ctime() + '\n' )
-            fp.close()
-            self.filename = None
-
-    def readFile(self, filename, count_entries=None):
+    def readFile(self, filename):
         """
-        Read test list from a file.  Existing TestSpec objects have their
-        attributes overwritten, but new TestSpec objects are not created.
-
-        If 'count_entries' is not None, it should be a dictionary.  This
-        dictionary maps test execute directory to the number of times that
-        test appears in 'filename'.
-
-        If this object has not had its filename set, this function will
-        set it.
-
-        If this object does not already have a date stamp, then the stamp
-        contained in 'filename' will be loaded and set.
+        Read test list from a file.  New tests are added, but existing TestSpec
+        objects with the same execute directory have their attributes
+        overwritten.
         """
+        # magic: instead of "first filename wins", maybe have a dedicated
+        #        "read results" function in this class (which automatically
+        #        loads the results files
         if not self.filename:
             self.filename = os.path.normpath( filename )
 
-        vers,lineL = self._read_file_lines(filename)
+        tlr = testlistio.TestListReader( filename )
+        tlr.read()
 
-        if len(lineL) > 0 and vers < 32:
-            raise Exception( "invalid test list file format version, " + \
-                str(vers) + '; corrupt file or vvtest was upgraded, ' + \
-                'file='+filename )
+        self.datestamp = tlr.getStartDate()
+        self.finish = tlr.getFinishDate()
 
-        # record all the test lines in the file
+        if not self.results_suffix:
+            self.results_suffix = tlr.getAttr( 'results_suffix', None )
 
-        for line in lineL:
+        for xdir,tspec in tlr.getTests().items():
 
-            try:
-                if line.startswith( 'DEP:' ):
-                    L = eval( line.split( 'DEP:', 1 )[1].strip() )
-                    self.deps[ L[0] ] = L[1:]
+            t = self.tspecs.get( xdir, None )
+            if t == None:
+                self.tspecs[ xdir ] = tspec
+            else:
+                for k,v in tspec.getAttrs().items():
+                    t.setAttr( k, v )
 
-                else:
-                    self._create_test_from_string( line, count_entries )
-
-            except Exception:
-                print3( 'WARNING: reading file', filename,
-                    'at line "'+line+'":', sys.exc_info()[1] )
-
-    def _create_test_from_string(self, line, count_entries):
+    def inlineIncludeFiles(self):
         ""
-        t = testlistio.string_to_test(line)
-
-        xdir = t.getExecuteDirectory()
-        if count_entries != None:
-            if xdir in count_entries: count_entries[xdir] += 1
-            else:                     count_entries[xdir] = 1
-
-        t2 = self.tspecs.get( xdir, None )
-        if t2 == None:
-            self.tspecs[xdir] = t
-
-        else:
-            # just overwrite the attributes of the previous test object
-            for k,v in t.getAttrs().items():
-                t2.setAttr(k,v)
-            t2.addOrigin( t.getOrigin()[-1] )
+        rfile = self.filename + '.' + self.results_suffix
+        testlistio.inline_include_files( rfile )
 
     def getDateStamp(self, default=None):
         """
         Return the date of the last stringFileWrite() or the date read in by
-        the first readFile().  If neither of those were issued, the 'default'
+        the last readFile().  If neither of those were issued, the 'default'
         argument is returned.
         """
         if self.datestamp:
@@ -209,81 +168,6 @@ class TestList:
         if self.finish:
           return self.finish
         return default
-
-    def scanFile(self, filename):
-        """
-        Reads through the file and records the date stamp and finish date, but
-        does not construct any tests.
-        """
-        self._read_file_lines( filename )
-
-    def _read_file_lines(self, filename):
-        """
-        Opens the file name, reads the test lines, and returns the file
-        format version and the test line list.
-        """
-        fp = open( filename, 'r' )
-        
-        # read the header, if any
-        
-        vers = 0
-        line = fp.readline()
-        while line:
-          line = line.strip()
-          if line.startswith( '#VVT: Version' ):
-            L = line.split( '=', 1 )
-            if len(L) == 2:
-              vers = int( L[1].strip() )
-          elif line.startswith( '#VVT: Date' ):
-            # only load the date stamp once
-            if self.datestamp == None:
-              L = line.split( '=', 1 )
-              if len(L) == 2:
-                tup = time.strptime( L[1].strip() )
-                self.datestamp = time.mktime( tup )
-          elif line.startswith( '#VVT: Finish' ):
-            # if there are no tests in this file, the finish mark is
-            # seen during the header read
-            L = line.split( '=', 1 )
-            if len(L) == 2:
-              tup = time.strptime( L[1].strip() )
-              self.finish = time.mktime( tup )
-          elif line and line[0] != '#':
-            break
-          line = fp.readline()
-        
-        # collect all the test lines in the file
-        
-        lineL = []
-        while line:
-          line = line.strip()
-          if line.startswith( "# INCLUDE " ):
-            # read the contents of the included file name
-            f = line[10:].strip()
-            if not os.path.isabs(f):
-              # a relative path is relative to the original file directory
-              d = os.path.dirname( filename )
-              f = os.path.join( d, f )
-            if os.path.exists(f):
-              # avoid changing datestamp and finish marks from included files
-              dat = self.datestamp
-              fin = self.finish
-              v,inclL = self._read_file_lines(f)
-              lineL.extend( inclL )
-              self.finish = fin
-              self.datestamp = dat
-          elif line.startswith( '#VVT: Finish' ):
-            L = line.split( '=', 1 )
-            if len(L) == 2:
-              tup = time.strptime( L[1].strip() )
-              self.finish = time.mktime( tup )
-          elif line and line[0] != "#":
-            lineL.append( line )
-          line = fp.readline()
-        
-        fp.close()
-        
-        return vers, lineL
 
     def getTests(self):
         """
@@ -482,6 +366,16 @@ class TestList:
 
             L.append( t )
 
+    def markTestsWithDependents(self):
+        ""
+        for np,txL in self.xtlist.items():
+            for tx in txL:
+                for tdep,_,_ in tx.getDependencies():
+                    if isinstance( tdep, TestExec.TestExec ):
+                        tdep.atest.setAttr( 'hasdependent', True )
+                    else:
+                        tdep.setAttr( 'hasdependent', True )
+
     def _test_group_has_analyze(self, grpL):
         ""
         for t in grpL:
@@ -503,6 +397,9 @@ class TestList:
 
     def _has_dependent_test(self, testobj):
         ""
+        if testobj.getAttr( 'hasdependent', False ):
+            return True
+
         key = ( testobj.getFilepath(), testobj.getName() )
 
         grpL = self.groups[key]
@@ -510,15 +407,6 @@ class TestList:
         for t in grpL:
             if t != testobj and t.isAnalyze():
                 return True
-
-        # also check the dependency map for tests that depend on testobj
-
-        testxdir = testobj.getExecuteDirectory()
-
-        for xdir,depxdirs in self.deps.items():
-            for depxdir in depxdirs:
-                if testxdir == depxdir:
-                    return True
 
         return False
 
@@ -857,7 +745,7 @@ class TestList:
         """
         """
         xdir = tx.atest.getExecuteDirectory()
-        self.AppendTestResult( tx.atest )
+        self.appendTestResult( tx.atest )
         self.started.pop( xdir )
         self.stopped[ xdir ] = tx
 

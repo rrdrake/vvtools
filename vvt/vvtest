@@ -592,6 +592,7 @@ def construct_info_test_list( plat, rtconfig, scan_dirs, test_dir, results_dir )
     if test_dir != None:
         tfile = os.path.join( test_dir, testlist_name )
         tlist.readFile( tfile )
+        read_and_merge_test_results( tlist, tfile )
         tlist.loadAndFilter( plat.getMaxProcs(),
                     filter_dir=computeRelativePath( test_dir, os.getcwd() ) )
 
@@ -600,6 +601,7 @@ def construct_info_test_list( plat, rtconfig, scan_dirs, test_dir, results_dir )
         tfile = os.path.join( test_dir, testlist_name )
         rtconfig.setAttr( 'include_tdd', True )  # always include tdd with -i
         tlist.readFile( tfile )
+        read_and_merge_test_results( tlist, tfile )
         tlist.loadAndFilter( plat.getMaxProcs() )
 
     elif '--keys' in optdict or '--files' in optdict:
@@ -707,8 +709,8 @@ def scan_test_source_directories( tlist, scan_dirs ):
 
     for d in scan_dirs:
         if not os.path.exists(d):
-            sys.stderr.write('*** ' + exeName + \
-                ': error: directory does not exist: ' + d + '\n')
+            sys.stderr.write(
+                '*** error: directory does not exist: ' + str(d) + '\n')
             sys.exit(1);
         tlist.scanDirectory( d, optdict.get('-S',None) )
 
@@ -738,7 +740,6 @@ def generateTestList( dirs, plat, rtconfig ):
 
     tf = os.path.join( test_dir, testlist_name )
     tlist.stringFileWrite( tf )
-    tlist.writeFinished()
 
     perms.set( os.path.abspath( tf ) )
     
@@ -1104,39 +1105,10 @@ def readCommandInfo():
     return None
 
 
-def runTests( toolsdir, dirs, plat, rtconfig ):
-    """
-    Executes a list of tests.
-    """
-    # determine the directory that stores the test results then create it
-    testdirname = testResultsDir( optdict, plat.getName() )
-    test_dir = os.path.join( os.getcwd(), testdirname )
-    tfile = os.path.join( test_dir, testlist_name )
-
-    check_for_currently_running_vvtest( tfile )
-
-    # this variable allows vvtest tests to run vvtest (ie, allows recursion)
-    os.environ['VVTEST_TEST_ROOT'] = os.path.normpath( os.path.abspath( test_dir ) )
-
-    perms = make_PermissionSetter( test_dir, optdict )
-    
-    createTestDir( testdirname, perms )
-    
-    if '-w' in optdict:
-        remove_directory_contents( testdirname )
-
-    writeCommandInfo( test_dir, plat, perms )
-
-    tlist = TestList.TestList( rtconfig )
-
-    scan_test_source_directories( tlist, dirs )
-
-    if os.path.exists( tfile ):
-        tlist.readFile( tfile )  # merge in existing test results
-    
-    loadRunTimes( tlist, plat )
-
+def load_filter_and_prune_test_list( test_dir, tlist, plat, filter_dir ):
+    ""
     pruneL,cntmax = tlist.loadAndFilter( plat.getMaxProcs(),
+                                         filter_dir=filter_dir,
                                          analyze_only='-a' in optdict,
                                          prune=True )
     
@@ -1152,40 +1124,106 @@ def runTests( toolsdir, dirs, plat, rtconfig ):
         print3( 'Note: there were', cntmax, 'tests that exceeded the',
                 'maximum number of processors - they will not be run' )
 
+
+def runTests( toolsdir, dirs, plat, rtconfig ):
+    """
+    Executes a list of tests.
+    """
+    # determine the directory that stores the test results then create it
+    testdirname = testResultsDir( optdict, plat.getName() )
+    test_dir = os.path.abspath( testdirname )
+    tfile = os.path.join( test_dir, testlist_name )
+
+    check_for_currently_running_vvtest( tfile )
+
+    # this variable allows vvtest tests to run vvtest (ie, allows recursion)
+    os.environ['VVTEST_TEST_ROOT'] = os.path.normpath( os.path.abspath( test_dir ) )
+
+    perms = make_PermissionSetter( test_dir, optdict )
+
+    createTestDir( testdirname, perms )
+
+    if '-w' in optdict:
+        remove_directory_contents( testdirname )
+
+    writeCommandInfo( test_dir, plat, perms )
+
+    tlist = TestList.TestList( rtconfig )
+
+    scan_test_source_directories( tlist, dirs )
+
     # save the test list in the TestResults directory
     tlist.stringFileWrite( tfile )
+    perms.set( os.path.abspath( tfile ) )
 
-    try:
-        
-        perms.set( os.path.abspath( tfile ) )
-        
-        if len(tlist.active) > 0:
-          
-          print3( "Running these tests:" )
-          printResults( tlist, test_dir, perms, short=True )
-          print3()
+    read_and_merge_test_results( tlist, tfile )
 
-          tlist.createTestExecs( test_dir, plat, config, perms )
-          
-          if '--save-results' in optdict:
+    loadRunTimes( tlist, plat )
+
+    load_filter_and_prune_test_list( test_dir, tlist, plat, None )
+
+    if len(tlist.active) > 0:
+
+        print3( "Running these tests:" )
+        printResults( tlist, test_dir, perms, short=True )
+        print3()
+
+        tlist.createTestExecs( test_dir, plat, config, perms )
+
+        if '--save-results' in optdict:
             saveResults( tlist, plat, test_dir, inprogress=True )
 
-          if '--batch' not in optdict:
+        if '--batch' not in optdict:
             executeTestList( tlist, test_dir, plat, perms, tfile )
-          
-          else:
-            batchTestList( toolsdir, tlist, test_dir, plat, perms )
-        
-          print3( "Test directory:", testdirname )
-          
-          if '--save-results' in optdict:
-            saveResults( tlist, plat, test_dir )
-        
+
         else:
-          print3( "\n--------- no tests to run -----------\n" )
-    
-    finally:
-        tlist.writeFinished()
+            batchTestList( toolsdir, tlist, test_dir, plat, perms )
+
+        print3( "Test directory:", testdirname )
+
+        if '--save-results' in optdict:
+            saveResults( tlist, plat, test_dir )
+
+    else:
+        print3( "\n--------- no tests to run -----------\n" )
+
+
+def read_test_list_if_no_test_results( tlist, baselistfname ):
+    ""
+    fL = glob.glob( baselistfname+'.*' )
+
+    if len(fL) == 0:
+        tlist.readFile( baselistfname )
+
+
+def read_and_merge_test_results( tlist, baselistfname ):
+    ""
+    fL = glob.glob( baselistfname+'.*' )
+    fL.sort()
+
+    for fn in fL:
+        tlist.readFile( fn )
+
+
+def check_for_currently_running_vvtest( testlistfile ):
+    ""
+    if '--force' not in optdict:
+
+        msg = '*** error: tests are currently running in another process\n' + \
+              '    (or a previous run crashed); use --force to run anyway'
+
+        fL = glob.glob( testlistfile+'.*' )
+        fL.sort()
+
+        if len(fL) > 0:
+
+            rfile = fL[-1]
+
+            tlr = testlistio.TestListReader( rfile )
+            fin = tlr.scanForFinishDate()
+            if fin == None:
+                print3( msg )
+                sys.exit(1)
 
 
 def printResults( atestlist, test_dir, perms,
@@ -1362,47 +1400,54 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
     plat.display()
     starttime = time.time()
     print3( "Start time:", time.ctime() )
-    
-    # execute tests
 
-    perms.set( os.path.abspath( tfile ) )
+    rfile = tlist.initializeResultsFile()
 
-    cwd = os.getcwd()
+    try:
 
-    while True:
+        # execute tests
 
-        tnext = tlist.popNext( plat )
+        perms.set( os.path.abspath( rfile ) )
 
-        if tnext != None:
-            print3( 'Starting:',
-                    relative_execute_directory( tnext.atest, test_dir, cwd ) )
-            tnext.start()
-            tlist.AppendTestResult( tnext.atest )
-        
-        elif tlist.numRunning() == 0:
-            break
+        cwd = os.getcwd()
 
-        else:
-            time.sleep(1)
+        while True:
 
-        showprogress = False
-        for tx in list( tlist.getRunning() ):
-            if tx.poll():
-                xs = XstatusString( tx, False, test_dir, cwd )
-                print3( "Finished:", xs )
-                tlist.testDone( tx )
-                showprogress = True
-      
-        unit_test_hook( 'tests', tlist.numRunning(), tlist.numDone() )
+            tnext = tlist.popNext( plat )
 
-        if showprogress:
-            ndone = tlist.numDone()
-            ntot = tlist.numActive()
-            pct = 100 * float(ndone) / float(ntot)
-            div = str(ndone)+'/'+str(ntot)
-            dt = pretty_time( time.time() - starttime )
-            print3( "Progress: " + div+" = %%%.1f"%pct + ', time = '+dt )
-    
+            if tnext != None:
+                print3( 'Starting:',
+                        relative_execute_directory( tnext.atest, test_dir, cwd ) )
+                tnext.start()
+                tlist.appendTestResult( tnext.atest )
+            
+            elif tlist.numRunning() == 0:
+                break
+
+            else:
+                time.sleep(1)
+
+            showprogress = False
+            for tx in list( tlist.getRunning() ):
+                if tx.poll():
+                    xs = XstatusString( tx, False, test_dir, cwd )
+                    print3( "Finished:", xs )
+                    tlist.testDone( tx )
+                    showprogress = True
+          
+            unit_test_hook( 'tests', tlist.numRunning(), tlist.numDone() )
+
+            if showprogress:
+                ndone = tlist.numDone()
+                ntot = tlist.numActive()
+                pct = 100 * float(ndone) / float(ntot)
+                div = str(ndone)+'/'+str(ntot)
+                dt = pretty_time( time.time() - starttime )
+                print3( "Progress: " + div+" = %%%.1f"%pct + ', time = '+dt )
+
+    finally:
+        tlist.writeFinished()
+
     # any remaining tests cannot run, so print warnings
     tL = tlist.popRemaining()
     if len(tL) > 0:
@@ -1439,8 +1484,10 @@ def batchTestList( toolsdir, tlist, test_dir, plat, perms ):
     starttime = time.time()
     print3( "Start time:", time.ctime() )
 
+    results_suffix = tlist.setResultsSuffix()
+
     # write testlist files for each qsub
-    numjobs = batch.writeQsubScripts()
+    numjobs = batch.writeQsubScripts( results_suffix )
 
     print3( 'Total number of batch jobs: ' + str(numjobs) + \
             ', maximum concurrent jobs: ' + str(qsublimit) )
@@ -1452,45 +1499,58 @@ def batchTestList( toolsdir, tlist, test_dir, plat, perms ):
 
     cwd = os.getcwd()
     qsleep = int( os.environ.get( 'VVTEST_BATCH_SLEEP_LENGTH', 15 ) )
-    
-    while True:
 
-        qid = schedule.checkstart()
-        if qid != None:
-            # nothing to print here because the qsubmit prints
-            pass
-        elif schedule.numInFlight() == 0:
-            break
-        else:
-            time.sleep( qsleep )
+    rfile = tlist.initializeResultsFile()
+    for inclf in batch.getIncludeFiles():
+        tlist.addIncludeFile( inclf )
 
-        qidL,doneL = schedule.checkdone()
-        
-        if len(qidL) > 0:
-            ids = ' '.join( [ str(qid) for qid in qidL ] )
-            print3( 'Finished batch IDS:', ids )
-        for t in doneL:
-            ts = XstatusString( t, False, test_dir, cwd )
-            print3( "Finished:", ts )
-        
-        unit_test_hook( 'batch', schedule.numInFlight(), schedule.numDone() )
+    try:
+        while True:
 
-        if len(doneL) > 0:
-            jpct = 100 * float(schedule.numDone()) / float(numjobs)
-            jdiv = 'jobs '+str(schedule.numDone())+'/'+str(numjobs)
-            jflt = '(in flight '+str(schedule.numStarted())+')'
-            ndone = tlist.numDone()
-            ntot = tlist.numActive()
-            tpct = 100 * float(ndone) / float(ntot)
-            tdiv = 'tests '+str(ndone)+'/'+str(ntot)
-            dt = pretty_time( time.time() - starttime )
-            print3( "Progress: " + \
-                    jdiv+" = %%%.1f"%jpct + ' '+jflt+', ' + \
-                    tdiv+" = %%%.1f"%tpct + ', ' + \
-                    'time = '+dt )
+            qid = schedule.checkstart()
+            if qid != None:
+                # nothing to print here because the qsubmit prints
+                pass
+            elif schedule.numInFlight() == 0:
+                break
+            else:
+                time.sleep( qsleep )
 
-    # any remaining tests cannot be run; flush then print warnings
-    NS, NF, nrL = schedule.flush()
+            qidL,doneL = schedule.checkdone()
+            
+            if len(qidL) > 0:
+                ids = ' '.join( [ str(qid) for qid in qidL ] )
+                print3( 'Finished batch IDS:', ids )
+            for t in doneL:
+                ts = XstatusString( t, False, test_dir, cwd )
+                print3( "Finished:", ts )
+            
+            unit_test_hook( 'batch', schedule.numInFlight(), schedule.numDone() )
+
+            if len(doneL) > 0:
+                jpct = 100 * float(schedule.numDone()) / float(numjobs)
+                jdiv = 'jobs '+str(schedule.numDone())+'/'+str(numjobs)
+                jflt = '(in flight '+str(schedule.numStarted())+')'
+                ndone = tlist.numDone()
+                ntot = tlist.numActive()
+                tpct = 100 * float(ndone) / float(ntot)
+                tdiv = 'tests '+str(ndone)+'/'+str(ntot)
+                dt = pretty_time( time.time() - starttime )
+                print3( "Progress: " + \
+                        jdiv+" = %%%.1f"%jpct + ' '+jflt+', ' + \
+                        tdiv+" = %%%.1f"%tpct + ', ' + \
+                        'time = '+dt )
+
+        # any remaining tests cannot be run; flush then print warnings
+        NS, NF, nrL = schedule.flush()
+
+    finally:
+        tlist.writeFinished()
+
+    tlist.inlineIncludeFiles()
+
+    perms.set( os.path.abspath( rfile ) )
+
     if len(NS)+len(NF)+len(nrL) > 0:
         print3()
     if len(NS) > 0:
@@ -1504,7 +1564,7 @@ def batchTestList( toolsdir, tlist, test_dir, plat, perms ):
         print3( '*** Warning: analyze test skipped for "' + \
                 tx.atest.getExecuteDirectory() + \
                 '" due to dependency "' + deptx.atest.getExecuteDirectory() + '"' )
-    
+
     print3()
     do_junit = optdict.get( '--junit', '' )
     printResults( tlist, test_dir, perms, tohtml=True, tojunit=do_junit )
@@ -1663,7 +1723,9 @@ class Batcher:
         self.read_interval = val
         val = int( os.environ.get( 'VVTEST_BATCH_READ_TIMEOUT', 5*60 ) )
         self.read_timeout = val
-        
+
+        self.qsub_testfilenames = []
+
         self.accountant = batchutils.BatchAccountant()
         self.namer = batchutils.BatchFileNamer( self.test_dir, testlist_name )
 
@@ -1715,9 +1777,11 @@ class Batcher:
         qL.reverse()
         self.qsublists = map( lambda L: L[2], qL )
 
-    def writeQsubScripts(self):
+    def writeQsubScripts(self, results_suffix):
         """
         """
+        self.tlist.markTestsWithDependents()
+
         self.removeBatchDirectories()
 
         commonopts = ''
@@ -1743,27 +1807,33 @@ class Batcher:
         
         qid = 0
         for qL in self.qsublists:
-          self.make_queue_batch( qid, qL, qsubids, commonopts )
+          self.make_queue_batch( qid, qL, qsubids, commonopts, results_suffix )
           qid += 1
-        
+
         qidL = list( qsubids.keys() )
         qidL.sort()
         for i in qidL:
-          incl = self.namer.getTestListName( i, relative=True )
-          self.tlist.AddIncludeFile( incl )
-        
+            incl = self.namer.getTestListName( i, relative=True )
+            self.qsub_testfilenames.append( incl )
+
         for i in qidL:
             d = self.namer.getSubdir( i )
             self.perms.recurse( d )
 
         return len( qsubids )
-    
-    def make_queue_batch(self, qnumber, qlist, npD, comopts):
+
+    def getIncludeFiles(self):
+        ""
+        return self.qsub_testfilenames
+
+    def make_queue_batch(self, qnumber, qlist, npD, comopts, results_suffix):
         """
         """
         qidstr = str(qnumber)
         
         tl = TestList.TestList()
+        tl.setResultsSuffix( results_suffix )
+
         tL = []
         maxnp = 0
         qtime = 0
@@ -1792,16 +1862,14 @@ class Batcher:
         
         npD[qnumber] = maxnp
         pout = self.namer.getBatchOutputName( qnumber )
-        tout = self.namer.getTestListName( qnumber )
+        tout = self.namer.getTestListName( qnumber ) + '.' + results_suffix
 
         jb = batchutils.BatchJob( maxnp, pout, tout, tL,
                                   self.read_interval, self.read_timeout )
         self.accountant.addJob( qnumber, jb )
         
         fn = self.namer.getTestListName( qidstr )
-        tl.stringFileWrite( fn )
-        tl.writeDependencies( self.tlist.getTests() )
-        tl.writeFinished()
+        tl.stringFileWrite( fn, include_results_suffix=True )
         
         fn = self.namer.getBatchScriptName( qidstr )
         fp = open( fn, "w" )
@@ -1914,70 +1982,45 @@ def restartTests( toolsdir, test_dir, plat, rtconfig ):
         config.set( 'refresh', False )
 
     tlist = TestList.TestList( rtconfig )
-    tlist.readFile( tfile )
 
-    if tlist.getFinishDate() == None and '--force' not in optdict:
-        print3( '*** error: tests are currently running in another process' )
-        print3( '    (or a previous run crashed); use --force to run anyway' )
-        sys.exit(1)
+    read_test_list_if_no_test_results( tlist, tfile )
+    read_and_merge_test_results( tlist, tfile )
+
+    check_for_currently_running_vvtest( tfile )
 
     if qid == None:
         loadRunTimes( tlist, plat )
 
     reld = computeRelativePath( os.path.abspath(test_dir), os.getcwd() )
-    
-    pruneL,cntmax = tlist.loadAndFilter( plat.getMaxProcs(),
-                                         filter_dir=reld,
-                                         analyze_only='-a' in optdict,
-                                         prune=True )
-    
-    if len(pruneL) > 0:
-        print3()
-        for pt,ct in pruneL:
-            print3( '*** Warning: analyze test',
-                    relative_execute_directory( pt, test_dir, os.getcwd() ),
-                    'will not be run due to dependency',
-                    relative_execute_directory( ct, test_dir, os.getcwd() ) )
-    if cntmax > 0:
-        print3()
-        print3( 'Note: there were', cntmax, 'tests that exceeded the',
-                'maximum number of processors - they will not be run' )
+
+    load_filter_and_prune_test_list( test_dir, tlist, plat, reld )
 
     perms = make_PermissionSetter( test_dir, optdict )
 
-    tlist.stringFileWrite( tfile )
+    perms.set( os.path.abspath( tfile ) )
 
-    try:
-        
-        perms.set( os.path.abspath( tfile ) )
-        
-        if len(tlist.active) > 0:
-          
-          print3( "Running these tests:" )
-          printResults( tlist, test_dir, perms, short=True )
-          print3()
-          
-          if '--save-results' in optdict:
+    if len(tlist.active) > 0:
+
+        print3( "Running these tests:" )
+        printResults( tlist, test_dir, perms, short=True )
+        print3()
+
+        if '--save-results' in optdict:
             saveResults( tlist, plat, test_dir, inprogress=True )
-          
-          if '--batch' not in optdict:
-            tlist.createTestExecs( test_dir, plat, config, perms )
+
+        tlist.createTestExecs( test_dir, plat, config, perms )
+
+        if '--batch' not in optdict:
             executeTestList( tlist, test_dir, plat, perms, tfile )
-          
-          else:
-            tlist.createTestExecs( test_dir, plat, config, perms )
-            batchTestList( toolsdir, tlist, test_dir, plat, perms )
-        
-          if '--save-results' in optdict:
-            saveResults( tlist, plat, test_dir )
-        
+
         else:
-          print3( "\n--------- no tests to run -----------\n" )
-    
-    except:
-        tlist.writeFinished()
-        raise
-    tlist.writeFinished()
+            batchTestList( toolsdir, tlist, test_dir, plat, perms )
+
+        if '--save-results' in optdict:
+            saveResults( tlist, plat, test_dir )
+
+    else:
+        print3( "\n--------- no tests to run -----------\n" )
 
 
 def baselineTests( test_dir, plat, rtconfig ):
@@ -1993,8 +2036,10 @@ def baselineTests( test_dir, plat, rtconfig ):
     tfile = os.path.join( test_dir, testlist_name )
 
     tlist = TestList.TestList( rtconfig )
-    tlist.readFile( tfile )
-    
+
+    read_test_list_if_no_test_results( tlist, tfile )
+    read_and_merge_test_results( tlist, tfile )
+
     filter_dir = None
     if path_filter != None:
       filter_dir = computeRelativePath( test_dir, path_filter )
@@ -2656,18 +2701,6 @@ def remove_directory_contents( path ):
             except Exception: pass
 
 
-def check_for_currently_running_vvtest( testlistfile ):
-    ""
-    if '--force' not in optdict and os.path.exists( testlistfile ):
-        tl = TestList.TestList()
-        tl.scanFile( testlistfile )
-        if tl.getFinishDate() == None:
-            print3( '*** error: tests are currently running in another process' )
-            print3( '    (or a previous run crashed); use --force to run anyway' )
-            sys.exit(1)
-        tl = None
-
-
 ##############################################################################
 
 if __name__ == '__main__':
@@ -2684,5 +2717,6 @@ if __name__ == '__main__':
     import results
     from libvvtest.PermissionSetter import DummyPermissionSetter
     from libvvtest.PermissionSetter import PermissionSetter
+    import libvvtest.testlistio as testlistio
 
     main()

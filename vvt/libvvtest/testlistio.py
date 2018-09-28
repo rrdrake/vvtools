@@ -163,6 +163,8 @@ class TestListReader:
             tlr = TestListReader( fname )
             tlr.read()
 
+            # magic: should just do this:
+            # self.tests.update( tlr.getTests() )
             for xdir,tspec in tlr.getTests().items():
                 self.tests[ xdir ] = tspec
 

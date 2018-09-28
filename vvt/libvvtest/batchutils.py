@@ -7,8 +7,10 @@
 import sys
 import os
 import time
+import glob
 
 from . import TestList
+from . import testlistio
 
 
 class BatchScheduler:
@@ -86,7 +88,7 @@ class BatchScheduler:
         tdoneL = []
         for qid,bjob in list( self.accountant.getStopped() ):
             if bjob.timeToCheckIfFinished( tnow ):
-                if self.checkJobFinished( bjob.outfile, bjob.testfile ):
+                if self.checkJobFinished( bjob.outfile, bjob.resultsfile ):
                     # load the results into the TestList
                     tdoneL.extend( self.finalizeJob( qid, bjob, 'clean' ) )
                 else:
@@ -116,12 +118,12 @@ class BatchScheduler:
 
         return started
 
-    def checkJobFinished(self, outfilename, testfilename):
+    def checkJobFinished(self, outfilename, resultsname):
         """
         """
         finished = False
         if self.scanBatchOutput( outfilename ):
-            finished = self.testListFinished( testfilename )
+            finished = self.testListFinished( resultsname )
         return finished
 
     def scanBatchOutput(self, outfile):
@@ -136,38 +138,37 @@ class BatchScheduler:
             sz = os.path.getsize( outfile )
             off = max(sz-512, 0)
             fp = open( outfile, 'r' )
-        except:
+        except Exception:
             pass
         else:
             try:
                 # only read the end of the file
                 fp.seek(off)
                 buf = fp.read(512)
-            except:
+            except Exception:
                 pass
             else:
                 if self.clean_exit_marker in buf:
                     clean = True
             try:
                 fp.close()
-            except:
+            except Exception:
                 pass
 
         return clean
 
-    def testListFinished(self, testfilename):
+    def testListFinished(self, resultsname):
         """
         Opens the test list file produced by a batch job and looks for the
         finish date mark.  Returns true if found.
         """
         finished = False
 
-        tl = TestList.TestList()
         try:
-            tl.scanFile( testfilename )
-            if tl.getFinishDate() != None:
+            tlr = testlistio.TestListReader( resultsname )
+            if tlr.scanForFinishDate() != None:
                 finished = True
-        except:
+        except Exception:
             pass
 
         return finished
@@ -215,17 +216,22 @@ class BatchScheduler:
         if not os.path.exists( bjob.outfile ):
             mark = 'notrun'
         
-        elif os.path.exists( bjob.testfile ):
+        elif os.path.exists( bjob.resultsfile ):
             if mark == None:
                 mark = 'notdone'
-            counts = {}
-            self.tlist.readFile( bjob.testfile, counts )
-            # only add tests to the stopped list that have a count
-            # of three (initial, launched, & finished)
+
+            self.tlist.readFile( bjob.resultsfile )
+
+            tlr = testlistio.TestListReader( bjob.resultsfile )
+            tlr.read()
+            jobtests = tlr.getTests()
+
+            # only add tests to the stopped list that are done
             for tx in bjob.testL:
                 xdir = tx.atest.getExecuteDirectory()
-                # TODO: could mark the tests that were not run somehow
-                if counts.get( xdir, 0 ) == 3:
+
+                tspec = jobtests.get( xdir, None )
+                if tspec and tspec.getAttr( 'state', None ) == 'done':
                     tL.append( tx.atest )
                     self.tlist.stopped[ xdir ] = tx
         
@@ -251,11 +257,11 @@ class BatchScheduler:
 
 class BatchJob:
     
-    def __init__(self, maxnp, fout, flist, testL,
+    def __init__(self, maxnp, fout, resultsfile, testL,
                        read_interval, read_timeout):
         self.maxnp = maxnp
         self.outfile = fout
-        self.testfile = flist
+        self.resultsfile = resultsfile
         self.testL = testL  # list of TestExec objects
         self.jobid = None
         self.tstart = None
