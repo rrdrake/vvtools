@@ -13,7 +13,6 @@ import os
 import re
 import glob
 import time
-import subprocess
 
 import testutils as util
 optD,argL = util.initialize( sys.argv )
@@ -32,8 +31,7 @@ def main():
         argL = """null script links1 links2 links3
                   exitstat xmldir options params
                   autolink tname1 tname2 duplicate
-                  postclean force1 force2 force3
-                  batch1
+                  postclean batch1
                """.split()
     
     cwd = os.getcwd()
@@ -598,157 +596,6 @@ def run_postclean( opt ):
     assert len( glob.glob( tdir+'/ana.P=2/ana.py' ) ) == 0
     assert len( glob.glob( tdir+'/ana/execute.log' ) ) == 1
     assert len( glob.glob( tdir+'/ana/anagen.txt' ) ) == 0
-
-
-############################################################################
-
-def force1():
-    """
-    a concurrent vvtest invocation should refuse to run
-    """
-    writefile( "sleeper.xml", """
-        <rtest name="sleeper">
-            <execute> sleep 10 </execute>
-        </rtest>""" )
-
-    bg = Background( vvtest, 'log' )
-    bg.wait()
-    fp = open( 'log', 'r' ) ; out = fp.read() ; fp.close()
-    print3( out )
-    np,nd,nf,nn = numpass(out),numdiff(out),numfail(out),numnotrun(out)
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-    remove_results()
-
-    bg = Background( vvtest, 'log' )
-    time.sleep(4)
-    xok,out = run_cmd( vvtest + ' -R' )
-
-    bg.wait( 10 )
-    assert not xok
-    assert len( grep( out, 'rror.*another process' ) ) == 1
-
-
-def force2():
-    """
-    same as force1 except cd into TestResults directory
-    """
-    writefile( "null.xml", """
-        <rtest name="null">
-        </rtest>""" )
-    out,np,nd,nf,nn = run_vvtest()
-    tdir = results_dir()
-    os.remove( 'null.xml' )
-    remove_results()
-
-    writefile( "sleeper.xml", """
-        <rtest name="sleeper">
-            <execute> sleep 10 </execute>
-        </rtest>""" )
-
-    bg = Background( vvtest, 'log' )
-    time.sleep(4)
-    xok,out = run_cmd( vvtest + ' -R', directory=tdir )
-
-    bg.wait( 10 )
-    assert not xok
-    assert len( grep( out, 'rror.*another process' ) ) == 1
-
-
-
-class Background:
-
-    def __init__(self, cmd, logfile=None):
-        """
-        """
-        self.cmd = cmd
-        if logfile != None:
-            fp = open( logfile, 'w' )
-            self.p = subprocess.Popen( cmd, shell=True,
-                                       stdout=fp.fileno(), 
-                                       stderr=fp.fileno() )
-            fp.close()
-        else:
-            self.p = subprocess.Popen( cmd, shell=True, close_fds=True )
-
-    def wait(self, timeout=30):
-        """
-        """
-        if timeout == None:
-            self.p.wait()
-            return self.p.returncode
-        for i in range(timeout):
-            self.p.poll()
-            if self.p.returncode != None:
-                return self.p.returncode
-            time.sleep(1)
-        self.stop()
-        return None
-    
-    def stop(self):
-        try:
-            os.kill( self.p.pid, signal.SIGINT )
-            self.p.wait()
-        except:
-            if hasattr( self.p, 'terminate' ):
-                try: self.p.terminate()
-                except: pass
-
-
-def force3():
-    """
-    can force concurrent by using --force
-    """
-    writefile( "sleeper1.xml", """
-        <rtest name="sleeper1">
-            <timeout value="20"/>
-            <execute> sleep 5 </execute>
-        </rtest>""" )
-    writefile( "sleeper2.xml", """
-        <rtest name="sleeper2">
-            <timeout value="20"/>
-            <execute> sleep 5 </execute>
-        </rtest>""" )
-
-    # using SIGKILL prevents the "finished" mark from getting placed
-    os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
-    os.environ['VVTEST_SIGNAL'] = 'SIGKILL'
-    xok,out = run_cmd( vvtest + ' -n 1' )
-    del os.environ['VVTEST_INTERRUPT_COUNT']
-    del os.environ['VVTEST_SIGNAL']
-
-    # this one should fail
-    xok,out = run_cmd( vvtest + ' -R' )
-    assert not xok
-    assert len( grep( out, 'rror.*another process' ) ) == 1
-
-    # this one should be forced to run
-    xok,out = run_cmd( vvtest + ' -R --force' )
-    assert xok
-    assert len( grep( out, 'rror.*another process' ) ) == 0
-
-    remove_results()
-
-    # using SIGKILL prevents the "finished" mark from getting placed
-    os.environ['VVTEST_INTERRUPT_BATCH'] = '1'
-    os.environ['VVTEST_SIGNAL_BATCH'] = 'SIGKILL'
-    cmd = vvtest + ' --plat '+core_platform_name() + \
-                   ' --batch --qsub-limit 1 --qsub-length 1'
-    xok,out = run_cmd( cmd )
-    del os.environ['VVTEST_INTERRUPT_BATCH']
-    del os.environ['VVTEST_SIGNAL_BATCH']
-
-    # this one should fail
-    xok,out = run_cmd( vvtest + ' --plat '+core_platform_name() + \
-                                ' --batch -R' )
-    assert not xok
-    assert len( grep( out, 'rror.*another process' ) ) == 1
-
-    # this one should be forced to run
-    xok,out = run_cmd( vvtest + ' --plat '+core_platform_name() + \
-                                ' --batch -R --force' )
-    assert xok
-    assert len( grep( out, 'rror.*another process' ) ) == 0
 
 
 ############################################################################

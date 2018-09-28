@@ -1,0 +1,173 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import unittest
+
+import testutils as util
+from testutils import print3
+
+
+class running_after_vvtest_is_killed( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_vvtest_fails_to_run_if_a_previous_run_was_killed(self):
+        ""
+        util.writefile( "sleeper.xml", """
+            <rtest name="sleeper">
+                <execute> sleep 10 </execute>
+            </rtest>""" )
+
+        bg = Background( util.vvtest, 'log' )
+        bg.wait()
+        fp = open( 'log', 'r' ) ; out = fp.read() ; fp.close()
+        print3( out )
+        np,nd = util.numpass(out), util.numdiff(out)
+        nf,nn = util.numfail(out), util.numnotrun(out)
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        util.remove_results()
+
+        bg = Background( util.vvtest, 'log' )
+        time.sleep(4)
+        xok,out = util.run_cmd( util.vvtest + ' -R' )
+
+        bg.wait( 10 )
+        assert not xok
+        assert len( util.grep( out, 'rror.*another process' ) ) == 1
+
+    def test_running_vvtest_after_killed_but_in_TestResults_directory(self):
+        ""
+        util.writefile( "null.xml", """
+            <rtest name="null">
+            </rtest>""" )
+        out,np,nd,nf,nn = util.run_vvtest()
+        tdir = util.results_dir()
+        os.remove( 'null.xml' )
+        util.remove_results()
+
+        util.writefile( "sleeper.xml", """
+            <rtest name="sleeper">
+                <execute> sleep 10 </execute>
+            </rtest>""" )
+
+        bg = Background( util.vvtest, 'log' )
+        time.sleep(4)
+        xok,out = util.run_cmd( util.vvtest + ' -R', directory=tdir )
+
+        bg.wait( 10 )
+        assert not xok
+        assert len( util.grep( out, 'rror.*another process' ) ) == 1
+
+    def test_forcing_vvtest_to_run_after_previous_was_killed(self):
+        ""
+        util.writefile( "sleeper1.xml", """
+            <rtest name="sleeper1">
+                <timeout value="20"/>
+                <execute> sleep 5 </execute>
+            </rtest>""" )
+        util.writefile( "sleeper2.xml", """
+            <rtest name="sleeper2">
+                <timeout value="20"/>
+                <execute> sleep 5 </execute>
+            </rtest>""" )
+
+        # using SIGKILL prevents the "finished" mark from getting placed
+        os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
+        os.environ['VVTEST_SIGNAL'] = 'SIGKILL'
+        xok,out = util.run_cmd( util.vvtest + ' -n 1' )
+        del os.environ['VVTEST_INTERRUPT_COUNT']
+        del os.environ['VVTEST_SIGNAL']
+
+        # this one should fail
+        xok,out = util.run_cmd( util.vvtest + ' -R' )
+        assert not xok
+        assert len( util.grep( out, 'rror.*another process' ) ) == 1
+
+        # this one should be forced to run
+        xok,out = util.run_cmd( util.vvtest + ' -R --force' )
+        assert xok
+        assert len( util.grep( out, 'rror.*another process' ) ) == 0
+
+        util.remove_results()
+
+        # using SIGKILL prevents the "finished" mark from getting placed
+        os.environ['VVTEST_INTERRUPT_BATCH'] = '1'
+        os.environ['VVTEST_SIGNAL_BATCH'] = 'SIGKILL'
+        cmd = util.vvtest + ' --plat '+util.core_platform_name() + \
+                       ' --batch --qsub-limit 1 --qsub-length 1'
+        xok,out = util.run_cmd( cmd )
+        del os.environ['VVTEST_INTERRUPT_BATCH']
+        del os.environ['VVTEST_SIGNAL_BATCH']
+
+        # this one should fail
+        xok,out = util.run_cmd( util.vvtest + ' --plat '+util.core_platform_name() + \
+                                    ' --batch -R' )
+        assert not xok
+        assert len( util.grep( out, 'rror.*another process' ) ) == 1
+
+        # this one should be forced to run
+        xok,out = util.run_cmd( util.vvtest + ' --plat '+util.core_platform_name() + \
+                                    ' --batch -R --force' )
+        assert xok
+        assert len( util.grep( out, 'rror.*another process' ) ) == 0
+
+
+
+
+# magic: remove this
+import subprocess
+
+class Background:
+
+    def __init__(self, cmd, logfile=None):
+        """
+        """
+        self.cmd = cmd
+        if logfile != None:
+            fp = open( logfile, 'w' )
+            self.p = subprocess.Popen( cmd, shell=True,
+                                       stdout=fp.fileno(), 
+                                       stderr=fp.fileno() )
+            fp.close()
+        else:
+            self.p = subprocess.Popen( cmd, shell=True, close_fds=True )
+
+    def wait(self, timeout=30):
+        """
+        """
+        if timeout == None:
+            self.p.wait()
+            return self.p.returncode
+        for i in range(timeout):
+            self.p.poll()
+            if self.p.returncode != None:
+                return self.p.returncode
+            time.sleep(1)
+        self.stop()
+        return None
+    
+    def stop(self):
+        try:
+            os.kill( self.p.pid, signal.SIGINT )
+            self.p.wait()
+        except:
+            if hasattr( self.p, 'terminate' ):
+                try: self.p.terminate()
+                except: pass
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
