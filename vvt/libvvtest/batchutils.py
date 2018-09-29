@@ -33,6 +33,10 @@ class BatchScheduler:
         """
         return self.accountant.numInFlight()
 
+    def numPastQueue(self):
+        ""
+        return self.accountant.numPastQueue()
+
     def numStarted(self):
         """
         Number of batch jobs currently running (those that have been started
@@ -386,6 +390,9 @@ class BatchAccountant:
 
     def numInFlight(self):
         return len( self.qstart ) + len( self.qstop )
+
+    def numPastQueue(self):
+        return len( self.qstop ) + len( self.qdone )
 
     def getNotStarted(self):
         """

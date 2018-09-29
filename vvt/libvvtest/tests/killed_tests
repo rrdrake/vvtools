@@ -32,7 +32,7 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        run_command_then_terminate_it( util.vvtest, signum=signal.SIGINT )
+        util.run_command_then_terminate_it( util.vvtest, signum=signal.SIGINT )
         time.sleep(1)
 
         out = util.readfile( 'run.log' )
@@ -55,7 +55,7 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
         
-        run_command_then_terminate_it( util.vvtest )
+        util.run_command_then_terminate_it( util.vvtest )
         time.sleep(1)
 
         out = util.readfile( 'run.log' )
@@ -79,7 +79,7 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
         
-        run_command_then_terminate_it( util.vvtest )
+        util.run_command_then_terminate_it( util.vvtest )
         time.sleep(1)
         tdir = util.results_dir()
 
@@ -153,29 +153,6 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
                                     ' --batch -R --force' )
         assert xok
         assert len( util.grep( out, 'rror.*another process' ) ) == 0
-
-
-############################################################################
-
-def run_command_then_terminate_it( command,
-                                   signum=signal.SIGTERM,
-                                   wait_before_signaling=4,
-                                   logfilename='run.log' ):
-    ""
-    fp = open( logfilename, 'w' )
-    try:
-        pop = subprocess.Popen( command, shell=True,
-                    stdout=fp.fileno(), stderr=fp.fileno(),
-                    preexec_fn=lambda:os.setpgid(os.getpid(),os.getpid()) )
-
-        time.sleep( wait_before_signaling )
-
-        os.kill( -pop.pid, signum )
-
-        pop.wait()
-
-    finally:
-        fp.close()
 
 
 ########################################################################

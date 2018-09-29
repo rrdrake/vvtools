@@ -1,0 +1,100 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import unittest
+import glob
+
+import testutils as util
+from testutils import print3
+
+
+class inlining_results_file_includes( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_restarting_a_killed_batch_run_three_times(self):
+        """
+        If a batch run is killed before the result file includes are inlined,
+        the only record of the results exist in the batch directories.  But
+        the batch directories are cleaned out before running the next time.
+        This means that previous results will be lost if they are not inlined
+        during vvtest startup.  This test checks that they are by restarting
+        a killed batch run a few times in a row.
+        """
+        util.writefile( "lazyA.vvt", """
+            import time
+            time.sleep(1)
+            fp = open( 'touchA.txt', 'w' ) ; fp.close()
+            """ )
+        util.writefile( "lazyB.vvt", """
+            import time
+            time.sleep(1)
+            fp = open( 'touchB.txt', 'w' ) ; fp.close()
+            """ )
+        util.writefile( "lazyC.vvt", """
+            import time
+            time.sleep(1)
+            fp = open( 'touchC.txt', 'w' ) ; fp.close()
+            """ )
+        time.sleep(1)
+
+        platname = util.core_platform_name()
+
+        opts = ' --batch --plat '+platname+' --qsub-limit 1 --force'
+
+        xok,out = interrupt_vvtest_run( opts )
+        time.sleep(1)
+
+        # exactly one of the three tests should have completed
+        fL = glob.glob( 'TestResults*/lazy*/touch*.txt' )
+        assert len(fL) == 1
+
+        xok,out = interrupt_vvtest_run( opts )
+        time.sleep(1)
+
+        # exactly one more of the three tests should have completed
+        fL = glob.glob( 'TestResults*/lazy*/touch*.txt' )
+        assert len(fL) == 2
+
+        vrun = util.vvtestRunner( opts )
+        time.sleep(1)
+
+        # only the last of the three tests should have been run
+        assert vrun.num_total == 1 and vrun.num_pass == 1
+        fL = glob.glob( 'TestResults*/lazy*/touch*.txt' )
+        assert len(fL) == 3
+
+        # all three tests should show as completed
+        xok,out = util.run_cmd( util.vvtest+' --plat '+platname+' -i' )
+        print3( out )
+        ntot,np = util.numtotal(out), util.numpass(out)
+        assert ntot == 3 and np == 3
+
+
+def interrupt_vvtest_run( opts ):
+    ""
+    os.environ['VVTEST_INTERRUPT_BATCH'] = '1'
+    os.environ['VVTEST_SIGNAL_BATCH'] = 'SIGTERM'
+    try:
+        xok,out = util.run_cmd( util.vvtest + opts )
+    finally:
+        del os.environ['VVTEST_INTERRUPT_BATCH']
+        del os.environ['VVTEST_SIGNAL_BATCH']
+
+    return xok, out
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

@@ -170,6 +170,13 @@ class TestList:
                     for k,v in tspec.getAttrs().items():
                         t.setAttr( k, v )
 
+    def ensureInlinedTestResultIncludes(self):
+        ""
+        fL = self.getResultsFilenames()
+        if len(fL) > 0:
+            # only the most recent is checked
+            testlistio.inline_include_files( fL[-1] )
+
     def inlineIncludeFiles(self):
         ""
         rfile = self.filename + '.' + self.results_suffix

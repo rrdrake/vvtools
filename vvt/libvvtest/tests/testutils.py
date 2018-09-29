@@ -402,6 +402,27 @@ def shell_escape( cmd ):
     return ' '.join( [ pipes.quote(s) for s in cmd ] )
 
 
+def run_command_then_terminate_it( command,
+                                   signum=signal.SIGTERM,
+                                   seconds_before_signaling=4,
+                                   logfilename='run.log' ):
+    ""
+    fp = open( logfilename, 'w' )
+    try:
+        pop = subprocess.Popen( command, shell=True,
+                    stdout=fp.fileno(), stderr=fp.fileno(),
+                    preexec_fn=lambda:os.setpgid(os.getpid(),os.getpid()) )
+
+        time.sleep( seconds_before_signaling )
+
+        os.kill( -pop.pid, signum )
+
+        pop.wait()
+
+    finally:
+        fp.close()
+
+
 def rmallfiles( not_these=None ):
     for f in os.listdir("."):
         if not_these == None or not fnmatch.fnmatch( f, not_these ):

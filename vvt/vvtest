@@ -1162,6 +1162,7 @@ def runTests( toolsdir, dirs, plat, rtconfig ):
     perms.set( os.path.abspath( tfile ) )
 
     tlist.readTestResults()
+    tlist.ensureInlinedTestResultIncludes()
 
     loadRunTimes( tlist, plat )
 
@@ -1510,7 +1511,7 @@ def batchTestList( toolsdir, tlist, test_dir, plat, perms ):
                 ts = XstatusString( t, False, test_dir, cwd )
                 print3( "Finished:", ts )
             
-            unit_test_hook( 'batch', schedule.numInFlight(), schedule.numDone() )
+            unit_test_hook( 'batch', schedule.numInFlight(), schedule.numPastQueue() )
 
             if len(doneL) > 0:
                 jpct = 100 * float(schedule.numDone()) / float(numjobs)
@@ -1971,6 +1972,7 @@ def restartTests( toolsdir, test_dir, plat, rtconfig ):
 
     tlist.readTestListIfNoTestResults()
     tlist.readTestResults()
+    tlist.ensureInlinedTestResultIncludes()
 
     check_for_currently_running_vvtest( tlist.getResultsFilenames() )
 
@@ -2025,6 +2027,7 @@ def baselineTests( test_dir, plat, rtconfig ):
 
     tlist.readTestListIfNoTestResults()
     tlist.readTestResults()
+    tlist.ensureInlinedTestResultIncludes()
 
     filter_dir = None
     if path_filter != None:
