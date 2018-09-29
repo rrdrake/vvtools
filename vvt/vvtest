@@ -1387,7 +1387,8 @@ def executeTestList( tlist, test_dir, plat, perms, tfile ):
     starttime = time.time()
     print3( "Start time:", time.ctime() )
 
-    uthook = construct_unit_testing_hook( 'run' )
+    job_qid = optdict.get( '--qsub-id', None )
+    uthook = utesthooks.construct_unit_testing_hook( 'run', job_qid )
 
     rfile = tlist.initializeResultsFile()
 
@@ -1488,7 +1489,7 @@ def batchTestList( toolsdir, tlist, test_dir, plat, perms ):
     cwd = os.getcwd()
     qsleep = int( os.environ.get( 'VVTEST_BATCH_SLEEP_LENGTH', 15 ) )
 
-    uthook = construct_unit_testing_hook( 'batch' )
+    uthook = utesthooks.construct_unit_testing_hook( 'batch' )
 
     rfile = tlist.initializeResultsFile()
     for inclf in batch.getIncludeFiles():
@@ -1581,94 +1582,6 @@ def pretty_time( nseconds ):
     if h > 0: return sh+' '+sm+' '+ss
     if m > 0: return sm+' '+ss
     return ss
-
-
-class UnitTestingRunHook:
-
-    def __init__(self, spec):
-        """
-        Examples:  count=2
-                   count=2,signum=SIGINT
-                   count=2,qid=5
-        """
-        self.count = 2**31
-        self.signum = signal.SIGINT
-        self.qid = None
-
-        for n,v in [ s.split('=') for s in spec.split(',') ]:
-            if n == 'count':
-                self.count = int( v )
-            elif n == 'signum':
-                self.signum = eval( 'signal.'+v )
-            elif n == 'qid':
-                self.qid = v.strip()
-
-    def check(self, numrun, numdone):
-        ""
-        qok = True
-        if self.qid != None and '--qsub-id' in optdict:
-            assert type( optdict['--qsub-id'] ) == type('')
-            # if the QID is defined and equal to this batch job's queue id
-            # then the interrupt will take place; if it is defined but
-            # not equal to this job's queue id then no interrupt will occur
-            if self.qid != optdict['--qsub-id']:
-                qok = False
-
-        if qok and numdone >= self.count:
-            os.kill( os.getpid(), self.signum )
-            time.sleep(60)
-            sys.exit(1)
-
-
-class UnitTestingBatchHook:
-
-    def __init__(self, spec):
-        """
-        Examples:  count=2
-                   count=2,signum=SIGINT"
-        """
-        self.count = 2**31
-        self.signum = signal.SIGINT
-
-        for n,v in [ s.split('=') for s in spec.split(',') ]:
-            if n == 'count':
-                self.count = int( v )
-            elif n == 'signum':
-                self.signum = eval( 'signal.'+v )
-
-    def check(self, numrun, numdone):
-        ""
-        if numdone >= self.count:
-            os.kill( os.getpid(), self.signum )
-            time.sleep(60)
-            sys.exit(1)
-
-
-class UnitTestingEmptyHook:
-    def check(self, *args):
-        pass
-
-
-def construct_unit_testing_hook( hooktype ):
-    """
-    Examples of environ variable VVTEST_UNIT_TEST_SPEC:
-
-        run:count=2,signum=SIGTERM
-        batch:count=1
-        run:count=2,signum=SIGTERM|batch:count=1
-    """
-    envspec = os.environ.get( 'VVTEST_UNIT_TEST_SPEC', '' )
-    specL = envspec.strip().split('|')
-
-    for spec in [ sp.strip() for sp in specL ]:
-
-        if hooktype == 'run' and spec.startswith('run:'):
-            return UnitTestingRunHook( spec[4:] )
-
-        elif hooktype == 'batch' and spec.startswith('batch:'):
-            return UnitTestingBatchHook( spec[6:] )
-
-    return UnitTestingEmptyHook()
 
 
 def loadRunTimes( tlist, plat ):
@@ -2795,5 +2708,6 @@ if __name__ == '__main__':
     from libvvtest.PermissionSetter import DummyPermissionSetter
     from libvvtest.PermissionSetter import PermissionSetter
     import libvvtest.testlistio as testlistio
+    import libvvtest.utesthooks as utesthooks
 
     main()
