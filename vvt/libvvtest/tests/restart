@@ -81,9 +81,7 @@ def test01():
         </rtest>""")
 
     # run the test set but provide a false interruption
-    os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
-    out,np,nd,nf,nn = run_vvtest( "-n 2", ignore_errors=1 )
-    del os.environ['VVTEST_INTERRUPT_COUNT']
+    interrupt_vvtest_run( '-n 2', count=1 )
     out,np,nd,nf,nn = run_vvtest( '-i' )
     assert np+nd+nf+nn == 4
     assert np < 2 or nd < 1 or nf < 1
@@ -94,9 +92,7 @@ def test01():
     assert np == 2 and nd == 1 and nf == 1 and nn == 0
 
     # restart using results keyword
-    os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
-    out,np,nd,nf,nn = run_vvtest( '-n 2 -w', ignore_errors=1 )
-    del os.environ['VVTEST_INTERRUPT_COUNT']
+    interrupt_vvtest_run( '-n 2 -w', count=1 )
     out,np,nd,nf,nn = run_vvtest( '-i' )
     assert np+nd+nf+nn == 4
     assert np < 2 or nd < 1 or nf < 1
@@ -233,9 +229,7 @@ def test04():
         """[1:] )
 
     # run the test set but provide a false interruption
-    os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
-    out,np,nd,nf,nn = run_vvtest( "-n 2", ignore_errors=1 )
-    del os.environ['VVTEST_INTERRUPT_COUNT']
+    interrupt_vvtest_run( '-n 2', count=1 )
     out,np,nd,nf,nn = run_vvtest( '-i' )
     assert np < 2 or nd < 1 or nf < 1
 
@@ -245,9 +239,7 @@ def test04():
     assert np == 2 and nd == 1 and nf == 1 and nn == 0
 
     # restart using results keyword
-    os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
-    out,np,nd,nf,nn = run_vvtest( '-n 2 -w', ignore_errors=1 )
-    del os.environ['VVTEST_INTERRUPT_COUNT']
+    interrupt_vvtest_run( '-n 2 -w', count=1 )
     out,np,nd,nf,nn = run_vvtest( '-i' )
     assert np < 2 or nd < 1 or nf < 1
     out,np,nd,nf,nn = run_vvtest( '-n 2 -k notrun/notdone' )

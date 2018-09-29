@@ -51,16 +51,16 @@ class inlining_results_file_includes( unittest.TestCase ):
 
         platname = util.core_platform_name()
 
-        opts = ' --batch --plat '+platname+' --qsub-limit 1 --force'
+        opts = '--batch --plat '+platname+' --qsub-limit 1 --force'
 
-        xok,out = interrupt_vvtest_run( opts )
+        util.interrupt_vvtest_batch( opts, count=1, signum='SIGTERM' )
         time.sleep(1)
 
         # exactly one of the three tests should have completed
         fL = glob.glob( 'TestResults*/lazy*/touch*.txt' )
         assert len(fL) == 1
 
-        xok,out = interrupt_vvtest_run( opts )
+        util.interrupt_vvtest_batch( opts, count=1, signum='SIGTERM' )
         time.sleep(1)
 
         # exactly one more of the three tests should have completed
@@ -77,22 +77,48 @@ class inlining_results_file_includes( unittest.TestCase ):
 
         # all three tests should show as completed
         xok,out = util.run_cmd( util.vvtest+' --plat '+platname+' -i' )
-        print3( out )
         ntot,np = util.numtotal(out), util.numpass(out)
         assert ntot == 3 and np == 3
 
+    def test_failed_batch_job_issues_warning_about_not_finishing(self):
+        ""
+        util.writefile( "sleeper1.xml", """
+            <rtest name="sleeper1">
+                <timeout value="15"/>
+                <execute> sleep 5 </execute>
+            </rtest>""" )
+        util.writefile( "sleeper2.xml", """
+            <rtest name="sleeper2">
+                <timeout value="15"/>
+                <execute> sleep 5 </execute>
+            </rtest>""" )
+        util.writefile( "sleeper3.xml", """
+            <rtest name="sleeper3">
+                <timeout value="15"/>
+                <execute> sleep 5 </execute>
+            </rtest>""" )
+        util.writefile( "sleeper4.xml", """
+            <rtest name="sleeper4">
+                <timeout value="15"/>
+                <execute> sleep 5 </execute>
+            </rtest>""" )
+        time.sleep(1)
 
-def interrupt_vvtest_run( opts ):
-    ""
-    os.environ['VVTEST_INTERRUPT_BATCH'] = '1'
-    os.environ['VVTEST_SIGNAL_BATCH'] = 'SIGTERM'
-    try:
-        xok,out = util.run_cmd( util.vvtest + opts )
-    finally:
-        del os.environ['VVTEST_INTERRUPT_BATCH']
-        del os.environ['VVTEST_SIGNAL_BATCH']
+        # these four tests are run in two batch
+        # batch zero will be ok, while batch one will crash
+        # this should cause batch one to show "did not seem to finish"
+        opts = '--plat '+util.core_platform_name() + \
+               ' --batch --qsub-limit 1 --qsub-length 40'
+        xok,out = util.interrupt_vvtest_run( opts, count=1, qid=1 )
 
-    return xok, out
+        L = util.grep( out, 'did not seem to finish:' )
+        assert len(L) == 1
+        L2 = L[0].split(':')[-1].split()
+        L2 = [ int(s) for s in L2 ]
+        assert L2 == [1]
+
+        assert len( util.greptestlist( out, 'sleeper[1-4]' ) ) == 4
+        assert len( util.greptestlist( out, 'sleeper[1-4] .*pass' ) ) == 3
 
 
 ########################################################################

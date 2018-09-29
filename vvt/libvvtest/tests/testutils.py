@@ -423,6 +423,46 @@ def run_command_then_terminate_it( command,
         fp.close()
 
 
+def interrupt_vvtest_run( vvtest_args, count=None, signum=None, qid=None ):
+    ""
+    valL = []
+    if count != None:
+        valL.append( "count="+str(count) )
+    if signum != None:
+        valL.append( "signum="+signum )
+    if qid != None:
+        valL.append( "qid="+str(qid) )
+
+    spec = "run:" + ','.join( valL )
+
+    os.environ['VVTEST_UNIT_TEST_SPEC'] = spec
+    try:
+        xok,out = run_cmd( vvtest + ' ' + vvtest_args )
+    finally:
+        del os.environ['VVTEST_UNIT_TEST_SPEC']
+
+    return xok, out
+
+
+def interrupt_vvtest_batch( vvtest_args, count=None, signum=None ):
+    ""
+    valL = []
+    if count != None:
+        valL.append( "count="+str(count) )
+    if signum != None:
+        valL.append( "signum="+signum )
+
+    spec = "batch:" + ','.join( valL )
+
+    os.environ['VVTEST_UNIT_TEST_SPEC'] = spec
+    try:
+        xok,out = run_cmd( vvtest + ' ' + vvtest_args )
+    finally:
+        del os.environ['VVTEST_UNIT_TEST_SPEC']
+
+    return xok, out
+
+
 def rmallfiles( not_these=None ):
     for f in os.listdir("."):
         if not_these == None or not fnmatch.fnmatch( f, not_these ):
@@ -595,6 +635,11 @@ def run_vvtest( args='', ignore_errors=0, directory=None ):
         print3( out )
         raise Exception( "vvtest command failed: " + cmd )
     return out,numpass(out),numdiff(out),numfail(out),numnotrun(out)
+
+
+def parse_run_counts( vvtest_output ):
+    ""
+    return numpass(out), numdiff(out), numfail(out), numnotrun(out)
 
 
 def platform_name( test_out ):

@@ -31,7 +31,7 @@ def main():
         argL = """null script links1 links2 links3
                   exitstat xmldir options params
                   autolink tname1 tname2 duplicate
-                  postclean batch1
+                  postclean
                """.split()
     
     cwd = os.getcwd()
@@ -596,55 +596,6 @@ def run_postclean( opt ):
     assert len( glob.glob( tdir+'/ana.P=2/ana.py' ) ) == 0
     assert len( glob.glob( tdir+'/ana/execute.log' ) ) == 1
     assert len( glob.glob( tdir+'/ana/anagen.txt' ) ) == 0
-
-
-############################################################################
-
-def batch1():
-    """
-    behavior of a batch job failing
-    """
-    writefile( "sleeper1.xml", """
-        <rtest name="sleeper1">
-            <timeout value="15"/>
-            <execute> sleep 5 </execute>
-        </rtest>""" )
-    writefile( "sleeper2.xml", """
-        <rtest name="sleeper2">
-            <timeout value="15"/>
-            <execute> sleep 5 </execute>
-        </rtest>""" )
-    writefile( "sleeper3.xml", """
-        <rtest name="sleeper3">
-            <timeout value="15"/>
-            <execute> sleep 5 </execute>
-        </rtest>""" )
-    writefile( "sleeper4.xml", """
-        <rtest name="sleeper4">
-            <timeout value="15"/>
-            <execute> sleep 5 </execute>
-        </rtest>""" )
-
-    # these four tests are run in two batch
-    # batch zero will be ok, while batch one will crash
-    # this should cause batch one to show "did not seem to finish"
-
-    os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
-    os.environ['VVTEST_INTERRUPT_QID'] = '1'
-    cmd = vvtest + ' --plat '+core_platform_name() + \
-                   ' --batch --qsub-limit 1 --qsub-length 40'
-    xok,out = run_cmd( cmd )
-    del os.environ['VVTEST_INTERRUPT_COUNT']
-    del os.environ['VVTEST_INTERRUPT_QID']
-
-    L = grep( out, 'did not seem to finish:' )
-    assert len(L) == 1
-    L2 = L[0].split(':')[-1].split()
-    L2 = [ int(s) for s in L2 ]
-    assert L2 == [1]
-
-    assert len( greptestlist( out, 'sleeper[1-4]' ) ) == 4
-    assert len( greptestlist( out, 'sleeper[1-4] .*pass' ) ) == 3
 
 
 ############################################################################

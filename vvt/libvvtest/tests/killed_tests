@@ -110,13 +110,7 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
             </rtest>""" )
 
         # using SIGTERM prevents the "finished" mark from getting placed
-        os.environ['VVTEST_INTERRUPT_COUNT'] = '1'
-        os.environ['VVTEST_SIGNAL'] = 'SIGTERM'
-        try:
-            xok,out = util.run_cmd( util.vvtest + ' -n 1' )
-        finally:
-            del os.environ['VVTEST_INTERRUPT_COUNT']
-            del os.environ['VVTEST_SIGNAL']
+        util.interrupt_vvtest_run( '-n 1', count=1, signum='SIGTERM' )
 
         # this one should fail
         xok,out = util.run_cmd( util.vvtest + ' -R' )
@@ -130,15 +124,9 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
 
         util.remove_results()
 
-        os.environ['VVTEST_INTERRUPT_BATCH'] = '1'
-        os.environ['VVTEST_SIGNAL_BATCH'] = 'SIGTERM'
-        try:
-            cmd = util.vvtest + ' --plat '+util.core_platform_name() + \
-                           ' --batch --qsub-limit 1 --qsub-length 1'
-            xok,out = util.run_cmd( cmd )
-        finally:
-            del os.environ['VVTEST_INTERRUPT_BATCH']
-            del os.environ['VVTEST_SIGNAL_BATCH']
+        opts = '--plat '+util.core_platform_name() + \
+               ' --batch --qsub-limit 1 --qsub-length 1'
+        util.interrupt_vvtest_batch( opts, count=1, signum='SIGTERM' )
 
         platname = util.core_platform_name()
 
