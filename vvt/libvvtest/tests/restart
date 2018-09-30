@@ -11,327 +11,286 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
+import unittest
 
 import testutils as util
-optD,argL = util.initialize( sys.argv )
-if 'TESTUTILS_RUNDIR' not in os.environ:
-    os.chdir( util.working_directory )
-
-from testutils import *
-
-def main():
-    """
-    """
-    global argL
-
-    if len(argL) == 0:
-        argL = """test01 test02 test03
-                  test04 test05 test06
-               """.split() 
-
-    cwd = os.getcwd()
-    for func in argL:
-        os.chdir( cwd )
-        rmallfiles()
-        time.sleep(1)
-        print3( '====> ', func )
-
-        # for batch tests
-        os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-        os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-        os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
-
-        eval( func+'()' )
+from testutils import print3
 
 
-#######################################################################
+class restart_tests( unittest.TestCase ):
 
-def test01():
-    """
-    tests notrun or notdone get run upon restart
-    """
-    writefile( "param.xml", """
-        <rtest name="param">
-          <parameterize hello="world mars"/>
-          <execute> <![CDATA[
-            sleep 1
-            echo "parm=$hello"
-          ]]>
-          </execute>
-        </rtest>""" )
+    def setUp(self):
+        util.setup_test()
 
-    writefile( "FailTest.xml", """
-        <rtest name="FailTest">
-          <execute> <![CDATA[
-            sleep 1
-            echo "Exiting with failure status"
-            exit 1
-          ]]>
-          </execute>
-        </rtest>""")
+    def test_that_notrun_or_notdone_get_run_upon_restart(self):
+        ""
+        util.writefile( "param.xml", """
+            <rtest name="param">
+              <parameterize hello="world mars"/>
+              <execute> <![CDATA[
+                sleep 1
+                echo "parm=$hello"
+              ]]>
+              </execute>
+            </rtest>""" )
 
-    writefile( "DiffTest.xml", """
-        <rtest name="DiffTest">
-          <execute> <![CDATA[
-            sleep 1
-            echo "Exiting with diff status"
-            set have_diff = yes
-          ]]>
-          </execute>
-        </rtest>""")
+        util.writefile( "FailTest.xml", """
+            <rtest name="FailTest">
+              <execute> <![CDATA[
+                sleep 1
+                echo "Exiting with failure status"
+                exit 1
+              ]]>
+              </execute>
+            </rtest>""")
 
-    # run the test set but provide a false interruption
-    interrupt_vvtest_run( '-n 2', count=1 )
-    out,np,nd,nf,nn = run_vvtest( '-i' )
-    assert np+nd+nf+nn == 4
-    assert np < 2 or nd < 1 or nf < 1
+        util.writefile( "DiffTest.xml", """
+            <rtest name="DiffTest">
+              <execute> <![CDATA[
+                sleep 1
+                echo "Exiting with diff status"
+                set have_diff = yes
+              ]]>
+              </execute>
+            </rtest>""")
 
-    # restart with no keywords
-    out,np,nd,nf,nn = run_vvtest( '-n 2' )
-    out,np,nd,nf,nn = run_vvtest( '-i' )
-    assert np == 2 and nd == 1 and nf == 1 and nn == 0
+        # run the test set but provide a false interruption
+        util.interrupt_vvtest_run( '-n 2', count=1 )
+        out,np,nd,nf,nn = util.run_vvtest( '-i' )
+        assert np+nd+nf+nn == 4
+        assert np < 2 or nd < 1 or nf < 1
 
-    # restart using results keyword
-    interrupt_vvtest_run( '-n 2 -w', count=1 )
-    out,np,nd,nf,nn = run_vvtest( '-i' )
-    assert np+nd+nf+nn == 4
-    assert np < 2 or nd < 1 or nf < 1
-    out,np,nd,nf,nn = run_vvtest( '-n 2 -k notrun/notdone' )
-    out,np,nd,nf,nn = run_vvtest( '-i' )
-    assert np+nd+nf+nn == 4
+        # restart with no keywords
+        out,np,nd,nf,nn = util.run_vvtest( '-n 2' )
+        out,np,nd,nf,nn = util.run_vvtest( '-i' )
+        assert np == 2 and nd == 1 and nf == 1 and nn == 0
 
-    # none should restart now
-    out,np,nd,nf,nn = run_vvtest( '-n 2' )
-    assert np+nd+nf+nn == 0
+        # restart using results keyword
+        util.interrupt_vvtest_run( '-n 2 -w', count=1 )
+        out,np,nd,nf,nn = util.run_vvtest( '-i' )
+        assert np+nd+nf+nn == 4
+        assert np < 2 or nd < 1 or nf < 1
+        out,np,nd,nf,nn = util.run_vvtest( '-n 2 -k notrun/notdone' )
+        out,np,nd,nf,nn = util.run_vvtest( '-i' )
+        assert np+nd+nf+nn == 4
 
-    # all of them should run again (the -F has been replaced by -R but use it
-    # here to test it still works, can be removed in the future [May 2016])
-    out,np,nd,nf,nn = run_vvtest( '-n 2 -F' )
-    assert np+nd+nf+nn == 4
+        # none should restart now
+        out,np,nd,nf,nn = util.run_vvtest( '-n 2' )
+        assert np+nd+nf+nn == 0
 
+        # all of them should run again (the -F has been replaced by -R but use it
+        # here to test it still works, can be removed in the future [May 2016])
+        out,np,nd,nf,nn = util.run_vvtest( '-n 2 -F' )
+        assert np+nd+nf+nn == 4
 
-def test02():
-    """
-    check prerun file cleanout
-    """
-    writefile( "clean.xml", """
-        <rtest name="clean">
-          <execute> <![CDATA[
-            foreach f ( `ls` )
-              echo "existing file = $f"
-            end
-            set noclobber
-            echo "gen file contents" > generated_file.txt || exit 1
-          ]]>
-          </execute>
-        </rtest>""" )
+    def test_prerun_file_cleanout(self):
+        ""
+        util.writefile( "clean.xml", """
+            <rtest name="clean">
+              <execute> <![CDATA[
+                foreach f ( `ls` )
+                  echo "existing file = $f"
+                end
+                set noclobber
+                echo "gen file contents" > generated_file.txt || exit 1
+              ]]>
+              </execute>
+            </rtest>""" )
 
-    run_test02( '' )
-    run_test02( '--plat '+core_platform_name()+' --batch' )
+        self.prerun_file_cleanout( '' )
+        self.prerun_file_cleanout(
+            '--plat '+util.core_platform_name()+' --batch' )
 
-def run_test02( opt ):
-    ""
-    remove_results()
+    def prerun_file_cleanout(self, opt):
+        ""
+        util.remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( opt )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-    assert os.path.exists( tdir+'/clean/generated_file.txt' )
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+        assert os.path.exists( tdir+'/clean/generated_file.txt' )
 
-    # run again should remove the generated file
-    out,np,nd,nf,nn = run_vvtest( opt+' -R' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 0
+        # run again should remove the generated file
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 0
 
-    # running again with -m option should fail
-    out,np,nd,nf,nn = run_vvtest( opt+' -R -m' )
-    assert np == 0 and nd == 0 and nf == 1 and nn == 0
-    assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 1
+        # running again with -m option should fail
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R -m' )
+        assert np == 0 and nd == 0 and nf == 1 and nn == 0
+        assert len( util.filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 1
 
+    def test_run_then_fix_a_test_then_restart(self):
+        ""
+        self.run_then_fix_a_test_then_restart( '' )
+        self.run_then_fix_a_test_then_restart(
+            '--plat '+util.core_platform_name()+' --batch' )
 
-#######################################################################
+    def run_then_fix_a_test_then_restart(self, opt):
+        ""
+        util.writefile( 'atest.xml', """
+            <rtest name="atest">
+              <parameterize timestep="1 2"/>
+              <execute>
+                if ( "$timestep" == 2 ) then
+                  echo "fake failure"
+                  exit 1
+                else
+                  touch atest.$timestep
+                endif
+              </execute>
+              <analyze>
+                 ls ../atest.timestep=1/atest.1 || exit 1
+                 ls ../atest.timestep=2/atest.2 || exit 1
+              </analyze>
+            </rtest>""" )
 
-def test03():
-    """
-    restart with batch
-    """
-    run_test03( '' )
-    run_test03( '--plat '+core_platform_name()+' --batch' )
+        util.remove_results()
 
-def run_test03( opt ):
-    ""
-    writefile( 'atest.xml', """
-        <rtest name="atest">
-          <parameterize timestep="1 2"/>
-          <execute>
-            if ( "$timestep" == 2 ) then
-              echo "fake failure"
-              exit 1
-            else
-              touch atest.$timestep
-            endif
-          </execute>
-          <analyze>
-             ls ../atest.timestep=1/atest.1 || exit 1
-             ls ../atest.timestep=2/atest.2 || exit 1
-          </analyze>
-        </rtest>""" )
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 1 and nd == 0 and nf == 1 and nn == 1
+        tdir = os.path.abspath( util.results_dir() )
+        platname = util.platform_name( out )
 
-    remove_results()
+        # "fix" the test and restart
+        util.writefile( 'atest.xml', """
+            <rtest name="atest">
+              <parameterize timestep="1 2"/>
+              <execute>
+                touch atest.$timestep
+              </execute>
+              <analyze>
+                 ls ../atest.timestep=1/atest.1 || exit 1
+                 ls ../atest.timestep=2/atest.2 || exit 1
+              </analyze>
+            </rtest>""" )
 
-    out,np,nd,nf,nn = run_vvtest( opt )
-    assert np == 1 and nd == 0 and nf == 1 and nn == 1
-    tdir = os.path.abspath( results_dir() )
-    platname = platform_name( out )
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -k fail/notrun' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
 
-    # "fix" the test and restart
-    writefile( 'atest.xml', """
-        <rtest name="atest">
-          <parameterize timestep="1 2"/>
-          <execute>
-            touch atest.$timestep
-          </execute>
-          <analyze>
-             ls ../atest.timestep=1/atest.1 || exit 1
-             ls ../atest.timestep=2/atest.2 || exit 1
-          </analyze>
-        </rtest>""" )
-    
-    out,np,nd,nf,nn = run_vvtest( opt+' -k fail/notrun' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
+    def test_restarting_script_tests(self):
+        ""
+        util.writefile( "param.vvt", """
+            #!/usr/bin/env python
+            #VVT: parameterize : hello = world mars
+            import time
+            time.sleep(1)
+            """[1:] )
+        util.writescript( "FailTest.vvt", """
+            #!/usr/bin/env python
+            import time
+            time.sleep(1)
+            raise Exception( "fake failure" )
+            """ )
+        util.writefile( "DiffTest.vvt", """
+            #!/usr/bin/env python
+            import script_util as vvt
+            import time
+            time.sleep(1)
+            vvt.set_have_diff()
+            vvt.if_diff_exit_diff()
+            """[1:] )
 
+        # run the test set but provide a false interruption
+        util.interrupt_vvtest_run( '-n 2', count=1 )
+        out,np,nd,nf,nn = util.run_vvtest( '-i' )
+        assert np < 2 or nd < 1 or nf < 1
 
-########################################################################
+        # restart with no keywords
+        out,np,nd,nf,nn = util.run_vvtest( '-n 2' )
+        out,np,nd,nf,nn = util.run_vvtest( '-i' )
+        assert np == 2 and nd == 1 and nf == 1 and nn == 0
 
-def test04():
-    """
-    restart with script tests
-    """
-    writefile( "param.vvt", """
-        #!/usr/bin/env python
-        #VVT: parameterize : hello = world mars
-        import time
-        time.sleep(1)
-        """[1:] )
-    writescript( "FailTest.vvt", """
-        #!/usr/bin/env python
-        import time
-        time.sleep(1)
-        raise Exception( "fake failure" )
-        """ )
-    writefile( "DiffTest.vvt", """
-        #!/usr/bin/env python
-        import script_util as vvt
-        import time
-        time.sleep(1)
-        vvt.set_have_diff()
-        vvt.if_diff_exit_diff()
-        """[1:] )
+        # restart using results keyword
+        util.interrupt_vvtest_run( '-n 2 -w', count=1 )
+        out,np,nd,nf,nn = util.run_vvtest( '-i' )
+        assert np < 2 or nd < 1 or nf < 1
+        out,np,nd,nf,nn = util.run_vvtest( '-n 2 -k notrun/notdone' )
+        out,np,nd,nf,nn = util.run_vvtest( '-i' )
+        assert np+nd+nf+nn == 4
 
-    # run the test set but provide a false interruption
-    interrupt_vvtest_run( '-n 2', count=1 )
-    out,np,nd,nf,nn = run_vvtest( '-i' )
-    assert np < 2 or nd < 1 or nf < 1
+        # none should restart now
+        out,np,nd,nf,nn = util.run_vvtest( '-n 2' )
+        assert np+nd+nf+nn == 0
 
-    # restart with no keywords
-    out,np,nd,nf,nn = run_vvtest( '-n 2' )
-    out,np,nd,nf,nn = run_vvtest( '-i' )
-    assert np == 2 and nd == 1 and nf == 1 and nn == 0
+        # all of them should run again
+        out,np,nd,nf,nn = util.run_vvtest( '-n 2 -R' )
+        assert np+nd+nf+nn == 4
 
-    # restart using results keyword
-    interrupt_vvtest_run( '-n 2 -w', count=1 )
-    out,np,nd,nf,nn = run_vvtest( '-i' )
-    assert np < 2 or nd < 1 or nf < 1
-    out,np,nd,nf,nn = run_vvtest( '-n 2 -k notrun/notdone' )
-    out,np,nd,nf,nn = run_vvtest( '-i' )
-    assert np+nd+nf+nn == 4
+    def test_prerun_file_cleanout_with_a_script_test(self):
+        ""
+        util.writescript( "clean.vvt", """
+            #!/usr/bin/env python
+            import os
+            for f in os.listdir('.'):
+                print ( 'existing file = '+f )
+            assert not os.path.exists( 'generated_file.txt' )
+            fp = open( 'generated_file.txt', 'w' )
+            fp.write( 'gen file contents' )
+            fp.close()
+            """ )
 
-    # none should restart now
-    out,np,nd,nf,nn = run_vvtest( '-n 2' )
-    assert np+nd+nf+nn == 0
+        self.prerun_file_cleanout_with_a_script_test( '' )
+        self.prerun_file_cleanout_with_a_script_test(
+            '--plat '+util.core_platform_name()+' --batch' )
 
-    # all of them should run again
-    out,np,nd,nf,nn = run_vvtest( '-n 2 -R' )
-    assert np+nd+nf+nn == 4
+    def prerun_file_cleanout_with_a_script_test(self, opt):
+        ""
+        util.remove_results()
 
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+        platname = util.platform_name( out )
+        assert os.path.exists( tdir+'/clean/generated_file.txt' )
 
-def test05():
-    """
-    prerun file cleanout with script test
-    """
-    writescript( "clean.vvt", """
-        #!/usr/bin/env python
-        import os
-        for f in os.listdir('.'):
-            print ( 'existing file = '+f )
-        assert not os.path.exists( 'generated_file.txt' )
-        fp = open( 'generated_file.txt', 'w' )
-        fp.write( 'gen file contents' )
-        fp.close()
-        """ )
+        # run again should remove the generated file
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 0
 
-    run_test05( '' )
-    run_test05( '--plat '+core_platform_name()+' --batch' )
+        # running again with -m option should fail
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R -m' )
+        assert np == 0 and nd == 0 and nf == 1 and nn == 0
+        assert len( util.filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 1
 
-def run_test05( opt ):
-    ""
-    remove_results()
+    def test_prerun_file_cleanout_when_test_contains_a_soft_linked_directory(self):
+        ""
+        util.writefile( 'softdir.xml', """
+            <rtest name="softdir">
+              <link_files> subdir </link_files>
+              <execute>
+                ls subdir/afile.txt || exit 1
+              </execute>
+            </rtest>""" )
+        util.writefile( 'subdir/afile.txt', """
+            contents of file
+            """ )
 
-    out,np,nd,nf,nn = run_vvtest( opt )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-    platname = platform_name( out )
-    assert os.path.exists( tdir+'/clean/generated_file.txt' )
+        self.prerun_file_cleanout_when_test_contains_a_soft_linked_directory( '' )
+        self.prerun_file_cleanout_when_test_contains_a_soft_linked_directory(
+            '--plat '+util.core_platform_name()+' --batch' )
 
-    # run again should remove the generated file
-    out,np,nd,nf,nn = run_vvtest( opt+' -R' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 0
+    def prerun_file_cleanout_when_test_contains_a_soft_linked_directory(self, opt):
+        ""
+        util.remove_results()
 
-    # running again with -m option should fail
-    out,np,nd,nf,nn = run_vvtest( opt+' -R -m' )
-    assert np == 0 and nd == 0 and nf == 1 and nn == 0
-    assert len( filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 1
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+        assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
 
+        # run again exercises the pre-clean logic
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
 
-def test06():
-    """
-    prerun file cleanout containing a soft linked directory
-    """
-    writefile( 'softdir.xml', """
-        <rtest name="softdir">
-          <link_files> subdir </link_files>
-          <execute>
-            ls subdir/afile.txt || exit 1
-          </execute>
-        </rtest>""" )
-    writefile( 'subdir/afile.txt', """
-        contents of file
-        """ )
-
-    run_test06( '' )
-    run_test06( '--plat '+core_platform_name()+' --batch' )
-
-def run_test06( opt ):
-    ""
-    remove_results()
-
-    out,np,nd,nf,nn = run_vvtest( opt )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-    assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
-
-    # run again exercises the pre-clean logic
-    out,np,nd,nf,nn = run_vvtest( opt+' -R' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
-
-    # now with post-clean (soft links are not cleaned)
-    out,np,nd,nf,nn = run_vvtest( opt+' -R -C' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
+        # now with post-clean (soft links are not cleaned)
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R -C' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
 
 
 ########################################################################
 
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )

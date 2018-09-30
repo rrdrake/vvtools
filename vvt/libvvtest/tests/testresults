@@ -15,13 +15,10 @@ import time
 import filecmp
 import shutil
 import glob
+import unittest
 
 import testutils as util
-optD,argL = util.initialize( sys.argv )
-if 'TESTUTILS_RUNDIR' not in os.environ:
-    os.chdir( util.working_directory )
-
-from testutils import *
+from testutils import print3
 
 import libvvtest.TestSpec as TestSpec
 import libvvtest.TestSpecCreator as TestSpecCreator
@@ -33,1576 +30,1475 @@ import results
 timesfname = results.runtimes_filename
 multifname = results.multiruntimes_filename
 
-def main():
-    """
-    """
-    global argL
 
-    if len(argL) == 0:
-        argL = """attrs01
-                  results01 results02 results03 results04 results05
-                  multi01 multi02 multi03 multi04 multi05 multi06
-                  runtimes01 runtimes02
-                  list01
-                  files01 report01 report02
-                  inprogress datestamp
-                  timeouts
-               """.split()
+class test_results_tests( unittest.TestCase ):
 
-    for func in argL:
-        
-        rmallfiles()
-        time.sleep(1)
-        
+    def setUp(self):
+        ""
+        util.setup_test()
+
         # force the results files to be written locally for testing here;
         # it is used in vvtest when handling the --save-results option
         os.environ['TESTING_DIRECTORY'] = os.getcwd()
 
-        print3( '====> ', func )
-        eval( func+'()' )
-
-
-########################################################################
-
-def attrs01():
-    """
-    make & parse test attrs
-    """
-    aD = { 'xdate':int(time.time()),
-           'xtime':23, 'state':'done', 'result':'pass' }
-    s = results.make_attr_string( aD )
-    print3( s )
-    D2 = results.read_attrs( s.split() )
-    assert aD == D2, str(aD) + ' != ' + str(D2)
-
-    aD = { 'xdate':int(time.time()), 'state':'notdone' }
-    s = results.make_attr_string( aD )
-    print3( s )
-    D2 = results.read_attrs( s.split() )
-    assert aD == D2, str(aD) + ' != ' + str(D2)
-
-    aD = { 'state':'notrun' }
-    s = results.make_attr_string( aD )
-    print3( s )
-    D2 = results.read_attrs( s.split() )
-    assert aD == D2, str(aD) + ' != ' + str(D2)
-
-
-#########################################################################
-
-def results01():
-    """
-    nominal uses of the TestResults class
-    """
-    writefile( "one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-    writefile( "one/dog.xml", """
-        <rtest name="dog">
-          <execute>
-        sleep 2
-          </execute>
-        </rtest>""" )
-    writefile( "two/circle.xml", """
-        <rtest name="circle">
-          <execute>
-        sleep 3
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-
-    run_vvtest( '-i --save-results' )
-    resultsfname = glob.glob('results.*')[0]
-
-    # without a runtimes file, no tests should have been added (because the
-    # --save-results logic cannot determine the test root relative paths)
-    tr = results.TestResults( resultsfname )
-    assert tr.testdir() == tdir
-    assert len( tr.dirList() ) == 0
-    # also check that a write will produce the same file as a read
-    platname,cplrname = tr.platform(), tr.compiler()
-    mach = os.uname()[1]
-    tr.writeResults( resultsfname+'.cmp', platname, cplrname, mach, tdir )
-    assert filecmp.cmp( resultsfname, resultsfname+'.cmp' )
-
-    # now bootstrap a runtimes file, to enable root relative path determination
-    ok,out = run_cmd( resultspy + ' save' )
-    assert ok
-    # rerun vvtest with to save the test results
-    run_vvtest( '-i --save-results' )
-    tr = results.TestResults( resultsfname )
-    assert tr.testdir() == tdir
-    assert len( tr.dirList() ) == 2
-    bd = os.path.basename( os.getcwd() )
-    assert tr.dirList() == [bd+'/one',bd+'/two']
-    assert tr.testList(bd+'/one') == ['cat','dog']
-    assert tr.testList(bd+'/two') == ['circle']
-    assert tr.testAttrs(bd+'/one','cat')['xtime'] >= 1
-    assert tr.testAttrs(bd+'/one','dog')['xtime'] >= 2
-    assert tr.testAttrs(bd+'/two','circle')['xtime'] >= 3
-    # also check that a write will produce the same file as a read
-    tr.writeResults( resultsfname+'.cmp', platname, cplrname, mach, tdir )
-    assert filecmp.cmp( resultsfname, resultsfname+'.cmp' )
-
-    # write root runtimes files in the subdirectories then save results again
-    os.remove( timesfname )
-    ok,out = run_cmd( resultspy + ' save', directory='one' )
-    assert ok
-    ok,out = run_cmd( resultspy + ' save', directory='two' )
-    assert ok
-    run_vvtest( '-i --save-results' )
-    # this time the tests should have different root-relative paths
-    tr = results.TestResults( resultsfname )
-    assert tr.dirList() == ['one','two']
-    assert tr.testList('one') == ['cat','dog']
-    assert tr.testList('two') == ['circle']
-    assert tr.testAttrs('one','cat')['xtime'] >= 1
-    assert tr.testAttrs('one','dog')['xtime'] >= 2
-    assert tr.testAttrs('two','circle')['xtime'] >= 3
-    
-    # the runtimes are empty at first (no files to "results.py save")
-    tr = results.TestResults( 'one/runtimes' )
-    assert len( tr.dirList() ) == 0
-    tr = results.TestResults( 'two/runtimes' )
-    assert len( tr.dirList() ) == 0
-
-    # saving runtimes again to the subdirectories should populate the
-    # runtimes but only include tests at or below the root
-    ok,out = run_cmd( resultspy + ' save ' + os.path.abspath( resultsfname ),
-                      directory='one' )
-    assert ok
-    ok,out = run_cmd( resultspy + ' save ' + os.path.abspath( resultsfname ),
-                      directory='two' )
-    assert ok
-    assert len( filegrep( 'one/'+timesfname, 'cat.*pass' ) ) == 1
-    assert len( filegrep( 'one/'+timesfname, 'dog.*pass' ) ) == 1
-    assert len( filegrep( 'two/'+timesfname, 'circle.*pass' ) ) == 1
-    assert len( filegrep( 'one/'+timesfname, 'circle.*pass' ) ) == 0
-    assert len( filegrep( 'two/'+timesfname, 'cat.*pass' ) ) == 0
-    assert len( filegrep( 'two/'+timesfname, 'dog.*pass' ) ) == 0
-
-
-def results02():
-    """
-    save results with multiple parameterize
-    """
-    writefile( "cat.xml", """
-        <rtest name="cat">
-        <parameterize direction="front rear"/>
-        <parameterize side="left right"/>
-          <execute>
-            echo "xcat direction $direction side $side"
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 4 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-
-    # bootstrap with runtimes files then save the test results
-    ok,out = run_cmd( resultspy + ' save' )
-    assert ok
-    run_vvtest( '-i --save-results' )
-
-    resultsfname = glob.glob('results.*')[0]
-    tr = results.TestResults( resultsfname )
-
-    assert len( filegrep( resultsfname, "cat" ) ) == 4
-    assert len( filegrep( resultsfname, "cat.direction=front.side=left" ) ) == 1
-    assert len( filegrep( resultsfname, "cat.direction=front.side=right" ) ) == 1
-    assert len( filegrep( resultsfname, "cat.direction=rear.side=left" ) ) == 1
-    assert len( filegrep( resultsfname, "cat.direction=rear.side=right" ) ) == 1
-
-
-def results03():
-    """
-    save results with multiple parameterize and an analyze
-    """
-    writefile( "cat.xml", """
-        <rtest name="cat">
-        <parameterize direction="front rear"/>
-        <parameterize side="left right"/>
-          <execute>
-            echo "xcat direction $direction side $side"
-          </execute>
-          <analyze>
-            echo "analyze direction $PARAM_direction"
-            echo "analyze side $PARAM_side"
-          </analyze>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 5 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-
-    # bootstrap with runtimes files then save the test results
-    ok,out = run_cmd( resultspy + ' save' )
-    assert ok
-    run_vvtest( '-i --save-results' )
-
-    resultsfname = glob.glob('results.*')[0]
-    tr = results.TestResults( resultsfname )
-
-    assert len( filegrep( resultsfname, "cat" ) ) == 5
-    assert len( filegrep( resultsfname, "cat.direction=front.side=left" ) ) == 1
-    assert len( filegrep( resultsfname, "cat.direction=front.side=right" ) ) == 1
-    assert len( filegrep( resultsfname, "cat.direction=rear.side=left" ) ) == 1
-    assert len( filegrep( resultsfname, "cat.direction=rear.side=right" ) ) == 1
-
-
-def results04():
-    """
-    save results with zipped parameterize
-    """
-    writefile( "cat.xml", """
-        <rtest name="cat">
-        <parameterize direction="front rear"
-                      side="left right"/>
-          <execute>
-            echo "xcat direction $direction side $side"
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-
-    # bootstrap with runtimes files then save the test results
-    ok,out = run_cmd( resultspy + ' save' )
-    assert ok
-    run_vvtest( '-i --save-results' )
-
-    resultsfname = glob.glob('results.*')[0]
-    tr = results.TestResults( resultsfname )
-
-    assert len( filegrep( resultsfname, "cat" ) ) == 2
-    assert len( filegrep( resultsfname, "cat.direction=front.side=left" ) ) == 1
-    assert len( filegrep( resultsfname, "cat.direction=rear.side=right" ) ) == 1
-
-
-def results05():
-    """
-    save results with zipped parameterize and an analyze
-    """
-    writefile( "cat.xml", """
-        <rtest name="cat">
-        <parameterize direction="front rear"
-                      side="left right"/>
-          <execute>
-            echo "xcat direction $direction side $side"
-          </execute>
-          <analyze>
-            echo "analyze direction plus side $PARAM_direction_side"
-          </analyze>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-
-    # bootstrap with runtimes files then save the test results
-    ok,out = run_cmd( resultspy + ' save' )
-    assert ok
-    run_vvtest( '-i --save-results' )
-
-    resultsfname = glob.glob('results.*')[0]
-    tr = results.TestResults( resultsfname )
-
-    assert len( filegrep( resultsfname, "cat" ) ) == 3
-    assert len( filegrep( resultsfname, "cat.direction=front.side=left" ) ) == 1
-    assert len( filegrep( resultsfname, "cat.direction=rear.side=right" ) ) == 1
-
-
-########################################################################
-
-def multi01():
-    """
-    nominal use of the MultiResults class
-    """
-    writefile( "one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-    writefile( "one/dog.xml", """
-        <rtest name="dog">
-          <execute>
-        sleep 2
-          </execute>
-        </rtest>""" )
-    writefile( "two/circle.xml", """
-        <rtest name="circle">
-          <execute>
-        sleep 3
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-
-    # bootstrap with runtimes files then save the test results
-    ok,out = run_cmd( resultspy + ' save', directory='one' )
-    assert ok
-    ok,out = run_cmd( resultspy + ' save', directory='two' )
-    assert ok
-    run_vvtest( '-i --save-results' )
-
-    resultsfname = glob.glob('results.*')[0]
-    tr = results.TestResults( resultsfname )
-    platname,cplrname = tr.platform(), tr.compiler()
-
-    ok,out = run_cmd( resultspy + ' merge ' + resultsfname )
-    assert ok
-
-    assert os.path.exists(multifname)
-    mr = results.MultiResults()
-    mr.readFile( multifname )
-    assert len( filegrep( multifname, 'cat.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
-    assert len( filegrep( multifname, 'dog.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
-    assert len( filegrep( multifname, 'circle.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
-
-    # create a second results file with a different platform/compiler name
-    tr = results.TestResults( resultsfname )
-    resultsfname2 = 'results2'
-    mach = os.uname()[1]
-    tr.writeResults( resultsfname2, 'Plat2', 'Cplr2', mach, tdir )
-
-    # merge a second platform/compiler file into first
-    ok,out = run_cmd( resultspy + ' merge -x '+resultsfname2 )
-    assert ok
-    assert len( filegrep( multifname, 'cat.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
-    assert len( filegrep( multifname, 'dog.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
-    assert len( filegrep( multifname, 'circle.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
-    assert len( filegrep( multifname, 'cat.*Plat2'+'.*Cplr2'+'.*pass' ) ) == 1
-    assert len( filegrep( multifname, 'dog.*Plat2'+'.*Cplr2'+'.*pass' ) ) == 1
-    assert len( filegrep( multifname, 'circle.*Plat2'+'.*Cplr2'+'.*pass' ) ) == 1
-
-    # spot check the run time of the 'dog' test
-    mr = results.MultiResults()
-    mr.readFile( multifname )
-    aD = mr.testAttrs( 'one', 'dog', platname+'/'+cplrname )
-    t1 = aD.get( 'xtime', -1 )
-    assert t1 > 0 and t1 < 4
-
-    # increase the run time of one test and run vvtest again
-    writefile( "one/dog.xml", """
-        <rtest name="dog">
-          <execute>
-        sleep 4
-          </execute>
-        </rtest>""" )
-    out,np,nd,nf,nn = run_vvtest( '-w' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-
-    # merge over the top of the multi platform file
-    run_vvtest( '-i --save-results' )
-    ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
-    assert ok
-    # now check the 'dog' test time
-    mr = results.MultiResults()
-    mr.readFile( multifname )
-    aD = mr.testAttrs( 'one', 'dog', platname+'/'+cplrname )
-    t2 = aD.get( 'xtime', -1 )
-    assert t2 > t1
-
-    # check that the other 'dog' time did not get overwritten
-    aD = mr.testAttrs( 'one', 'dog', 'Plat2/Cplr2' )
-    t3 = aD.get( 'xtime', -1 )
-    assert t2 > t3
-
-
-########################################################################
-
-def multi02():
-    """
-    merging multiplat files by test date and by globbing
-    """
-    writefile( "one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-    writefile( "one/dog.xml", """
-        <rtest name="dog">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-
-    # create a multiplatform timings file
-    run_cmd( resultspy + ' save' )
-    run_vvtest( '-i --save-results' )
-    resultsfname = glob.glob('results.*')[0]
-    ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
-    assert ok
-
-    # get the platform name & compiler
-    tr = results.TestResults( resultsfname )
-    platname,cplrname = tr.platform(), tr.compiler()
-    platcplr = platname+'/'+cplrname
-
-    time.sleep(1)  # force a gap between vvtest invocations
-
-    # make the test diff this time
-    writefile( "one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 1
-        set have_diff = 1
-          </execute>
-        </rtest>""" )
-    # also remove the dog test
-    os.remove( "one/dog.xml" )
-
-    out,np,nd,nf,nn = run_vvtest('-w')
-    assert np == 0 and nd == 1 and nf == 0 and nn == 0
-
-    # save a second results file
-    run_vvtest( '-i --save-results --results-tag diffs' )
-    results2fname = None
-    for f in glob.glob('results.*'):
-      if f != resultsfname:
-        results2fname = f
-        break
-    assert results2fname and resultsfname != results2fname
-
-    # merge the second results file into the timings file
-    ok,out = run_cmd( resultspy + ' merge -x '+results2fname )
-    assert ok
-
-    # check that the timings file contains the new test results
-    mr = results.MultiResults()
-    mr.readFile( multifname )
-    root = os.path.basename( os.getcwd() )
-    catD = mr.testAttrs( root+'/one', 'cat', platcplr )
-    assert catD.get('result','') == 'diff'
-
-    # merge the first results file into the timings file
-    ok,out = run_cmd( resultspy + ' merge -x '+resultsfname )
-    assert ok
-
-    # check that the timings file does NOT contain the first test results
-    mr = results.MultiResults()
-    mr.readFile( multifname )
-    catD = mr.testAttrs( root+'/one', 'cat', platcplr )
-    assert catD.get('result','') == 'diff'
-
-    # now force a merge from the first results file
-    ok,out = run_cmd( resultspy + ' merge -w '+resultsfname )
-    assert ok
-
-    # check that the timings file DOES contain the first test results
-    mr = results.MultiResults()
-    mr.readFile( multifname )
-    catD = mr.testAttrs( root+'/one', 'cat', platcplr )
-    assert catD.get('result','') == 'pass'
-
-    # modify the name of the old results file to test the -d option
-    nL = resultsfname.split('.')
-    tm = time.mktime( time.strptime( nL[1], '%Y_%m_%d' ) )
-    d5 = time.strftime( "%Y_%m_%d", time.localtime( tm - 5*24*60*60 ) )
-    newfname = '.'.join( [nL[0],d5]+nL[2:] )
-    os.rename( resultsfname, newfname )
-    resultsfname = newfname
-
-    # create the timings file with the newest results
-    os.remove( multifname )
-    ok,out = run_cmd( resultspy + ' merge -x '+results2fname )
-    assert ok
-
-    # the timings file should contain the new results and not contain the dog test
-    mr = results.MultiResults()
-    mr.readFile( multifname )
-    catD = mr.testAttrs( root+'/one', 'cat', platcplr )
-    assert catD.get('result','') == 'diff'
-    dogD = mr.testAttrs( root+'/one', 'dog', platcplr )
-    assert len(dogD) == 0
-
-    # merge again with -d but should still just pick up latest results
-    ok,out = run_cmd( resultspy + ' merge -d 2 -g results.*' )
-    assert ok
-
-    # the timings file should still contain only the latest results
-    mr = results.MultiResults()
-    mr.readFile( multifname )
-    catD = mr.testAttrs( root+'/one', 'cat', platcplr )
-    assert catD.get('result','') == 'diff'
-    dogD = mr.testAttrs( root+'/one', 'dog', platcplr )
-    assert len(dogD) == 0
-
-    # now merge from 6 days ago to catch the old results file
-    ok,out =run_cmd( resultspy + ' merge -d 7 -g results.*' )
-    assert ok
-
-    # should be the latest cat results but the old dog test should appear
-    mr = results.MultiResults()
-    mr.readFile( multifname )
-    catD = mr.testAttrs( root+'/one', 'cat', platcplr )
-    assert catD.get('result','') == 'diff'
-    dogD = mr.testAttrs( root+'/one', 'dog', platcplr )
-    assert dogD.get('result','') == 'pass'
-
-
-########################################################################
-
-def multi03():
-    """
-    test merging a multiplat file into another multiplat file
-    """
-    writefile( "tsrc/one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-    writefile( "tsrc/one/dog.xml", """
-        <rtest name="dog">
-          <execute>
-        sleep 2
-          </execute>
-        </rtest>""" )
-    writefile( "tsrc/two/circle.xml", """
-        <rtest name="circle">
-          <execute>
-        sleep 3
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest( 'tsrc' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-
-    run_cmd( resultspy + ' save', directory='tsrc' )
-
-    os.mkdir( 'testing' )
-    os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
-
-    run_vvtest( '-i --save-results' )
-    resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
-
-    # create initial multiplat file
-    ok,out = run_cmd( resultspy + ' merge -x '+ resultsfname,
-                      directory='testing' )
-    assert ok
-    assert os.path.exists( os.path.join( 'testing', multifname ) )
-
-    # create a second results file with a different platform/compiler name
-    tr = results.TestResults( resultsfname )
-    resultsfname2 = os.path.abspath( 'testing/results2' )
-    mach = os.uname()[1]
-    tr.writeResults( resultsfname2, 'Plat2', 'Cplr2', mach, tdir )
-
-    # create second multiplat file
-    ok,out = run_cmd( resultspy + ' merge -x '+resultsfname2 )
-    assert ok
-
-    # merge second multiplat into first multiplat
-    ok,out = run_cmd( resultspy + ' merge -x '+ os.path.abspath(multifname),
-                      directory='testing' )
-    assert ok
-
-    # now check the combined multiplat file
-    mr = results.MultiResults()
-    mr.readFile( 'testing/'+multifname )
-    assert mr.dirList() == ['tsrc/one','tsrc/two']
-    assert mr.testList('tsrc/one') == ['cat','dog']
-    assert mr.testList('tsrc/two') == ['circle']
-    assert len( mr.platformList('tsrc/one','cat') ) == 2
-    assert len( mr.platformList('tsrc/one','dog') ) == 2
-    assert len( mr.platformList('tsrc/two','circle') ) == 2
-
-
-#######################################################################
-
-def multi04():
-    """
-    test creating source tree runtimes files
-    """
-    writefile( "tsrc/one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-    writefile( "tsrc/one/dog.xml", """
-        <rtest name="dog">
-          <execute>
-        sleep 2
-          </execute>
-        </rtest>""" )
-    writefile( "tsrc/two/circle.xml", """
-        <rtest name="circle">
-          <execute>
-        sleep 3
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest( 'tsrc' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-    run_cmd( resultspy + ' save', directory='tsrc' )  # bootstrap runtimes
-
-    os.mkdir( 'testing' )
-    os.environ['TESTING_DIRECTORY'] = os.path.join( os.getcwd(), 'testing' )
-
-    run_vvtest( '-i --save-results' )
-    resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
-
-    # use the results.py script to save the results to the runtimes file
-    ok,out = run_cmd( resultspy + ' save ' + resultsfname, directory='tsrc' )
-    assert ok
-
-    tr = results.TestResults( 'tsrc/'+timesfname )
-    assert tr.dirList() == ['tsrc/one','tsrc/two']
-    assert tr.testList('tsrc/one') == ['cat','dog']
-    assert tr.testList('tsrc/two') == ['circle']
-
-    # hold on to the runtime for the cat test
-    tr = results.TestResults( resultsfname )
-    cat_t1 = tr.testAttrs( 'tsrc/one', 'cat' )['xtime']
-
-    # increase the run time of one test and run vvtest again
-    writefile( "tsrc/one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 4
-          </execute>
-        </rtest>""" )
-    out,np,nd,nf,nn = run_vvtest( '-w -k cat tsrc' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    run_vvtest( '-i --save-results --results-tag 2nd' )
-
-    rfn2 = os.path.abspath( glob.glob( 'testing/results.*.2nd' )[0] )
-
-    # extract the runtime for the second cat test
-    tr = results.TestResults( rfn2 )
-    cat_t2 = tr.testAttrs( 'tsrc/one', 'cat' )['xtime']
-    assert cat_t1 < cat_t2
-
-    # merge two results files into the runtimes file
-    ok,out = run_cmd( resultspy + ' save ' + rfn2 + ' ' + resultsfname,
-                      directory='tsrc' )
-    assert ok
-
-    tr = results.TestResults( 'tsrc/'+timesfname )
-    assert tr.dirList() == ['tsrc/one','tsrc/two']
-    assert tr.testList('tsrc/one') == ['cat','dog']
-    assert tr.testList('tsrc/two') == ['circle']
-    # two instances of the cat test means the timings should be averaged
-    assert tr.testAttrs( 'tsrc/one', 'cat' )['xtime'] == int((cat_t1+cat_t2)/2)
-
-    # modify a test then generate a multi platform results file
-    writefile( "tsrc/two/circle.xml", """
-        <rtest name="circle">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-    out,np,nd,nf,nn = run_vvtest( '-w tsrc' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    run_vvtest( '-i --save-results --results-tag 3rd' )
-    rfn3 = os.path.abspath( glob.glob( 'testing/results.*.3rd' )[0] )
-    # force the results to be a different platform/compiler
-    tr = results.TestResults( rfn3 )
-    mach = os.uname()[1]
-    tr.writeResults( rfn3, 'Plat2', 'Cplr2', mach, tdir )
-    ok,out = run_cmd( resultspy + ' merge '+rfn3, directory='testing' )
-    assert ok
-
-    # save off the circle runtime from first execution
-    tr = results.TestResults( 'tsrc/'+timesfname )
-    circ1 = tr.testAttrs( 'tsrc/two', 'circle' )['xtime']
-
-    # update the test src runtimes file to include the multiplat contents
-    mf = os.path.abspath( 'testing/'+multifname )
-    ok,out = run_cmd( resultspy + ' save '+mf, directory='tsrc' )
-    assert ok
-
-    tr = results.TestResults( 'tsrc/'+timesfname )
-    circ2 = tr.testAttrs( 'tsrc/two', 'circle' )['xtime']
-    assert circ1 != circ2
-    mr = results.MultiResults( 'testing/'+multifname )
-    assert mr.testAttrs( 'tsrc/two', 'circle', 'Plat2/Cplr2' )['xtime'] == circ2
-
-
-def multi05():
-    """
-    test merging using the default (maximum runtime) method
-    """
-    writefile( "one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 3
-          </execute>
-        </rtest>""" )
-    writefile( "one/dog.xml", """
-        <rtest name="dog">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-    run_cmd( resultspy + ' save' )  # bootstrap runtimes
-
-    # create a multiplatform timings file
-    run_vvtest( '-i --save-results' )
-    resultsfname = os.path.abspath( glob.glob('results.*')[0] )
-    ok,out = run_cmd( resultspy + ' merge '+resultsfname )
-    assert ok
-
-    # get the platform name & compiler
-    tr = results.TestResults( resultsfname )
-    platname,cplrname = tr.platform(), tr.compiler()
-    platcplr = platname+'/'+cplrname
-
-    time.sleep(1)  # force a gap between vvtest invocations
-
-    # make the test run faster
-    writefile( "one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest('-w')
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-    # save a second results file
-    run_vvtest( '-i --save-results --results-tag faster' )
-    results2fname = None
-    for f in glob.glob('results.*'):
-        f = os.path.abspath(f)
-        if f != resultsfname:
+    def test_make_and_parse_test_attributes(self):
+        ""
+        aD = { 'xdate':int(time.time()),
+               'xtime':23, 'state':'done', 'result':'pass' }
+        s = results.make_attr_string( aD )
+        print3( s )
+        D2 = results.read_attrs( s.split() )
+        assert aD == D2, str(aD) + ' != ' + str(D2)
+
+        aD = { 'xdate':int(time.time()), 'state':'notdone' }
+        s = results.make_attr_string( aD )
+        print3( s )
+        D2 = results.read_attrs( s.split() )
+        assert aD == D2, str(aD) + ' != ' + str(D2)
+
+        aD = { 'state':'notrun' }
+        s = results.make_attr_string( aD )
+        print3( s )
+        D2 = results.read_attrs( s.split() )
+        assert aD == D2, str(aD) + ' != ' + str(D2)
+
+    def test_nominal_uses_of_TestResults_class(self):
+        ""
+        util.writefile( "one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+        util.writefile( "one/dog.xml", """
+            <rtest name="dog">
+              <execute>
+            sleep 2
+              </execute>
+            </rtest>""" )
+        util.writefile( "two/circle.xml", """
+            <rtest name="circle">
+              <execute>
+            sleep 3
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+
+        util.run_vvtest( '-i --save-results' )
+        resultsfname = glob.glob('results.*')[0]
+
+        # without a runtimes file, no tests should have been added (because the
+        # --save-results logic cannot determine the test root relative paths)
+        tr = results.TestResults( resultsfname )
+        assert tr.testdir() == tdir
+        assert len( tr.dirList() ) == 0
+        # also check that a write will produce the same file as a read
+        platname,cplrname = tr.platform(), tr.compiler()
+        mach = os.uname()[1]
+        tr.writeResults( resultsfname+'.cmp', platname, cplrname, mach, tdir )
+        assert filecmp.cmp( resultsfname, resultsfname+'.cmp' )
+
+        # now bootstrap a runtimes file, to enable root relative path determination
+        ok,out = util.run_cmd( util.resultspy + ' save' )
+        assert ok
+        # rerun vvtest with to save the test results
+        util.run_vvtest( '-i --save-results' )
+        tr = results.TestResults( resultsfname )
+        assert tr.testdir() == tdir
+        assert len( tr.dirList() ) == 2
+        bd = os.path.basename( os.getcwd() )
+        assert tr.dirList() == [bd+'/one',bd+'/two']
+        assert tr.testList(bd+'/one') == ['cat','dog']
+        assert tr.testList(bd+'/two') == ['circle']
+        assert tr.testAttrs(bd+'/one','cat')['xtime'] >= 1
+        assert tr.testAttrs(bd+'/one','dog')['xtime'] >= 2
+        assert tr.testAttrs(bd+'/two','circle')['xtime'] >= 3
+        # also check that a write will produce the same file as a read
+        tr.writeResults( resultsfname+'.cmp', platname, cplrname, mach, tdir )
+        assert filecmp.cmp( resultsfname, resultsfname+'.cmp' )
+
+        # write root runtimes files in the subdirectories then save results again
+        os.remove( timesfname )
+        ok,out = util.run_cmd( util.resultspy + ' save', directory='one' )
+        assert ok
+        ok,out = util.run_cmd( util.resultspy + ' save', directory='two' )
+        assert ok
+        util.run_vvtest( '-i --save-results' )
+        # this time the tests should have different root-relative paths
+        tr = results.TestResults( resultsfname )
+        assert tr.dirList() == ['one','two']
+        assert tr.testList('one') == ['cat','dog']
+        assert tr.testList('two') == ['circle']
+        assert tr.testAttrs('one','cat')['xtime'] >= 1
+        assert tr.testAttrs('one','dog')['xtime'] >= 2
+        assert tr.testAttrs('two','circle')['xtime'] >= 3
+
+        # the runtimes are empty at first (no files to "results.py save")
+        tr = results.TestResults( 'one/runtimes' )
+        assert len( tr.dirList() ) == 0
+        tr = results.TestResults( 'two/runtimes' )
+        assert len( tr.dirList() ) == 0
+
+        # saving runtimes again to the subdirectories should populate the
+        # runtimes but only include tests at or below the root
+        ok,out = util.run_cmd( util.resultspy + ' save ' + os.path.abspath( resultsfname ),
+                          directory='one' )
+        assert ok
+        ok,out = util.run_cmd( util.resultspy + ' save ' + os.path.abspath( resultsfname ),
+                          directory='two' )
+        assert ok
+        assert len( util.filegrep( 'one/'+timesfname, 'cat.*pass' ) ) == 1
+        assert len( util.filegrep( 'one/'+timesfname, 'dog.*pass' ) ) == 1
+        assert len( util.filegrep( 'two/'+timesfname, 'circle.*pass' ) ) == 1
+        assert len( util.filegrep( 'one/'+timesfname, 'circle.*pass' ) ) == 0
+        assert len( util.filegrep( 'two/'+timesfname, 'cat.*pass' ) ) == 0
+        assert len( util.filegrep( 'two/'+timesfname, 'dog.*pass' ) ) == 0
+
+    def test_save_results_with_multiple_parameterize(self):
+        ""
+        util.writefile( "cat.xml", """
+            <rtest name="cat">
+            <parameterize direction="front rear"/>
+            <parameterize side="left right"/>
+              <execute>
+                echo "xcat direction $direction side $side"
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+
+        # bootstrap with runtimes files then save the test results
+        ok,out = util.run_cmd( util.resultspy + ' save' )
+        assert ok
+        util.run_vvtest( '-i --save-results' )
+
+        resultsfname = glob.glob('results.*')[0]
+        tr = results.TestResults( resultsfname )
+
+        assert len( util.filegrep( resultsfname, "cat" ) ) == 4
+        assert len( util.filegrep( resultsfname, "cat.direction=front.side=left" ) ) == 1
+        assert len( util.filegrep( resultsfname, "cat.direction=front.side=right" ) ) == 1
+        assert len( util.filegrep( resultsfname, "cat.direction=rear.side=left" ) ) == 1
+        assert len( util.filegrep( resultsfname, "cat.direction=rear.side=right" ) ) == 1
+
+    def test_save_results_with_multiple_parameterize_and_an_analyze(self):
+        ""
+        util.writefile( "cat.xml", """
+            <rtest name="cat">
+            <parameterize direction="front rear"/>
+            <parameterize side="left right"/>
+              <execute>
+                echo "xcat direction $direction side $side"
+              </execute>
+              <analyze>
+                echo "analyze direction $PARAM_direction"
+                echo "analyze side $PARAM_side"
+              </analyze>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 5 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+
+        # bootstrap with runtimes files then save the test results
+        ok,out = util.run_cmd( util.resultspy + ' save' )
+        assert ok
+        util.run_vvtest( '-i --save-results' )
+
+        resultsfname = glob.glob('results.*')[0]
+        tr = results.TestResults( resultsfname )
+
+        assert len( util.filegrep( resultsfname, "cat" ) ) == 5
+        assert len( util.filegrep( resultsfname, "cat.direction=front.side=left" ) ) == 1
+        assert len( util.filegrep( resultsfname, "cat.direction=front.side=right" ) ) == 1
+        assert len( util.filegrep( resultsfname, "cat.direction=rear.side=left" ) ) == 1
+        assert len( util.filegrep( resultsfname, "cat.direction=rear.side=right" ) ) == 1
+
+    def test_save_results_with_zipped_parameterize(self):
+        ""
+        util.writefile( "cat.xml", """
+            <rtest name="cat">
+            <parameterize direction="front rear"
+                          side="left right"/>
+              <execute>
+                echo "xcat direction $direction side $side"
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+
+        # bootstrap with runtimes files then save the test results
+        ok,out = util.run_cmd( util.resultspy + ' save' )
+        assert ok
+        util.run_vvtest( '-i --save-results' )
+
+        resultsfname = glob.glob('results.*')[0]
+        tr = results.TestResults( resultsfname )
+
+        assert len( util.filegrep( resultsfname, "cat" ) ) == 2
+        assert len( util.filegrep( resultsfname, "cat.direction=front.side=left" ) ) == 1
+        assert len( util.filegrep( resultsfname, "cat.direction=rear.side=right" ) ) == 1
+
+    def test_save_results_with_zipped_parameterize_and_an_analyze(self):
+        ""
+        util.writefile( "cat.xml", """
+            <rtest name="cat">
+            <parameterize direction="front rear"
+                          side="left right"/>
+              <execute>
+                echo "xcat direction $direction side $side"
+              </execute>
+              <analyze>
+                echo "analyze direction plus side $PARAM_direction_side"
+              </analyze>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+
+        # bootstrap with runtimes files then save the test results
+        ok,out = util.run_cmd( util.resultspy + ' save' )
+        assert ok
+        util.run_vvtest( '-i --save-results' )
+
+        resultsfname = glob.glob('results.*')[0]
+        tr = results.TestResults( resultsfname )
+
+        assert len( util.filegrep( resultsfname, "cat" ) ) == 3
+        assert len( util.filegrep( resultsfname, "cat.direction=front.side=left" ) ) == 1
+        assert len( util.filegrep( resultsfname, "cat.direction=rear.side=right" ) ) == 1
+
+    def test_nominal_use_of_MultiResults_class(self):
+        ""
+        util.writefile( "one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+        util.writefile( "one/dog.xml", """
+            <rtest name="dog">
+              <execute>
+            sleep 2
+              </execute>
+            </rtest>""" )
+        util.writefile( "two/circle.xml", """
+            <rtest name="circle">
+              <execute>
+            sleep 3
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+
+        # bootstrap with runtimes files then save the test results
+        ok,out = util.run_cmd( util.resultspy + ' save', directory='one' )
+        assert ok
+        ok,out = util.run_cmd( util.resultspy + ' save', directory='two' )
+        assert ok
+        util.run_vvtest( '-i --save-results' )
+
+        resultsfname = glob.glob('results.*')[0]
+        tr = results.TestResults( resultsfname )
+        platname,cplrname = tr.platform(), tr.compiler()
+
+        ok,out = util.run_cmd( util.resultspy + ' merge ' + resultsfname )
+        assert ok
+
+        assert os.path.exists(multifname)
+        mr = results.MultiResults()
+        mr.readFile( multifname )
+        assert len( util.filegrep( multifname, 'cat.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
+        assert len( util.filegrep( multifname, 'dog.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
+        assert len( util.filegrep( multifname, 'circle.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
+
+        # create a second results file with a different platform/compiler name
+        tr = results.TestResults( resultsfname )
+        resultsfname2 = 'results2'
+        mach = os.uname()[1]
+        tr.writeResults( resultsfname2, 'Plat2', 'Cplr2', mach, tdir )
+
+        # merge a second platform/compiler file into first
+        ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname2 )
+        assert ok
+        assert len( util.filegrep( multifname, 'cat.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
+        assert len( util.filegrep( multifname, 'dog.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
+        assert len( util.filegrep( multifname, 'circle.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
+        assert len( util.filegrep( multifname, 'cat.*Plat2'+'.*Cplr2'+'.*pass' ) ) == 1
+        assert len( util.filegrep( multifname, 'dog.*Plat2'+'.*Cplr2'+'.*pass' ) ) == 1
+        assert len( util.filegrep( multifname, 'circle.*Plat2'+'.*Cplr2'+'.*pass' ) ) == 1
+
+        # spot check the run time of the 'dog' test
+        mr = results.MultiResults()
+        mr.readFile( multifname )
+        aD = mr.testAttrs( 'one', 'dog', platname+'/'+cplrname )
+        t1 = aD.get( 'xtime', -1 )
+        assert t1 > 0 and t1 < 4
+
+        # increase the run time of one test and run vvtest again
+        util.writefile( "one/dog.xml", """
+            <rtest name="dog">
+              <execute>
+            sleep 4
+              </execute>
+            </rtest>""" )
+        out,np,nd,nf,nn = util.run_vvtest( '-w' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+        # merge over the top of the multi platform file
+        util.run_vvtest( '-i --save-results' )
+        ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
+        assert ok
+        # now check the 'dog' test time
+        mr = results.MultiResults()
+        mr.readFile( multifname )
+        aD = mr.testAttrs( 'one', 'dog', platname+'/'+cplrname )
+        t2 = aD.get( 'xtime', -1 )
+        assert t2 > t1
+
+        # check that the other 'dog' time did not get overwritten
+        aD = mr.testAttrs( 'one', 'dog', 'Plat2/Cplr2' )
+        t3 = aD.get( 'xtime', -1 )
+        assert t2 > t3
+
+    def test_merging_multiplatform_files_by_test_date_and_globbing(self):
+        ""
+        util.writefile( "one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+        util.writefile( "one/dog.xml", """
+            <rtest name="dog">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+
+        # create a multiplatform timings file
+        util.run_cmd( util.resultspy + ' save' )
+        util.run_vvtest( '-i --save-results' )
+        resultsfname = glob.glob('results.*')[0]
+        ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
+        assert ok
+
+        # get the platform name & compiler
+        tr = results.TestResults( resultsfname )
+        platname,cplrname = tr.platform(), tr.compiler()
+        platcplr = platname+'/'+cplrname
+
+        time.sleep(1)  # force a gap between vvtest invocations
+
+        # make the test diff this time
+        util.writefile( "one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 1
+            set have_diff = 1
+              </execute>
+            </rtest>""" )
+        # also remove the dog test
+        os.remove( "one/dog.xml" )
+
+        out,np,nd,nf,nn = util.run_vvtest('-w')
+        assert np == 0 and nd == 1 and nf == 0 and nn == 0
+
+        # save a second results file
+        util.run_vvtest( '-i --save-results --results-tag diffs' )
+        results2fname = None
+        for f in glob.glob('results.*'):
+          if f != resultsfname:
             results2fname = f
             break
-    assert results2fname and resultsfname != results2fname
-
-    # get the old runtimes from the multiplat file
-    mr = results.MultiResults( multifname )
-    root = os.path.basename( os.getcwd() )
-    oldcatD = mr.testAttrs( root+'/one', 'cat', platcplr )
-    olddogD = mr.testAttrs( root+'/one', 'dog', platcplr )
-
-    # merge the second results file into the timings file
-    ok,out = run_cmd( resultspy + ' merge '+results2fname )
-    assert ok
-
-    # check that the timings file contains the old test results
-    mr = results.MultiResults( multifname )
-    catD = mr.testAttrs( root+'/one', 'cat', platcplr )
-    assert catD.get('xtime','') == oldcatD.get('xtime','no')
-    dogD = mr.testAttrs( root+'/one', 'dog', platcplr )
-    assert dogD.get('xtime','') == olddogD.get('xtime','no')
-
-    # make a test run slower
-    writefile( "one/dog.xml", """
-        <rtest name="dog">
-          <execute>
-        sleep 3
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest('-w')
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-    # save a third results file
-    run_vvtest( '-i --save-results --results-tag slower' )
-    results3fname = None
-    for f in glob.glob('results.*slower*'):
-        f = os.path.abspath(f)
-        if f != resultsfname:
-            results3fname = f
-            break
-    assert results3fname and results2fname != results3fname
-
-    # merge the third results file into the timings file
-    ok,out = run_cmd( resultspy + ' merge '+results3fname )
-    assert ok
-
-    # check that the timings file contains new test results for the slower test
-    mr = results.MultiResults( multifname )
-    newcatD = mr.testAttrs( root+'/one', 'cat', platcplr )
-    assert newcatD.get('xtime','') == catD.get('xtime','no')
-    newdogD = mr.testAttrs( root+'/one', 'dog', platcplr )
-    assert newdogD.get('xtime','') > dogD.get('xtime','no')
-
-    # check that including all the results files does not change anything
-    ok,out = run_cmd( resultspy + ' merge -d 6 -g results.*' )
-    assert ok
-
-    mr = results.MultiResults( multifname )
-    cD = mr.testAttrs( root+'/one', 'cat', platcplr )
-    assert cD.get('xtime','') == newcatD.get('xtime','no')
-    dD = mr.testAttrs( root+'/one', 'dog', platcplr )
-    assert dD.get('xtime','') == newdogD.get('xtime','no')
-
-
-def multi06():
-    """
-    test merging using more than one -g option
-    """
-    writefile( "one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 3
-          </execute>
-        </rtest>""" )
-    writefile( "one/dog.xml", """
-        <rtest name="dog">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-    run_cmd( resultspy + ' save' )  # bootstrap runtimes
-
-    # create a multiplatform timings file
-    run_vvtest( '-i --save-results --results-tag first' )
-    resultsfname = os.path.abspath( glob.glob('results.*')[0] )
-
-    # get the platform name & compiler
-    tr = results.TestResults( resultsfname )
-    platname,cplrname = tr.platform(), tr.compiler()
-    platcplr = platname+'/'+cplrname
-
-    time.sleep(1)  # force a gap between vvtest invocations
-
-    # make the test run faster
-    writefile( "one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest('-w')
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-    # save a second results file
-    run_vvtest( '-i --save-results --results-tag second' )
-    results2fname = os.path.abspath( glob.glob('results.*.second')[0] )
-    assert results2fname != resultsfname
-
-    time.sleep(1)  # force a gap between vvtest invocations
-
-    # make the test run slower
-    writefile( "one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 6
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest('-w')
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-    # save a second results file
-    run_vvtest( '-i --save-results --results-tag third' )
-    results3fname = os.path.abspath( glob.glob('results.*.third')[0] )
-    assert results3fname != resultsfname and results3fname != results2fname
-
-    # merge the first and second results files
-    ok,out = run_cmd( resultspy + ' merge' + \
-                      ' -g results.*.first -g results.*.second' )
-    assert ok
-
-    # check that the timings file took the max
-    mr = results.MultiResults( multifname )
-    root = os.path.basename( os.getcwd() )
-    catD = mr.testAttrs( root+'/one', 'cat', platcplr )
-    assert abs( catD.get('xtime') - 3 ) < 2
-
-    # again but merge the second two results files
-    os.remove( multifname )
-    ok,out = run_cmd( resultspy + ' merge' + \
-                      ' -g results.*.third -g results.*.second' )
-    assert ok
-    mr = results.MultiResults( multifname )
-    catD = mr.testAttrs( root+'/one', 'cat', platcplr )
-    assert abs( catD.get('xtime') - 6 ) < 2
-
-    # now merge by order on the command line
-    os.remove( multifname )
-    ok,out = run_cmd( resultspy + ' merge -w' + \
-                      ' -g results.*.third -g results.*.first' )
-    assert ok
-    mr = results.MultiResults( multifname )
-    catD = mr.testAttrs( root+'/one', 'cat', platcplr )
-    assert catD.get('xtime') < 6
-
-
-########################################################################
-
-def runtimes01():
-    """
-    test source tree runtimes files within subdirectories
-    """
-    writefile( "tsrc/one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-    writefile( "tsrc/one/dog.xml", """
-        <rtest name="dog">
-          <execute>
-        sleep 2
-          </execute>
-        </rtest>""" )
-    writefile( "tsrc/two/circle.xml", """
-        <rtest name="circle">
-          <execute>
-        sleep 3
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest( 'tsrc' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-
-    os.mkdir( 'testing' )
-    os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
-
-    # write a (blank) runtimes file into test source to bootstrap
-    run_cmd( resultspy + ' save', directory='tsrc' )
-
-    # save the results
-    run_vvtest( '-i --save-results' )
-    resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
-
-    # create a runtimes file in a subdirectory
-    ok,out = run_cmd( resultspy + ' save ' + resultsfname,
-                      directory='tsrc/one' )
-    assert ok
-
-    tr = results.TestResults( 'tsrc/'+timesfname )
-    assert len(tr.dirList()) == 0
-    tr.readResults( 'tsrc/one/'+timesfname )
-    assert len(tr.dirList()) == 1
-    assert tr.testList('tsrc/one') == ['cat','dog']
-    assert not os.path.exists('tsrc/two/'+timesfname)
-
-    # add a test to 'one', rerun the tests, then save runtimes at the top level
-    writefile( "tsrc/one/ferret.xml", """
-        <rtest name="ferret">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest( '-w tsrc' )
-    assert np == 4 and nd == 0 and nf == 0 and nn == 0
-
-    run_vvtest( '-i --save-results' )
-    ok,out = run_cmd( resultspy + ' save ' + resultsfname, directory='tsrc' )
-    assert ok
-
-    tr = results.TestResults( 'tsrc/'+timesfname )
-    assert tr.dirList() == ['tsrc/one','tsrc/two']
-    assert tr.testList('tsrc/one') == ['cat','dog','ferret']
-    assert tr.testList('tsrc/two') == ['circle']
-    tr.readResults( 'tsrc/one/'+timesfname )
-    assert len(tr.dirList()) == 1
-    assert tr.testList('tsrc/one') == ['cat','dog','ferret']
-    assert not os.path.exists('tsrc/two/'+timesfname)
-
-
-def runtimes02():
-    """
-    test saving source tree runtimes files without merging (-w option)
-    """
-    writefile( "tsrc/one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-    writefile( "tsrc/one/dog.xml", """
-        <rtest name="dog">
-          <execute>
-        sleep 2
-          </execute>
-        </rtest>""" )
-    writefile( "tsrc/two/circle.xml", """
-        <rtest name="circle">
-          <execute>
-        sleep 3
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest( 'tsrc' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-
-    os.mkdir( 'testing' )
-    os.environ['TESTING_DIRECTORY'] = os.path.join( os.getcwd(), 'testing' )
-
-    # write a (blank) runtimes file into test source to bootstrap
-    run_cmd( resultspy + ' save', directory='tsrc' )
-
-    # save the results
-    run_vvtest( '-i --save-results' )
-    resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
-
-    resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
-
-    # create a runtimes file in a subdirectory
-    ok,out = run_cmd( resultspy + ' save ' + resultsfname, directory='tsrc' )
-    assert ok
-
-    tr = results.TestResults( 'tsrc/'+timesfname )
-    assert tr.dirList() == ['tsrc/one','tsrc/two']
-    assert tr.testList('tsrc/one') == ['cat','dog']
-    assert tr.testList('tsrc/two') == ['circle']
-
-    # remove a test
-    os.remove( 'tsrc/one/dog.xml' )
-
-    out,np,nd,nf,nn = run_vvtest( '-w tsrc' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-    run_vvtest( '-i --save-results' )
-    ok,out = run_cmd( resultspy+' save -w '+resultsfname, directory='tsrc' )
-    assert ok
-
-    # dog gone
-    tr = results.TestResults( 'tsrc/'+timesfname )
-    assert tr.dirList() == ['tsrc/one','tsrc/two']
-    assert tr.testList('tsrc/one') == ['cat']
-    assert tr.testList('tsrc/two') == ['circle']
-    assert len( filegrep( 'tsrc/'+timesfname, 'dog' ) ) == 0
-
-
-########################################################################
-
-def list01():
-    """
-    test listing of results files
-    """
-    writefile( "tsrc/one/cat.xml", """
-        <rtest name="cat">
-          <execute>
-        sleep 1
-          </execute>
-        </rtest>""" )
-    writefile( "tsrc/one/dog.xml", """
-        <rtest name="dog">
-          <execute>
-        sleep 2
-          </execute>
-        </rtest>""" )
-    writefile( "tsrc/two/circle.xml", """
-        <rtest name="circle">
-          <execute>
-        sleep 3
-          </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest( 'tsrc' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-    run_cmd( resultspy + ' save', directory='tsrc' )  # bootstrap runtimes
-
-    os.mkdir( 'testing' )
-    os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
-
-    run_vvtest( '-i --save-results' )
-    resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
-
-    # create a duplicate results file with known platform/compiler names
-    tr = results.TestResults( resultsfname )
-    resultsfname1 = os.path.abspath( 'testing/results1' )
-    mach = os.uname()[1]
-    tr.writeResults( resultsfname1, 'Plat1', 'Cplr1', mach, tdir )
-    resultsfname2 = os.path.abspath( 'testing/results2' )
-    tr.writeResults( resultsfname2, 'Plat2', 'Cplr2', mach, tdir )
-
-    # check listing a results file
-    ok,out = run_cmd( resultspy + ' list -p '+resultsfname1 )
-    assert ok
-    assert out.strip() == 'Plat1/Cplr1'
-    ok,out = run_cmd( resultspy + ' list '+resultsfname1 )
-    assert ok
-    assert len( grep( out, 'Plat1/Cplr1' ) ) == 0
-    assert len( grep( out, 'tsrc/two/circle' ) ) == 1
-    assert len( grep( out, 'tsrc/one/dog' ) ) == 1
-    assert len( grep( out, 'tsrc/one/cat' ) ) == 1
-
-    # create multiplat file with two platform/compiler combos
-    ok,out = run_cmd( resultspy + ' merge -x ' + \
-                           resultsfname1 + ' ' + resultsfname2,
-                      directory='testing' )
-    assert ok
-
-    # check listing a multiplatform file
-    ok,out = run_cmd( resultspy + ' list -p testing/'+multifname )
-    assert ok
-    assert out.split() == ['Plat1/Cplr1','Plat2/Cplr2']
-    
-    ok,out = run_cmd( resultspy + ' list testing/'+multifname )
-    assert ok
-    assert len( grep( out, 'Plat1/Cplr1' ) ) == 3
-    assert len( grep( out, 'Plat2/Cplr2' ) ) == 3
-    assert len( grep( out, 'tsrc/two/circle' ) ) == 2
-    assert len( grep( out, 'tsrc/one/dog' ) ) == 2
-    assert len( grep( out, 'tsrc/one/cat' ) ) == 2
-
-    # save a copy the multiplat file
-    shutil.copy( 'testing/'+multifname, 'testing/save' )
-
-    # remove Plat1/Cplr1 from the multiplat file
-    ok,out = run_cmd( resultspy + ' clean -p Plat1/Cplr1 testing/'+multifname )
-    assert ok
-    ok,out = run_cmd( resultspy + ' list testing/'+multifname )
-    assert ok
-    assert len( grep( out, 'Plat1/Cplr1' ) ) == 0
-    assert len( grep( out, 'Plat2/Cplr2' ) ) == 3
-    assert len( grep( out, 'tsrc/two/circle' ) ) == 1
-    assert len( grep( out, 'tsrc/one/dog' ) ) == 1
-    assert len( grep( out, 'tsrc/one/cat' ) ) == 1
+        assert results2fname and resultsfname != results2fname
+
+        # merge the second results file into the timings file
+        ok,out = util.run_cmd( util.resultspy + ' merge -x '+results2fname )
+        assert ok
+
+        # check that the timings file contains the new test results
+        mr = results.MultiResults()
+        mr.readFile( multifname )
+        root = os.path.basename( os.getcwd() )
+        catD = mr.testAttrs( root+'/one', 'cat', platcplr )
+        assert catD.get('result','') == 'diff'
+
+        # merge the first results file into the timings file
+        ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
+        assert ok
+
+        # check that the timings file does NOT contain the first test results
+        mr = results.MultiResults()
+        mr.readFile( multifname )
+        catD = mr.testAttrs( root+'/one', 'cat', platcplr )
+        assert catD.get('result','') == 'diff'
+
+        # now force a merge from the first results file
+        ok,out = util.run_cmd( util.resultspy + ' merge -w '+resultsfname )
+        assert ok
+
+        # check that the timings file DOES contain the first test results
+        mr = results.MultiResults()
+        mr.readFile( multifname )
+        catD = mr.testAttrs( root+'/one', 'cat', platcplr )
+        assert catD.get('result','') == 'pass'
+
+        # modify the name of the old results file to test the -d option
+        nL = resultsfname.split('.')
+        tm = time.mktime( time.strptime( nL[1], '%Y_%m_%d' ) )
+        d5 = time.strftime( "%Y_%m_%d", time.localtime( tm - 5*24*60*60 ) )
+        newfname = '.'.join( [nL[0],d5]+nL[2:] )
+        os.rename( resultsfname, newfname )
+        resultsfname = newfname
+
+        # create the timings file with the newest results
+        os.remove( multifname )
+        ok,out = util.run_cmd( util.resultspy + ' merge -x '+results2fname )
+        assert ok
+
+        # the timings file should contain the new results and not contain the dog test
+        mr = results.MultiResults()
+        mr.readFile( multifname )
+        catD = mr.testAttrs( root+'/one', 'cat', platcplr )
+        assert catD.get('result','') == 'diff'
+        dogD = mr.testAttrs( root+'/one', 'dog', platcplr )
+        assert len(dogD) == 0
+
+        # merge again with -d but should still just pick up latest results
+        ok,out = util.run_cmd( util.resultspy + ' merge -d 2 -g results.*' )
+        assert ok
+
+        # the timings file should still contain only the latest results
+        mr = results.MultiResults()
+        mr.readFile( multifname )
+        catD = mr.testAttrs( root+'/one', 'cat', platcplr )
+        assert catD.get('result','') == 'diff'
+        dogD = mr.testAttrs( root+'/one', 'dog', platcplr )
+        assert len(dogD) == 0
+
+        # now merge from 6 days ago to catch the old results file
+        ok,out =util.run_cmd( util.resultspy + ' merge -d 7 -g results.*' )
+        assert ok
+
+        # should be the latest cat results but the old dog test should appear
+        mr = results.MultiResults()
+        mr.readFile( multifname )
+        catD = mr.testAttrs( root+'/one', 'cat', platcplr )
+        assert catD.get('result','') == 'diff'
+        dogD = mr.testAttrs( root+'/one', 'dog', platcplr )
+        assert dogD.get('result','') == 'pass'
+
+    def test_merging_a_multiplatform_file_into_another_multiplatform_file(self):
+        ""
+        util.writefile( "tsrc/one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+        util.writefile( "tsrc/one/dog.xml", """
+            <rtest name="dog">
+              <execute>
+            sleep 2
+              </execute>
+            </rtest>""" )
+        util.writefile( "tsrc/two/circle.xml", """
+            <rtest name="circle">
+              <execute>
+            sleep 3
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest( 'tsrc' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+
+        util.run_cmd( util.resultspy + ' save', directory='tsrc' )
+
+        os.mkdir( 'testing' )
+        os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
+
+        util.run_vvtest( '-i --save-results' )
+        resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+
+        # create initial multiplat file
+        ok,out = util.run_cmd( util.resultspy + ' merge -x '+ resultsfname,
+                          directory='testing' )
+        assert ok
+        assert os.path.exists( os.path.join( 'testing', multifname ) )
+
+        # create a second results file with a different platform/compiler name
+        tr = results.TestResults( resultsfname )
+        resultsfname2 = os.path.abspath( 'testing/results2' )
+        mach = os.uname()[1]
+        tr.writeResults( resultsfname2, 'Plat2', 'Cplr2', mach, tdir )
+
+        # create second multiplat file
+        ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname2 )
+        assert ok
+
+        # merge second multiplat into first multiplat
+        ok,out = util.run_cmd( util.resultspy + ' merge -x '+ os.path.abspath(multifname),
+                          directory='testing' )
+        assert ok
+
+        # now check the combined multiplat file
+        mr = results.MultiResults()
+        mr.readFile( 'testing/'+multifname )
+        assert mr.dirList() == ['tsrc/one','tsrc/two']
+        assert mr.testList('tsrc/one') == ['cat','dog']
+        assert mr.testList('tsrc/two') == ['circle']
+        assert len( mr.platformList('tsrc/one','cat') ) == 2
+        assert len( mr.platformList('tsrc/one','dog') ) == 2
+        assert len( mr.platformList('tsrc/two','circle') ) == 2
+
+    def test_creating_source_tree_runtimes_files(self):
+        ""
+        util.writefile( "tsrc/one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+        util.writefile( "tsrc/one/dog.xml", """
+            <rtest name="dog">
+              <execute>
+            sleep 2
+              </execute>
+            </rtest>""" )
+        util.writefile( "tsrc/two/circle.xml", """
+            <rtest name="circle">
+              <execute>
+            sleep 3
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest( 'tsrc' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+        util.run_cmd( util.resultspy + ' save', directory='tsrc' )  # bootstrap runtimes
+
+        os.mkdir( 'testing' )
+        os.environ['TESTING_DIRECTORY'] = os.path.join( os.getcwd(), 'testing' )
+
+        util.run_vvtest( '-i --save-results' )
+        resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+
+        # use the results.py script to save the results to the runtimes file
+        ok,out = util.run_cmd( util.resultspy + ' save ' + resultsfname, directory='tsrc' )
+        assert ok
+
+        tr = results.TestResults( 'tsrc/'+timesfname )
+        assert tr.dirList() == ['tsrc/one','tsrc/two']
+        assert tr.testList('tsrc/one') == ['cat','dog']
+        assert tr.testList('tsrc/two') == ['circle']
+
+        # hold on to the runtime for the cat test
+        tr = results.TestResults( resultsfname )
+        cat_t1 = tr.testAttrs( 'tsrc/one', 'cat' )['xtime']
+
+        # increase the run time of one test and run vvtest again
+        util.writefile( "tsrc/one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 4
+              </execute>
+            </rtest>""" )
+        out,np,nd,nf,nn = util.run_vvtest( '-w -k cat tsrc' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        util.run_vvtest( '-i --save-results --results-tag 2nd' )
+
+        rfn2 = os.path.abspath( glob.glob( 'testing/results.*.2nd' )[0] )
+
+        # extract the runtime for the second cat test
+        tr = results.TestResults( rfn2 )
+        cat_t2 = tr.testAttrs( 'tsrc/one', 'cat' )['xtime']
+        assert cat_t1 < cat_t2
+
+        # merge two results files into the runtimes file
+        ok,out = util.run_cmd( util.resultspy + ' save ' + rfn2 + ' ' + resultsfname,
+                          directory='tsrc' )
+        assert ok
+
+        tr = results.TestResults( 'tsrc/'+timesfname )
+        assert tr.dirList() == ['tsrc/one','tsrc/two']
+        assert tr.testList('tsrc/one') == ['cat','dog']
+        assert tr.testList('tsrc/two') == ['circle']
+        # two instances of the cat test means the timings should be averaged
+        assert tr.testAttrs( 'tsrc/one', 'cat' )['xtime'] == int((cat_t1+cat_t2)/2)
+
+        # modify a test then generate a multi platform results file
+        util.writefile( "tsrc/two/circle.xml", """
+            <rtest name="circle">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+        out,np,nd,nf,nn = util.run_vvtest( '-w tsrc' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        util.run_vvtest( '-i --save-results --results-tag 3rd' )
+        rfn3 = os.path.abspath( glob.glob( 'testing/results.*.3rd' )[0] )
+        # force the results to be a different platform/compiler
+        tr = results.TestResults( rfn3 )
+        mach = os.uname()[1]
+        tr.writeResults( rfn3, 'Plat2', 'Cplr2', mach, tdir )
+        ok,out = util.run_cmd( util.resultspy + ' merge '+rfn3, directory='testing' )
+        assert ok
+
+        # save off the circle runtime from first execution
+        tr = results.TestResults( 'tsrc/'+timesfname )
+        circ1 = tr.testAttrs( 'tsrc/two', 'circle' )['xtime']
+
+        # update the test src runtimes file to include the multiplat contents
+        mf = os.path.abspath( 'testing/'+multifname )
+        ok,out = util.run_cmd( util.resultspy + ' save '+mf, directory='tsrc' )
+        assert ok
+
+        tr = results.TestResults( 'tsrc/'+timesfname )
+        circ2 = tr.testAttrs( 'tsrc/two', 'circle' )['xtime']
+        assert circ1 != circ2
+        mr = results.MultiResults( 'testing/'+multifname )
+        assert mr.testAttrs( 'tsrc/two', 'circle', 'Plat2/Cplr2' )['xtime'] == circ2
+
+    def test_merging_using_the_default_merge_method(self):
+        ""
+        util.writefile( "one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 3
+              </execute>
+            </rtest>""" )
+        util.writefile( "one/dog.xml", """
+            <rtest name="dog">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+        util.run_cmd( util.resultspy + ' save' )  # bootstrap runtimes
+
+        # create a multiplatform timings file
+        util.run_vvtest( '-i --save-results' )
+        resultsfname = os.path.abspath( glob.glob('results.*')[0] )
+        ok,out = util.run_cmd( util.resultspy + ' merge '+resultsfname )
+        assert ok
+
+        # get the platform name & compiler
+        tr = results.TestResults( resultsfname )
+        platname,cplrname = tr.platform(), tr.compiler()
+        platcplr = platname+'/'+cplrname
+
+        time.sleep(1)  # force a gap between vvtest invocations
+
+        # make the test run faster
+        util.writefile( "one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest('-w')
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+        # save a second results file
+        util.run_vvtest( '-i --save-results --results-tag faster' )
+        results2fname = None
+        for f in glob.glob('results.*'):
+            f = os.path.abspath(f)
+            if f != resultsfname:
+                results2fname = f
+                break
+        assert results2fname and resultsfname != results2fname
+
+        # get the old runtimes from the multiplat file
+        mr = results.MultiResults( multifname )
+        root = os.path.basename( os.getcwd() )
+        oldcatD = mr.testAttrs( root+'/one', 'cat', platcplr )
+        olddogD = mr.testAttrs( root+'/one', 'dog', platcplr )
+
+        # merge the second results file into the timings file
+        ok,out = util.run_cmd( util.resultspy + ' merge '+results2fname )
+        assert ok
+
+        # check that the timings file contains the old test results
+        mr = results.MultiResults( multifname )
+        catD = mr.testAttrs( root+'/one', 'cat', platcplr )
+        assert catD.get('xtime','') == oldcatD.get('xtime','no')
+        dogD = mr.testAttrs( root+'/one', 'dog', platcplr )
+        assert dogD.get('xtime','') == olddogD.get('xtime','no')
+
+        # make a test run slower
+        util.writefile( "one/dog.xml", """
+            <rtest name="dog">
+              <execute>
+            sleep 3
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest('-w')
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+        # save a third results file
+        util.run_vvtest( '-i --save-results --results-tag slower' )
+        results3fname = None
+        for f in glob.glob('results.*slower*'):
+            f = os.path.abspath(f)
+            if f != resultsfname:
+                results3fname = f
+                break
+        assert results3fname and results2fname != results3fname
+
+        # merge the third results file into the timings file
+        ok,out = util.run_cmd( util.resultspy + ' merge '+results3fname )
+        assert ok
+
+        # check that the timings file contains new test results for the slower test
+        mr = results.MultiResults( multifname )
+        newcatD = mr.testAttrs( root+'/one', 'cat', platcplr )
+        assert newcatD.get('xtime','') == catD.get('xtime','no')
+        newdogD = mr.testAttrs( root+'/one', 'dog', platcplr )
+        assert newdogD.get('xtime','') > dogD.get('xtime','no')
+
+        # check that including all the results files does not change anything
+        ok,out = util.run_cmd( util.resultspy + ' merge -d 6 -g results.*' )
+        assert ok
+
+        mr = results.MultiResults( multifname )
+        cD = mr.testAttrs( root+'/one', 'cat', platcplr )
+        assert cD.get('xtime','') == newcatD.get('xtime','no')
+        dD = mr.testAttrs( root+'/one', 'dog', platcplr )
+        assert dD.get('xtime','') == newdogD.get('xtime','no')
+
+    def test_merging_using_more_than_one_g_option(self):
+        ""
+        util.writefile( "one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 3
+              </execute>
+            </rtest>""" )
+        util.writefile( "one/dog.xml", """
+            <rtest name="dog">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+        util.run_cmd( util.resultspy + ' save' )  # bootstrap runtimes
+
+        # create a multiplatform timings file
+        util.run_vvtest( '-i --save-results --results-tag first' )
+        resultsfname = os.path.abspath( glob.glob('results.*')[0] )
+
+        # get the platform name & compiler
+        tr = results.TestResults( resultsfname )
+        platname,cplrname = tr.platform(), tr.compiler()
+        platcplr = platname+'/'+cplrname
+
+        time.sleep(1)  # force a gap between vvtest invocations
+
+        # make the test run faster
+        util.writefile( "one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest('-w')
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+        # save a second results file
+        util.run_vvtest( '-i --save-results --results-tag second' )
+        results2fname = os.path.abspath( glob.glob('results.*.second')[0] )
+        assert results2fname != resultsfname
+
+        time.sleep(1)  # force a gap between vvtest invocations
+
+        # make the test run slower
+        util.writefile( "one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 6
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest('-w')
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+        # save a second results file
+        util.run_vvtest( '-i --save-results --results-tag third' )
+        results3fname = os.path.abspath( glob.glob('results.*.third')[0] )
+        assert results3fname != resultsfname and results3fname != results2fname
+
+        # merge the first and second results files
+        ok,out = util.run_cmd( util.resultspy + ' merge' + \
+                          ' -g results.*.first -g results.*.second' )
+        assert ok
+
+        # check that the timings file took the max
+        mr = results.MultiResults( multifname )
+        root = os.path.basename( os.getcwd() )
+        catD = mr.testAttrs( root+'/one', 'cat', platcplr )
+        assert abs( catD.get('xtime') - 3 ) < 2
+
+        # again but merge the second two results files
+        os.remove( multifname )
+        ok,out = util.run_cmd( util.resultspy + ' merge' + \
+                          ' -g results.*.third -g results.*.second' )
+        assert ok
+        mr = results.MultiResults( multifname )
+        catD = mr.testAttrs( root+'/one', 'cat', platcplr )
+        assert abs( catD.get('xtime') - 6 ) < 2
+
+        # now merge by order on the command line
+        os.remove( multifname )
+        ok,out = util.run_cmd( util.resultspy + ' merge -w' + \
+                          ' -g results.*.third -g results.*.first' )
+        assert ok
+        mr = results.MultiResults( multifname )
+        catD = mr.testAttrs( root+'/one', 'cat', platcplr )
+        assert catD.get('xtime') < 6
+
+    def test_source_tree_runtimes_files_within_subdirectories(self):
+        ""
+        util.writefile( "tsrc/one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+        util.writefile( "tsrc/one/dog.xml", """
+            <rtest name="dog">
+              <execute>
+            sleep 2
+              </execute>
+            </rtest>""" )
+        util.writefile( "tsrc/two/circle.xml", """
+            <rtest name="circle">
+              <execute>
+            sleep 3
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest( 'tsrc' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+
+        os.mkdir( 'testing' )
+        os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
+
+        # write a (blank) runtimes file into test source to bootstrap
+        util.run_cmd( util.resultspy + ' save', directory='tsrc' )
+
+        # save the results
+        util.run_vvtest( '-i --save-results' )
+        resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+
+        # create a runtimes file in a subdirectory
+        ok,out = util.run_cmd( util.resultspy + ' save ' + resultsfname,
+                          directory='tsrc/one' )
+        assert ok
+
+        tr = results.TestResults( 'tsrc/'+timesfname )
+        assert len(tr.dirList()) == 0
+        tr.readResults( 'tsrc/one/'+timesfname )
+        assert len(tr.dirList()) == 1
+        assert tr.testList('tsrc/one') == ['cat','dog']
+        assert not os.path.exists('tsrc/two/'+timesfname)
+
+        # add a test to 'one', rerun the tests, then save runtimes at the top level
+        util.writefile( "tsrc/one/ferret.xml", """
+            <rtest name="ferret">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w tsrc' )
+        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+
+        util.run_vvtest( '-i --save-results' )
+        ok,out = util.run_cmd( util.resultspy + ' save ' + resultsfname, directory='tsrc' )
+        assert ok
+
+        tr = results.TestResults( 'tsrc/'+timesfname )
+        assert tr.dirList() == ['tsrc/one','tsrc/two']
+        assert tr.testList('tsrc/one') == ['cat','dog','ferret']
+        assert tr.testList('tsrc/two') == ['circle']
+        tr.readResults( 'tsrc/one/'+timesfname )
+        assert len(tr.dirList()) == 1
+        assert tr.testList('tsrc/one') == ['cat','dog','ferret']
+        assert not os.path.exists('tsrc/two/'+timesfname)
+
+    def test_saving_source_tree_runtimes_files_without_merging(self):
+        ""
+        util.writefile( "tsrc/one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+        util.writefile( "tsrc/one/dog.xml", """
+            <rtest name="dog">
+              <execute>
+            sleep 2
+              </execute>
+            </rtest>""" )
+        util.writefile( "tsrc/two/circle.xml", """
+            <rtest name="circle">
+              <execute>
+            sleep 3
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest( 'tsrc' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+
+        os.mkdir( 'testing' )
+        os.environ['TESTING_DIRECTORY'] = os.path.join( os.getcwd(), 'testing' )
+
+        # write a (blank) runtimes file into test source to bootstrap
+        util.run_cmd( util.resultspy + ' save', directory='tsrc' )
+
+        # save the results
+        util.run_vvtest( '-i --save-results' )
+        resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+
+        resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+
+        # create a runtimes file in a subdirectory
+        ok,out = util.run_cmd( util.resultspy + ' save ' + resultsfname, directory='tsrc' )
+        assert ok
+
+        tr = results.TestResults( 'tsrc/'+timesfname )
+        assert tr.dirList() == ['tsrc/one','tsrc/two']
+        assert tr.testList('tsrc/one') == ['cat','dog']
+        assert tr.testList('tsrc/two') == ['circle']
+
+        # remove a test
+        os.remove( 'tsrc/one/dog.xml' )
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w tsrc' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+        util.run_vvtest( '-i --save-results' )
+        ok,out = util.run_cmd( util.resultspy+' save -w '+resultsfname, directory='tsrc' )
+        assert ok
+
+        # dog gone
+        tr = results.TestResults( 'tsrc/'+timesfname )
+        assert tr.dirList() == ['tsrc/one','tsrc/two']
+        assert tr.testList('tsrc/one') == ['cat']
+        assert tr.testList('tsrc/two') == ['circle']
+        assert len( util.filegrep( 'tsrc/'+timesfname, 'dog' ) ) == 0
+
+    def test_listing_of_results_files(self):
+        ""
+        util.writefile( "tsrc/one/cat.xml", """
+            <rtest name="cat">
+              <execute>
+            sleep 1
+              </execute>
+            </rtest>""" )
+        util.writefile( "tsrc/one/dog.xml", """
+            <rtest name="dog">
+              <execute>
+            sleep 2
+              </execute>
+            </rtest>""" )
+        util.writefile( "tsrc/two/circle.xml", """
+            <rtest name="circle">
+              <execute>
+            sleep 3
+              </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest( 'tsrc' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+        util.run_cmd( util.resultspy + ' save', directory='tsrc' )  # bootstrap runtimes
+
+        os.mkdir( 'testing' )
+        os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
+
+        util.run_vvtest( '-i --save-results' )
+        resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+
+        # create a duplicate results file with known platform/compiler names
+        tr = results.TestResults( resultsfname )
+        resultsfname1 = os.path.abspath( 'testing/results1' )
+        mach = os.uname()[1]
+        tr.writeResults( resultsfname1, 'Plat1', 'Cplr1', mach, tdir )
+        resultsfname2 = os.path.abspath( 'testing/results2' )
+        tr.writeResults( resultsfname2, 'Plat2', 'Cplr2', mach, tdir )
+
+        # check listing a results file
+        ok,out = util.run_cmd( util.resultspy + ' list -p '+resultsfname1 )
+        assert ok
+        assert out.strip() == 'Plat1/Cplr1'
+        ok,out = util.run_cmd( util.resultspy + ' list '+resultsfname1 )
+        assert ok
+        assert len( util.grep( out, 'Plat1/Cplr1' ) ) == 0
+        assert len( util.grep( out, 'tsrc/two/circle' ) ) == 1
+        assert len( util.grep( out, 'tsrc/one/dog' ) ) == 1
+        assert len( util.grep( out, 'tsrc/one/cat' ) ) == 1
+
+        # create multiplat file with two platform/compiler combos
+        ok,out = util.run_cmd( util.resultspy + ' merge -x ' + \
+                               resultsfname1 + ' ' + resultsfname2,
+                          directory='testing' )
+        assert ok
+
+        # check listing a multiplatform file
+        ok,out = util.run_cmd( util.resultspy + ' list -p testing/'+multifname )
+        assert ok
+        assert out.split() == ['Plat1/Cplr1','Plat2/Cplr2']
+        
+        ok,out = util.run_cmd( util.resultspy + ' list testing/'+multifname )
+        assert ok
+        assert len( util.grep( out, 'Plat1/Cplr1' ) ) == 3
+        assert len( util.grep( out, 'Plat2/Cplr2' ) ) == 3
+        assert len( util.grep( out, 'tsrc/two/circle' ) ) == 2
+        assert len( util.grep( out, 'tsrc/one/dog' ) ) == 2
+        assert len( util.grep( out, 'tsrc/one/cat' ) ) == 2
+
+        # save a copy the multiplat file
+        shutil.copy( 'testing/'+multifname, 'testing/save' )
+
+        # remove Plat1/Cplr1 from the multiplat file
+        ok,out = util.run_cmd( util.resultspy + ' clean -p Plat1/Cplr1 testing/'+multifname )
+        assert ok
+        ok,out = util.run_cmd( util.resultspy + ' list testing/'+multifname )
+        assert ok
+        assert len( util.grep( out, 'Plat1/Cplr1' ) ) == 0
+        assert len( util.grep( out, 'Plat2/Cplr2' ) ) == 3
+        assert len( util.grep( out, 'tsrc/two/circle' ) ) == 1
+        assert len( util.grep( out, 'tsrc/one/dog' ) ) == 1
+        assert len( util.grep( out, 'tsrc/one/cat' ) ) == 1
+
+    def test_the_process_files_function(self):
+        ""
+        # globbing files
+        optD = {}
+        fL = ['file.txt']
+        results.process_files( optD, fL, None )
+        assert fL == ['file.txt']
+
+        util.writefile( 'file1.txt', """
+            file one contents
+            """ )
+        util.writefile( 'file2.txt', """
+            file two contents
+            """ )
+        util.writefile( 'file3.log', """
+            file three contents
+            """ )
+        util.writefile( 'foo.dat', """
+            foo contents
+            """ )
+
+        optD = { '-g':['file*.txt','fo*.*'] }
+        fL = ['bar.txt']
+        results.process_files( optD, fL, None )
+        fL.sort()
+        assert fL == ['bar.txt','file1.txt','file2.txt','foo.dat']
+
+        # specifying the platform
+        fileL = [ 'results.2016_02_10.Linux.gnu4.bnb',
+                  'results.2016_02_10.SunOS.gnu4.bnb',
+                  'results.2016_02_11.Linux.gnu4.bnb' ]
+        optD = { '-p':['Linux'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
+                         'results.2016_02_11.Linux.gnu4.bnb']
+
+        fileL = [ 'results.2016_02_10.TLCC.gnu4.bnb',
+                  'results.2016_02_10.SunOS.gnu4.bnb',
+                  'results.2016_02_11.Darwin.gnu4.bnb' ]
+        optD = { '-p':['SunOS','TLCC'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_10.TLCC.gnu4.bnb',
+                         'results.2016_02_10.SunOS.gnu4.bnb']
+
+        fileL = [ 'results.2016_02_10.TLCC.gnu4.bnb',
+                  'results.2016_02_10.SunOS.gnu4.bnb',
+                  'results.2016_02_11.Darwin.gnu4.bnb' ]
+        optD = { '-P':['TLCC'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_10.SunOS.gnu4.bnb',
+                         'results.2016_02_11.Darwin.gnu4.bnb']
+
+        fileL = [ 'results.2016_02_10.TLCC.gnu4.bnb',
+                  'results.2016_02_10.SunOS.gnu4.bnb',
+                  'results.2016_02_11.Darwin.gnu4.bnb' ]
+        optD = { '-P':['Darwin','TLCC'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_10.SunOS.gnu4.bnb' ]
+
+        fileL = [ 'results.2016_02_10.TLCC.gnu4.bnb',
+                  'results.2016_02_10.SunOS.gnu4.bnb',
+                  'results.2016_02_11.Darwin.gnu4.bnb' ]
+        optD = { '-p':['SunOS'], '-P':['Darwin'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_10.SunOS.gnu4.bnb' ]
+
+        # specifying options
+        fileL = [ 'results.2016_02_10.Linux.gnu4.bnb',
+                  'results.2016_02_10.Linux.gnu4.dev',
+                  'results.2016_02_11.Linux.gnu4.bnb' ]
+        optD = { '-t':['bnb'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
+                        'results.2016_02_11.Linux.gnu4.bnb' ]
+
+        # specifying options
+        fileL = [ 'results.2016_02_10.Linux.gnu4.bnb',
+                  'results.2016_02_10.Linux.gnu4+cxx11.dev',
+                  'results.2016_02_11.Linux.gnu4.bnb' ]
+        optD = { '-o':['gnu4'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
+                         'results.2016_02_10.Linux.gnu4+cxx11.dev',
+                         'results.2016_02_11.Linux.gnu4.bnb' ]
+
+        fileL = [ 'results.2016_02_10.Linux.gnu4.bnb',
+                  'results.2016_02_10.Linux.gnu4+cxx11.dev',
+                  'results.2016_02_11.Linux.gnu4.bnb' ]
+        optD = { '-o':['cxx11'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_10.Linux.gnu4+cxx11.dev' ]
+
+        fileL = [ 'results.2016_02_10.Linux.intel.bnb',
+                  'results.2016_02_10.Linux.gnu4.dev',
+                  'results.2016_02_11.Linux.intel+cxx11.bnb' ]
+        optD = { '-o':['intel','cxx11'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_10.Linux.intel.bnb',
+                         'results.2016_02_11.Linux.intel+cxx11.bnb' ]
+
+        fileL = [ 'results.2016_02_10.Linux.intel.bnb',
+                  'results.2016_02_10.Linux.gnu4.dev',
+                  'results.2016_02_11.Linux.intel+cxx11.bnb' ]
+        optD = { '-o':['gnu4','cxx11'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_10.Linux.gnu4.dev',
+                         'results.2016_02_11.Linux.intel+cxx11.bnb' ]
+
+        fileL = [ 'results.2016_02_10.Linux.intel.bnb',
+                  'results.2016_02_10.Linux.gnu4+cxx11.dev',
+                  'results.2016_02_11.Linux.intel+cxx11.bnb' ]
+        optD = { '-o':['intel'], '-O':['cxx11'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_10.Linux.intel.bnb' ]
+
+        fileL = [ 'results.2016_02_10.Linux.intel+dbg.bnb',
+                  'results.2016_02_10.Linux.gnu4+dbg.dev',
+                  'results.2016_02_11.Linux.intel+cxx11.bnb' ]
+        optD = { '-O':['cxx11','gnu4'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_10.Linux.intel+dbg.bnb' ]
+
+        # specifying tags
+        fileL = [ 'results.2016_02_10.Linux.gnu4.bnb',
+                  'results.2016_02_10.Linux.gnu4.dev',
+                  'results.2016_02_11.Linux.gnu4.bnb' ]
+        optD = { '-t':['bnb'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
+                         'results.2016_02_11.Linux.gnu4.bnb' ]
+
+        fileL = [ 'results.2016_02_10.Linux.gnu4.bnb',
+                  'results.2016_02_10.Linux.gnu4.dev',
+                  'results.2016_02_11.Linux.gnu4.bnb' ]
+        optD = { '-T':['dev'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
+                         'results.2016_02_11.Linux.gnu4.bnb' ]
+
+        fileL = [ 'results.2016_02_10.Linux.gnu4.bnb',
+                  'results.2016_02_10.Linux.gnu4.dev',
+                  'results.2016_02_11.Linux.gnu4.longbnb' ]
+        optD = { '-T':['dev'], '-t':['longbnb'] }
+        results.process_files( optD, fileL, None )
+        assert fileL == ['results.2016_02_11.Linux.gnu4.longbnb' ]
+
+    def test_the_report_subcommand(self):
+        ""
+        os.mkdir( 'config' )  # force the test to use default plat & cplr
+
+        util.writefile( "one/cat.xml", """
+            <rtest name="cat">
+              <execute> sleep 1 </execute>
+            </rtest>""" )
+        util.writefile( "one/dog.xml", """
+            <rtest name="dog">
+              <execute> set have_diff = yes </execute>
+            </rtest>""" )
+        util.writefile( "one/ferret.xml", """
+            <rtest name="ferret">
+              <execute> exit 1 </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest( '--config config' )
+        assert np == 1 and nd == 1 and nf == 1 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+
+        # bootstrap with runtimes files then save the test results
+        ok,out = util.run_cmd( util.resultspy + ' save', directory='one' )
+        assert ok
+        util.run_vvtest( '--config config -i --save-results' )
+
+        rf1 = glob.glob('results.*')[0]
+        tr = results.TestResults( rf1 )
+        platname,cplrname = tr.platform(), tr.compiler()
+        L = rf1.split('.')
+        rf2 = L[0]+'.'+L[1]+'.Fake.'+L[3]
+        mach = os.uname()[1]
+        tr.writeResults( rf2, 'Fake', L[3], mach, '/some/fake/path' )
+
+        ok,out = util.run_cmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
+        assert ok
+
+        assert len( util.grep( out, 'Fake.gcc' ) ) == 3
+        assert len( util.grep( out, 'pass=1 ' ) ) == 2
+        assert len( util.grep( out, 'diff=1 ' ) ) == 2
+        assert len( util.grep( out, 'fail=1 ' ) ) == 2
+        assert len( util.grep( out, 'one/dog' ) ) == 1
+        assert len( util.grep( out, 'one/ferret' ) ) == 1
+
+    def test_the_report_subcommand_with_G_option(self):
+        ""
+        util.writefile( "one/cat.xml", """
+            <rtest name="cat">
+              <execute> sleep 1 </execute>
+            </rtest>""" )
+        util.writefile( "one/dog.xml", """
+            <rtest name="dog">
+              <execute> set have_diff = yes </execute>
+            </rtest>""" )
+        util.writefile( "one/ferret.xml", """
+            <rtest name="ferret">
+              <execute> exit 1 </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 1 and nf == 1 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+
+        # bootstrap with runtimes files then save the test results
+        ok,out = util.run_cmd( util.resultspy + ' save', directory='one' )
+        assert ok
+        util.run_vvtest( '-i --save-results' )
+
+        rf = glob.glob('results.*')[0]
+
+        ok,out = util.run_cmd( util.resultspy + ' report -G ' + rf )
+        assert ok
+
+        assert len( util.grep( out, 'pass=1 ' ) ) == 1
+        assert len( util.grep( out, 'diff=1 ' ) ) == 1
+        assert len( util.grep( out, 'fail=1 ' ) ) == 1
+        assert len( util.grep( out, 'one/dog' ) ) == 0
+        assert len( util.grep( out, 'one/ferret' ) ) == 0
+
+        ok,out = util.run_cmd( util.resultspy + ' report -g ' + rf )
+        assert ok
+
+        assert len( util.grep( out, 'pass=1 ' ) ) == 1
+        assert len( util.grep( out, 'diff=1 ' ) ) == 1
+        assert len( util.grep( out, 'fail=1 ' ) ) == 1
+        assert len( util.grep( out, 'one/dog' ) ) == 1
+        assert len( util.grep( out, 'one/ferret' ) ) == 1
+
+    def test_the_in_progress_results_file(self):
+        ""
+        util.writefile( "cat.xml", """
+            <rtest name="cat">
+              <execute> sleep 1 </execute>
+            </rtest>""" )
+        util.writefile( "dog.xml", """
+            <rtest name="dog">
+              <execute> sleep 2 </execute>
+            </rtest>""" )
+        util.writefile( "circle.xml", """
+            <rtest name="circle">
+              <execute> sleep 3 </execute>
+            </rtest>""" )
+
+        util.interrupt_vvtest_run( '--save-results', count=2 )
+        tdir = os.path.abspath( util.results_dir() )
+
+        resultsfname = glob.glob('results.*')[0]
+
+        ok,out = util.run_cmd( util.resultspy + ' report ' + resultsfname )
+        assert ok
+
+        tr = results.TestResults( resultsfname )
+        assert tr.inProgress()
+
+        for line in util.grep( out, ' [.]' ):
+            if line.strip().startswith('.'):
+                s = line.split('pass')[0].strip()
+                assert s[-1] == 's'
+                break
+
+    def test_the_results_date_option(self):
+        ""
+        util.writefile( "cat.xml", """
+            <rtest name="cat">
+              <execute> sleep 1 </execute>
+            </rtest>""" )
+        util.writefile( "dog.xml", """
+            <rtest name="dog">
+              <execute> sleep 2 </execute>
+            </rtest>""" )
+        util.writefile( "circle.xml", """
+            <rtest name="circle">
+              <execute> sleep 3 </execute>
+            </rtest>""" )
+
+        olddate = time.time() - 2*24*60*60
+        out,np,nd,nf,nn = util.run_vvtest(
+            '--save-results --results-date ' + str(olddate) )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+
+        rfile1 = glob.glob('results.*')[0]
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w --save-results' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        L = glob.glob('results.*')
+        assert len(L) == 2
+        L.sort()
+        assert L[0] == rfile1
+        assert L[1] != rfile1
+        rfile2 = L[1]
+        print3( 'results files:', rfile1, rfile2 )
+
+        out,np,nd,nf,nn = util.run_vvtest(
+            '-w --save-results --results-date 2016_07_15' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        L = glob.glob('results.*')
+        assert len(L) == 3
+        L.sort()
+        print3( 'results list', L )
+        assert L[1] == rfile1
+        assert L[2] == rfile2
+        rfile3 = L[0]
+        assert '2016_07_15' in rfile3
+        assert rfile3 not in [ rfile1, rfile2 ]
+        print3( 'results files:', rfile1, rfile2, rfile3 )
+
+    def test_that_timeout_only_reported_if_two_or_more_times_in_a_row(self):
+        ""
+        util.writefile( "subdir/test1.xml", """
+            <rtest name="test1">
+              <timeout value="5"/>
+              <execute> sleep 2 </execute>
+            </rtest>""" )
+        util.writefile( "subdir/test2.xml", """
+            <rtest name="test2">
+              <timeout value="10"/>
+              <execute> sleep 1 </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest( 'subdir' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+
+        # bootstrap with runtimes files then save the test results
+        ok,out = util.run_cmd( util.resultspy + ' save', directory='subdir' )
+        assert ok
+        util.run_vvtest( '-i --save-results' )
+
+        # compute a new result date to be yesterday's date
+        rf1 = glob.glob('results.*')[0]
+        s1,d,s2 = rf1.split('.',2)
+        y,m,d = d.split('_')
+        if d == '01':
+            if m == '01':
+                return  # I'm lazy
+            m = int(m)-1
+            if m < 10: m = '0'+str(m)
+            else:      m = str(m)
+            d = '28'
+        else:
+            d = int(d)-1
+            if d < 10: d = '0'+str(d)
+            else:      d = str(d)
+        rf2 = s1+'.'+y+'_'+m+'_'+d+'.'+s2
+
+        # rewrite the results file to a file with yesterday's date
+        tr = results.TestResults( rf1 )
+        platname,cplrname = tr.platform(), tr.compiler()
+        mach,testdir = tr.machine(), tr.testdir()
+        tr.writeResults( rf2, platname, cplrname, mach, testdir )
+
+        # rerun the tests
+        time.sleep(1)
+        out,np,nd,nf,nn = util.run_vvtest( '-w --save-results subdir' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+        ok,out = util.run_cmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
+        assert ok
+        assert len( util.grep( out, 'test1' ) ) == 0
+        assert len( util.grep( out, 'test2' ) ) == 0
+
+        # now make a test timeout
+        util.writefile( "subdir/test1.xml", """
+            <rtest name="test1">
+              <timeout value="5"/>
+              <execute> sleep 10 </execute>
+            </rtest>""" )
+        
+        out,np,nd,nf,nn = util.run_vvtest( '-w --save-results subdir' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        # the timed out test should not be reported
+        ok,out = util.run_cmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
+        assert ok
+        assert len( util.grep( out, 'test1' ) ) == 0
+        assert len( util.grep( out, 'test2' ) ) == 0
+
+        # rename the results with the timed out test to yesterday's date
+        os.remove( rf2 )
+        os.rename( rf1, rf2 )
+
+        # rerun one more time, in which the test will timeout again
+        out,np,nd,nf,nn = util.run_vvtest( '-w --save-results subdir' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        # the timed out test should now be reported
+        ok,out = util.run_cmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
+        assert ok
+        assert len( util.grep( out, 'test1' ) ) == 1
+        assert len( util.grep( out, 'test2' ) ) == 0
 
 
 ############################################################################
 
-def files01():
-    """
-    test the process_files() function
-    """
-    # globbing files
-    optD = {}
-    fL = ['file.txt']
-    results.process_files( optD, fL, None )
-    assert fL == ['file.txt']
-
-    writefile( 'file1.txt', """
-        file one contents
-        """ )
-    writefile( 'file2.txt', """
-        file two contents
-        """ )
-    writefile( 'file3.log', """
-        file three contents
-        """ )
-    writefile( 'foo.dat', """
-        foo contents
-        """ )
-    
-    optD = { '-g':['file*.txt','fo*.*'] }
-    fL = ['bar.txt']
-    results.process_files( optD, fL, None )
-    fL.sort()
-    assert fL == ['bar.txt','file1.txt','file2.txt','foo.dat']
-    
-    # specifying the platform
-    fileL = [ 'results.2016_02_10.Linux.gnu4.bnb',
-              'results.2016_02_10.SunOS.gnu4.bnb',
-              'results.2016_02_11.Linux.gnu4.bnb' ]
-    optD = { '-p':['Linux'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
-                     'results.2016_02_11.Linux.gnu4.bnb']
-    
-    fileL = [ 'results.2016_02_10.TLCC.gnu4.bnb',
-              'results.2016_02_10.SunOS.gnu4.bnb',
-              'results.2016_02_11.Darwin.gnu4.bnb' ]
-    optD = { '-p':['SunOS','TLCC'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_10.TLCC.gnu4.bnb',
-                     'results.2016_02_10.SunOS.gnu4.bnb']
-    
-    fileL = [ 'results.2016_02_10.TLCC.gnu4.bnb',
-              'results.2016_02_10.SunOS.gnu4.bnb',
-              'results.2016_02_11.Darwin.gnu4.bnb' ]
-    optD = { '-P':['TLCC'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_10.SunOS.gnu4.bnb',
-                     'results.2016_02_11.Darwin.gnu4.bnb']
-    
-    fileL = [ 'results.2016_02_10.TLCC.gnu4.bnb',
-              'results.2016_02_10.SunOS.gnu4.bnb',
-              'results.2016_02_11.Darwin.gnu4.bnb' ]
-    optD = { '-P':['Darwin','TLCC'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_10.SunOS.gnu4.bnb' ]
-    
-    fileL = [ 'results.2016_02_10.TLCC.gnu4.bnb',
-              'results.2016_02_10.SunOS.gnu4.bnb',
-              'results.2016_02_11.Darwin.gnu4.bnb' ]
-    optD = { '-p':['SunOS'], '-P':['Darwin'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_10.SunOS.gnu4.bnb' ]
-    
-    # specifying options
-    fileL = [ 'results.2016_02_10.Linux.gnu4.bnb',
-              'results.2016_02_10.Linux.gnu4.dev',
-              'results.2016_02_11.Linux.gnu4.bnb' ]
-    optD = { '-t':['bnb'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
-                    'results.2016_02_11.Linux.gnu4.bnb' ]
-    
-    # specifying options
-    fileL = [ 'results.2016_02_10.Linux.gnu4.bnb',
-              'results.2016_02_10.Linux.gnu4+cxx11.dev',
-              'results.2016_02_11.Linux.gnu4.bnb' ]
-    optD = { '-o':['gnu4'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
-                     'results.2016_02_10.Linux.gnu4+cxx11.dev',
-                     'results.2016_02_11.Linux.gnu4.bnb' ]
-    
-    fileL = [ 'results.2016_02_10.Linux.gnu4.bnb',
-              'results.2016_02_10.Linux.gnu4+cxx11.dev',
-              'results.2016_02_11.Linux.gnu4.bnb' ]
-    optD = { '-o':['cxx11'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_10.Linux.gnu4+cxx11.dev' ]
-    
-    fileL = [ 'results.2016_02_10.Linux.intel.bnb',
-              'results.2016_02_10.Linux.gnu4.dev',
-              'results.2016_02_11.Linux.intel+cxx11.bnb' ]
-    optD = { '-o':['intel','cxx11'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_10.Linux.intel.bnb',
-                     'results.2016_02_11.Linux.intel+cxx11.bnb' ]
-    
-    fileL = [ 'results.2016_02_10.Linux.intel.bnb',
-              'results.2016_02_10.Linux.gnu4.dev',
-              'results.2016_02_11.Linux.intel+cxx11.bnb' ]
-    optD = { '-o':['gnu4','cxx11'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_10.Linux.gnu4.dev',
-                     'results.2016_02_11.Linux.intel+cxx11.bnb' ]
-    
-    fileL = [ 'results.2016_02_10.Linux.intel.bnb',
-              'results.2016_02_10.Linux.gnu4+cxx11.dev',
-              'results.2016_02_11.Linux.intel+cxx11.bnb' ]
-    optD = { '-o':['intel'], '-O':['cxx11'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_10.Linux.intel.bnb' ]
-    
-    fileL = [ 'results.2016_02_10.Linux.intel+dbg.bnb',
-              'results.2016_02_10.Linux.gnu4+dbg.dev',
-              'results.2016_02_11.Linux.intel+cxx11.bnb' ]
-    optD = { '-O':['cxx11','gnu4'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_10.Linux.intel+dbg.bnb' ]
-    
-    # specifying tags
-    fileL = [ 'results.2016_02_10.Linux.gnu4.bnb',
-              'results.2016_02_10.Linux.gnu4.dev',
-              'results.2016_02_11.Linux.gnu4.bnb' ]
-    optD = { '-t':['bnb'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
-                     'results.2016_02_11.Linux.gnu4.bnb' ]
-    
-    fileL = [ 'results.2016_02_10.Linux.gnu4.bnb',
-              'results.2016_02_10.Linux.gnu4.dev',
-              'results.2016_02_11.Linux.gnu4.bnb' ]
-    optD = { '-T':['dev'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_10.Linux.gnu4.bnb',
-                     'results.2016_02_11.Linux.gnu4.bnb' ]
-    
-    fileL = [ 'results.2016_02_10.Linux.gnu4.bnb',
-              'results.2016_02_10.Linux.gnu4.dev',
-              'results.2016_02_11.Linux.gnu4.longbnb' ]
-    optD = { '-T':['dev'], '-t':['longbnb'] }
-    results.process_files( optD, fileL, None )
-    assert fileL == ['results.2016_02_11.Linux.gnu4.longbnb' ]
-
-
-def report01():
-    """
-    test the report subcommand
-    """
-    os.mkdir( 'config' )  # force the test to use default plat & cplr
-
-    writefile( "one/cat.xml", """
-        <rtest name="cat">
-          <execute> sleep 1 </execute>
-        </rtest>""" )
-    writefile( "one/dog.xml", """
-        <rtest name="dog">
-          <execute> set have_diff = yes </execute>
-        </rtest>""" )
-    writefile( "one/ferret.xml", """
-        <rtest name="ferret">
-          <execute> exit 1 </execute>
-        </rtest>""" )
-    
-    out,np,nd,nf,nn = run_vvtest( '--config config' )
-    assert np == 1 and nd == 1 and nf == 1 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-
-    # bootstrap with runtimes files then save the test results
-    ok,out = run_cmd( resultspy + ' save', directory='one' )
-    assert ok
-    run_vvtest( '--config config -i --save-results' )
-    
-    rf1 = glob.glob('results.*')[0]
-    tr = results.TestResults( rf1 )
-    platname,cplrname = tr.platform(), tr.compiler()
-    L = rf1.split('.')
-    rf2 = L[0]+'.'+L[1]+'.Fake.'+L[3]
-    mach = os.uname()[1]
-    tr.writeResults( rf2, 'Fake', L[3], mach, '/some/fake/path' )
-
-    ok,out = run_cmd( resultspy + ' report ' + rf1 + ' ' + rf2 )
-    assert ok
-
-    assert len( grep( out, 'Fake.gcc' ) ) == 3
-    assert len( grep( out, 'pass=1 ' ) ) == 2
-    assert len( grep( out, 'diff=1 ' ) ) == 2
-    assert len( grep( out, 'fail=1 ' ) ) == 2
-    assert len( grep( out, 'one/dog' ) ) == 1
-    assert len( grep( out, 'one/ferret' ) ) == 1
-
-
-def report02():
-    """
-    test the report subcommand with -G
-    """
-    writefile( "one/cat.xml", """
-        <rtest name="cat">
-          <execute> sleep 1 </execute>
-        </rtest>""" )
-    writefile( "one/dog.xml", """
-        <rtest name="dog">
-          <execute> set have_diff = yes </execute>
-        </rtest>""" )
-    writefile( "one/ferret.xml", """
-        <rtest name="ferret">
-          <execute> exit 1 </execute>
-        </rtest>""" )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 1 and nf == 1 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-
-    # bootstrap with runtimes files then save the test results
-    ok,out = run_cmd( resultspy + ' save', directory='one' )
-    assert ok
-    run_vvtest( '-i --save-results' )
-    
-    rf = glob.glob('results.*')[0]
-
-    ok,out = run_cmd( resultspy + ' report -G ' + rf )
-    assert ok
-    
-    assert len( grep( out, 'pass=1 ' ) ) == 1
-    assert len( grep( out, 'diff=1 ' ) ) == 1
-    assert len( grep( out, 'fail=1 ' ) ) == 1
-    assert len( grep( out, 'one/dog' ) ) == 0
-    assert len( grep( out, 'one/ferret' ) ) == 0
-    
-    ok,out = run_cmd( resultspy + ' report -g ' + rf )
-    assert ok
-    
-    assert len( grep( out, 'pass=1 ' ) ) == 1
-    assert len( grep( out, 'diff=1 ' ) ) == 1
-    assert len( grep( out, 'fail=1 ' ) ) == 1
-    assert len( grep( out, 'one/dog' ) ) == 1
-    assert len( grep( out, 'one/ferret' ) ) == 1
-
-
-############################################################################
-
-def inprogress():
-    """
-    in-progress results file
-    """
-    writefile( "cat.xml", """
-        <rtest name="cat">
-          <execute> sleep 1 </execute>
-        </rtest>""" )
-    writefile( "dog.xml", """
-        <rtest name="dog">
-          <execute> sleep 2 </execute>
-        </rtest>""" )
-    writefile( "circle.xml", """
-        <rtest name="circle">
-          <execute> sleep 3 </execute>
-        </rtest>""" )
-
-    interrupt_vvtest_run( '--save-results', count=2 )
-    tdir = os.path.abspath( results_dir() )
-
-    resultsfname = glob.glob('results.*')[0]
-    
-    ok,out = run_cmd( resultspy + ' report ' + resultsfname )
-    assert ok
-
-    tr = results.TestResults( resultsfname )
-    assert tr.inProgress()
-
-    for line in grep( out, ' [.]' ):
-        if line.strip().startswith('.'):
-            s = line.split('pass')[0].strip()
-            assert s[-1] == 's'
-            break
-
-def datestamp():
-    """
-    use the --results-date option
-    """
-    writefile( "cat.xml", """
-        <rtest name="cat">
-          <execute> sleep 1 </execute>
-        </rtest>""" )
-    writefile( "dog.xml", """
-        <rtest name="dog">
-          <execute> sleep 2 </execute>
-        </rtest>""" )
-    writefile( "circle.xml", """
-        <rtest name="circle">
-          <execute> sleep 3 </execute>
-        </rtest>""" )
-
-    olddate = time.time() - 2*24*60*60
-    out,np,nd,nf,nn = run_vvtest(
-        '--save-results --results-date ' + str(olddate) )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-
-    rfile1 = glob.glob('results.*')[0]
-    
-    out,np,nd,nf,nn = run_vvtest( '-w --save-results' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    L = glob.glob('results.*')
-    assert len(L) == 2
-    L.sort()
-    assert L[0] == rfile1
-    assert L[1] != rfile1
-    rfile2 = L[1]
-    print3( 'results files:', rfile1, rfile2 )
-
-    out,np,nd,nf,nn = run_vvtest(
-        '-w --save-results --results-date 2016_07_15' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    L = glob.glob('results.*')
-    assert len(L) == 3
-    L.sort()
-    print3( 'results list', L )
-    assert L[1] == rfile1
-    assert L[2] == rfile2
-    rfile3 = L[0]
-    assert '2016_07_15' in rfile3
-    assert rfile3 not in [ rfile1, rfile2 ]
-    print3( 'results files:', rfile1, rfile2, rfile3 )
-
-
-############################################################################
-
-def timeouts():
-    """
-    timeout only reported if two or more times in a row
-    """
-    writefile( "subdir/test1.xml", """
-        <rtest name="test1">
-          <timeout value="5"/>
-          <execute> sleep 2 </execute>
-        </rtest>""" )
-    writefile( "subdir/test2.xml", """
-        <rtest name="test2">
-          <timeout value="10"/>
-          <execute> sleep 1 </execute>
-        </rtest>""" )
-    
-    out,np,nd,nf,nn = run_vvtest( 'subdir' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-
-    # bootstrap with runtimes files then save the test results
-    ok,out = run_cmd( resultspy + ' save', directory='subdir' )
-    assert ok
-    run_vvtest( '-i --save-results' )
-    
-    # compute a new result date to be yesterday's date
-    rf1 = glob.glob('results.*')[0]
-    s1,d,s2 = rf1.split('.',2)
-    y,m,d = d.split('_')
-    if d == '01':
-        if m == '01':
-            return  # I'm lazy
-        m = int(m)-1
-        if m < 10: m = '0'+str(m)
-        else:      m = str(m)
-        d = '28'
-    else:
-        d = int(d)-1
-        if d < 10: d = '0'+str(d)
-        else:      d = str(d)
-    rf2 = s1+'.'+y+'_'+m+'_'+d+'.'+s2
-
-    # rewrite the results file to a file with yesterday's date
-    tr = results.TestResults( rf1 )
-    platname,cplrname = tr.platform(), tr.compiler()
-    mach,testdir = tr.machine(), tr.testdir()
-    tr.writeResults( rf2, platname, cplrname, mach, testdir )
-
-    # rerun the tests
-    time.sleep(1)
-    out,np,nd,nf,nn = run_vvtest( '-w --save-results subdir' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-    ok,out = run_cmd( resultspy + ' report ' + rf1 + ' ' + rf2 )
-    assert ok
-    assert len( grep( out, 'test1' ) ) == 0
-    assert len( grep( out, 'test2' ) ) == 0
-
-    # now make a test timeout
-    writefile( "subdir/test1.xml", """
-        <rtest name="test1">
-          <timeout value="5"/>
-          <execute> sleep 10 </execute>
-        </rtest>""" )
-    
-    out,np,nd,nf,nn = run_vvtest( '-w --save-results subdir' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-    # the timed out test should not be reported
-    ok,out = run_cmd( resultspy + ' report ' + rf1 + ' ' + rf2 )
-    assert ok
-    assert len( grep( out, 'test1' ) ) == 0
-    assert len( grep( out, 'test2' ) ) == 0
-
-    # rename the results with the timed out test to yesterday's date
-    os.remove( rf2 )
-    os.rename( rf1, rf2 )
-
-    # rerun one more time, in which the test will timeout again
-    out,np,nd,nf,nn = run_vvtest( '-w --save-results subdir' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-    # the timed out test should now be reported
-    ok,out = run_cmd( resultspy + ' report ' + rf1 + ' ' + rf2 )
-    assert ok
-    assert len( grep( out, 'test1' ) ) == 1
-    assert len( grep( out, 'test2' ) ) == 0
-
-
-############################################################################
-
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )

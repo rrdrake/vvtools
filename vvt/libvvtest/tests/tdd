@@ -15,13 +15,10 @@ import time
 import filecmp
 import shutil
 import glob
+import unittest
 
 import testutils as util
-optD,argL = util.initialize( sys.argv )
-if 'TESTUTILS_RUNDIR' not in os.environ:
-    os.chdir( util.working_directory )
-
-from testutils import *
+from testutils import print3
 
 import libvvtest.TestSpec as TestSpec
 import libvvtest.TestSpecCreator as TestSpecCreator
@@ -33,247 +30,222 @@ import results
 timesfname = results.runtimes_filename
 multifname = results.multiruntimes_filename
 
-def main():
-    """
-    """
-    global argL
 
-    if len(argL) == 0:
-        argL = """filter01 results01 report01
-               """.split()
+class tdd_tests( unittest.TestCase ):
 
-    cwd = os.getcwd()
-    for func in argL:
-        os.chdir( cwd )
-        rmallfiles()
-        time.sleep(1)
-        
+    def setUp(self):
+        ""
+        util.setup_test()
+
         # force the results files to be written locally for testing here;
         # it is used in vvtest when handling the --save-results option
         os.environ['TESTING_DIRECTORY'] = os.getcwd()
 
-        # for batch tests
-        os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-        os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-        os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+    def test_that_tests_marked_TDD_are_skipped_by_default(self):
+        ""
+        util.writefile( "testone.xml", """
+            <rtest name="testone">
+                <keywords> junk TDD </keywords>
+                <execute> sleep 1 </execute>
+            </rtest>""" )
+        util.writefile( "testtwo.xml", """
+            <rtest name="testtwo">
+                <keywords> gold </keywords>
+                <execute> sleep 1 </execute>
+            </rtest>""" )
+        util.writescript( 'testthree.vvt', """
+            #!/usr/bin/env python
+            #VVT: keywords = pink
+            import time
+            time.sleep(1)
+            """ )
+        util.writescript( 'testfour.vvt', """
+            #!/usr/bin/env python
+            #VVT: keywords = blue TDD
+            import time
+            time.sleep(1)
+            """ )
 
-        print3( '====> ', func )
-        eval( func+'()' )
+        # by default, tests with TDD in keywords should not run
 
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
+        platname = util.platform_name( out )
 
-########################################################################
+        assert len( util.grep( out, 'testtwo' ) ) > 0
+        assert len( util.grep( out, 'testthree' ) ) > 0
+        assert len( util.grep( out, 'testone' ) ) == 0
+        assert len( util.grep( out, 'testfour' ) ) == 0
 
-def filter01():
-    """
-    tests marked TDD are skipped by default
-    """
-    writefile( "testone.xml", """
-        <rtest name="testone">
-            <keywords> junk TDD </keywords>
-            <execute> sleep 1 </execute>
-        </rtest>""" )
-    writefile( "testtwo.xml", """
-        <rtest name="testtwo">
-            <keywords> gold </keywords>
-            <execute> sleep 1 </execute>
-        </rtest>""" )
-    writescript( 'testthree.vvt', """
-        #!/usr/bin/env python
-        #VVT: keywords = pink
-        import time
-        time.sleep(1)
-        """ )
-    writescript( 'testfour.vvt', """
-        #!/usr/bin/env python
-        #VVT: keywords = blue TDD
-        import time
-        time.sleep(1)
-        """ )
+        out,np,nd,nf,nn = util.run_vvtest( '-i' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.grep( out, 'testtwo' ) ) > 0
+        assert len( util.grep( out, 'testthree' ) ) > 0
+        assert len( util.grep( out, 'testone' ) ) == 0
+        assert len( util.grep( out, 'testfour' ) ) == 0
 
-    # by default, tests with TDD in keywords should not run
+        cwd = os.getcwd()
+        os.chdir( tdir )
+        out,np,nd,nf,nn = util.run_vvtest( '-i' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.grep( out, 'testtwo' ) ) > 0
+        assert len( util.grep( out, 'testthree' ) ) > 0
+        assert len( util.grep( out, 'testone' ) ) == 0
+        assert len( util.grep( out, 'testfour' ) ) == 0
+        os.chdir( cwd )
 
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-    platname = platform_name( out )
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest(
+            '--plat '+util.core_platform_name()+' --batch' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
 
-    assert len( grep( out, 'testtwo' ) ) > 0
-    assert len( grep( out, 'testthree' ) ) > 0
-    assert len( grep( out, 'testone' ) ) == 0
-    assert len( grep( out, 'testfour' ) ) == 0
+        os.chdir( tdir )
+        out,np,nd,nf,nn = util.run_vvtest( '-R' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.grep( out, 'testtwo' ) ) > 0
+        assert len( util.grep( out, 'testthree' ) ) > 0
+        assert len( util.grep( out, 'testone' ) ) == 0
+        assert len( util.grep( out, 'testfour' ) ) == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-i' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    assert len( grep( out, 'testtwo' ) ) > 0
-    assert len( grep( out, 'testthree' ) ) > 0
-    assert len( grep( out, 'testone' ) ) == 0
-    assert len( grep( out, 'testfour' ) ) == 0
-    
-    cwd = os.getcwd()
-    os.chdir( tdir )
-    out,np,nd,nf,nn = run_vvtest( '-i' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    assert len( grep( out, 'testtwo' ) ) > 0
-    assert len( grep( out, 'testthree' ) ) > 0
-    assert len( grep( out, 'testone' ) ) == 0
-    assert len( grep( out, 'testfour' ) ) == 0
-    os.chdir( cwd )
-    
-    remove_results()
-    out,np,nd,nf,nn = run_vvtest( '--plat '+core_platform_name()+' --batch' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
+        # the --include-tdd option means run the tests with TDD
 
-    os.chdir( tdir )
-    out,np,nd,nf,nn = run_vvtest( '-R' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    assert len( grep( out, 'testtwo' ) ) > 0
-    assert len( grep( out, 'testthree' ) ) > 0
-    assert len( grep( out, 'testone' ) ) == 0
-    assert len( grep( out, 'testfour' ) ) == 0
+        os.chdir( cwd )
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( '--include-tdd' )
+        tdir = os.path.abspath( util.results_dir() )
+        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.grep( out, 'testtwo' ) ) > 0
+        assert len( util.grep( out, 'testthree' ) ) > 0
+        assert len( util.grep( out, 'testone' ) ) > 0
+        assert len( util.grep( out, 'testfour' ) ) > 0
 
-    # the --include-tdd option means run the tests with TDD
+        out,np,nd,nf,nn = util.run_vvtest( '-i' )
+        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.grep( out, 'testtwo' ) ) > 0
+        assert len( util.grep( out, 'testthree' ) ) > 0
+        assert len( util.grep( out, 'testone' ) ) > 0
+        assert len( util.grep( out, 'testfour' ) ) > 0
 
-    os.chdir( cwd )
-    remove_results()
-    out,np,nd,nf,nn = run_vvtest( '--include-tdd' )
-    tdir = os.path.abspath( results_dir() )
-    assert np == 4 and nd == 0 and nf == 0 and nn == 0
-    assert len( grep( out, 'testtwo' ) ) > 0
-    assert len( grep( out, 'testthree' ) ) > 0
-    assert len( grep( out, 'testone' ) ) > 0
-    assert len( grep( out, 'testfour' ) ) > 0
-    
-    out,np,nd,nf,nn = run_vvtest( '-i' )
-    assert np == 4 and nd == 0 and nf == 0 and nn == 0
-    assert len( grep( out, 'testtwo' ) ) > 0
-    assert len( grep( out, 'testthree' ) ) > 0
-    assert len( grep( out, 'testone' ) ) > 0
-    assert len( grep( out, 'testfour' ) ) > 0
+        os.chdir( tdir )
+        out,np,nd,nf,nn = util.run_vvtest( '-i' )
+        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.grep( out, 'testtwo' ) ) > 0
+        assert len( util.grep( out, 'testthree' ) ) > 0
+        assert len( util.grep( out, 'testone' ) ) > 0
+        assert len( util.grep( out, 'testfour' ) ) > 0
+        os.chdir( cwd )
 
-    os.chdir( tdir )
-    out,np,nd,nf,nn = run_vvtest( '-i' )
-    assert np == 4 and nd == 0 and nf == 0 and nn == 0
-    assert len( grep( out, 'testtwo' ) ) > 0
-    assert len( grep( out, 'testthree' ) ) > 0
-    assert len( grep( out, 'testone' ) ) > 0
-    assert len( grep( out, 'testfour' ) ) > 0
-    os.chdir( cwd )
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( '--plat '+util.core_platform_name() + \
+                                      ' --batch --include-tdd' )
+        assert np == 4 and nd == 0 and nf == 0 and nn == 0
 
-    remove_results()
-    out,np,nd,nf,nn = run_vvtest( '--plat '+core_platform_name() + \
-                                  ' --batch --include-tdd' )
-    assert np == 4 and nd == 0 and nf == 0 and nn == 0
+    def test_that_tests_marked_TDD_carry_the_mark_to_the_test_results_file(self):
+        ""
+        util.writefile( "testone.xml", """
+            <rtest name="testone">
+                <keywords> junk TDD </keywords>
+                <execute> sleep 1 </execute>
+            </rtest>""" )
+        util.writefile( "testtwo.xml", """
+            <rtest name="testtwo">
+                <keywords> gold </keywords>
+                <execute> sleep 1 </execute>
+            </rtest>""" )
+        util.writescript( 'testthree.vvt', """
+            #!/usr/bin/env python
+            #VVT: keywords = pink
+            import time
+            time.sleep(1)
+            """ )
+        util.writescript( 'testfour.vvt', """
+            #!/usr/bin/env python
+            #VVT: keywords = blue TDD
+            import time
+            time.sleep(1)
+            """ )
 
+        out,np,nd,nf,nn = util.run_vvtest( '--include-tdd' )
+        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
 
-def results01():
-    """
-    tests marked TDD carry the mark to the test results file
-    """
-    writefile( "testone.xml", """
-        <rtest name="testone">
-            <keywords> junk TDD </keywords>
-            <execute> sleep 1 </execute>
-        </rtest>""" )
-    writefile( "testtwo.xml", """
-        <rtest name="testtwo">
-            <keywords> gold </keywords>
-            <execute> sleep 1 </execute>
-        </rtest>""" )
-    writescript( 'testthree.vvt', """
-        #!/usr/bin/env python
-        #VVT: keywords = pink
-        import time
-        time.sleep(1)
-        """ )
-    writescript( 'testfour.vvt', """
-        #!/usr/bin/env python
-        #VVT: keywords = blue TDD
-        import time
-        time.sleep(1)
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest( '--include-tdd' )
-    assert np == 4 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-    
-    # bootstrap with runtimes files then save the test results
-    ok,out = run_cmd( resultspy + ' save' )
-    assert ok
-    run_vvtest( '-i --save-results' )
+        # bootstrap with runtimes files then save the test results
+        ok,out = util.run_cmd( util.resultspy + ' save' )
+        assert ok
+        util.run_vvtest( '-i --save-results' )
 
-    resultsfname = glob.glob('results.*')[0]
-    tr = results.TestResults( resultsfname )
-    
-    assert len( filegrep( resultsfname, "testone.*TDD" ) ) == 1
-    assert len( filegrep( resultsfname, "testtwo.*pass" ) ) == 1
-    assert len( filegrep( resultsfname, "testtwo.*TDD" ) ) == 0
-    assert len( filegrep( resultsfname, "testthree.*pass" ) ) == 1
-    assert len( filegrep( resultsfname, "testthree.*TDD" ) ) == 0
-    assert len( filegrep( resultsfname, "testfour.*TDD" ) ) == 1
+        resultsfname = glob.glob('results.*')[0]
+        tr = results.TestResults( resultsfname )
 
+        assert len( util.filegrep( resultsfname, "testone.*TDD" ) ) == 1
+        assert len( util.filegrep( resultsfname, "testtwo.*pass" ) ) == 1
+        assert len( util.filegrep( resultsfname, "testtwo.*TDD" ) ) == 0
+        assert len( util.filegrep( resultsfname, "testthree.*pass" ) ) == 1
+        assert len( util.filegrep( resultsfname, "testthree.*TDD" ) ) == 0
+        assert len( util.filegrep( resultsfname, "testfour.*TDD" ) ) == 1
 
-def report01():
-    """
-    tests marked TDD are handled distinguished in the reporting
-    """
-    os.mkdir( 'config' )  # force the test to use default plat & cplr
+    def test_that_tests_marked_TDD_are_distinguished_in_reporting(self):
+        ""
+        os.mkdir( 'config' )  # force the test to use default plat & cplr
 
-    writefile( "testone.xml", """
-        <rtest name="testone">
-            <keywords> junk TDD </keywords>
-            <execute> sleep 1 </execute>
-        </rtest>""" )
-    writefile( "testtwo.xml", """
-        <rtest name="testtwo">
-            <keywords> gold </keywords>
-            <execute> sleep 1 </execute>
-        </rtest>""" )
-    writescript( 'testthree.vvt', """
-        #!/usr/bin/env python
-        #VVT: keywords = pink
-        import time
-        time.sleep(1)
-        """ )
-    writescript( 'testfour.vvt', """
-        #!/usr/bin/env python
-        #VVT: keywords = blue TDD
-        import time
-        time.sleep(1)
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest( '--include-tdd --config config' )
-    assert np == 4 and nd == 0 and nf == 0 and nn == 0
-    tdir = os.path.abspath( results_dir() )
-    
-    # bootstrap with runtimes files then save the test results
-    ok,out = run_cmd( resultspy + ' save' )
-    assert ok
-    run_vvtest( '--config config -i --save-results' )
-    
-    rf1 = glob.glob('results.*')[0]
-    tr = results.TestResults( rf1 )
-    platname,cplrname = tr.platform(), tr.compiler()
-    L = rf1.split('.')
-    rf2 = L[0]+'.'+L[1]+'.Fake.'+L[3]
-    mach = os.uname()[1]
-    tr.writeResults( rf2, 'Fake', L[3], mach, '/some/fake/path' )
+        util.writefile( "testone.xml", """
+            <rtest name="testone">
+                <keywords> junk TDD </keywords>
+                <execute> sleep 1 </execute>
+            </rtest>""" )
+        util.writefile( "testtwo.xml", """
+            <rtest name="testtwo">
+                <keywords> gold </keywords>
+                <execute> sleep 1 </execute>
+            </rtest>""" )
+        util.writescript( 'testthree.vvt', """
+            #!/usr/bin/env python
+            #VVT: keywords = pink
+            import time
+            time.sleep(1)
+            """ )
+        util.writescript( 'testfour.vvt', """
+            #!/usr/bin/env python
+            #VVT: keywords = blue TDD
+            import time
+            time.sleep(1)
+            """ )
 
-    ok,out = run_cmd( resultspy + ' report ' + rf1 + ' ' + rf2 )
-    assert ok
+        out,np,nd,nf,nn = util.run_vvtest( '--include-tdd --config config' )
+        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+        tdir = os.path.abspath( util.results_dir() )
 
-    assert len( grep( out, 'Fake.gcc' ) ) == 1
-    assert len( grep( out, 'pass=2 ' ) ) == 2
-    assert len( grep( out, 'diff= ' ) ) == 0
-    assert len( grep( out, 'fail= ' ) ) == 0
+        # bootstrap with runtimes files then save the test results
+        ok,out = util.run_cmd( util.resultspy + ' save' )
+        assert ok
+        util.run_vvtest( '--config config -i --save-results' )
 
-    # excercise this, but verifying the values is hard without just
-    # bringing up a browser
-    ok = run_redirect( resultspy + ' report --html . ' + rf1 + ' ' + rf2,
-                       'short.html' )
-    assert ok
+        rf1 = glob.glob('results.*')[0]
+        tr = results.TestResults( rf1 )
+        platname,cplrname = tr.platform(), tr.compiler()
+        L = rf1.split('.')
+        rf2 = L[0]+'.'+L[1]+'.Fake.'+L[3]
+        mach = os.uname()[1]
+        tr.writeResults( rf2, 'Fake', L[3], mach, '/some/fake/path' )
+
+        ok,out = util.run_cmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
+        assert ok
+
+        assert len( util.grep( out, 'Fake.gcc' ) ) == 1
+        assert len( util.grep( out, 'pass=2 ' ) ) == 2
+        assert len( util.grep( out, 'diff= ' ) ) == 0
+        assert len( util.grep( out, 'fail= ' ) ) == 0
+
+        # excercise this, but verifying the values is hard without just
+        # bringing up a browser
+        ok = util.run_redirect(
+                util.resultspy + ' report --html . ' + rf1 + ' ' + rf2,
+                           'short.html' )
+        assert ok
 
 
 ############################################################################
 
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )

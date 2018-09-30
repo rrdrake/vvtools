@@ -12,37 +12,325 @@ sys.excepthook = sys.__excepthook__
 import os
 import re
 import time, glob, shutil
+import unittest
 
 import testutils as util
-optD,argL = util.initialize( sys.argv )
-if 'TESTUTILS_RUNDIR' not in os.environ:
-    os.chdir( util.working_directory )
-
-from testutils import *
+from testutils import print3
 
 
-def main():
-    """
-    """
-    global argL
+class config_tests( unittest.TestCase ):
 
-    if len(argL) == 0:
-        argL = """test01 test02 test03 test04 test05
-               """.split()
+    def setUp(self):
+        util.setup_test()
 
-    cwd = os.getcwd()
-    for func in argL:
-        os.chdir( cwd )
-        rmallfiles()
+    def test_using_idplatform_in_a_specified_config_directory(self):
+        ""
+        default_platname = self.using_idplatform_in_a_specified_config_directory( '' )
+        if default_platname in util.nonqueued_platform_names:
+            self.using_idplatform_in_a_specified_config_directory( '--batch' )
+
+    def using_idplatform_in_a_specified_config_directory(self, opt):
+        ""
+        util.remove_results()
+
+        util.writefile( "tst.xml", """
+            <rtest name="tst">
+              <execute> echo "the COMPILER is $COMPILER" </execute>
+            </rtest>""" )
         time.sleep(1)
-        print3( '====> ', func )
 
-        # for batch tests
-        os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-        os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-        os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+        vrun = util.vvtestRunner( opt )
+        default_platname, cplr = check_get_compiler_and_platform( vrun )
 
-        eval( func+'()' )
+        util.writefile( "config/idplatform.py", """
+            def platform( opts ):
+                return "XBox"
+            def compiler( platname, opts ):
+                return "BASIC"
+            """ )
+        util.remove_results()
+        time.sleep(1)
+
+        vrun = util.vvtestRunner( opt+' --config config' )
+        platname, cplr = check_get_compiler_and_platform( vrun )
+        assert platname == "XBox"
+        assert cplr == "BASIC"
+
+        util.writefile( "nonsense/idplatform.py", """
+            def platform( opts ):
+                return "PlayStation"
+            def compiler( platname, opts ):
+                return "Fortran"
+            """ )
+        util.remove_results()
+        time.sleep(1)
+
+        os.environ['VVTEST_CONFIGDIR'] = 'nonsense'
+        vrun = util.vvtestRunner( opt )
+        del os.environ['VVTEST_CONFIGDIR']
+        platname, cplr = check_get_compiler_and_platform( vrun )
+        assert platname == 'PlayStation'
+        assert cplr == 'Fortran'
+
+        return default_platname
+
+    def test_get_max_num_processors_from_config(self):
+        ""
+        util.writescript( 'atest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : np=1
+            import vvtest_util as vvt
+            print ( 'executing test, np='+str(vvt.np) )
+            """ )
+        util.writescript( 'btest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : np=2
+            import vvtest_util as vvt
+            print ( 'executing test, np='+str(vvt.np) )
+            """ )
+        util.writescript( 'ctest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : np=3
+            import vvtest_util as vvt
+            print ( 'executing test, np='+str(vvt.np) )
+            """ )
+        util.writescript( 'dtest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : np=4
+            import vvtest_util as vvt
+            print ( 'executing test, np='+str(vvt.np) )
+            """ )
+        time.sleep(1)
+
+        platname = util.core_platform_name()
+
+        vrun = util.vvtestRunner( '--plat '+platname )
+        assert vrun.num_pass > 0
+
+        # only run this test if the number of processors is at least 4
+        L = util.grep( vrun.out, 'max procs' )
+        assert len(L) == 1
+        maxprocs = L[0].split( 'max procs', 1 )[1].strip().lstrip('=').strip()
+        maxprocs = int( maxprocs )
+
+        if maxprocs >= 4:
+
+            assert vrun.num_pass == 4
+            util.remove_results()
+
+            util.writefile( "config/platform_plugin.py", """
+                import os, sys
+                def initialize( plat ):
+                    plat.setattr( 'maxprocs', 2 )
+                """ )
+            time.sleep(1)
+
+            vrun = util.vvtestRunner( '--plat '+platname+' --config config' )
+            assert vrun.num_pass == 2
+
+            L = util.grep( vrun.out, 'max procs' )
+            assert len(L) == 1
+            mx = L[0].split( 'max procs', 1 )[1].strip().lstrip('=').strip()
+            mx = int( mx )
+            assert mx == 2
+
+            tdir = vrun.testdir
+            assert len( glob.glob( tdir+'/atest*/execute.log' ) ) == 1
+            assert len( glob.glob( tdir+'/btest*/execute.log' ) ) == 1
+            assert len( glob.glob( tdir+'/ctest*/execute.log' ) ) == 0
+            assert len( glob.glob( tdir+'/dtest*/execute.log' ) ) == 0
+
+            util.remove_results()
+            time.sleep(1)
+
+            vrun = util.vvtestRunner( '--plat '+platname+' --batch --config config' )
+            assert vrun.num_pass == 2
+
+            L = util.grep( vrun.out, 'max procs' )
+            assert len(L) == 1
+            mx = L[0].split( 'max procs', 1 )[1].strip().lstrip('=').strip()
+            mx = int( mx )
+            assert mx == 2
+
+            tdir = vrun.testdir
+            assert len( glob.glob( tdir+'/atest*/execute.log' ) ) == 1
+            assert len( glob.glob( tdir+'/btest*/execute.log' ) ) == 1
+            assert len( glob.glob( tdir+'/ctest*/execute.log' ) ) == 0
+            assert len( glob.glob( tdir+'/dtest*/execute.log' ) ) == 0
+
+    def test_setting_platform_environ_vars(self):
+        ""
+        util.writefile( "config/platform_plugin.py", """
+            import os, sys
+            def initialize( plat ):
+                plat.setenv( 'MY_PLATFORM_VAR', 'my platform value' )
+            """ )
+
+        util.writescript( 'pytest.vvt', """
+            #!/usr/bin/env python
+            import os, sys
+            import vvtest_util as vvt
+            vvt.apply_platform_variables()
+            sys.stdout.write( 'plat vars = '+str(vvt.PLATFORM_VARIABLES)+'\\n' )
+            sys.stdout.write( 'plat var = '+os.environ['MY_PLATFORM_VAR']+'\\n' )
+            """ )
+        util.writescript( 'shtest.vvt', """
+            #!/bin/sh
+            source ./vvtest_util.sh
+            apply_platform_variables
+            echo "plat vars = $PLATFORM_VARIABLES"
+            echo "my var = $PLATVAR_MY_PLATFORM_VAR"
+            echo "my var from env = $MY_PLATFORM_VAR"
+            """ )
+
+        vrun = util.vvtestRunner( '--config config' )
+        assert vrun.num_pass == 2
+
+        tdir = vrun.testdir
+        assert len( util.filegrep( tdir+'/pytest/execute.log',
+                                   "plat vars = .*MY_PLATFORM_VAR" ) ) == 1
+        assert len( util.filegrep( tdir+'/pytest/execute.log',
+                                   "plat var = my platform value" ) ) == 1
+
+        assert len( util.filegrep( tdir+'/shtest/execute.log',
+                                   "plat vars = .*MY_PLATFORM_VAR" ) ) == 1
+        assert len( util.filegrep( tdir+'/shtest/execute.log',
+                                   "my var = my platform value" ) ) == 1
+        assert len( util.filegrep( tdir+'/shtest/execute.log',
+                                   "my var from env = my platform value" ) ) == 1
+
+    def test_using_a_script_util_plugin_from_the_config_dir(self):
+        ""
+        cfg = os.path.abspath('config')
+        util.writescript( 'pytest.vvt', """
+            #!/usr/bin/env python
+            import os
+            from script_util_plugin import *
+            assert os.path.samefile( CONFIGDIR, '"""+cfg+"""' )
+            special_function()
+            """ )
+        util.writescript( 'shtest.vvt', """
+            #!/bin/sh
+            source ./vvtest_util.sh
+            [ -e "$CONFIGDIR/script_util_plugin.sh" ] || exit 1
+            special_function
+            """ )
+
+        util.writefile( "config/script_util_plugin.py", """
+            import os, sys
+            from script_util import *
+            def special_function():
+                print3( 'hello from spec func' )
+            """ )
+        util.writefile( "config/script_util_plugin.sh", """
+            source $VVTESTSRC/config/script_util.sh
+            special_function() {
+                echo 'hello from sh spec func'
+            }
+            """ )
+
+        self.using_a_script_util_plugin_from_the_config_dir( '' )
+        self.using_a_script_util_plugin_from_the_config_dir(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def using_a_script_util_plugin_from_the_config_dir(self, opt):
+        ""
+        util.remove_results()
+
+        vrun = util.vvtestRunner( opt+' --config config' )
+        assert vrun.num_pass == 2
+
+        tdir = vrun.testdir
+        assert len( util.filegrep( tdir+'/pytest/execute.log',
+                              "hello from spec func" ) ) == 1
+        assert len( util.filegrep( tdir+'/shtest/execute.log',
+                              "hello from sh spec func" ) ) == 1
+
+    def test_exercising_defaults_and_checking_in_the_idplatform_plugin(self):
+        ""
+        default_platname = self.exercising_defaults_and_checking_in_the_idplatform_plugin( '' )
+        if default_platname in util.nonqueued_platform_names:
+            self.exercising_defaults_and_checking_in_the_idplatform_plugin( '--batch' )
+
+    def exercising_defaults_and_checking_in_the_idplatform_plugin(self, opt):
+        ""
+        util.rmallfiles()
+        time.sleep(1)
+
+        os.mkdir( 'config' )
+        util.writefile( "tst.xml", """
+            <rtest name="tst">
+              <execute> echo "the COMPILER is $COMPILER" </execute>
+            </rtest>""" )
+        util.remove_results()
+        time.sleep(1)
+
+        # first grab the default compiler and platform name
+        vrun = util.vvtestRunner( opt+' --config config' )
+        default_platname, default_cplr = check_get_compiler_and_platform( vrun )
+
+        # override idplatform.py but misspell the function names, which will
+        # force vvtest to fall back to some other default
+        util.writefile( "config/idplatform.py", """
+            def platforms( opts ):
+                return "XBox"
+            def compilers( platname, opts ):
+                return "BASIC"
+            """ )
+        util.remove_results()
+        time.sleep(1)
+
+        vrun = util.vvtestRunner( opt+' --config config' )
+        core_platname, core_cplr = check_get_compiler_and_platform( vrun )
+        # no guarantees about the value here; just make sure it is non-empty
+        assert core_cplr and core_platname
+
+        # if the functions return an empty string, the core defaults should be used
+        util.writefile( "config/idplatform.py", """
+            def platform( opts ):
+                return ''
+            def compiler( platname, opts ):
+                return ''
+            """ )
+        shutil.rmtree( vrun.testdir )
+        time.sleep(1)
+
+        vrun = util.vvtestRunner( opt+' --config config' )
+        platname, cplr = check_get_compiler_and_platform( vrun )
+        assert cplr == core_cplr
+        assert platname == core_platname
+
+        # if the functions do not return a value, the core defaults should be used
+        util.writefile( "config/idplatform.py", """
+            def platform( opts ):
+                pass
+            def compiler( platname, opts ):
+                pass
+            """ )
+        shutil.rmtree( vrun.testdir )
+        time.sleep(1)
+
+        vrun = util.vvtestRunner( opt+' --config config' )
+        platname, cplr = check_get_compiler_and_platform( vrun )
+        assert cplr == core_cplr
+        assert platname == core_platname
+
+        # the command line option --plat should take precedence
+        util.writefile( "config/idplatform.py", """
+            def platform( opts ):
+                return "XBox"
+            def compiler( platname, opts ):
+                if platname == 'PlayStation': return "BASIC"
+            """ )
+        shutil.rmtree( vrun.testdir )
+        time.sleep(1)
+
+        vrun = util.vvtestRunner( opt+' --config config --plat PlayStation' )
+        platname, cplr = check_get_compiler_and_platform( vrun )
+        assert cplr == "BASIC"
+        assert platname == "PlayStation"
+
+        return default_platname
 
 
 ########################################################################
@@ -54,7 +342,7 @@ def check_get_compiler_and_platform( vrun ):
     platname = vrun.platname
 
     tstlog = os.path.join( vrun.testdir, 'tst', 'execute.log' )
-    L = filegrep( tstlog, 'the COMPILER is' )
+    L = util.filegrep( tstlog, 'the COMPILER is' )
     cplr = L[0].split()[-1]
 
     return platname, cplr
@@ -62,335 +350,4 @@ def check_get_compiler_and_platform( vrun ):
 
 ########################################################################
 
-def test01():
-    """
-    use a file idplatform.py in a specified config directory
-    """
-    default_platname = run_test01( '' )
-    if default_platname in nonqueued_platform_names:
-        run_test01( '--batch' )
-
-def run_test01( opt ):
-    ""
-    remove_results()
-
-    writefile( "tst.xml", """
-        <rtest name="tst">
-          <execute> echo "the COMPILER is $COMPILER" </execute>
-        </rtest>""" )
-    time.sleep(1)
-
-    vrun = vvtestRunner( opt )
-    default_platname, cplr = check_get_compiler_and_platform( vrun )
-
-    writefile( "config/idplatform.py", """
-        def platform( opts ):
-            return "XBox"
-        def compiler( platname, opts ):
-            return "BASIC"
-        """ )
-    remove_results()
-    time.sleep(1)
-
-    vrun = vvtestRunner( opt+' --config config' )
-    platname, cplr = check_get_compiler_and_platform( vrun )
-    assert platname == "XBox"
-    assert cplr == "BASIC"
-
-    writefile( "nonsense/idplatform.py", """
-        def platform( opts ):
-            return "PlayStation"
-        def compiler( platname, opts ):
-            return "Fortran"
-        """ )
-    remove_results()
-    time.sleep(1)
-
-    os.environ['VVTEST_CONFIGDIR'] = 'nonsense'
-    vrun = vvtestRunner( opt )
-    del os.environ['VVTEST_CONFIGDIR']
-    platname, cplr = check_get_compiler_and_platform( vrun )
-    assert platname == 'PlayStation'
-    assert cplr == 'Fortran'
-
-    return default_platname
-
-
-########################################################################
-
-def test02():
-    """
-    get max num processors from config
-    """
-    writescript( 'atest.vvt', """
-        #!/usr/bin/env python
-        #VVT: parameterize : np=1
-        import vvtest_util as vvt
-        print ( 'executing test, np='+str(vvt.np) )
-        """ )
-    writescript( 'btest.vvt', """
-        #!/usr/bin/env python
-        #VVT: parameterize : np=2
-        import vvtest_util as vvt
-        print ( 'executing test, np='+str(vvt.np) )
-        """ )
-    writescript( 'ctest.vvt', """
-        #!/usr/bin/env python
-        #VVT: parameterize : np=3
-        import vvtest_util as vvt
-        print ( 'executing test, np='+str(vvt.np) )
-        """ )
-    writescript( 'dtest.vvt', """
-        #!/usr/bin/env python
-        #VVT: parameterize : np=4
-        import vvtest_util as vvt
-        print ( 'executing test, np='+str(vvt.np) )
-        """ )
-    time.sleep(1)
-
-    platname = core_platform_name()
-
-    vrun = vvtestRunner( '--plat '+platname )
-    assert vrun.num_pass > 0
-
-    # only run this test if the number of processors is at least 4
-    L = grep( vrun.out, 'max procs' )
-    assert len(L) == 1
-    maxprocs = L[0].split( 'max procs', 1 )[1].strip().lstrip('=').strip()
-    maxprocs = int( maxprocs )
-
-    if maxprocs >= 4:
-
-        assert vrun.num_pass == 4
-        remove_results()
-        
-        writefile( "config/platform_plugin.py", """
-            import os, sys
-            def initialize( plat ):
-                plat.setattr( 'maxprocs', 2 )
-            """ )
-        time.sleep(1)
-
-        vrun = vvtestRunner( '--plat '+platname+' --config config' )
-        assert vrun.num_pass == 2
-
-        L = grep( vrun.out, 'max procs' )
-        assert len(L) == 1
-        mx = L[0].split( 'max procs', 1 )[1].strip().lstrip('=').strip()
-        mx = int( mx )
-        assert mx == 2
-
-        tdir = vrun.testdir
-        assert len( glob.glob( tdir+'/atest*/execute.log' ) ) == 1
-        assert len( glob.glob( tdir+'/btest*/execute.log' ) ) == 1
-        assert len( glob.glob( tdir+'/ctest*/execute.log' ) ) == 0
-        assert len( glob.glob( tdir+'/dtest*/execute.log' ) ) == 0
-
-        remove_results()
-        time.sleep(1)
-
-        vrun = vvtestRunner( '--plat '+platname+' --batch --config config' )
-        assert vrun.num_pass == 2
-
-        L = grep( vrun.out, 'max procs' )
-        assert len(L) == 1
-        mx = L[0].split( 'max procs', 1 )[1].strip().lstrip('=').strip()
-        mx = int( mx )
-        assert mx == 2
-
-        tdir = vrun.testdir
-        assert len( glob.glob( tdir+'/atest*/execute.log' ) ) == 1
-        assert len( glob.glob( tdir+'/btest*/execute.log' ) ) == 1
-        assert len( glob.glob( tdir+'/ctest*/execute.log' ) ) == 0
-        assert len( glob.glob( tdir+'/dtest*/execute.log' ) ) == 0
-
-
-def test03():
-    """
-    setting platform env vars
-    """
-    writefile( "config/platform_plugin.py", """
-        import os, sys
-        def initialize( plat ):
-            plat.setenv( 'MY_PLATFORM_VAR', 'my platform value' )
-        """ )
-
-    writescript( 'pytest.vvt', """
-        #!/usr/bin/env python
-        import os, sys
-        import vvtest_util as vvt
-        vvt.apply_platform_variables()
-        sys.stdout.write( 'plat vars = '+str(vvt.PLATFORM_VARIABLES)+'\\n' )
-        sys.stdout.write( 'plat var = '+os.environ['MY_PLATFORM_VAR']+'\\n' )
-        """ )
-    writescript( 'shtest.vvt', """
-        #!/bin/sh
-        source ./vvtest_util.sh
-        apply_platform_variables
-        echo "plat vars = $PLATFORM_VARIABLES"
-        echo "my var = $PLATVAR_MY_PLATFORM_VAR"
-        echo "my var from env = $MY_PLATFORM_VAR"
-        """ )
-
-    vrun = vvtestRunner( '--config config' )
-    assert vrun.num_pass == 2
-
-    tdir = vrun.testdir
-    assert len( filegrep( tdir+'/pytest/execute.log',
-                          "plat vars = .*MY_PLATFORM_VAR" ) ) == 1
-    assert len( filegrep( tdir+'/pytest/execute.log',
-                          "plat var = my platform value" ) ) == 1
-    
-    assert len( filegrep( tdir+'/shtest/execute.log',
-                          "plat vars = .*MY_PLATFORM_VAR" ) ) == 1
-    assert len( filegrep( tdir+'/shtest/execute.log',
-                          "my var = my platform value" ) ) == 1
-    assert len( filegrep( tdir+'/shtest/execute.log',
-                          "my var from env = my platform value" ) ) == 1
-
-
-########################################################################
-
-def test04():
-    """
-    use a script util plugin from the config dir
-    """
-    cfg = os.path.abspath('config')
-    writescript( 'pytest.vvt', """
-        #!/usr/bin/env python
-        import os
-        from script_util_plugin import *
-        assert os.path.samefile( CONFIGDIR, '"""+cfg+"""' )
-        special_function()
-        """ )
-    writescript( 'shtest.vvt', """
-        #!/bin/sh
-        source ./vvtest_util.sh
-        [ -e "$CONFIGDIR/script_util_plugin.sh" ] || exit 1
-        special_function
-        """ )
-
-    writefile( "config/script_util_plugin.py", """
-        import os, sys
-        from script_util import *
-        def special_function():
-            print3( 'hello from spec func' )
-        """ )
-    writefile( "config/script_util_plugin.sh", """
-        source $VVTESTSRC/config/script_util.sh
-        special_function() {
-            echo 'hello from sh spec func'
-        }
-        """ )
-
-    run_test04( '' )
-    run_test04( '--plat '+core_platform_name()+' --batch' )
-
-def run_test04( opt ):
-    ""
-    remove_results()
-
-    vrun = vvtestRunner( opt+' --config config' )
-    assert vrun.num_pass == 2
-
-    tdir = vrun.testdir
-    assert len( filegrep( tdir+'/pytest/execute.log',
-                          "hello from spec func" ) ) == 1
-    assert len( filegrep( tdir+'/shtest/execute.log',
-                          "hello from sh spec func" ) ) == 1
-
-
-########################################################################
-
-def test05():
-    """
-    exercise defaults and checking in idplatform.py
-    """
-    default_platname = run_test05( '' )
-    if default_platname in nonqueued_platform_names:
-        run_test05( '--batch' )
-
-def run_test05( opt ):
-    ""
-    rmallfiles()
-    time.sleep(1)
-
-    os.mkdir( 'config' )
-    writefile( "tst.xml", """
-        <rtest name="tst">
-          <execute> echo "the COMPILER is $COMPILER" </execute>
-        </rtest>""" )
-    remove_results()
-    time.sleep(1)
-
-    # first grab the default compiler and platform name
-    vrun = vvtestRunner( opt+' --config config' )
-    default_platname, default_cplr = check_get_compiler_and_platform( vrun )
-
-    # override idplatform.py but misspell the function names, which will
-    # force vvtest to fall back to some other default
-    writefile( "config/idplatform.py", """
-        def platforms( opts ):
-            return "XBox"
-        def compilers( platname, opts ):
-            return "BASIC"
-        """ )
-    remove_results()
-    time.sleep(1)
-
-    vrun = vvtestRunner( opt+' --config config' )
-    core_platname, core_cplr = check_get_compiler_and_platform( vrun )
-    # no guarantees about the value here; just make sure it is non-empty
-    assert core_cplr and core_platname
-
-    # if the functions return an empty string, the core defaults should be used
-    writefile( "config/idplatform.py", """
-        def platform( opts ):
-            return ''
-        def compiler( platname, opts ):
-            return ''
-        """ )
-    shutil.rmtree( vrun.testdir )
-    time.sleep(1)
-
-    vrun = vvtestRunner( opt+' --config config' )
-    platname, cplr = check_get_compiler_and_platform( vrun )
-    assert cplr == core_cplr
-    assert platname == core_platname
-
-    # if the functions do not return a value, the core defaults should be used
-    writefile( "config/idplatform.py", """
-        def platform( opts ):
-            pass
-        def compiler( platname, opts ):
-            pass
-        """ )
-    shutil.rmtree( vrun.testdir )
-    time.sleep(1)
-
-    vrun = vvtestRunner( opt+' --config config' )
-    platname, cplr = check_get_compiler_and_platform( vrun )
-    assert cplr == core_cplr
-    assert platname == core_platname
-
-    # the command line option --plat should take precedence
-    writefile( "config/idplatform.py", """
-        def platform( opts ):
-            return "XBox"
-        def compiler( platname, opts ):
-            if platname == 'PlayStation': return "BASIC"
-        """ )
-    shutil.rmtree( vrun.testdir )
-    time.sleep(1)
-
-    vrun = vvtestRunner( opt+' --config config --plat PlayStation' )
-    platname, cplr = check_get_compiler_and_platform( vrun )
-    assert cplr == "BASIC"
-    assert platname == "PlayStation"
-
-    return default_platname
-
-
-########################################################################
-
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )

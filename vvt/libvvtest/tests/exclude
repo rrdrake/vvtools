@@ -12,465 +12,418 @@ sys.excepthook = sys.__excepthook__
 import os
 import time
 import glob
+import unittest
 
 import testutils as util
-optD,argL = util.initialize( sys.argv )
-if 'TESTUTILS_RUNDIR' not in os.environ:
-    os.chdir( util.working_directory )
-
-from testutils import *
+from testutils import print3
 
 
-def main():
-    """
-    """
-    global argL
+class exclude_tests( unittest.TestCase ):
 
-    if len(argL) == 0:
-        argL = """test01 test02 test03 test04 test05
-                  test06 test07
-               """.split()
+    def setUp(self):
+        util.setup_test()
 
-    cwd = os.getcwd()
-    for func in argL:
-        os.chdir( cwd )
-        rmallfiles()
-        time.sleep(1)
-        print3( '====> ', func )
+    def test_exclude_and_include_on_current_platform(self):
+        ""
+        util.writefile( "none.xml", """
+            <rtest name="none">
+              <execute> echo "in test none" </execute>
+            </rtest>""" )
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+        print3( "Extracted platname =", platname )
+        os.remove( 'none.xml' )
+        util.remove_results()
 
-        # for batch tests
-        os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-        os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-        os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+        util.writefile( "exclude.xml", """
+            <rtest name="exclude">
+              <include platforms="not """+platname+""""/>'
+              <execute>
+                echo "in test none"
+                sleep 1
+              </execute>
+            </rtest>""" )
 
-        eval( func+'()' )
+        out,np,nd,nf,nn = util.run_vvtest( '-w' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
+        # include the current platform
 
-########################################################################
+        os.remove( 'exclude.xml' )
+        util.writefile( "include.xml", '''
+            <rtest name="include">
+              <include platforms="'''+platname+'''"/>
+              <execute>
+                echo "in test none"
+                sleep 1
+              </execute>
+            </rtest>''' )
 
-def test01():
-    """
-    exclude & include current platform
-    """
-    writefile( "none.xml", """
-        <rtest name="none">
-          <execute> echo "in test none" </execute>
-        </rtest>""" )
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    platname = platform_name( out )
-    print3( "Extracted platname =", platname )
-    os.remove( 'none.xml' )
-    remove_results()
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    writefile( "exclude.xml", """
-        <rtest name="exclude">
-          <include platforms="not """+platname+""""/>'
-          <execute>
-            echo "in test none"
-            sleep 1
-          </execute>
-        </rtest>""" )
+        # add both an include and an exclude
 
-    out,np,nd,nf,nn = run_vvtest( '-w' )
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
-
-    # include the current platform
-
-    os.remove( 'exclude.xml' )
-    writefile( "include.xml", '''
-        <rtest name="include">
+        os.remove( 'include.xml' )
+        util.writefile( "both.xml", '''
+        <rtest name="both">
           <include platforms="'''+platname+'''"/>
+          <include platforms="not '''+platname+'''"/>
           <execute>
             echo "in test none"
             sleep 1
           </execute>
         </rtest>''' )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    # add both an include and an exclude
-    
-    os.remove( 'include.xml' )
-    writefile( "both.xml", '''
-    <rtest name="both">
-      <include platforms="'''+platname+'''"/>
-      <include platforms="not '''+platname+'''"/>
-      <execute>
-        echo "in test none"
-        sleep 1
-      </execute>
-    </rtest>''' )
-    
-    out,np,nd,nf,nn = run_vvtest( '-w' )
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
-    
-    # add -A option to ignore the include/exclude tags
-    
-    out,np,nd,nf,nn = run_vvtest( '-A' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-w' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-    # an empty include
+        # add -A option to ignore the include/exclude tags
 
-    os.remove( 'both.xml' )
-    writefile( "include.xml", '''
-        <rtest name="include">
-          <include platforms=""/>
-          <execute>
-            echo "in test include"
-            sleep 1
-          </execute>
-        </rtest>''' )
+        out,np,nd,nf,nn = util.run_vvtest( '-A' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        # an empty include
 
+        os.remove( 'both.xml' )
+        util.writefile( "include.xml", '''
+            <rtest name="include">
+              <include platforms=""/>
+              <execute>
+                echo "in test include"
+                sleep 1
+              </execute>
+            </rtest>''' )
 
-def test02():
-    """
-    use platform to exclude an execute block
-    """
-    writefile( "none.xml", """
-        <rtest name="none">
-          <execute> echo "in test none" </execute>
-        </rtest>""" )
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    platname = platform_name( out )
-    os.remove( 'none.xml' )
-    remove_results()
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-    writefile( "exe_exclude.xml", '''
-        <rtest name="exe_exclude">
-          <execute platforms="not '''+platname+'''">
-            echo "findme line not excluded"
-          </execute>
-          <execute>
-            echo "findme line number two included"
-            sleep 1
-          </execute>
-        </rtest>''' )
+    def test_using_platform_to_exclude_an_execute_block(self):
+        ""
+        util.writefile( "none.xml", """
+            <rtest name="none">
+              <execute> echo "in test none" </execute>
+            </rtest>""" )
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+        os.remove( 'none.xml' )
+        util.remove_results()
 
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    L = filegrep( results_dir()+'/exe_exclude/execute.log', "findme" )
-    assert len(L) == 1
+        util.writefile( "exe_exclude.xml", '''
+            <rtest name="exe_exclude">
+              <execute platforms="not '''+platname+'''">
+                echo "findme line not excluded"
+              </execute>
+              <execute>
+                echo "findme line number two included"
+                sleep 1
+              </execute>
+            </rtest>''' )
 
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        L = util.filegrep( util.results_dir()+'/exe_exclude/execute.log', "findme" )
+        assert len(L) == 1
 
-def test03():
-    """
-    options attribute with include
-    """
-    writefile( "opt_exclude.xml", '''
-        <rtest name="opt_exclude">
-          <include options="2D and ( tridev or tri8 )"/>
-          <execute>
-            echo "findme line number one executed"
-            sleep 1
-          </execute>
-        </rtest>''' )
+    def test_using_an_option_attribute_with_include(self):
+        ""
+        util.writefile( "opt_exclude.xml", '''
+            <rtest name="opt_exclude">
+              <include options="2D and ( tridev or tri8 )"/>
+              <execute>
+                echo "findme line number one executed"
+                sleep 1
+              </execute>
+            </rtest>''' )
 
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tridev' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-w -o 2D+tridev' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tri8' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-w -o 2D+tri8' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-w -o 2D -o tri8' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-w -o 2D -o tri8' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-w -o 3D -o tri8' )
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-w -o 3D -o tri8' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-    writefile( "opt_exclude.xml", '''
-        <rtest name="opt_exclude">
-          <include options="2D and ( tdev or t8 )"/>
-          <execute>
-            echo "findme line number one executed"
-            sleep 1
-          </execute>
-        </rtest>''' )
+        util.writefile( "opt_exclude.xml", '''
+            <rtest name="opt_exclude">
+              <include options="2D and ( tdev or t8 )"/>
+              <execute>
+                echo "findme line number one executed"
+                sleep 1
+              </execute>
+            </rtest>''' )
 
-    out,np,nd,nf,nn = run_vvtest( '-w' )
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-w' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tdev' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-w -o 2D+tdev' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
+    def test_using_a_platform_name_that_is_not_the_current_one(self):
+        ""
+        util.writefile( "none.xml", """
+            <rtest name="none">
+              <execute> echo "in test none" </execute>
+            </rtest>""" )
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+        os.remove( 'none.xml' )
+        util.remove_results()
 
-def test04():
-    """
-    platform name other than the current
-    """
-    writefile( "none.xml", """
-        <rtest name="none">
-          <execute> echo "in test none" </execute>
-        </rtest>""" )
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    platname = platform_name( out )
-    os.remove( 'none.xml' )
-    remove_results()
+        assert platname != "Fake"
+        otherplatname = "Fake"
 
-    assert platname != "Fake"
-    otherplatname = "Fake"
-    
-    writefile( "plats.xml", '''
-        <rtest name="plats">
-        <include platforms="'''+otherplatname+'''"/>
-        </rtest>''' )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
-    
-    out,np,nd,nf,nn = run_vvtest( '-x '+otherplatname )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    
-    remove_results()
-    
-    writefile( "plats.xml", '''
-        <rtest name="plats">
-        <include platforms="'''+otherplatname+''' or Dummy"/>
-        </rtest>''')
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
-    
-    out,np,nd,nf,nn = run_vvtest( '-x '+otherplatname )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    
-    remove_results()
-    
-    out,np,nd,nf,nn = run_vvtest( '-x '+platname+'/Junk' )
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
-    
-    out,np,nd,nf,nn = run_vvtest( '-x '+otherplatname+'/Junk' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    
-    remove_results()
-    
-    writefile( "plats.xml", '''
-        <rtest name="plats">
-        </rtest>''' )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    
-    remove_results()
-    
-    out,np,nd,nf,nn = run_vvtest( '-x '+otherplatname )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    
-    remove_results()
-    
-    out,np,nd,nf,nn = run_vvtest( '-X '+otherplatname )
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
-    
-    out,np,nd,nf,nn = run_vvtest( '-x '+platname+' -X '+otherplatname )
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        util.writefile( "plats.xml", '''
+            <rtest name="plats">
+            <include platforms="'''+otherplatname+'''"/>
+            </rtest>''' )
 
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-def test05():
-    """
-    include on spec having more than one test
-    """
-    writefile( "none.xml", """
-        <rtest name="none">
-          <execute> echo "in test none" </execute>
-        </rtest>""" )
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    platname = platform_name( out )
-    os.remove( 'none.xml' )
-    remove_results()
-    
-    assert platname != "Fake"
-    otherplatname = "Fake"
+        out,np,nd,nf,nn = util.run_vvtest( '-x '+otherplatname )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    writefile( "multi.xml", '''
-        <rtest name="multi">
-          <rtest name="dual"/>
-          <include testname="multi" platforms="'''+otherplatname+'''"/>
-          <include testname="dual" platforms="'''+platname+'''"/>
-          <execute> echo "hello world" </execute>
-        </rtest>''' )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    assert len( glob.glob( 'TestResults.*/dual/execute.log' ) ) == 1
-    
-    out,np,nd,nf,nn = run_vvtest( '-w -x '+platname )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    assert len( glob.glob( 'TestResults.*/dual/execute.log' ) ) == 1
-    
-    out,np,nd,nf,nn = run_vvtest( '-w -X '+platname )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    assert len( glob.glob( 'TestResults.*/multi/execute.log' ) ) == 1
-    
-    out,np,nd,nf,nn = run_vvtest( '-w -x '+platname+'/'+otherplatname )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    assert len( glob.glob( 'TestResults.*/multi/execute.log' ) ) == 1
-    assert len( glob.glob( 'TestResults.*/dual/execute.log' ) ) == 1
+        util.remove_results()
 
+        util.writefile( "plats.xml", '''
+            <rtest name="plats">
+            <include platforms="'''+otherplatname+''' or Dummy"/>
+            </rtest>''')
 
-########################################################################
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-def test06():
-    """
-    using "enable" with script test
-    """
-    writescript( "null.vvt", """
-        #!/usr/bin/env python
-        pass""" )
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    platname = platform_name( out )
-    tdir = results_dir()
-    remove_results()
-    os.remove( 'null.vvt' )
-    
-    # disable current platform
-    writescript( 'exclude.vvt', """
-        #!/bin/sh
-        #VVT: enable (platforms=not """+platname+""")
-        echo "hello world"
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
-    
-    # enable current platform
-    os.remove( 'exclude.vvt' )
-    writescript( 'include.vvt', """
-        #!/bin/sh
-        #VVT: enable (platforms="""+platname+""")
-        echo "hello world"
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest( '-w' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    
-    # add both an enable and disable
-    os.remove( 'include.vvt' )
-    writescript( 'both.vvt', """
-        #!/bin/sh
-        #VVT: enable (platforms=not """+platname+""")
-        #VVT: enable (platforms="""+platname+""")
-        echo "hello world"
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest( '-w' )
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
-    
-    # use -A to ignore enable/disable
-    out,np,nd,nf,nn = run_vvtest( '-w -A' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    
-    # an empty platform enable
-    os.remove( 'both.vvt' )
-    writescript( 'empty.vvt', """
-        #!/bin/sh
-        #VVT: name=empty1
-        #VVT: name=empty2
-        #VVT: enable (testname=empty1, platforms=)
-        echo "hello world"
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest( '-w' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    assert os.path.exists( os.path.join( tdir, 'empty2', 'execute.log' ) )
+        out,np,nd,nf,nn = util.run_vvtest( '-x '+otherplatname )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    writescript( 'empty.vvt', """
-        #!/bin/sh
-        #VVT: name=empty1
-        #VVT: name=empty2
-        #VVT: enable (testname=empty2, platforms)
-        echo "hello world"
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest( '-w' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    assert os.path.exists( os.path.join( tdir, 'empty1', 'execute.log' ) )
+        util.remove_results()
 
+        out,np,nd,nf,nn = util.run_vvtest( '-x '+platname+'/Junk' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-def test07():
-    """
-    option attributes with enable in script test
-    """
-    writescript( "null.vvt", """
-        #!/usr/bin/env python
-        pass""" )
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    platname = platform_name( out )
-    tdir = results_dir()
-    remove_results()
-    os.remove( 'null.vvt' )
-    
-    # some complex option expression
-    writescript( 'opts.vvt', """
-        #!/bin/sh
-        #VVT: enable ( options="2D and ( tridev or tri8 )" )
-        echo "hello world"
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-x '+otherplatname+'/Junk' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tridev' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        util.remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tri8' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        util.writefile( "plats.xml", '''
+            <rtest name="plats">
+            </rtest>''' )
 
-    out,np,nd,nf,nn = run_vvtest( '-w -o 2D -o tri8' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-w -o 3D -o tri8' )
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
-    
-    # combine platform with option expression
-    writescript( 'opts.vvt', """
-        #!/bin/sh
-        #VVT: enable (options="2D and ( tridev or tri8 )",""" + \
-                """platforms="""+platname+""")
-        echo "hello world"
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        util.remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tridev' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-x '+otherplatname )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tridev -X '+platname )
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        util.remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tridev -x '+platname )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    
-    # reverse the order (and add an extra comma in the attributes)
-    writescript( 'opts.vvt', """
-        #!/bin/sh
-        #VVT: enable ( platforms="""+platname+", " + \
-                   """options="2D and ( tridev or tri8 )", )
-        echo "hello world"
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-X '+otherplatname )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tridev' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( '-x '+platname+' -X '+otherplatname )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
-    out,np,nd,nf,nn = run_vvtest( '-w -o 2D+tridev -X '+platname )
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
+    def test_using_include_on_test_file_with_more_than_one_test_name(self):
+        ""
+        util.writefile( "none.xml", """
+            <rtest name="none">
+              <execute> echo "in test none" </execute>
+            </rtest>""" )
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+        os.remove( 'none.xml' )
+        util.remove_results()
+
+        assert platname != "Fake"
+        otherplatname = "Fake"
+
+        util.writefile( "multi.xml", '''
+            <rtest name="multi">
+              <rtest name="dual"/>
+              <include testname="multi" platforms="'''+otherplatname+'''"/>
+              <include testname="dual" platforms="'''+platname+'''"/>
+              <execute> echo "hello world" </execute>
+            </rtest>''' )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( glob.glob( 'TestResults.*/dual/execute.log' ) ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -x '+platname )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( glob.glob( 'TestResults.*/dual/execute.log' ) ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -X '+platname )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( glob.glob( 'TestResults.*/multi/execute.log' ) ) == 1
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -x '+platname+'/'+otherplatname )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        assert len( glob.glob( 'TestResults.*/multi/execute.log' ) ) == 1
+        assert len( glob.glob( 'TestResults.*/dual/execute.log' ) ) == 1
+
+    def test_the_enable_directive_on_script_test(self):
+        ""
+        util.writescript( "null.vvt", """
+            #!/usr/bin/env python
+            pass""" )
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+        tdir = util.results_dir()
+        util.remove_results()
+        os.remove( 'null.vvt' )
+
+        # disable current platform
+        util.writescript( 'exclude.vvt', """
+            #!/bin/sh
+            #VVT: enable (platforms=not """+platname+""")
+            echo "hello world"
+            """ )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        # enable current platform
+        os.remove( 'exclude.vvt' )
+        util.writescript( 'include.vvt', """
+            #!/bin/sh
+            #VVT: enable (platforms="""+platname+""")
+            echo "hello world"
+            """ )
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        # add both an enable and disable
+        os.remove( 'include.vvt' )
+        util.writescript( 'both.vvt', """
+            #!/bin/sh
+            #VVT: enable (platforms=not """+platname+""")
+            #VVT: enable (platforms="""+platname+""")
+            echo "hello world"
+            """ )
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        # use -A to ignore enable/disable
+        out,np,nd,nf,nn = util.run_vvtest( '-w -A' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        # an empty platform enable
+        os.remove( 'both.vvt' )
+        util.writescript( 'empty.vvt', """
+            #!/bin/sh
+            #VVT: name=empty1
+            #VVT: name=empty2
+            #VVT: enable (testname=empty1, platforms=)
+            echo "hello world"
+            """ )
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert os.path.exists( os.path.join( tdir, 'empty2', 'execute.log' ) )
+
+        util.writescript( 'empty.vvt', """
+            #!/bin/sh
+            #VVT: name=empty1
+            #VVT: name=empty2
+            #VVT: enable (testname=empty2, platforms)
+            echo "hello world"
+            """ )
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert os.path.exists( os.path.join( tdir, 'empty1', 'execute.log' ) )
+
+    def test_using_option_attributes_in_an_enable_directive(self):
+        ""
+        util.writescript( "null.vvt", """
+            #!/usr/bin/env python
+            pass""" )
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+        tdir = util.results_dir()
+        util.remove_results()
+        os.remove( 'null.vvt' )
+
+        # some complex option expression
+        util.writescript( 'opts.vvt', """
+            #!/bin/sh
+            #VVT: enable ( options="2D and ( tridev or tri8 )" )
+            echo "hello world"
+            """ )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -o 2D+tridev' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -o 2D+tri8' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -o 2D -o tri8' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -o 3D -o tri8' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        # combine platform with option expression
+        util.writescript( 'opts.vvt', """
+            #!/bin/sh
+            #VVT: enable (options="2D and ( tridev or tri8 )",""" + \
+                    """platforms="""+platname+""")
+            echo "hello world"
+            """ )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -o 2D+tridev' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -o 2D+tridev -X '+platname )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -o 2D+tridev -x '+platname )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        # reverse the order (and add an extra comma in the attributes)
+        util.writescript( 'opts.vvt', """
+            #!/bin/sh
+            #VVT: enable ( platforms="""+platname+", " + \
+                       """options="2D and ( tridev or tri8 )", )
+            echo "hello world"
+            """ )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -o 2D+tridev' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( '-w -o 2D+tridev -X '+platname )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
 
 
 ########################################################################
 
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )

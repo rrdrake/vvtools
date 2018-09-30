@@ -400,7 +400,6 @@ OPTIONS
 ############################################################################
 
 toolsdir = None
-exeName = None
 
 # the globally available option dictionary
 optdict = {}
@@ -456,7 +455,7 @@ config = Configuration()
 def main():
     ""
     # get directory containing this script and the script name itself
-    toolsdir, exeName = getExeDirAndName()
+    toolsdir = getToolsDirectory()
 
     global keyword_expr
     keyword_expr = FilterExpressions.WordExpression()
@@ -1055,8 +1054,8 @@ def readCommandInfo():
     if test_cache != None:
       
       if '-o' in optdict or '-O' in optdict or '-g' in optdict:
-        sys.stderr.write('*** ' + exeName + \
-            ': error: the -g, -o, and -O options are not allowed ' + \
+        sys.stderr.write('*** error: ' + \
+            'the -g, -o, and -O options are not allowed ' + \
             'in a TestResults directory\n')
         sys.exit(1);
       
@@ -2204,7 +2203,7 @@ def parseOptionsAndGenerateOptionDictionary():
     try: opts, dirs = getopt.getopt( argL, singles, longopts=doubles )
     except getopt.error:
         e = sys.exc_info()[1]
-        sys.stderr.write('*** ' + exeName + ': error: ' + str(e) + '\n')
+        sys.stderr.write( '*** error: ' + str(e) + '\n' )
         sys.exit(1)
     
     for optpair in opts:
@@ -2242,8 +2241,8 @@ def parseOptionsAndGenerateOptionDictionary():
                              '-n' in optdict or \
                              '-m' in optdict or \
                              '-L' in optdict ):
-      sys.stderr.write('*** ' + exeName + \
-            ': error: the only options allowed with -g are -oOMfkKpPS\n')
+      sys.stderr.write('*** error: ' + \
+            'the only options allowed with -g are -oOMfkKpPS\n')
       sys.exit(1)
     
     if '-i' in optdict and ( '-L' in optdict or \
@@ -2252,8 +2251,8 @@ def parseOptionsAndGenerateOptionDictionary():
                              '-w' in optdict or \
                              '-S' in optdict or \
                              '-b' in optdict ):
-      sys.stderr.write('*** ' + exeName + \
-            ': error: the options -fLgbRSF cannot be used with -i\n')
+      sys.stderr.write('*** error: ' + \
+            'the options -fLgbRSF cannot be used with -i\n')
       sys.exit(1)
     
     if '-b' in optdict and ( '-A' in optdict or \
@@ -2261,8 +2260,8 @@ def parseOptionsAndGenerateOptionDictionary():
                              '-w' in optdict or \
                              '-S' in optdict or \
                              '-M' in optdict ):
-      sys.stderr.write('*** ' + exeName + \
-            ': error: the options -glfMARS cannot be used with -b\n')
+      sys.stderr.write('*** error: ' + \
+            'the options -glfMARS cannot be used with -b\n')
       sys.exit(1)
     
     # parse -k & -K options into two convenient objects
@@ -2284,15 +2283,15 @@ def parseOptionsAndGenerateOptionDictionary():
       pf = FilterExpressions.ParamFilter( optdict.get('-p',None) )
     except ValueError:
       e = sys.exc_info()[1]
-      sys.stderr.write('*** ' + exeName + \
-            ': error: in -p specification: ' + str(e) + '\n')
+      sys.stderr.write('*** error: ' + \
+            'in -p specification: ' + str(e) + '\n')
       sys.exit(1)
     try:
       pf = FilterExpressions.ParamFilter( optdict.get('-P',None) )
     except ValueError:
       e = sys.exc_info()[1]
-      sys.stderr.write('*** ' + exeName + \
-            ': error: in -P specification: ' + str(e) + '\n')
+      sys.stderr.write('*** error: ' + \
+            'in -P specification: ' + str(e) + '\n')
       sys.exit(1)
     
     if '-P' in optdict:
@@ -2328,7 +2327,7 @@ def parseOptionsAndGenerateOptionDictionary():
         try:
           c = re.compile(pat)
         except:
-          sys.stderr.write( '*** ' + exeName + ': error: -s option ' + \
+          sys.stderr.write( '*** error: -s option ' + \
                             'specified an invalid regular expression: ' + pat )
           sys.exit(1)
     
@@ -2339,8 +2338,8 @@ def parseOptionsAndGenerateOptionDictionary():
       for s in optdict['-S']:
         L = s.split( '=', 1 )
         if len(L) < 2 or not L[0] or not L[1]:
-          sys.stderr.write('*** ' + exeName + \
-              ': error: -S option values must be "param=value"\n')
+          sys.stderr.write('*** error: ' + \
+              '-S option values must be "param=value"\n')
           sys.exit(1)
         if L[0] in sdict: sdict[L[0]].extend( L[1].split() )
         else:             sdict[L[0]] = L[1].split()
@@ -2350,15 +2349,15 @@ def parseOptionsAndGenerateOptionDictionary():
         val = ''.join( [ s.strip() for s in optdict['--sort'] ] )
         for c in val:
             if c not in 'nxtdsr':
-                sys.stderr.write('*** ' + exeName + \
-                    ': error: invalid --sort character: ' + c + '\n')
+                sys.stderr.write('*** error: ' + \
+                    'invalid --sort character: ' + c + '\n')
                 sys.exit(1)
         optdict[ '--sort' ] = val
 
     if '--plat' in optdict:
       if len(optdict['--plat']) > 1:
-        sys.stderr.write('*** ' + exeName + \
-              ': error: only one --plat option allowed\n')
+        sys.stderr.write('*** error: ' + \
+              'only one --plat option allowed\n')
         sys.exit(1)
       optdict['--plat'] = optdict['--plat'][0]
     
@@ -2378,33 +2377,33 @@ def parseOptionsAndGenerateOptionDictionary():
     
     if '--qsub-limit' in optdict:
       if len(optdict['--qsub-limit']) > 1:
-        sys.stderr.write('*** ' + exeName + \
-              ': error: only one --qsub-limit option allowed\n')
+        sys.stderr.write('*** error: ' + \
+              'only one --qsub-limit option allowed\n')
         sys.exit(1)
       try: val = int(optdict['--qsub-limit'][0])
       except:
-          sys.stderr.write('*** ' + exeName + \
-            ': error: the --qsub-limit option must be followed by an integer\n')
+          sys.stderr.write('*** error: ' + \
+            'the --qsub-limit option must be followed by an integer\n')
           sys.exit(1)
       if val <= 0:
-          sys.stderr.write('*** ' + exeName + \
-            ': error: the --qsub-limit value must be a positive integer\n')
+          sys.stderr.write('*** error: ' + \
+            'the --qsub-limit value must be a positive integer\n')
           sys.exit(1)
       optdict['--qsub-limit'] = val
     
     if '--qsub-length' in optdict:
       if len(optdict['--qsub-length']) > 1:
-        sys.stderr.write('*** ' + exeName + \
-              ': error: only one --qsub-length option allowed\n')
+        sys.stderr.write('*** error: ' + \
+              'only one --qsub-length option allowed\n')
         sys.exit(1)
       try: val = int(optdict['--qsub-length'][0])
       except:
-          sys.stderr.write('*** ' + exeName + \
-            ': error: the --qsub-length option must be followed by an integer\n')
+          sys.stderr.write('*** error: ' + \
+            'the --qsub-length option must be followed by an integer\n')
           sys.exit(1)
       if val < 0:
-          sys.stderr.write('*** ' + exeName + \
-            ': error: the --qsub-length value cannot be negative\n')
+          sys.stderr.write('*** error: ' + \
+            'the --qsub-length value cannot be negative\n')
           sys.exit(1)
       optdict['--qsub-length'] = val
     
@@ -2433,80 +2432,79 @@ def parseOptionsAndGenerateOptionDictionary():
       config.set( 'offopts', off )
     
     if '-j' in optdict and len(optdict['-j']) > 1:
-      sys.stderr.write('*** ' + exeName + \
-            ': error: only one -j option allowed\n')
+      sys.stderr.write('*** error: ' + \
+            'only one -j option allowed\n')
       sys.exit(1)
     
     if '-M' in optdict and len(optdict['-M']) > 1:
-      sys.stderr.write('*** ' + exeName + \
-            ': error: only one -M option allowed\n')
+      sys.stderr.write('*** error: ' + \
+            'only one -M option allowed\n')
       sys.exit(1)
 
     if '--run-dir' in optdict:
         d = optdict['--run-dir'][0]
         if d != os.path.basename(d):
-            sys.stderr.write('*** ' + exeName + \
-                ': error: --run-dir value can only be a single path segment\n')
+            sys.stderr.write('*** error: ' + \
+                '--run-dir value can only be a single path segment\n')
             sys.exit(1)
         optdict['--run-dir'] = d
 
     if '-n' in optdict:
       if len(optdict['-n']) > 1:
-          sys.stderr.write('*** ' + exeName + \
-                ': error: only one -n option is allowed\n')
+          sys.stderr.write('*** error: ' + \
+                'only one -n option is allowed\n')
           sys.exit(1)
       try: val = int(optdict['-n'][0])
       except:
-          sys.stderr.write('*** ' + exeName + \
-                ': error: the -n option must be followd by an integer\n')
+          sys.stderr.write('*** error: ' + \
+                'the -n option must be followd by an integer\n')
           sys.exit(1)
       if val <= 0:
-        sys.stderr.write('*** ' + exeName + \
-              ': error: the -n option must specify a positive integer\n')
+        sys.stderr.write('*** error: ' + \
+              'the -n option must specify a positive integer\n')
         sys.exit(1);
      
     if '-N' in optdict:
       if len(optdict['-N']) > 1:
-          sys.stderr.write('*** ' + exeName + \
-                ': error: only one -N option is allowed\n')
+          sys.stderr.write('*** error: ' + \
+                'only one -N option is allowed\n')
           sys.exit(1)
       try: val = int(optdict['-N'][0])
       except:
-          sys.stderr.write('*** ' + exeName + \
-                ': error: the -N option must be followd by an integer\n')
+          sys.stderr.write('*** error: ' + \
+                'the -N option must be followd by an integer\n')
           sys.exit(1)
       if val <= 0:
-        sys.stderr.write('*** ' + exeName + \
-              ': error: the -N option must specify a positive integer\n')
+        sys.stderr.write('*** error: ' + \
+              'the -N option must specify a positive integer\n')
         sys.exit(1);
      
     if '-T' in optdict:
       if len(optdict['-T']) > 1:
-          sys.stderr.write('*** ' + exeName + \
-                ': error: only one -T option is allowed\n')
+          sys.stderr.write('*** error: ' + \
+                'only one -T option is allowed\n')
           sys.exit(1)
       try: val = float(optdict['-T'][0])
       except:
-          sys.stderr.write('*** ' + exeName + \
-                ': error: the -T option must be followd by a number\n')
+          sys.stderr.write('*** error: ' + \
+                'the -T option must be followd by a number\n')
           sys.exit(1);
       if val < 0.0: optdict['-T'] = 0.0
       else:         optdict['-T'] = val
     
     if '--timeout-multiplier' in optdict:
       if len(optdict['--timeout-multiplier']) > 1:
-          sys.stderr.write('*** ' + exeName + \
-                ': error: only one --timeout-multiplier option is allowed\n')
+          sys.stderr.write('*** error: ' + \
+                'only one --timeout-multiplier option is allowed\n')
           sys.exit(1)
       try: val = float(optdict['--timeout-multiplier'][0])
       except:
-          sys.stderr.write('*** ' + exeName + \
-               ': error: the --timeout-multiplier option must be ' + \
-               'followd by a number\n')
+          sys.stderr.write('*** error: ' + \
+               'the --timeout-multiplier option must be followd by a number\n')
           sys.exit(1)
       if val <= 0.0:
-        sys.stderr.write('*** ' + exeName + \
-             ': error: the --timeout-multiplier option must be ' + \
+        sys.stderr.write('*** error: ' + \
+             'the --timeout-multiplier option must be ' + \
              'followd by a positive number\n')
         sys.exit(1)
       optdict['--timeout-multiplier'] = val
@@ -2516,8 +2514,8 @@ def parseOptionsAndGenerateOptionDictionary():
             val = float( optdict['--max-timeout'][-1] )
             assert val > 0
         except:
-            sys.stderr.write('*** ' + exeName + \
-               ': error: the --max-timeout option must be a positive number\n' )
+            sys.stderr.write('*** error: ' + \
+               'the --max-timeout option must be a positive number\n' )
             sys.exit(1)
         optdict['--max-timeout'] = val
 
@@ -2525,24 +2523,24 @@ def parseOptionsAndGenerateOptionDictionary():
         try:
             mn = float( optdict['--tmin'][-1] )
         except:
-            sys.stderr.write('*** ' + exeName + \
-                ': error: the --tmin option must be a number\n' )
+            sys.stderr.write('*** error: ' + \
+                'the --tmin option must be a number\n' )
             sys.exit(1)
         optdict['--tmin'] = mn
     if '--tmax' in optdict:
         try:
             mx = float( optdict['--tmax'][-1] )
         except:
-            sys.stderr.write('*** ' + exeName + \
-                ': error: the --tmax option must be a number\n' )
+            sys.stderr.write('*** error: ' + \
+                'the --tmax option must be a number\n' )
             sys.exit(1)
         optdict['--tmax'] = mx
     if '--tsum' in optdict:
         try:
             sm = float( optdict['--tsum'][-1] )
         except:
-            sys.stderr.write('*** ' + exeName + \
-                ': error: the --tsum option must be a number\n' )
+            sys.stderr.write('*** error: ' + \
+                'the --tsum option must be a number\n' )
             sys.exit(1)
         optdict['--tsum'] = sm
      
@@ -2551,7 +2549,7 @@ def parseOptionsAndGenerateOptionDictionary():
     if '-j' in optdict:
       d = optdict['-j'][0]
       if not os.path.exists(d):
-        sys.stderr.write('*** ' + exeName + ': error: project directory ' + \
+        sys.stderr.write('*** error: project directory ' + \
                          'does not exist: ' + d + os.linesep )
         sys.exit(1)
       d = os.path.abspath(d)
@@ -2596,12 +2594,12 @@ def parseOptionsAndGenerateOptionDictionary():
     return dirs
 
 
-def getExeDirAndName():
+def getToolsDirectory():
+    ""
     d = sys.path[0]
     if not d:                  d = os.getcwd()
     elif not os.path.isabs(d): d = os.path.abspath(d)
-    n = os.path.basename( sys.argv[0] )
-    return d, n
+    return d
 
 
 def check_for_bootstrap_file():

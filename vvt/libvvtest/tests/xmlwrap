@@ -11,255 +11,216 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
+import unittest
 
 import testutils as util
-optD,argL = util.initialize( sys.argv )
-if 'TESTUTILS_RUNDIR' not in os.environ:
-    os.chdir( util.working_directory )
-
-from testutils import *
+from testutils import print3
 
 import libvvtest.xmlwrapper as xmlwrapper
 
 
-def main():
-    """
-    """
-    global argL
+class xmlwrap_tests( unittest.TestCase ):
 
-    if len(argL) == 0:
-        argL = """read01 child01 split01 lineno01 subnd01
-                  match01 match02 err01
-               """.split()
+    def setUp(self):
+        util.setup_test()
 
-    for func in argL:
-        rmallfiles()
+    def test_basic_xml_read(self):
+        ""
+        util.writefile( 'my1.xml', """
+            <mytag>
+              my content
+            </mytag>""" )
+        util.writefile( 'my2.xml', """
+            <mytag myattrname="my attr value">
+            </mytag>""" )
+        util.writefile( 'my3.xml', """
+            <mytag myattrname="my attr value"/>""" )
         time.sleep(1)
-        print3( '====> ', func )
-        eval( func+'()' )
 
+        xreader = xmlwrapper.XmlDocReader()
+        nd = xreader.readDoc('my1.xml')
 
-########################################################################
+        assert nd.getName() == 'mytag'
+        assert len( nd.getAttrs() ) == 0
+        assert len( nd.getSubNodes() ) == 0
+        assert nd.getContent().strip() == 'my content'
 
-def read01():
-    """
-    basic xml read
-    """
-    writefile( 'my1.xml', """
-        <mytag>
-          my content
-        </mytag>""" )
-    writefile( 'my2.xml', """
-        <mytag myattrname="my attr value">
-        </mytag>""" )
-    writefile( 'my3.xml', """
-        <mytag myattrname="my attr value"/>""" )
-    time.sleep(1)
+        nd = xreader.readDoc('my2.xml')
 
-    xreader = xmlwrapper.XmlDocReader()
-    nd = xreader.readDoc('my1.xml')
+        assert nd.getName() == 'mytag'
+        assert len( nd.getAttrs() ) == 1
+        assert nd.getAttr( 'myattrname' ) == 'my attr value'
+        assert len( nd.getSubNodes() ) == 0
+        assert nd.getContent().strip() == ''
 
-    assert nd.getName() == 'mytag'
-    assert len( nd.getAttrs() ) == 0
-    assert len( nd.getSubNodes() ) == 0
-    assert nd.getContent().strip() == 'my content'
+        nd = xreader.readDoc('my3.xml')
 
-    nd = xreader.readDoc('my2.xml')
+        assert nd.getName() == 'mytag'
+        assert len( nd.getAttrs() ) == 1
+        assert nd.getAttr( 'myattrname' ) == 'my attr value'
+        assert len( nd.getSubNodes() ) == 0
+        assert nd.getContent().strip() == ''
 
-    assert nd.getName() == 'mytag'
-    assert len( nd.getAttrs() ) == 1
-    assert nd.getAttr( 'myattrname' ) == 'my attr value'
-    assert len( nd.getSubNodes() ) == 0
-    assert nd.getContent().strip() == ''
+    def test_child_tags(self):
+        ""
+        util.writefile( 'my.xml', """
+            <mytag>
+              <sub1 attr='blah'/>
+              <sub2> foo bar </sub2>
+            </mytag>""" )
+        time.sleep(1)
 
-    nd = xreader.readDoc('my3.xml')
-
-    assert nd.getName() == 'mytag'
-    assert len( nd.getAttrs() ) == 1
-    assert nd.getAttr( 'myattrname' ) == 'my attr value'
-    assert len( nd.getSubNodes() ) == 0
-    assert nd.getContent().strip() == ''
-
-
-def child01():
-    """
-    child tags
-    """
-    writefile( 'my.xml', """
-        <mytag>
-          <sub1 attr='blah'/>
-          <sub2> foo bar </sub2>
-        </mytag>""" )
-    time.sleep(1)
-
-    xreader = xmlwrapper.XmlDocReader()
-    nd = xreader.readDoc('my.xml')
-
-    assert nd.getName() == 'mytag'
-
-    L = nd.getSubNodes()
-    assert len(L) == 2
-
-    assert L[0].getName() == 'sub1'
-    assert len( L[0].getAttrs() ) == 1
-    assert L[0].getAttr( 'attr' ) == 'blah'
-    assert L[0].getContent().strip() == ''
-
-    assert L[1].getName() == 'sub2'
-    assert len( L[1].getAttrs() ) == 0
-    assert L[1].getContent().strip() == 'foo bar'
-
-
-def split01():
-    """
-    content interrupted by a child tag
-    """
-    writefile( 'my.xml', """
-        <mytag>
-          my content
-          <sub1 attr='blah'/>
-          more content
-          <sub2> foo bar </sub2>
-          tail content
-        </mytag>""" )
-    time.sleep(1)
-
-    xreader = xmlwrapper.XmlDocReader()
-    nd = xreader.readDoc('my.xml')
-
-    assert nd.getName() == 'mytag'
-    assert len( nd.getAttrs() ) == 0
-    assert len( nd.getSubNodes() ) == 2
-    L = non_empty_lines( nd.getContent() )
-    assert len(L) == 3
-    assert L[0] == 'my content'
-    assert L[1] == 'more content'
-    assert L[2] == 'tail content'
-
-
-def lineno01():
-    """
-    get the line numbers of the tags
-    """
-    writefile( 'my.xml', """
-        <mytag>
-          <sub1 attr='blah'/>
-          foo
-          <sub2> foo bar </sub2>
-          bar
-        </mytag>""" )
-    time.sleep(1)
-
-    xreader = xmlwrapper.XmlDocReader()
-    nd = xreader.readDoc('my.xml')
-
-    assert nd.getName() == 'mytag'
-    assert nd.getLineNumber() == 2
-
-    subL = nd.getSubNodes()
-
-    assert subL[0].getName() == 'sub1'
-    assert subL[0].getLineNumber() == 3
-
-    assert subL[1].getName() == 'sub2'
-    assert subL[1].getLineNumber() == 5
-
-
-def subnd01():
-    """
-    subNode() function
-    """
-    writefile( 'my.xml', """
-        <mytag>
-          <sub1 attr='blah'/>
-          foo
-          <sub2> blah punk </sub2>
-          bar
-        </mytag>""" )
-    time.sleep(1)
-
-    xreader = xmlwrapper.XmlDocReader()
-    nd = xreader.readDoc('my.xml')
-
-    assert nd.getName() == 'mytag'
-    assert nd.subNode( 'sub2' ).getName() == 'sub2'
-    assert nd.subNode( 'sub1' ).getName() == 'sub1'
-
-
-def match01():
-    """
-    matchNodes() function
-    """
-    writefile( 'my.xml', """
-        <mytag>
-          <foobar attr='blah'/>
-          <foobaz> blah punk </foobaz>
-        </mytag>""" )
-    time.sleep(1)
-
-    xreader = xmlwrapper.XmlDocReader()
-    nd = xreader.readDoc('my.xml')
-
-    assert nd.getName() == 'mytag'
-    L = nd.matchNodes( ['foo.*'] )
-    assert len(L) == 2
-    assert L[0].getName() == 'foobar'
-    assert L[1].getName() == 'foobaz'
-
-
-def match02():
-    """
-    matchNodes() function
-    """
-    writefile( 'my.xml', """
-        <mytag>
-          <foobar attr='blah'>
-            <deep> water </deep>
-          </foobar>
-          <foobaz> blah punk
-            <dope> a rope </dope>
-          </foobaz>
-        </mytag>""" )
-    time.sleep(1)
-
-    xreader = xmlwrapper.XmlDocReader()
-    nd = xreader.readDoc('my.xml')
-
-    assert nd.getName() == 'mytag'
-    L = nd.matchNodes( ['foo.*','dee*'] )
-    assert len(L) == 1
-    assert L[0].getName() == 'deep'
-
-
-def err01():
-    """
-    """
-    writefile( 'my.xml', """
-        <mytag>
-          <foobar attr='blah'>
-            <deep> water
-          </foobar>
-        </mytag>""" )
-    time.sleep(1)
-
-    xreader = xmlwrapper.XmlDocReader()
-
-    try:
+        xreader = xmlwrapper.XmlDocReader()
         nd = xreader.readDoc('my.xml')
-    except xmlwrapper.XmlError:
-        err = str( sys.exc_info()[1] )
-    else:
-        raise Exception( 'expected an exception' )
 
-    assert 'line 5' in err
+        assert nd.getName() == 'mytag'
+
+        L = nd.getSubNodes()
+        assert len(L) == 2
+
+        assert L[0].getName() == 'sub1'
+        assert len( L[0].getAttrs() ) == 1
+        assert L[0].getAttr( 'attr' ) == 'blah'
+        assert L[0].getContent().strip() == ''
+
+        assert L[1].getName() == 'sub2'
+        assert len( L[1].getAttrs() ) == 0
+        assert L[1].getContent().strip() == 'foo bar'
+
+    def test_content_interrupted_by_a_child_tag(self):
+        ""
+        util.writefile( 'my.xml', """
+            <mytag>
+              my content
+              <sub1 attr='blah'/>
+              more content
+              <sub2> foo bar </sub2>
+              tail content
+            </mytag>""" )
+        time.sleep(1)
+
+        xreader = xmlwrapper.XmlDocReader()
+        nd = xreader.readDoc('my.xml')
+
+        assert nd.getName() == 'mytag'
+        assert len( nd.getAttrs() ) == 0
+        assert len( nd.getSubNodes() ) == 2
+        L = non_empty_lines( nd.getContent() )
+        assert len(L) == 3
+        assert L[0] == 'my content'
+        assert L[1] == 'more content'
+        assert L[2] == 'tail content'
+
+    def test_getting_the_line_numbers_of_the_tags(self):
+        ""
+        util.writefile( 'my.xml', """
+            <mytag>
+              <sub1 attr='blah'/>
+              foo
+              <sub2> foo bar </sub2>
+              bar
+            </mytag>""" )
+        time.sleep(1)
+
+        xreader = xmlwrapper.XmlDocReader()
+        nd = xreader.readDoc('my.xml')
+
+        assert nd.getName() == 'mytag'
+        assert nd.getLineNumber() == 2
+
+        subL = nd.getSubNodes()
+
+        assert subL[0].getName() == 'sub1'
+        assert subL[0].getLineNumber() == 3
+
+        assert subL[1].getName() == 'sub2'
+        assert subL[1].getLineNumber() == 5
+
+    def test_the_subNode_function(self):
+        ""
+        util.writefile( 'my.xml', """
+            <mytag>
+              <sub1 attr='blah'/>
+              foo
+              <sub2> blah punk </sub2>
+              bar
+            </mytag>""" )
+        time.sleep(1)
+
+        xreader = xmlwrapper.XmlDocReader()
+        nd = xreader.readDoc('my.xml')
+
+        assert nd.getName() == 'mytag'
+        assert nd.subNode( 'sub2' ).getName() == 'sub2'
+        assert nd.subNode( 'sub1' ).getName() == 'sub1'
+
+    def test_the_matchNodes_function(self):
+        ""
+        util.writefile( 'my.xml', """
+            <mytag>
+              <foobar attr='blah'/>
+              <foobaz> blah punk </foobaz>
+            </mytag>""" )
+        time.sleep(1)
+
+        xreader = xmlwrapper.XmlDocReader()
+        nd = xreader.readDoc('my.xml')
+
+        assert nd.getName() == 'mytag'
+        L = nd.matchNodes( ['foo.*'] )
+        assert len(L) == 2
+        assert L[0].getName() == 'foobar'
+        assert L[1].getName() == 'foobaz'
+
+    def test_the_matchNodes_function_with_multiple_patterns(self):
+        ""
+        util.writefile( 'my.xml', """
+            <mytag>
+              <foobar attr='blah'>
+                <deep> water </deep>
+              </foobar>
+              <foobaz> blah punk
+                <dope> a rope </dope>
+              </foobaz>
+            </mytag>""" )
+        time.sleep(1)
+
+        xreader = xmlwrapper.XmlDocReader()
+        nd = xreader.readDoc('my.xml')
+
+        assert nd.getName() == 'mytag'
+        L = nd.matchNodes( ['foo.*','dee*'] )
+        assert len(L) == 1
+        assert L[0].getName() == 'deep'
+
+    def test_that_the_exception_class_gets_defined(self):
+        ""
+        util.writefile( 'my.xml', """
+            <mytag>
+              <foobar attr='blah'>
+                <deep> water
+              </foobar>
+            </mytag>""" )
+        time.sleep(1)
+
+        xreader = xmlwrapper.XmlDocReader()
+
+        try:
+            nd = xreader.readDoc('my.xml')
+        except xmlwrapper.XmlError:
+            err = str( sys.exc_info()[1] )
+        else:
+            raise Exception( 'expected an exception' )
+
+        assert 'line 5' in err
 
 
 ########################################################################
 
 def non_empty_lines( lines ):
     """
-    splits the given string into lines; returns a list of lines excluding those
-    that are empty
+    splits the given string into lines; returns a list of lines
+    excluding those that are empty
     """
     L = []
     for line in lines.split( os.linesep ):
@@ -267,6 +228,7 @@ def non_empty_lines( lines ):
             L.append( line.strip() )
     return L
 
+
 ########################################################################
 
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )

@@ -12,1226 +12,1135 @@ sys.excepthook = sys.__excepthook__
 import os
 import time
 import glob
+import unittest
 
 import testutils as util
-optD,argL = util.initialize( sys.argv )
-if 'TESTUTILS_RUNDIR' not in os.environ:
-    os.chdir( util.working_directory )
-
-from testutils import *
+from testutils import print3
 
 
-def main():
-    """
-    """
-    global argL
+class script_tests( unittest.TestCase ):
 
-    if len(argL) == 0:
-        argL = """test01 test01b
-                  test_that_python_is_always_used_to_run_non_executable_scripts
-                  test04 test05 test06
-                  test07 test08 test09 test10 test11 test12 test13
-                  test14 test15 test16 test17 test18 test19 test20
-                  test21
-               """.split()
+    def setUp(self):
+        util.setup_test()
 
-    cwd = os.getcwd()
-    for func in argL:
-        os.chdir( cwd )
-        rmallfiles()
-        time.sleep(1)
-        print3( '====> ', func )
+    def test_an_executable_script_as_a_test_file(self):
+        ""
+        util.writescript( 'hello.vvt', """
+            #!/bin/sh
+            echo "hello from the hello test script"
+            """ )
 
-        # for batch tests
-        os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-        os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-        os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+        out,np,nd,nf,nn = util.run_vvtest()
+        tdir = util.results_dir()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.greptestlist(out,'pass.*hello') ) == 1
 
-        eval( func+'()' )
+        assert len( util.filegrep( tdir+'/hello/execute.log',
+                              "hello from the hello test script" ) ) == 1
 
+    def test_that_the_test_name_can_be_different_than_the_script_name(self):
+        ""
+        util.writescript( 'hello.vvt', """
+            #!/bin/sh
+            #VVT: name=world
+            echo "hello from the hello/world test script"
+            """ )
 
-########################################################################
+        out,np,nd,nf,nn = util.run_vvtest()
+        tdir = util.results_dir()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.greptestlist(out,'pass.*hello') ) == 0
+        assert len( util.greptestlist(out,'pass.*world') ) == 1
 
-def test01():
-    """
-    an executable script as a test file
-    """
-    writescript( 'hello.vvt', """
-        #!/bin/sh
-        echo "hello from the hello test script"
-        """ )
+        assert len( util.filegrep( tdir+'/world/execute.log',
+                              "hello from the hello/world test script" ) ) == 1
 
-    out,np,nd,nf,nn = run_vvtest()
-    tdir = results_dir()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    assert len( greptestlist(out,'pass.*hello') ) == 1
+    def test_that_python_is_always_used_to_run_non_executable_scripts(self):
+        ""
+        util.writefile( 'hello.vvt',
+            "#!/bin/sh\n" + \
+            "print ( 'hello from the hello test script' )\n" )
 
-    assert len( filegrep( tdir+'/hello/execute.log',
-                          "hello from the hello test script" ) ) == 1
+        out,np,nd,nf,nn = util.run_vvtest()
+        tdir = util.results_dir()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.greptestlist(out,'pass.*hello') ) == 1
 
+        assert len( util.filegrep( tdir+'/hello/execute.log',
+                              "hello from the hello test script" ) ) == 1
 
-def test01b():
-    """
-    the test can be named different than the script name
-    """
-    writescript( 'hello.vvt', """
-        #!/bin/sh
-        #VVT: name=world
-        echo "hello from the hello/world test script"
-        """ )
+    def test_importing_the_helper_fragment(self):
+        ""
+        util.writefile( 'hello.py.vvt', """
+            import os, sys
+            print ( "hello from the python test script" )
+            import vvtest_util as vvt
+            print ( 'hello, dir=', dir(vvt) )
 
-    out,np,nd,nf,nn = run_vvtest()
-    tdir = results_dir()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    assert len( greptestlist(out,'pass.*hello') ) == 0
-    assert len( greptestlist(out,'pass.*world') ) == 1
+            assert hasattr( vvt, 'NAME' )
+            assert hasattr( vvt, 'TESTID' )
+            assert hasattr( vvt, 'PLATFORM' )
+            assert hasattr( vvt, 'COMPILER' )
+            assert hasattr( vvt, 'VVTESTSRC' )
+            assert hasattr( vvt, 'CONFIGDIR' )
+            assert hasattr( vvt, 'PROJECT' )
+            assert hasattr( vvt, 'OPTIONS' )
+            assert hasattr( vvt, 'OPTIONS_OFF' )
+            assert hasattr( vvt, 'SRCDIR' )
 
-    assert len( filegrep( tdir+'/world/execute.log',
-                          "hello from the hello/world test script" ) ) == 1
+            assert vvt.NAME == 'hello.py'
+            print ( 'PROJECT = '+vvt.PROJECT )
+            assert vvt.OPTIONS == ['dbg']
+            """ )
 
+        os.mkdir( 'bin' )
 
-########################################################################
+        self.importing_the_helper_fragment( '' )
+        self.importing_the_helper_fragment(
+            '--plat '+util.core_platform_name()+' --batch' )
 
-def test_that_python_is_always_used_to_run_non_executable_scripts():
-    ""
-    writefile( 'hello.vvt',
-        "#!/bin/sh\n" + \
-        "print ( 'hello from the hello test script' )\n" )
+    def importing_the_helper_fragment(self, opt):
+        ""
+        util.remove_results()
 
-    out,np,nd,nf,nn = run_vvtest()
-    tdir = results_dir()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    assert len( greptestlist(out,'pass.*hello') ) == 1
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -j bin -o dbg' )
+        tdir = util.results_dir()
+        platname = util.platform_name( out )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.greptestlist(out,'pass.*hello.py') ) == 1
 
-    assert len( filegrep( tdir+'/hello/execute.log',
-                          "hello from the hello test script" ) ) == 1
+        assert len( util.filegrep( tdir+'/hello.py/execute.log',
+                              "hello from the python test script" ) ) == 1
+        L = util.filegrep( tdir+'/hello.py/execute.log', "PROJECT =" )
+        assert len(L) == 1
+        assert L[0].split('=',1)[1].strip() == os.path.abspath('bin')
 
+    def test_a_python_test_that_exits_with_a_diff_a_pass_and_a_fail(self):
+        ""
+        util.writescript( 'tpass.vvt', """
+            #!/usr/bin/env python
+            import os, sys
+            import vvtest_util as vvt
+            """ )
+        util.writescript( 'tdiff.vvt', """
+            #!/usr/bin/env python
+            import os, sys
+            from script_util import *
+            exit_diff()
+            """ )
+        util.writescript( 'tfail.vvt', """
+            #!/usr/bin/env python
+            import os, sys
+            def myfunc():
+                raise Exception( "test failed" )
+            myfunc()
+            """ )
 
-########################################################################
+        self.a_python_test_that_exits_with_a_diff_a_pass_and_a_fail( '' )
+        self.a_python_test_that_exits_with_a_diff_a_pass_and_a_fail(
+            '--plat '+util.core_platform_name()+' --batch' )
 
-def test04():
-    """
-    script that imports the helper fragment
-    """
-    writefile( 'hello.py.vvt', """
-        import os, sys
-        print ( "hello from the python test script" )
-        import vvtest_util as vvt
-        print ( 'hello, dir=', dir(vvt) )
+    def a_python_test_that_exits_with_a_diff_a_pass_and_a_fail(self, opt):
+        ""
+        util.remove_results()
 
-        assert hasattr( vvt, 'NAME' )
-        assert hasattr( vvt, 'TESTID' )
-        assert hasattr( vvt, 'PLATFORM' )
-        assert hasattr( vvt, 'COMPILER' )
-        assert hasattr( vvt, 'VVTESTSRC' )
-        assert hasattr( vvt, 'CONFIGDIR' )
-        assert hasattr( vvt, 'PROJECT' )
-        assert hasattr( vvt, 'OPTIONS' )
-        assert hasattr( vvt, 'OPTIONS_OFF' )
-        assert hasattr( vvt, 'SRCDIR' )
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 1 and nd == 1 and nf == 1 and nn == 0
 
-        assert vvt.NAME == 'hello.py'
-        print ( 'PROJECT = '+vvt.PROJECT )
-        assert vvt.OPTIONS == ['dbg']
-        """ )
+    def test_multiple_tests_in_one_script_file(self):
+        ""
+        util.writescript( 'multi.vvt', """
+            #!/usr/bin/env python
+            #VVT: name=multi
+            #VVT: name=multi2
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
 
-    os.mkdir( 'bin' )
+        self.multiple_tests_in_one_script_file( '' )
+        self.multiple_tests_in_one_script_file(
+            '--plat '+util.core_platform_name()+' --batch' )
 
-    run_test04( '' )
-    run_test04( '--plat '+core_platform_name()+' --batch' )
+    def multiple_tests_in_one_script_file(self, opt):
+        ""
+        util.remove_results()
 
-def run_test04( opt ):
-    ""
-    remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        tdir = util.results_dir()
 
-    out,np,nd,nf,nn = run_vvtest( opt+' -j bin -o dbg' )
-    tdir = results_dir()
-    platname = platform_name( out )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    assert len( greptestlist(out,'pass.*hello.py') ) == 1
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.greptestlist(out,'pass.*multi') ) == 2
+        assert len( util.greptestlist(out,'pass.*multi2') ) == 1
 
-    assert len( filegrep( tdir+'/hello.py/execute.log',
-                          "hello from the python test script" ) ) == 1
-    L = filegrep( tdir+'/hello.py/execute.log', "PROJECT =" )
-    assert len(L) == 1
-    assert L[0].split('=',1)[1].strip() == os.path.abspath('bin')
+        assert len( util.filegrep( tdir+'/multi/execute.log',
+                              "hello from the multi test" ) ) == 1
+        assert len( util.filegrep( tdir+'/multi2/execute.log',
+                              "hello from the multi2 test" ) ) == 1
 
+    def test_header_specification_comment_variations(self):
+        ""
+        util.writescript( 'tst1.vvt', """
+            #!/usr/bin/env python
 
-def test05():
-    """
-    python test that exits with a diff a pass and a fail
-    """
-    writescript( 'tpass.vvt', """
-        #!/usr/bin/env python
-        import os, sys
-        import vvtest_util as vvt
-        """ )
-    writescript( 'tdiff.vvt', """
-        #!/usr/bin/env python
-        import os, sys
-        from script_util import *
-        exit_diff()
-        """ )
-    writescript( 'tfail.vvt', """
-        #!/usr/bin/env python
-        import os, sys
-        def myfunc():
-            raise Exception( "test failed" )
-        myfunc()
-        """ )
+            #VVT: name=test1
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
+        util.writescript( 'tst2.vvt', """
+            #!/usr/bin/env python
+            # 
+            #VVT: name=test2
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
+        util.writescript( 'tst3.vvt', """
+            #!/usr/bin/env python
+            import vvtest_util as vvt
+            #VVT: name=test3
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
+        util.writescript( 'tst4.vvt', """
+            #!/usr/bin/env python
+            #VVT: name=test4a
 
-    run_test05( '' )
-    run_test05( '--plat '+core_platform_name()+' --batch' )
+            #VVT: name=test4b
 
-def run_test05( opt ):
-    ""
-    remove_results()
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
+        util.writescript( 'tst5.vvt', """
+            #!/usr/bin/env python
+            # regular comments can be interleaved
+            #VVT: name=test5a
 
-    out,np,nd,nf,nn = run_vvtest( opt )
-    assert np == 1 and nd == 1 and nf == 1 and nn == 0
+            # this test should also be run
+            #VVT: name=test5b
 
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
 
-def test06():
-    """
-    multiple tests in one script file
-    """
-    writescript( 'multi.vvt', """
-        #!/usr/bin/env python
-        #VVT: name=multi
-        #VVT: name=multi2
-        import vvtest_util as vvt
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
+        out,np,nd,nf,nn = util.run_vvtest()
+        tdir = util.results_dir()
+        assert np == 7 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.greptestlist(out,'pass.*tst1') ) == 0
+        assert len( util.greptestlist(out,'pass.*test1') ) == 1
+        assert len( util.greptestlist(out,'pass.*tst2') ) == 0
+        assert len( util.greptestlist(out,'pass.*test2') ) == 1
+        assert len( util.greptestlist(out,'pass.*tst3') ) == 1
+        assert len( util.greptestlist(out,'pass.*test3') ) == 0
+        assert len( util.greptestlist(out,'pass.*test4a') ) == 1
+        assert len( util.greptestlist(out,'pass.*test4b') ) == 1
+        assert len( util.greptestlist(out,'pass.*test5a') ) == 1
+        assert len( util.greptestlist(out,'pass.*test5b') ) == 1
 
-    run_test06( '' )
-    run_test06( '--plat '+core_platform_name()+' --batch' )
+        assert len( util.filegrep( tdir+'/test1/execute.log',
+                              "hello from the test1 test" ) ) == 1
+        assert len( util.filegrep( tdir+'/test2/execute.log',
+                              "hello from the test2 test" ) ) == 1
+        assert len( util.filegrep( tdir+'/tst3/execute.log',
+                              "hello from the tst3 test" ) ) == 1
+        assert len( util.filegrep( tdir+'/test4a/execute.log',
+                              "hello from the test4a test" ) ) == 1
+        assert len( util.filegrep( tdir+'/test4b/execute.log',
+                              "hello from the test4b test" ) ) == 1
+        assert len( util.filegrep( tdir+'/test5a/execute.log',
+                              "hello from the test5a test" ) ) == 1
+        assert len( util.filegrep( tdir+'/test5b/execute.log',
+                              "hello from the test5b test" ) ) == 1
 
-def run_test06( opt ):
-    ""
-    remove_results()
+    def test_incorrect_specification_syntax(self):
+        ""
+        util.writescript( 'tst1.vvt', """
+            #!/usr/bin/env python
+            #VVT: =junk
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
+        util.writescript( 'tst2.vvt', """
+            #!/usr/bin/env python
+            #VVT: keywords (testname=tst2) foo : bar
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
+        util.writescript( 'tst2b.vvt', """
+            #!/usr/bin/env python
+            #VVT: keywords (testname=tst2b) foo
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
+        util.writescript( 'tst2c.vvt', """
+            #!/usr/bin/env python
+            #VVT: keywords (testname=tst2c) (testname=tst2b)
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
+        util.writescript( 'tst3.vvt', """
+            #!/usr/bin/env python
+            #VVT: keywords (testname=tst3) : junk
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
+        util.writescript( 'tst4.vvt', """
+            #!/usr/bin/env python
+            #VVT::
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
+        util.writescript( 'tst5.vvt', """
+            #!/usr/bin/env python
+            #VVT: keywords (=tst5) : foo bar
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
+        util.writescript( 'tst6.vvt', """
+            #!/usr/bin/env python
+            #VVT: keywords (foo=bar,=) : foo bar
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
+        util.writescript( 'tst7.vvt', """
+            #!/usr/bin/env python
+            #VVT: keywords (foo=bar : foo bar
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
 
-    out,np,nd,nf,nn = run_vvtest( opt )
-    tdir = results_dir()
+        out,np,nd,nf,nn = util.run_vvtest()
+        tdir = util.results_dir()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
 
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    assert len( greptestlist(out,'pass.*multi') ) == 2
-    assert len( greptestlist(out,'pass.*multi2') ) == 1
+        assert len( util.grep( out, 'skipping .*tst1.vvt'  ) ) == 1
+        assert len( util.grep( out, 'skipping .*tst2.vvt'  ) ) == 1
+        assert len( util.grep( out, 'skipping .*tst2b.vvt' ) ) == 1
+        assert len( util.grep( out, 'skipping .*tst2c.vvt' ) ) == 1
+        assert os.path.exists( os.path.join( tdir, 'tst3', 'execute.log' ) )
+        assert len( util.grep( out, 'skipping .*tst4.vvt' ) ) == 1
+        assert len( util.grep( out, 'skipping .*tst5.vvt' ) ) == 1
+        assert len( util.grep( out, 'skipping .*tst6.vvt' ) ) == 1
+        assert len( util.grep( out, 'skipping .*tst7.vvt' ) ) == 1
 
-    assert len( filegrep( tdir+'/multi/execute.log',
-                          "hello from the multi test" ) ) == 1
-    assert len( filegrep( tdir+'/multi2/execute.log',
-                          "hello from the multi2 test" ) ) == 1
+    def test_using_the_have_diff_utility(self):
+        ""
+        util.writescript( 'pypass.vvt', """
+            #!/usr/bin/env python
+            import os, sys
+            from script_util import *
+            if_diff_exit_diff()
+            """ )
+        util.writescript( 'pydiff.vvt', """
+            #!/usr/bin/env python
+            import os, sys
+            from script_util import *
+            set_have_diff()
+            if_diff_exit_diff()
+            """ )
+        util.writescript( 'pydiff2.vvt', """
+            #!/usr/bin/env python
+            import os, sys
+            from script_util import *
+            exit_diff()
+            """ )
+        util.writescript( 'shpass.vvt', """
+            #!/bin/sh
+            source ./vvtest_util.sh
+            if_diff_exit_diff
+            """ )
+        util.writescript( 'shdiff.vvt', """
+            #!/bin/sh
+            source ./vvtest_util.sh
+            set_have_diff
+            if_diff_exit_diff
+            """ )
+        util.writescript( 'shdiff2.vvt', """
+            #!/bin/sh
+            source ./vvtest_util.sh
+            exit_diff
+            """ )
 
-
-def test07():
-    """
-    check header specification comment variations
-    """
-    writescript( 'tst1.vvt', """
-        #!/usr/bin/env python
-
-        #VVT: name=test1
-        import vvtest_util as vvt
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
-    writescript( 'tst2.vvt', """
-        #!/usr/bin/env python
-        # 
-        #VVT: name=test2
-        import vvtest_util as vvt
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
-    writescript( 'tst3.vvt', """
-        #!/usr/bin/env python
-        import vvtest_util as vvt
-        #VVT: name=test3
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
-    writescript( 'tst4.vvt', """
-        #!/usr/bin/env python
-        #VVT: name=test4a
-
-        #VVT: name=test4b
-
-        import vvtest_util as vvt
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
-    writescript( 'tst5.vvt', """
-        #!/usr/bin/env python
-        # regular comments can be interleaved
-        #VVT: name=test5a
-
-        # this test should also be run
-        #VVT: name=test5b
-
-        import vvtest_util as vvt
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
-
-    out,np,nd,nf,nn = run_vvtest()
-    tdir = results_dir()
-    assert np == 7 and nd == 0 and nf == 0 and nn == 0
-    assert len( greptestlist(out,'pass.*tst1') ) == 0
-    assert len( greptestlist(out,'pass.*test1') ) == 1
-    assert len( greptestlist(out,'pass.*tst2') ) == 0
-    assert len( greptestlist(out,'pass.*test2') ) == 1
-    assert len( greptestlist(out,'pass.*tst3') ) == 1
-    assert len( greptestlist(out,'pass.*test3') ) == 0
-    assert len( greptestlist(out,'pass.*test4a') ) == 1
-    assert len( greptestlist(out,'pass.*test4b') ) == 1
-    assert len( greptestlist(out,'pass.*test5a') ) == 1
-    assert len( greptestlist(out,'pass.*test5b') ) == 1
-
-    assert len( filegrep( tdir+'/test1/execute.log',
-                          "hello from the test1 test" ) ) == 1
-    assert len( filegrep( tdir+'/test2/execute.log',
-                          "hello from the test2 test" ) ) == 1
-    assert len( filegrep( tdir+'/tst3/execute.log',
-                          "hello from the tst3 test" ) ) == 1
-    assert len( filegrep( tdir+'/test4a/execute.log',
-                          "hello from the test4a test" ) ) == 1
-    assert len( filegrep( tdir+'/test4b/execute.log',
-                          "hello from the test4b test" ) ) == 1
-    assert len( filegrep( tdir+'/test5a/execute.log',
-                          "hello from the test5a test" ) ) == 1
-    assert len( filegrep( tdir+'/test5b/execute.log',
-                          "hello from the test5b test" ) ) == 1
-
-
-def test08():
-    """
-    incorrect specification syntax
-    """
-    writescript( 'tst1.vvt', """
-        #!/usr/bin/env python
-        #VVT: =junk
-        import vvtest_util as vvt
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
-    writescript( 'tst2.vvt', """
-        #!/usr/bin/env python
-        #VVT: keywords (testname=tst2) foo : bar
-        import vvtest_util as vvt
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
-    writescript( 'tst2b.vvt', """
-        #!/usr/bin/env python
-        #VVT: keywords (testname=tst2b) foo
-        import vvtest_util as vvt
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
-    writescript( 'tst2c.vvt', """
-        #!/usr/bin/env python
-        #VVT: keywords (testname=tst2c) (testname=tst2b)
-        import vvtest_util as vvt
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
-    writescript( 'tst3.vvt', """
-        #!/usr/bin/env python
-        #VVT: keywords (testname=tst3) : junk
-        import vvtest_util as vvt
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
-    writescript( 'tst4.vvt', """
-        #!/usr/bin/env python
-        #VVT::
-        import vvtest_util as vvt
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
-    writescript( 'tst5.vvt', """
-        #!/usr/bin/env python
-        #VVT: keywords (=tst5) : foo bar
-        import vvtest_util as vvt
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
-    writescript( 'tst6.vvt', """
-        #!/usr/bin/env python
-        #VVT: keywords (foo=bar,=) : foo bar
-        import vvtest_util as vvt
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
-    writescript( 'tst7.vvt', """
-        #!/usr/bin/env python
-        #VVT: keywords (foo=bar : foo bar
-        import vvtest_util as vvt
-        print ( "hello from the "+vvt.NAME+" test" )
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    tdir = results_dir()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-    assert len( grep( out, 'skipping .*tst1.vvt'  ) ) == 1
-    assert len( grep( out, 'skipping .*tst2.vvt'  ) ) == 1
-    assert len( grep( out, 'skipping .*tst2b.vvt' ) ) == 1
-    assert len( grep( out, 'skipping .*tst2c.vvt' ) ) == 1
-    assert os.path.exists( os.path.join( tdir, 'tst3', 'execute.log' ) )
-    assert len( grep( out, 'skipping .*tst4.vvt' ) ) == 1
-    assert len( grep( out, 'skipping .*tst5.vvt' ) ) == 1
-    assert len( grep( out, 'skipping .*tst6.vvt' ) ) == 1
-    assert len( grep( out, 'skipping .*tst7.vvt' ) ) == 1
-
-
-def test09():
-    """
-    using the "have diff" utils
-    """
-    writescript( 'pypass.vvt', """
-        #!/usr/bin/env python
-        import os, sys
-        from script_util import *
-        if_diff_exit_diff()
-        """ )
-    writescript( 'pydiff.vvt', """
-        #!/usr/bin/env python
-        import os, sys
-        from script_util import *
-        set_have_diff()
-        if_diff_exit_diff()
-        """ )
-    writescript( 'pydiff2.vvt', """
-        #!/usr/bin/env python
-        import os, sys
-        from script_util import *
-        exit_diff()
-        """ )
-    writescript( 'shpass.vvt', """
-        #!/bin/sh
-        source ./vvtest_util.sh
-        if_diff_exit_diff
-        """ )
-    writescript( 'shdiff.vvt', """
-        #!/bin/sh
-        source ./vvtest_util.sh
-        set_have_diff
-        if_diff_exit_diff
-        """ )
-    writescript( 'shdiff2.vvt', """
-        #!/bin/sh
-        source ./vvtest_util.sh
-        exit_diff
-        """ )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 2 and nd == 4 and nf == 0 and nn == 0
-    platname = platform_name( out )
-    tdir = results_dir()
-    assert len( filegrep( tdir+'/pydiff/execute.log', 'exiting diff' ) ) == 1
-    assert len( filegrep( tdir+'/shdiff/execute.log', 'exiting diff' ) ) == 1
-    assert len( filegrep( tdir+'/pypass/execute.log', 'exiting diff' ) ) == 0
-    assert len( filegrep( tdir+'/shpass/execute.log', 'exiting diff' ) ) == 0
-
-    if platname in nonqueued_platform_names:
-        remove_results()
-        
-        out,np,nd,nf,nn = run_vvtest( '--batch' )
+        out,np,nd,nf,nn = util.run_vvtest()
         assert np == 2 and nd == 4 and nf == 0 and nn == 0
-        assert len( filegrep( tdir+'/pydiff/execute.log', 'exiting diff' ) ) == 1
-        assert len( filegrep( tdir+'/shdiff/execute.log', 'exiting diff' ) ) == 1
-        assert len( filegrep( tdir+'/pypass/execute.log', 'exiting diff' ) ) == 0
-        assert len( filegrep( tdir+'/shpass/execute.log', 'exiting diff' ) ) == 0
+        platname = util.platform_name( out )
+        tdir = util.results_dir()
+        assert len( util.filegrep( tdir+'/pydiff/execute.log', 'exiting diff' ) ) == 1
+        assert len( util.filegrep( tdir+'/shdiff/execute.log', 'exiting diff' ) ) == 1
+        assert len( util.filegrep( tdir+'/pypass/execute.log', 'exiting diff' ) ) == 0
+        assert len( util.filegrep( tdir+'/shpass/execute.log', 'exiting diff' ) ) == 0
 
-    os.chdir( tdir )
-    out,np,nd,nf,nn = run_vvtest( '-R' )
-    assert np == 2 and nd == 4 and nf == 0 and nn == 0
-    assert len( filegrep( 'pydiff/execute.log', 'exiting diff' ) ) == 1
-    assert len( filegrep( 'shdiff/execute.log', 'exiting diff' ) ) == 1
-    assert len( filegrep( 'pypass/execute.log', 'exiting diff' ) ) == 0
-    assert len( filegrep( 'shpass/execute.log', 'exiting diff' ) ) == 0
+        if platname in util.nonqueued_platform_names:
+            util.remove_results()
 
+            out,np,nd,nf,nn = util.run_vvtest( '--batch' )
+            assert np == 2 and nd == 4 and nf == 0 and nn == 0
+            assert len( util.filegrep( tdir+'/pydiff/execute.log', 'exiting diff' ) ) == 1
+            assert len( util.filegrep( tdir+'/shdiff/execute.log', 'exiting diff' ) ) == 1
+            assert len( util.filegrep( tdir+'/pypass/execute.log', 'exiting diff' ) ) == 0
+            assert len( util.filegrep( tdir+'/shpass/execute.log', 'exiting diff' ) ) == 0
 
-def test10():
-    """
-    the sedfile utility
-    """
-    writefile( 'changeme.txt', """
-        the quick brown fox jumps
-        over the lazy dog
-        """ )
-    writescript( 'pytest.vvt', """
-        #!/usr/bin/env python
-        #VVT: link = changeme.txt
-        import os
-        from script_util import *
-        assert os.path.islink( 'changeme.txt' )
-        sedfile( 'changeme.txt', 'quick', 'lazy', 'jumps', 'steps' )
-        assert not os.path.islink( 'changeme.txt' )
-        """ )
-    writescript( 'shtest.vvt', """
-        #!/bin/sh
-        #VVT: link = changeme.txt
-        source ./vvtest_util.sh
-        sedfile changeme.txt "s/quick/speedy/"
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    platname = platform_name( out )
-    tdir = results_dir()
+        os.chdir( tdir )
+        out,np,nd,nf,nn = util.run_vvtest( '-R' )
+        assert np == 2 and nd == 4 and nf == 0 and nn == 0
+        assert len( util.filegrep( 'pydiff/execute.log', 'exiting diff' ) ) == 1
+        assert len( util.filegrep( 'shdiff/execute.log', 'exiting diff' ) ) == 1
+        assert len( util.filegrep( 'pypass/execute.log', 'exiting diff' ) ) == 0
+        assert len( util.filegrep( 'shpass/execute.log', 'exiting diff' ) ) == 0
 
-    assert len( filegrep( 'changeme.txt', 'quick brown' ) ) == 1
-    assert len( filegrep( 'changeme.txt', 'lazy brown' ) ) == 0
-    assert len( filegrep( 'changeme.txt', 'fox jumps' ) ) == 1
-    assert len( filegrep( 'changeme.txt', 'fox steps' ) ) == 0
-    assert len( filegrep( 'changeme.txt', 'speedy brown' ) ) == 0
-    
-    assert not os.path.islink( tdir+'/pytest/changeme.txt' )
-    assert len( filegrep( tdir+'/pytest/changeme.txt', 'lazy brown' ) ) == 1
-    assert len( filegrep( tdir+'/pytest/changeme.txt', 'fox steps' ) ) == 1
-    assert not os.path.islink( tdir+'/shtest/changeme.txt' )
-    assert len( filegrep( tdir+'/shtest/changeme.txt', 'speedy brown' ) ) == 1
+    def test_the_sedfile_utility(self):
+        ""
+        util.writefile( 'changeme.txt', """
+            the quick brown fox jumps
+            over the lazy dog
+            """ )
+        util.writescript( 'pytest.vvt', """
+            #!/usr/bin/env python
+            #VVT: link = changeme.txt
+            import os
+            from script_util import *
+            assert os.path.islink( 'changeme.txt' )
+            sedfile( 'changeme.txt', 'quick', 'lazy', 'jumps', 'steps' )
+            assert not os.path.islink( 'changeme.txt' )
+            """ )
+        util.writescript( 'shtest.vvt', """
+            #!/bin/sh
+            #VVT: link = changeme.txt
+            source ./vvtest_util.sh
+            sedfile changeme.txt "s/quick/speedy/"
+            """ )
 
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+        tdir = util.results_dir()
 
-def test11():
-    """
-    the unixdiff utility
-    """
-    writefile( 'baseline.txt',
-               'the quick brown fox jumps\n' + \
-               'over the lazy dog' )
-    writescript( 'pypass.vvt', """
-        #!/usr/bin/env python
-        #VVT: link = baseline.txt
-        import os
-        from script_util import *
-        fp = open( 'genfile.txt', 'w' )
-        fp.write( 'the quick brown fox jumps\\n' + \
-                  'over the lazy dog\\n' )
-        fp.close()
-        unixdiff( 'baseline.txt', 'genfile.txt' )
-        if_diff_exit_diff()
-        """ )
-    writescript( 'pydiff.vvt', """
-        #!/usr/bin/env python
-        #VVT: link = baseline.txt
-        import os
-        from script_util import *
-        fp = open( 'genfile.txt', 'w' )
-        fp.write( 'the quick brown fox jumps\\n' + \
-                  'over the super lazy dog\\n' )
-        fp.close()
-        unixdiff( 'baseline.txt', 'genfile.txt' )
-        if_diff_exit_diff()
-        """ )
-    writescript( 'shpass.vvt', """
-        #!/bin/sh
-        #VVT: link = baseline.txt
-        source ./vvtest_util.sh
-        echo "the quick brown fox jumps" > genfile.txt
-        echo "over the lazy dog" >> genfile.txt
-        echo "" >> genfile.xt
-        unixdiff baseline.txt genfile.txt
-        if_diff_exit_diff
-        """ )
-    writescript( 'shdiff.vvt', """
-        #!/bin/sh
-        #VVT: link = baseline.txt
-        source ./vvtest_util.sh
-        echo "the quick brown fox jumps" > genfile.txt
-        echo "over the utterly lazy dog" >> genfile.txt
-        echo "" >> genfile.xt
-        unixdiff baseline.txt genfile.txt
-        if_diff_exit_diff
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 2 and nd == 2 and nf == 0 and nn == 0
-    platname = platform_name( out )
-    tdir = results_dir()
+        assert len( util.filegrep( 'changeme.txt', 'quick brown' ) ) == 1
+        assert len( util.filegrep( 'changeme.txt', 'lazy brown' ) ) == 0
+        assert len( util.filegrep( 'changeme.txt', 'fox jumps' ) ) == 1
+        assert len( util.filegrep( 'changeme.txt', 'fox steps' ) ) == 0
+        assert len( util.filegrep( 'changeme.txt', 'speedy brown' ) ) == 0
 
-    assert len( filegrep( tdir+'/pypass/execute.log', 'files are diff' ) ) == 0
-    assert len( filegrep( tdir+'/pydiff/execute.log', 'files are diff' ) ) == 1
-    assert len( filegrep( tdir+'/shpass/execute.log', 'files are diff' ) ) == 0
-    assert len( filegrep( tdir+'/shdiff/execute.log', 'files are diff' ) ) == 1
+        assert not os.path.islink( tdir+'/pytest/changeme.txt' )
+        assert len( util.filegrep( tdir+'/pytest/changeme.txt', 'lazy brown' ) ) == 1
+        assert len( util.filegrep( tdir+'/pytest/changeme.txt', 'fox steps' ) ) == 1
+        assert not os.path.islink( tdir+'/shtest/changeme.txt' )
+        assert len( util.filegrep( tdir+'/shtest/changeme.txt', 'speedy brown' ) ) == 1
 
+    def test_the_unixdiff_utility(self):
+        ""
+        util.writefile( 'baseline.txt',
+                   'the quick brown fox jumps\n' + \
+                   'over the lazy dog' )
+        util.writescript( 'pypass.vvt', """
+            #!/usr/bin/env python
+            #VVT: link = baseline.txt
+            import os
+            from script_util import *
+            fp = open( 'genfile.txt', 'w' )
+            fp.write( 'the quick brown fox jumps\\n' + \
+                      'over the lazy dog\\n' )
+            fp.close()
+            unixdiff( 'baseline.txt', 'genfile.txt' )
+            if_diff_exit_diff()
+            """ )
+        util.writescript( 'pydiff.vvt', """
+            #!/usr/bin/env python
+            #VVT: link = baseline.txt
+            import os
+            from script_util import *
+            fp = open( 'genfile.txt', 'w' )
+            fp.write( 'the quick brown fox jumps\\n' + \
+                      'over the super lazy dog\\n' )
+            fp.close()
+            unixdiff( 'baseline.txt', 'genfile.txt' )
+            if_diff_exit_diff()
+            """ )
+        util.writescript( 'shpass.vvt', """
+            #!/bin/sh
+            #VVT: link = baseline.txt
+            source ./vvtest_util.sh
+            echo "the quick brown fox jumps" > genfile.txt
+            echo "over the lazy dog" >> genfile.txt
+            echo "" >> genfile.xt
+            unixdiff baseline.txt genfile.txt
+            if_diff_exit_diff
+            """ )
+        util.writescript( 'shdiff.vvt', """
+            #!/bin/sh
+            #VVT: link = baseline.txt
+            source ./vvtest_util.sh
+            echo "the quick brown fox jumps" > genfile.txt
+            echo "over the utterly lazy dog" >> genfile.txt
+            echo "" >> genfile.xt
+            unixdiff baseline.txt genfile.txt
+            if_diff_exit_diff
+            """ )
 
-def test12():
-    """
-    the nlinesdiff utility
-    """
-    writescript( 'pypass.vvt', """
-        #!/usr/bin/env python
-        import os
-        from script_util import *
-        fp = open( 'genfile.txt', 'w' )
-        fp.write( 'the speedy brown fox jumps\\n' + \
-                  'over the lazy dog\\n' )
-        fp.close()
-        nlinesdiff( 'genfile.txt', 2 )
-        if_diff_exit_diff()
-        """ )
-    writescript( 'pydiff.vvt', """
-        #!/usr/bin/env python
-        import os
-        from script_util import *
-        fp = open( 'genfile.txt', 'w' )
-        fp.write( 'the speedy brown fox jumps\\n' + \
-                  'over the super lazy dog\\n' + \
-                  'and laughed\\n' )
-        fp.close()
-        nlinesdiff( 'genfile.txt', 2 )
-        if_diff_exit_diff()
-        """ )
-    writescript( 'shpass.vvt', """
-        #!/bin/sh
-        source ./vvtest_util.sh
-        echo "the speedy brown fox jumps" > genfile.txt
-        echo "over the lazy dog" >> genfile.txt
-        nlinesdiff genfile.txt 2
-        if_diff_exit_diff
-        """ )
-    writescript( 'shdiff.vvt', """
-        #!/bin/sh
-        source ./vvtest_util.sh
-        echo "the speedy brown fox jumps" > genfile.txt
-        echo "over the lazy dog" >> genfile.txt
-        echo "and laughed" >> genfile.txt
-        nlinesdiff genfile.txt 2
-        if_diff_exit_diff
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 2 and nd == 2 and nf == 0 and nn == 0
-    platname = platform_name( out )
-    tdir = results_dir()
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 2 and nd == 2 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+        tdir = util.results_dir()
 
-    assert len( filegrep( tdir+'/pypass/execute.log',
-                          'number of lines exceeded' ) ) == 0
-    assert len( filegrep( tdir+'/pydiff/execute.log',
-                          'number of lines exceeded' ) ) == 1
-    assert len( filegrep( tdir+'/shpass/execute.log',
-                          'number of lines exceeded' ) ) == 0
-    assert len( filegrep( tdir+'/shdiff/execute.log',
-                          'number of lines exceeded' ) ) == 1
+        assert len( util.filegrep( tdir+'/pypass/execute.log', 'files are diff' ) ) == 0
+        assert len( util.filegrep( tdir+'/pydiff/execute.log', 'files are diff' ) ) == 1
+        assert len( util.filegrep( tdir+'/shpass/execute.log', 'files are diff' ) ) == 0
+        assert len( util.filegrep( tdir+'/shdiff/execute.log', 'files are diff' ) ) == 1
 
+    def test_the_nlinesdiff_utility(self):
+        ""
+        util.writescript( 'pypass.vvt', """
+            #!/usr/bin/env python
+            import os
+            from script_util import *
+            fp = open( 'genfile.txt', 'w' )
+            fp.write( 'the speedy brown fox jumps\\n' + \
+                      'over the lazy dog\\n' )
+            fp.close()
+            nlinesdiff( 'genfile.txt', 2 )
+            if_diff_exit_diff()
+            """ )
+        util.writescript( 'pydiff.vvt', """
+            #!/usr/bin/env python
+            import os
+            from script_util import *
+            fp = open( 'genfile.txt', 'w' )
+            fp.write( 'the speedy brown fox jumps\\n' + \
+                      'over the super lazy dog\\n' + \
+                      'and laughed\\n' )
+            fp.close()
+            nlinesdiff( 'genfile.txt', 2 )
+            if_diff_exit_diff()
+            """ )
+        util.writescript( 'shpass.vvt', """
+            #!/bin/sh
+            source ./vvtest_util.sh
+            echo "the speedy brown fox jumps" > genfile.txt
+            echo "over the lazy dog" >> genfile.txt
+            nlinesdiff genfile.txt 2
+            if_diff_exit_diff
+            """ )
+        util.writescript( 'shdiff.vvt', """
+            #!/bin/sh
+            source ./vvtest_util.sh
+            echo "the speedy brown fox jumps" > genfile.txt
+            echo "over the lazy dog" >> genfile.txt
+            echo "and laughed" >> genfile.txt
+            nlinesdiff genfile.txt 2
+            if_diff_exit_diff
+            """ )
 
-########################################################################
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 2 and nd == 2 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+        tdir = util.results_dir()
 
-def test13():
-    """
-    copy & link files
-    """
-    writefile( 'file1.txt', """
-        this is file one
-        """ )
-    writefile( 'file2.txt', """
-        this is file two
-        """ )
-    writefile( 'file3.txt', """
-        this is file three
-        """ )
-    writescript( 'files.vvt', """
-        #!/usr/bin/env python
-        #VVT: link : file1.txt file2.txt
-        #VVT: copy : file3.txt
-        #VVT: link (rename) : file1.txt, lfile1 file2.txt,lfile2
-        #VVT: copy (rename) : file3.txt ,cfile3
-        import os
-        assert os.path.exists( 'file1.txt' )
-        assert os.path.islink( 'file1.txt' )
-        assert os.path.exists( 'file2.txt' )
-        assert os.path.islink( 'file2.txt' )
-        assert os.path.exists( 'file3.txt' )
-        assert not os.path.islink( 'file3.txt' )
-        assert os.path.exists( 'lfile1' )
-        assert os.path.islink( 'lfile1' )
-        assert os.path.exists( 'lfile2' )
-        assert os.path.islink( 'lfile2' )
-        assert os.path.exists( 'cfile3' )
-        assert not os.path.islink( 'cfile3' )
+        assert len( util.filegrep( tdir+'/pypass/execute.log',
+                              'number of lines exceeded' ) ) == 0
+        assert len( util.filegrep( tdir+'/pydiff/execute.log',
+                              'number of lines exceeded' ) ) == 1
+        assert len( util.filegrep( tdir+'/shpass/execute.log',
+                              'number of lines exceeded' ) ) == 0
+        assert len( util.filegrep( tdir+'/shdiff/execute.log',
+                              'number of lines exceeded' ) ) == 1
 
-        import filecmp
-        assert filecmp.cmp( 'file1.txt', 'lfile1', shallow=False )
-        assert filecmp.cmp( 'file2.txt', 'lfile2', shallow=False )
-        assert filecmp.cmp( 'file3.txt', 'cfile3', shallow=False )
-        """ )
-
-    run_test13( '' )
-    run_test13( '--plat '+core_platform_name()+' --batch' )
-
-def run_test13( opt ):
-    ""
-    remove_results()
-
-    out,np,nd,nf,nn = run_vvtest( opt )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    platname = platform_name( out )
-
-
-def test14():
-    """
-    copy & link files with attribute specifications
-    """
-    platname = core_platform_name()
-
-    writefile( 'file1.txt', """
-        this is file one
-        """ )
-    writefile( 'file2.txt', """
-        this is file two
-        """ )
-    writefile( 'file3.txt', """
-        this is file three
-        """ )
-    writefile( 'file4.txt', """
-        this is file four
-        """ )
-    writefile( 'file5.txt', """
-        this is file five
-        """ )
-    writescript( 'files.vvt', """
-        #!/usr/bin/env python
-        
-        #VVT: name = files
-        #VVT: name = another
-        #VVT: link (testname=files): file1.txt
-        #VVT: link (testname=not files): file2.txt
-        #VVT: copy (options=dbg, testname=another) : file3.txt
-        #VVT: link (rename, platforms="Junk") : file4.txt, lfile4
-        #VVT: copy (rename, platforms="""+platname+""") : file5.txt,cfile5
-        
-        import os
-        import script_util as vvt
-        if vvt.NAME == 'files':
+    def test_copy_and_link_files_specification(self):
+        ""
+        util.writefile( 'file1.txt', """
+            this is file one
+            """ )
+        util.writefile( 'file2.txt', """
+            this is file two
+            """ )
+        util.writefile( 'file3.txt', """
+            this is file three
+            """ )
+        util.writescript( 'files.vvt', """
+            #!/usr/bin/env python
+            #VVT: link : file1.txt file2.txt
+            #VVT: copy : file3.txt
+            #VVT: link (rename) : file1.txt, lfile1 file2.txt,lfile2
+            #VVT: copy (rename) : file3.txt ,cfile3
+            import os
             assert os.path.exists( 'file1.txt' )
             assert os.path.islink( 'file1.txt' )
-            assert not os.path.exists( 'file2.txt' )
-        else:
             assert os.path.exists( 'file2.txt' )
             assert os.path.islink( 'file2.txt' )
-        if 'dbg' in vvt.OPTIONS and vvt.NAME == 'another':
             assert os.path.exists( 'file3.txt' )
             assert not os.path.islink( 'file3.txt' )
-        else:
-            assert not os.path.exists( 'file3.txt' )
-        assert not os.path.exists( 'file4.txt' )
-        assert not os.path.exists( 'lfile4' )
-        assert os.path.exists( 'cfile5' )
-        assert not os.path.islink( 'cfile5' )
-        """ )
+            assert os.path.exists( 'lfile1' )
+            assert os.path.islink( 'lfile1' )
+            assert os.path.exists( 'lfile2' )
+            assert os.path.islink( 'lfile2' )
+            assert os.path.exists( 'cfile3' )
+            assert not os.path.islink( 'cfile3' )
 
-    run_test14( '--plat '+core_platform_name() )
-    run_test14( '--plat '+core_platform_name()+' --batch' )
+            import filecmp
+            assert filecmp.cmp( 'file1.txt', 'lfile1', shallow=False )
+            assert filecmp.cmp( 'file2.txt', 'lfile2', shallow=False )
+            assert filecmp.cmp( 'file3.txt', 'cfile3', shallow=False )
+            """ )
 
-def run_test14( opt ):
-    ""
-    remove_results()
+        self.copy_and_link_files_specification( '' )
+        self.copy_and_link_files_specification(
+            '--plat '+util.core_platform_name()+' --batch' )
 
-    out,np,nd,nf,nn = run_vvtest( opt )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    remove_results()
+    def copy_and_link_files_specification(self, opt):
+        ""
+        util.remove_results()
 
-    out,np,nd,nf,nn = run_vvtest( opt+' -o dbg' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    dbgdir = results_dir()
-    assert os.path.exists( dbgdir+'/another/file3.txt' )
-    assert not os.path.islink( dbgdir+'/another/file3.txt' )
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        platname = util.platform_name( out )
 
+    def test_copy_and_link_files_with_attribute_specifications(self):
+        ""
+        platname = util.core_platform_name()
 
-########################################################################
-
-def test15():
-    """
-    using the vvtest system utility functions
-    """
-    platname = core_platform_name()
-
-    writescript( 'pytest.vvt', """
-        #!/usr/bin/env python
-        #VVT: parameterize : A = 1 3 5
-        import script_util as vvt
-        print3 = vvt.print3
-        if vvt.parameter_expr( "A<3 or A=5" ):
-            print3( "with A="+vvt.A+" param expr true" )
-        else:
-            print3( "with A="+vvt.A+" param expr false" )
-        if vvt.platform_expr( 'Junk or """+platname+"""' ):
-            print3( "plat expr true" )
-        else:
-            print3( "plat expr false" )
-        if vvt.platform_expr( 'Junk' ):
-            print3( "plat expr2 true" )
-        else:
-            print3( "plat expr2 false" )
-        if vvt.option_expr( 'dbg and not intel' ):
-            print3( "option expr true" )
-        else:
-            print3( "option expr false" )
-        """ )
-    writescript( 'shtest.vvt', """
-        #!/bin/sh
-        #VVT: parameterize : B = 1 3 5
-        source ./vvtest_util.sh
-        if parameter_expr "B<3 or B=5"
-        then
-            echo "with B=$B param expr true"
-        else
-            echo "with B=$B param expr false"
-        fi
-        if platform_expr 'Junk or """+platname+"""'
-        then
-            echo "plat expr true"
-        else
-            echo "plat expr false"
-        fi
-        if platform_expr 'Junk'
-        then
-            echo "plat expr2 true"
-        else
-            echo "plat expr2 false"
-        fi
-        if option_expr 'dbg and not intel'
-        then
-            echo "option expr true"
-        else
-            echo "option expr false"
-        fi
-        """ )
-
-    run_test15( '--plat '+core_platform_name() )
-    run_test15( '--plat '+core_platform_name()+' --batch' )
-
-def run_test15( opt ):
-    ""
-    remove_results()
-
-    out,np,nd,nf,nn = run_vvtest( opt )
-    assert np == 6 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-
-    assert len( filegrep( tdir+'/pytest.A=1/execute.log',
-                          'with A=1 param expr true' ) ) == 1
-    assert len( filegrep( tdir+'/pytest.A=3/execute.log',
-                          'with A=3 param expr false' ) ) == 1
-    assert len( filegrep( tdir+'/pytest.A=5/execute.log',
-                          'with A=5 param expr true' ) ) == 1
-    assert len( filegrep( tdir+'/shtest.B=1/execute.log',
-                          'with B=1 param expr true' ) ) == 1
-    assert len( filegrep( tdir+'/shtest.B=3/execute.log',
-                          'with B=3 param expr false' ) ) == 1
-    assert len( filegrep( tdir+'/shtest.B=5/execute.log',
-                          'with B=5 param expr true' ) ) == 1
-    
-    assert len( filegrep( tdir+'/pytest.A=3/execute.log',
-                          'plat expr true' ) ) == 1
-    assert len( filegrep( tdir+'/pytest.A=3/execute.log',
-                          'plat expr2 false' ) ) == 1
-    assert len( filegrep( tdir+'/shtest.B=5/execute.log',
-                          'plat expr true' ) ) == 1
-    assert len( filegrep( tdir+'/shtest.B=5/execute.log',
-                          'plat expr2 false' ) ) == 1
-    
-    assert len( filegrep( tdir+'/pytest.A=1/execute.log',
-                          'option expr false' ) ) == 1
-    assert len( filegrep( tdir+'/shtest.B=1/execute.log',
-                          'option expr false' ) ) == 1
-    
-    remove_results()
-    out,np,nd,nf,nn = run_vvtest( opt+' -o dbg' )
-    assert np == 6 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    assert len( filegrep( tdir+'/pytest.A=1/execute.log',
-                          'option expr true' ) ) == 1
-    assert len( filegrep( tdir+'/shtest.B=1/execute.log',
-                          'option expr true' ) ) == 1
-    
-    remove_results()
-    out,np,nd,nf,nn = run_vvtest( opt+' -o dbg+intel' )
-    assert np == 6 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    assert len( filegrep( tdir+'/pytest.A=1/execute.log',
-                          'option expr false' ) ) == 1
-    assert len( filegrep( tdir+'/shtest.B=1/execute.log',
-                          'option expr false' ) ) == 1
-
-
-def test16():
-    """
-    using the vvtest system utility functions in an analyze test
-    """
-    writescript( "null.vvt", """
-        #!/bin/sh
-        echo null
-        """ )
-
-    out,np,nd,nf,nn = run_vvtest( '-o dbg' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    platname = platform_name( out )
-    tdir = results_dir()
-    remove_results()
-    os.remove( 'null.vvt' )
-
-    writescript( 'pytest.vvt', """
-        #!/usr/bin/env python
-        #VVT: parameterize : A = 1 2
-        #VVT: analyze : -a
-        import sys
-        import script_util as vvt
-        print3 = vvt.print3
-        if '-a' in sys.argv:
-            pass
-            if vvt.parameter_expr( "not A" ):
-                print3( "analyze param expr true" )
+        util.writefile( 'file1.txt', """
+            this is file one
+            """ )
+        util.writefile( 'file2.txt', """
+            this is file two
+            """ )
+        util.writefile( 'file3.txt', """
+            this is file three
+            """ )
+        util.writefile( 'file4.txt', """
+            this is file four
+            """ )
+        util.writefile( 'file5.txt', """
+            this is file five
+            """ )
+        util.writescript( 'files.vvt', """
+            #!/usr/bin/env python
+            
+            #VVT: name = files
+            #VVT: name = another
+            #VVT: link (testname=files): file1.txt
+            #VVT: link (testname=not files): file2.txt
+            #VVT: copy (options=dbg, testname=another) : file3.txt
+            #VVT: link (rename, platforms="Junk") : file4.txt, lfile4
+            #VVT: copy (rename, platforms="""+platname+""") : file5.txt,cfile5
+            
+            import os
+            import script_util as vvt
+            if vvt.NAME == 'files':
+                assert os.path.exists( 'file1.txt' )
+                assert os.path.islink( 'file1.txt' )
+                assert not os.path.exists( 'file2.txt' )
             else:
-                print3( "analyze param expr false" )
+                assert os.path.exists( 'file2.txt' )
+                assert os.path.islink( 'file2.txt' )
+            if 'dbg' in vvt.OPTIONS and vvt.NAME == 'another':
+                assert os.path.exists( 'file3.txt' )
+                assert not os.path.islink( 'file3.txt' )
+            else:
+                assert not os.path.exists( 'file3.txt' )
+            assert not os.path.exists( 'file4.txt' )
+            assert not os.path.exists( 'lfile4' )
+            assert os.path.exists( 'cfile5' )
+            assert not os.path.islink( 'cfile5' )
+            """ )
+
+        self.copy_and_link_files_with_attribute_specifications(
+            '--plat '+util.core_platform_name() )
+        self.copy_and_link_files_with_attribute_specifications(
+            '--plat '+util.core_platform_name()+' --batch' )
+
+    def copy_and_link_files_with_attribute_specifications(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -o dbg' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        dbgdir = util.results_dir()
+        assert os.path.exists( dbgdir+'/another/file3.txt' )
+        assert not os.path.islink( dbgdir+'/another/file3.txt' )
+
+    def test_using_the_vvtest_system_utility_functions(self):
+        ""
+        platname = util.core_platform_name()
+
+        util.writescript( 'pytest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : A = 1 3 5
+            import script_util as vvt
+            print3 = vvt.print3
+            if vvt.parameter_expr( "A<3 or A=5" ):
+                print3( "with A="+vvt.A+" param expr true" )
+            else:
+                print3( "with A="+vvt.A+" param expr false" )
             if vvt.platform_expr( 'Junk or """+platname+"""' ):
-                print3( "analyze plat expr true" )
+                print3( "plat expr true" )
             else:
-                print3( "analyze plat expr false" )
+                print3( "plat expr false" )
             if vvt.platform_expr( 'Junk' ):
-                print3( "analyze plat expr2 true" )
+                print3( "plat expr2 true" )
             else:
-                print3( "analyze plat expr2 false" )
+                print3( "plat expr2 false" )
             if vvt.option_expr( 'dbg and not intel' ):
-                print3( "analyze option expr true" )
+                print3( "option expr true" )
             else:
-                print3( "analyze option expr false" )
-        """ )
-    writescript( 'shtest.vvt', """
-        #!/bin/sh
-        #VVT: parameterize : B = 1 2
-        #VVT: analyze : -a
-        source ./vvtest_util.sh
-        analyze=false
-        for opt in "$@"
-        do
-          [ "$opt" = "-a" ] && analyze=true
-        done
-        if [ $analyze = true ]
-        then
-            if parameter_expr "B"
+                print3( "option expr false" )
+            """ )
+        util.writescript( 'shtest.vvt', """
+            #!/bin/sh
+            #VVT: parameterize : B = 1 3 5
+            source ./vvtest_util.sh
+            if parameter_expr "B<3 or B=5"
             then
-                echo "analyze param expr true"
+                echo "with B=$B param expr true"
             else
-                echo "analyze param expr false"
+                echo "with B=$B param expr false"
             fi
             if platform_expr 'Junk or """+platname+"""'
             then
-                echo "analyze plat expr true"
+                echo "plat expr true"
             else
-                echo "analyze plat expr false"
+                echo "plat expr false"
             fi
             if platform_expr 'Junk'
             then
-                echo "analyze plat expr2 true"
+                echo "plat expr2 true"
             else
-                echo "analyze plat expr2 false"
+                echo "plat expr2 false"
             fi
             if option_expr 'dbg and not intel'
             then
-                echo "analyze option expr true"
+                echo "option expr true"
             else
-                echo "analyze option expr false"
+                echo "option expr false"
             fi
-        fi
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest( '-o dbg' )
-    assert np == 6 and nd == 0 and nf == 0 and nn == 0
-    
-    for f in glob.glob( tdir+'/*=*/execute.log' ):
-        assert len( filegrep( f, 'analyze' ) ) == 0
-    
-    assert len( filegrep( tdir+'/pytest/execute.log',
-                          'analyze param expr true' ) ) == 1
-    assert len( filegrep( tdir+'/pytest/execute.log',
-                          'analyze plat expr true' ) ) == 1
-    assert len( filegrep( tdir+'/pytest/execute.log',
-                          'analyze plat expr2 false' ) ) == 1
-    assert len( filegrep( tdir+'/pytest/execute.log',
-                          'analyze option expr true' ) ) == 1
-    
-    assert len( filegrep( tdir+'/shtest/execute.log',
-                          'analyze param expr false' ) ) == 1
-    assert len( filegrep( tdir+'/shtest/execute.log',
-                          'analyze plat expr true' ) ) == 1
-    assert len( filegrep( tdir+'/shtest/execute.log',
-                          'analyze plat expr2 false' ) ) == 1
-    assert len( filegrep( tdir+'/shtest/execute.log',
-                          'analyze option expr true' ) ) == 1
+            """ )
 
+        self.using_the_vvtest_system_utility_functions(
+            '--plat '+util.core_platform_name() )
+        self.using_the_vvtest_system_utility_functions(
+            '--plat '+util.core_platform_name()+' --batch' )
 
-########################################################################
+    def using_the_vvtest_system_utility_functions(self, opt):
+        ""
+        util.remove_results()
 
-def test17():
-    """
-    test the runcmd script util
-    """
-    writescript( 'py1.vvt', """
-        #!/usr/bin/env python
-        import script_util as vvt
-        print3 = vvt.print3
-        x = vvt.runcmd( 'ls -l' )
-        assert x == 0
-        """ )
-    writescript( 'py2.vvt', """
-        #!/usr/bin/env python
-        import script_util as vvt
-        print3 = vvt.print3
-        x = vvt.runcmd( 'failprogram', ignore_exit=True )
-        assert x != 0
-        """ )
-    writescript( 'py3.vvt', """
-        #!/usr/bin/env python
-        import script_util as vvt
-        print3 = vvt.print3
-        vvt.runcmd( 'failprogram' )
-        print3( 'should not get here' )
-        """ )
-    writescript( 'py4.vvt', """
-        #!/usr/bin/env python
-        import script_util as vvt
-        print3 = vvt.print3
-        out = vvt.runcmd( 'ls -l', capture_output=True )
-        print3( out )
-        for line in out.split( '\\n' ):
-            line = line.rstrip()
-            if line and line.split()[-1].endswith( 'vvtest_util.py' ):
-                print3( 'found', line.split()[-1] )
-        """ )
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
 
-    writescript( 'helloworld', """
-        #!/bin/sh
-        echo "hello world"
-        """ )
-    writescript( 'py5.vvt', """
-        #!/usr/bin/env python
-        #VVT: link : helloworld
-        import script_util as vvt
-        print3 = vvt.print3
-        vvt.runcmd( './helloworld progargs', echo=False )
-        """ )
+        assert len( util.filegrep( tdir+'/pytest.A=1/execute.log',
+                              'with A=1 param expr true' ) ) == 1
+        assert len( util.filegrep( tdir+'/pytest.A=3/execute.log',
+                              'with A=3 param expr false' ) ) == 1
+        assert len( util.filegrep( tdir+'/pytest.A=5/execute.log',
+                              'with A=5 param expr true' ) ) == 1
+        assert len( util.filegrep( tdir+'/shtest.B=1/execute.log',
+                              'with B=1 param expr true' ) ) == 1
+        assert len( util.filegrep( tdir+'/shtest.B=3/execute.log',
+                              'with B=3 param expr false' ) ) == 1
+        assert len( util.filegrep( tdir+'/shtest.B=5/execute.log',
+                              'with B=5 param expr true' ) ) == 1
 
-    writescript( 'py6.vvt', """
-        #!/usr/bin/env python
-        #VVT: link : helloworld
-        import script_util as vvt
-        print3 = vvt.print3
-        vvt.runcmd( './helloworld', redirect='prog.out' )
-        """ )
-    
-    writescript( 'hellomars', """
-        #!/bin/sh
-        echo "hello mars"
-        """ )
-    writescript( 'py7.vvt', """
-        #!/usr/bin/env python
-        #VVT: link : helloworld hellomars
-        import script_util as vvt
-        print3 = vvt.print3
-        vvt.runcmd( './helloworld', redirect='prog.out' )
-        vvt.runcmd( './hellomars', redirect='prog.out' )
-        """ )
-    writescript( 'py8.vvt', """
-        #!/usr/bin/env python
-        #VVT: link : helloworld hellomars
-        import script_util as vvt
-        print3 = vvt.print3
-        vvt.runcmd( './helloworld', redirect='prog.out' )
-        vvt.runcmd( './hellomars', redirect='prog.out', append=True )
-        """ )
+        assert len( util.filegrep( tdir+'/pytest.A=3/execute.log',
+                              'plat expr true' ) ) == 1
+        assert len( util.filegrep( tdir+'/pytest.A=3/execute.log',
+                              'plat expr2 false' ) ) == 1
+        assert len( util.filegrep( tdir+'/shtest.B=5/execute.log',
+                              'plat expr true' ) ) == 1
+        assert len( util.filegrep( tdir+'/shtest.B=5/execute.log',
+                              'plat expr2 false' ) ) == 1
 
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 7 and nd == 0 and nf == 1 and nn == 0
-    tdir = results_dir()
-    
-    assert len( filegrep( tdir+'/py1/execute.log',
-                          'vvtest_util.py' ) ) >= 1
-    assert len( greptestlist( out, 'pass.*py2' ) ) == 1
-    assert len( filegrep( tdir+'/py2/execute.log',
-                          'failprogram' ) ) > 0
-    assert len( greptestlist( out, 'pass.*py3' ) ) == 0
-    assert len( filegrep( tdir+'/py3/execute.log',
-                          'command failed.*failprogram' ) ) > 0
-    assert len( filegrep( tdir+'/py4/execute.log',
-                          'found .*vvtest_util.py' ) ) == 1
-    assert len( greptestlist( out, 'pass.*py5' ) ) == 1
-    assert len( filegrep( tdir+'/py5/execute.log',
-                          'helloworld.*progargs' ) ) == 0
-    assert len( filegrep( tdir+'/py6/execute.log',
-                          'hello world' ) ) == 0
-    assert len( filegrep( tdir+'/py6/prog.out',
-                          'hello world' ) ) == 1
-    assert len( filegrep( tdir+'/py7/execute.log',
-                          'hello world' ) ) == 0
-    assert len( filegrep( tdir+'/py7/execute.log',
-                          'hello mars' ) ) == 0
-    assert len( filegrep( tdir+'/py7/prog.out',
-                          'hello world' ) ) == 0
-    assert len( filegrep( tdir+'/py7/prog.out',
-                          'hello mars' ) ) == 1
-    assert len( filegrep( tdir+'/py8/prog.out',
-                          'hello world' ) ) == 1
-    assert len( filegrep( tdir+'/py8/prog.out',
-                          'hello mars' ) ) == 1
+        assert len( util.filegrep( tdir+'/pytest.A=1/execute.log',
+                              'option expr false' ) ) == 1
+        assert len( util.filegrep( tdir+'/shtest.B=1/execute.log',
+                              'option expr false' ) ) == 1
 
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -o dbg' )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        assert len( util.filegrep( tdir+'/pytest.A=1/execute.log',
+                              'option expr true' ) ) == 1
+        assert len( util.filegrep( tdir+'/shtest.B=1/execute.log',
+                              'option expr true' ) ) == 1
 
-def test18():
-    """
-    test permissions helpers in script util
-    """
-    writescript( 'py1.vvt', """
-        #!/usr/bin/env python
-        from script_util import *
-        fp = open( 'script', 'w' )
-        fp.write( '#!/bin/sh\\n' )
-        fp.write( 'echo "script got executed"\\n' )
-        fp.close()
-        assert get_permissions( 'script', 'read' )
-        assert get_permissions( 'script', 'write' )
-        assert not get_permissions( 'script', 'execute' )
-        change_permissions( 'script', 'u+x', 'g+x' )
-        assert get_permissions( 'script', 'execute' )
-        runcmd( './script' )
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    
-    assert len( filegrep( tdir+'/py1/execute.log',
-                          'script got executed' ) ) == 1
+        util.remove_results()
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -o dbg+intel' )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        assert len( util.filegrep( tdir+'/pytest.A=1/execute.log',
+                              'option expr false' ) ) == 1
+        assert len( util.filegrep( tdir+'/shtest.B=1/execute.log',
+                              'option expr false' ) ) == 1
 
+    def test_using_the_vvtest_system_utilities_in_an_analyze_test(self):
+        ""
+        util.writescript( "null.vvt", """
+            #!/bin/sh
+            echo null
+            """ )
 
-def test19():
-    """
-    util functions: catfile, grepfile, prependPATH, which
-    """
-    writefile( 'file1.txt', """
-        this is line one
-        and line two
-        """ )
-    writefile( 'file2.txt', """
-        the quick brown fox
-        jumps over the lazy dog
-        """ )
-    writescript( 'subdir/myscript', """
-        #!/bin/sh
-        echo "hello from myscript"
-        """ )
-    writescript( 'py1.vvt', """
-        #!/usr/bin/env python
-        #VVT: link : file1.txt file2.txt
-        import os
-        from script_util import *
-        assert len( grepfile( 'tw[op]', 'file1.txt' ) ) == 1
-        catfile( 'file2.txt' )
-        prependPATH( os.path.join( SRCDIR, 'subdir' ) )
-        print3( 'which =', which( 'myscript' ) )
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    
-    assert len( filegrep( tdir+'/py1/execute.log',
-                          'quick brown fox' ) ) == 1
-    assert len( filegrep( tdir+'/py1/execute.log',
-                          'lazy dog' ) ) == 1
-    assert len( filegrep( tdir+'/py1/execute.log',
-                          'which = '+os.getcwd()+'/subdir/myscript' ) ) == 1
+        out,np,nd,nf,nn = util.run_vvtest( '-o dbg' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        platname = util.platform_name( out )
+        tdir = util.results_dir()
+        util.remove_results()
+        os.remove( 'null.vvt' )
 
+        util.writescript( 'pytest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : A = 1 2
+            #VVT: analyze : -a
+            import sys
+            import script_util as vvt
+            print3 = vvt.print3
+            if '-a' in sys.argv:
+                pass
+                if vvt.parameter_expr( "not A" ):
+                    print3( "analyze param expr true" )
+                else:
+                    print3( "analyze param expr false" )
+                if vvt.platform_expr( 'Junk or """+platname+"""' ):
+                    print3( "analyze plat expr true" )
+                else:
+                    print3( "analyze plat expr false" )
+                if vvt.platform_expr( 'Junk' ):
+                    print3( "analyze plat expr2 true" )
+                else:
+                    print3( "analyze plat expr2 false" )
+                if vvt.option_expr( 'dbg and not intel' ):
+                    print3( "analyze option expr true" )
+                else:
+                    print3( "analyze option expr false" )
+            """ )
+        util.writescript( 'shtest.vvt', """
+            #!/bin/sh
+            #VVT: parameterize : B = 1 2
+            #VVT: analyze : -a
+            source ./vvtest_util.sh
+            analyze=false
+            for opt in "$@"
+            do
+              [ "$opt" = "-a" ] && analyze=true
+            done
+            if [ $analyze = true ]
+            then
+                if parameter_expr "B"
+                then
+                    echo "analyze param expr true"
+                else
+                    echo "analyze param expr false"
+                fi
+                if platform_expr 'Junk or """+platname+"""'
+                then
+                    echo "analyze plat expr true"
+                else
+                    echo "analyze plat expr false"
+                fi
+                if platform_expr 'Junk'
+                then
+                    echo "analyze plat expr2 true"
+                else
+                    echo "analyze plat expr2 false"
+                fi
+                if option_expr 'dbg and not intel'
+                then
+                    echo "analyze option expr true"
+                else
+                    echo "analyze option expr false"
+                fi
+            fi
+            """ )
 
-def test20():
-    """
-    test the user termination function
-    """
-    writescript( 'py1.vvt', """
-        #!/usr/bin/env python
-        from script_util import *
-        def lastcall():
-            print3( 'lastcall called' )
-        register_termination_function( lastcall )
-        try:
+        out,np,nd,nf,nn = util.run_vvtest( '-o dbg' )
+        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+
+        for f in glob.glob( tdir+'/*=*/execute.log' ):
+            assert len( util.filegrep( f, 'analyze' ) ) == 0
+
+        assert len( util.filegrep( tdir+'/pytest/execute.log',
+                              'analyze param expr true' ) ) == 1
+        assert len( util.filegrep( tdir+'/pytest/execute.log',
+                              'analyze plat expr true' ) ) == 1
+        assert len( util.filegrep( tdir+'/pytest/execute.log',
+                              'analyze plat expr2 false' ) ) == 1
+        assert len( util.filegrep( tdir+'/pytest/execute.log',
+                              'analyze option expr true' ) ) == 1
+
+        assert len( util.filegrep( tdir+'/shtest/execute.log',
+                              'analyze param expr false' ) ) == 1
+        assert len( util.filegrep( tdir+'/shtest/execute.log',
+                              'analyze plat expr true' ) ) == 1
+        assert len( util.filegrep( tdir+'/shtest/execute.log',
+                              'analyze plat expr2 false' ) ) == 1
+        assert len( util.filegrep( tdir+'/shtest/execute.log',
+                              'analyze option expr true' ) ) == 1
+
+    def test_the_runcmd_script_util(self):
+        ""
+        util.writescript( 'py1.vvt', """
+            #!/usr/bin/env python
+            import script_util as vvt
+            print3 = vvt.print3
+            x = vvt.runcmd( 'ls -l' )
+            assert x == 0
+            """ )
+        util.writescript( 'py2.vvt', """
+            #!/usr/bin/env python
+            import script_util as vvt
+            print3 = vvt.print3
+            x = vvt.runcmd( 'failprogram', ignore_exit=True )
+            assert x != 0
+            """ )
+        util.writescript( 'py3.vvt', """
+            #!/usr/bin/env python
+            import script_util as vvt
+            print3 = vvt.print3
+            vvt.runcmd( 'failprogram' )
+            print3( 'should not get here' )
+            """ )
+        util.writescript( 'py4.vvt', """
+            #!/usr/bin/env python
+            import script_util as vvt
+            print3 = vvt.print3
+            out = vvt.runcmd( 'ls -l', capture_output=True )
+            print3( out )
+            for line in out.split( '\\n' ):
+                line = line.rstrip()
+                if line and line.split()[-1].endswith( 'vvtest_util.py' ):
+                    print3( 'found', line.split()[-1] )
+            """ )
+
+        util.writescript( 'helloworld', """
+            #!/bin/sh
+            echo "hello world"
+            """ )
+        util.writescript( 'py5.vvt', """
+            #!/usr/bin/env python
+            #VVT: link : helloworld
+            import script_util as vvt
+            print3 = vvt.print3
+            vvt.runcmd( './helloworld progargs', echo=False )
+            """ )
+
+        util.writescript( 'py6.vvt', """
+            #!/usr/bin/env python
+            #VVT: link : helloworld
+            import script_util as vvt
+            print3 = vvt.print3
+            vvt.runcmd( './helloworld', redirect='prog.out' )
+            """ )
+
+        util.writescript( 'hellomars', """
+            #!/bin/sh
+            echo "hello mars"
+            """ )
+        util.writescript( 'py7.vvt', """
+            #!/usr/bin/env python
+            #VVT: link : helloworld hellomars
+            import script_util as vvt
+            print3 = vvt.print3
+            vvt.runcmd( './helloworld', redirect='prog.out' )
+            vvt.runcmd( './hellomars', redirect='prog.out' )
+            """ )
+        util.writescript( 'py8.vvt', """
+            #!/usr/bin/env python
+            #VVT: link : helloworld hellomars
+            import script_util as vvt
+            print3 = vvt.print3
+            vvt.runcmd( './helloworld', redirect='prog.out' )
+            vvt.runcmd( './hellomars', redirect='prog.out', append=True )
+            """ )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 7 and nd == 0 and nf == 1 and nn == 0
+        tdir = util.results_dir()
+
+        assert len( util.filegrep( tdir+'/py1/execute.log',
+                              'vvtest_util.py' ) ) >= 1
+        assert len( util.greptestlist( out, 'pass.*py2' ) ) == 1
+        assert len( util.filegrep( tdir+'/py2/execute.log',
+                              'failprogram' ) ) > 0
+        assert len( util.greptestlist( out, 'pass.*py3' ) ) == 0
+        assert len( util.filegrep( tdir+'/py3/execute.log',
+                              'command failed.*failprogram' ) ) > 0
+        assert len( util.filegrep( tdir+'/py4/execute.log',
+                              'found .*vvtest_util.py' ) ) == 1
+        assert len( util.greptestlist( out, 'pass.*py5' ) ) == 1
+        assert len( util.filegrep( tdir+'/py5/execute.log',
+                              'helloworld.*progargs' ) ) == 0
+        assert len( util.filegrep( tdir+'/py6/execute.log',
+                              'hello world' ) ) == 0
+        assert len( util.filegrep( tdir+'/py6/prog.out',
+                              'hello world' ) ) == 1
+        assert len( util.filegrep( tdir+'/py7/execute.log',
+                              'hello world' ) ) == 0
+        assert len( util.filegrep( tdir+'/py7/execute.log',
+                              'hello mars' ) ) == 0
+        assert len( util.filegrep( tdir+'/py7/prog.out',
+                              'hello world' ) ) == 0
+        assert len( util.filegrep( tdir+'/py7/prog.out',
+                              'hello mars' ) ) == 1
+        assert len( util.filegrep( tdir+'/py8/prog.out',
+                              'hello world' ) ) == 1
+        assert len( util.filegrep( tdir+'/py8/prog.out',
+                              'hello mars' ) ) == 1
+
+    def test_permissions_helpers_in_script_util(self):
+        ""
+        util.writescript( 'py1.vvt', """
+            #!/usr/bin/env python
+            from script_util import *
+            fp = open( 'script', 'w' )
+            fp.write( '#!/bin/sh\\n' )
+            fp.write( 'echo "script got executed"\\n' )
+            fp.close()
+            assert get_permissions( 'script', 'read' )
+            assert get_permissions( 'script', 'write' )
+            assert not get_permissions( 'script', 'execute' )
+            change_permissions( 'script', 'u+x', 'g+x' )
+            assert get_permissions( 'script', 'execute' )
+            runcmd( './script' )
+            """ )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+
+        assert len( util.filegrep( tdir+'/py1/execute.log',
+                              'script got executed' ) ) == 1
+
+    def test_utilities_catfile_grepfile_prependPATH_which(self):
+        ""
+        util.writefile( 'file1.txt', """
+            this is line one
+            and line two
+            """ )
+        util.writefile( 'file2.txt', """
+            the quick brown fox
+            jumps over the lazy dog
+            """ )
+        util.writescript( 'subdir/myscript', """
+            #!/bin/sh
+            echo "hello from myscript"
+            """ )
+        util.writescript( 'py1.vvt', """
+            #!/usr/bin/env python
+            #VVT: link : file1.txt file2.txt
+            import os
+            from script_util import *
+            assert len( grepfile( 'tw[op]', 'file1.txt' ) ) == 1
+            catfile( 'file2.txt' )
+            prependPATH( os.path.join( SRCDIR, 'subdir' ) )
+            print3( 'which =', which( 'myscript' ) )
+            """ )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+
+        assert len( util.filegrep( tdir+'/py1/execute.log',
+                              'quick brown fox' ) ) == 1
+        assert len( util.filegrep( tdir+'/py1/execute.log',
+                              'lazy dog' ) ) == 1
+        assert len( util.filegrep( tdir+'/py1/execute.log',
+                              'which = '+os.getcwd()+'/subdir/myscript' ) ) == 1
+
+    def test_the_user_termination_function(self):
+        ""
+        util.writescript( 'py1.vvt', """
+            #!/usr/bin/env python
+            from script_util import *
+            def lastcall():
+                print3( 'lastcall called' )
+            register_termination_function( lastcall )
+            try:
+                raise Exception( 'fake exception' )
+            except:
+                pass
+            """ )
+        util.writescript( 'py2.vvt', """
+            #!/usr/bin/env python
+            from script_util import *
+            def lastcall():
+                print3( 'lastcall called' )
+            register_termination_function( lastcall )
             raise Exception( 'fake exception' )
-        except:
-            pass
-        """ )
-    writescript( 'py2.vvt', """
-        #!/usr/bin/env python
-        from script_util import *
-        def lastcall():
-            print3( 'lastcall called' )
-        register_termination_function( lastcall )
-        raise Exception( 'fake exception' )
-        print3( 'should not be here' )
-        """ )
-    writescript( 'py3.vvt', """
-        #!/usr/bin/env python
-        from script_util import *
-        def lastcall():
-            print3( 'lastcall called' )
-        register_termination_function( lastcall )
-        set_have_diff()
-        if_diff_exit_diff()
-        print3( 'should not be here' )
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 1 and nf == 1 and nn == 0
-    tdir = results_dir()
-    
-    assert len( filegrep( tdir+'/py1/execute.log',
-                          'fake exception' ) ) == 0
-    assert len( filegrep( tdir+'/py1/execute.log',
-                          'lastcall called' ) ) == 1
-    assert len( filegrep( tdir+'/py2/execute.log',
-                          'fake exception' ) ) > 0
-    assert len( filegrep( tdir+'/py2/execute.log',
-                          'lastcall called' ) ) == 0
-    assert len( filegrep( tdir+'/py2/execute.log',
-                          'should not be here' ) ) == 0
-    assert len( filegrep( tdir+'/py3/execute.log',
-                          'exiting diff' ) ) == 1
-    assert len( filegrep( tdir+'/py3/execute.log',
-                          'lastcall called' ) ) == 0
-    assert len( filegrep( tdir+'/py3/execute.log',
-                          'should not be here' ) ) == 0
+            print3( 'should not be here' )
+            """ )
+        util.writescript( 'py3.vvt', """
+            #!/usr/bin/env python
+            from script_util import *
+            def lastcall():
+                print3( 'lastcall called' )
+            register_termination_function( lastcall )
+            set_have_diff()
+            if_diff_exit_diff()
+            print3( 'should not be here' )
+            """ )
 
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 1 and nf == 1 and nn == 0
+        tdir = util.results_dir()
 
-def test21():
-    """
-    test the python trace utility
-    """
-    writefile( 'file1.txt', """
-        this is line one
-        and line two
-        """ )
-    writescript( 'py1.vvt', """
-        #!/usr/bin/env python
-        #VVT: link : file1.txt
-        from script_util import *
-        def myfunc( ivar=5 ):
-            funcvar = 2*ivar
-            otherfunc( funcvar )
-        def otherfunc( *args ):
-            assert len(args) == 1
-            print3( 'otherfunc args =', args )
-            catfile( 'file1.txt' )
-            if 'FOOBAR_NOEXIST_VNAME' in os.environ:
-                print3( 'how could that happen!!' )
-        set_python_trace()
-        ivar = 4
-        myfunc( ivar )
-        """ )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    
-    xlog = tdir+'/py1/execute.log'
-    assert len( filegrep( xlog, 'myfunc[(] *ivar *[)].*py1.vvt:15' ) ) == 1
-    assert len( filegrep( xlog,
-        'def myfunc[(] ivar=5 [)]:.*[(]ivar=4[)].*py1.vvt:4' ) ) == 1
-    assert len( filegrep( xlog,
-        'def otherfunc[(] [*]args [)]:.*args=.*8.*py1.vvt:7' ) ) == 1
-    assert len( filegrep( xlog, "catfile[(] 'file1.txt' [)]" ) ) == 1
-    # this one tries to catch a function name that is internal to python,
-    # which should be filtered out
-    assert len( filegrep( xlog, "__contains__" ) ) == 0
+        assert len( util.filegrep( tdir+'/py1/execute.log',
+                              'fake exception' ) ) == 0
+        assert len( util.filegrep( tdir+'/py1/execute.log',
+                              'lastcall called' ) ) == 1
+        assert len( util.filegrep( tdir+'/py2/execute.log',
+                              'fake exception' ) ) > 0
+        assert len( util.filegrep( tdir+'/py2/execute.log',
+                              'lastcall called' ) ) == 0
+        assert len( util.filegrep( tdir+'/py2/execute.log',
+                              'should not be here' ) ) == 0
+        assert len( util.filegrep( tdir+'/py3/execute.log',
+                              'exiting diff' ) ) == 1
+        assert len( util.filegrep( tdir+'/py3/execute.log',
+                              'lastcall called' ) ) == 0
+        assert len( util.filegrep( tdir+'/py3/execute.log',
+                              'should not be here' ) ) == 0
+
+    def test_the_python_trace_utility(self):
+        ""
+        util.writefile( 'file1.txt', """
+            this is line one
+            and line two
+            """ )
+        util.writescript( 'py1.vvt', """
+            #!/usr/bin/env python
+            #VVT: link : file1.txt
+            from script_util import *
+            def myfunc( ivar=5 ):
+                funcvar = 2*ivar
+                otherfunc( funcvar )
+            def otherfunc( *args ):
+                assert len(args) == 1
+                print3( 'otherfunc args =', args )
+                catfile( 'file1.txt' )
+                if 'FOOBAR_NOEXIST_VNAME' in os.environ:
+                    print3( 'how could that happen!!' )
+            set_python_trace()
+            ivar = 4
+            myfunc( ivar )
+            """ )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+
+        xlog = tdir+'/py1/execute.log'
+        assert len( util.filegrep( xlog, 'myfunc[(] *ivar *[)].*py1.vvt:15' ) ) == 1
+        assert len( util.filegrep( xlog,
+            'def myfunc[(] ivar=5 [)]:.*[(]ivar=4[)].*py1.vvt:4' ) ) == 1
+        assert len( util.filegrep( xlog,
+            'def otherfunc[(] [*]args [)]:.*args=.*8.*py1.vvt:7' ) ) == 1
+        assert len( util.filegrep( xlog, "catfile[(] 'file1.txt' [)]" ) ) == 1
+        # this one tries to catch a function name that is internal to python,
+        # which should be filtered out
+        assert len( util.filegrep( xlog, "__contains__" ) ) == 0
 
 
 ########################################################################
 
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )

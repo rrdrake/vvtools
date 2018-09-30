@@ -12,416 +12,365 @@ sys.excepthook = sys.__excepthook__
 import os
 import time
 import glob
+import unittest
 
 import testutils as util
-optD,argL = util.initialize( sys.argv )
-if 'TESTUTILS_RUNDIR' not in os.environ:
-    os.chdir( util.working_directory )
-
-from testutils import *
+from testutils import print3
 
 
-def main():
-    """
-    """
-    global argL
+class parameter_tests( unittest.TestCase ):
 
-    if len(argL) == 0:
-        argL = """test01 test02 test03   test05 test06 test07 test08
-                  test09
-               """.split()
+    def setUp(self):
+        util.setup_test()
 
-    savedir = os.getcwd()
-    for func in argL:
-        os.chdir( savedir )
-        rmallfiles()
-        time.sleep(1)
-        print3( '====> ', func )
+    def test_nominal_parameterize_usage(self):
+        ""
+        util.writefile( 'basic.xml', """
+            <rtest name="basic">
+              <parameterize np="1 4 8"/>
+              <execute> echo "execute basic2 np = $np" </execute>
+            </rtest>""" )
 
-        # for batch tests
-        os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-        os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-        os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
+        self.nominal_parameterize_usage( '' )
+        self.nominal_parameterize_usage(
+                '--plat '+util.core_platform_name()+' --batch --qsub-length 0' )
 
-        eval( func+'()' )
+    def nominal_parameterize_usage(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -p np<8 -P np=1 -N 10' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        platname = util.platform_name( out )
+        print3( "Extracted platname =", platname )
+        tdir = util.results_dir()
+
+        L = util.filegrep( tdir + '/basic.np=4/execute.log', 'execute basic2' )
+        print3( "execute", L )
+        assert len(L) == 1 and L[0].strip() == 'execute basic2 np = 4'
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -p np<=8 -N 10' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( '--plat '+platname+' -i' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+        out,np,nd,nf,nn = util.run_vvtest( '--plat '+platname+' -i -p np=4' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    def test_multiple_parameterize(self):
+        ""
+        util.writefile( 'basic.xml', """
+            <rtest name="basic">
+              <parameterize np="1 4"/>
+              <parameterize dt="0.1 0.01"/>
+              <execute> echo "execute basic np = $np dt = $dt" </execute>
+            </rtest>""" )
+
+        self.multiple_parameterize( '' )
+        self.multiple_parameterize(
+            '--plat '+util.core_platform_name()+' --batch --qsub-length 0' )
+
+    def multiple_parameterize(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -N 10' )
+        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+
+        tdir = util.results_dir()
+        platname = util.platform_name( out )
+
+        L = util.filegrep( tdir+'/basic.dt=0.01.np=4/execute.log', 'execute basic' )
+        print3( "execute", L )
+        assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.01'
+
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -p np=4 -N 10' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        L = util.filegrep( tdir + '/basic.dt=0.01.np=4/execute.log', 'execute basic' )
+        assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.01'
+        L = util.filegrep( tdir + '/basic.dt=0.1.np=4/execute.log', 'execute basic' )
+        assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.1'
+
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -N 10' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+    def test_an_empty_parameterize(self):
+        ""
+        util.writefile( 'basic.xml', """
+            <rtest name="basic">
+              <keywords> foobar </keywords>
+              <parameterize/>
+              <execute> echo "execute basic3 np = $np" </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        tdir = util.results_dir()
+        platname = util.platform_name( out )
+
+        L = util.filegrep( tdir + '/basic/execute.log', 'execute basic3 np = 0' )
+        print3( "execute", L )
+        assert len(L) == 1 and L[0].strip() == 'execute basic3 np = 0'
+
+        util.remove_results()
+
+        util.writefile( 'basic.xml', """
+          <rtest name="basic">
+            <keywords> foobar </keywords>
+            <parameterize testname="basic"/>
+            <execute> echo "execute basic3 np = $np" </execute>
+          </rtest>""")
+
+        out,np,nd,nf,nn = util.run_vvtest( '-k foobar' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        L = util.filegrep( tdir + '/basic/execute.log', 'execute basic3 np = 0' )
+        print3( "execute", L )
+        assert len(L) == 1 and L[0].strip() == 'execute basic3 np = 0'
+
+    def test_filtering_out_by_parameter_on_a_subsequent_run(self):
+        ""
+        util.writefile( 'params.xml', """
+            <rtest name="params">
+              <parameterize AA="1 2"/>
+              <parameterize BB="foo bar"/>
+              <execute> echo "params AA=$AA BB=$BB" </execute>
+            </rtest>""" )
+
+        out,np,nd,nf,nn = util.run_vvtest()
+        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+
+        tdir = util.results_dir()
+
+        out,np,nd,nf,nn = util.run_vvtest( '-R -p AA=2' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+
+        os.chdir( tdir+'/params.AA=2.BB=bar' )
+        out,np,nd,nf,nn = util.run_vvtest( '-R' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+    def test_that_an_analyze_section_will_have_the_parameters_available(self):
+        ""
+        util.writefile( 'basic.xml', """
+            <rtest name="basic">
+              <parameterize np="1 4"/>
+              <parameterize dt="0.1 0.01"/>
+              <execute> echo "execute basic np = $np dt = $dt" </execute>
+              <analyze>
+                echo "access PARAM_np = $PARAM_np"
+                echo "access PARAM_dt = $PARAM_dt"
+              </analyze>
+            </rtest> """ )
+
+        out,np,nd,nf,nn = util.run_vvtest( '-N 10' )
+        assert np == 5 and nd == 0 and nf == 0 and nn == 0
+
+        tdir = util.results_dir()
+
+        L = util.filegrep( tdir + '/basic/execute.log', 'access PARAM_np' )
+        assert len(L) == 1
+        pL = L[0].split( '=', 1 )[1].strip().split()
+        assert pL == ['1','4']
+        L = util.filegrep( tdir + '/basic/execute.log', 'access PARAM_dt' )
+        assert len(L) == 1
+        pL = L[0].split( '=', 1 )[1].strip().split()
+        assert pL == ['0.1','0.01']
+
+        cwd = os.getcwd()
+        os.chdir( tdir+'/basic' )
+        out,np,nd,nf,nn = util.run_vvtest( '-R -N 10' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        L = util.filegrep( 'execute.log', 'access PARAM_np' )
+        assert len(L) == 1
+        pL = L[0].split( '=', 1 )[1].strip().split()
+        assert pL == ['1','4']
+        L = util.filegrep( 'execute.log', 'access PARAM_dt' )
+        assert len(L) == 1
+        pL = L[0].split( '=', 1 )[1].strip().split()
+        assert pL == ['0.1','0.01']
+        os.chdir( cwd )
+
+        util.rmallfiles()
+
+        util.writefile( 'zip.xml', """
+            <rtest name="zip">
+              <parameterize np="1 4" dt="0.1 0.01"/>
+              <execute> echo "execute zip np = $np dt = $dt" </execute>
+              <analyze>
+                echo "access PARAM_dt_np = $PARAM_dt_np"
+              </analyze>
+            </rtest> """ )
+
+        out,np,nd,nf,nn = util.run_vvtest( '-N 10' )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        L = util.filegrep( tdir+'/zip/execute.log', 'access PARAM_dt_np' )
+        assert len(L) == 1
+        pL = L[0].split( '=', 1 )[1].strip().split()
+        assert pL == ['0.1/1','0.01/4']
+
+        os.chdir( tdir+'/zip' )
+        out,np,nd,nf,nn = util.run_vvtest( '-R -N 10' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        L = util.filegrep( 'execute.log', 'access PARAM_dt_np' )
+        assert len(L) == 1
+        pL = L[0].split( '=', 1 )[1].strip().split()
+        assert pL == ['0.1/1','0.01/4']
+
+    def test_complex_command_line_parameter_expression_with_rerun(self):
+        ""
+        util.writefile( 'basic.xml', """
+            <rtest name="basic">
+              <parameterize isize="1 2 4"/>
+              <execute> echo "execute basic isize = $isize" </execute>
+              <analyze>
+                echo "access PARAM_isize = $PARAM_isize"
+              </analyze>
+            </rtest> """)
+
+        self.complex_command_line_parameter_expression_with_rerun( '' )
+        self.complex_command_line_parameter_expression_with_rerun(
+            '--plat '+util.core_platform_name()+' --batch' )
+
+    def complex_command_line_parameter_expression_with_rerun(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt.split()+['-p','isize<=2 or not isize'] )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+
+        assert     os.path.exists( tdir+'/basic.isize=1' )
+        assert     os.path.exists( tdir+'/basic.isize=2' )
+        assert not os.path.exists( tdir+'/basic.isize=4' )
+        assert     os.path.exists( tdir+'/basic' )
+
+        cwd = os.getcwd()
+        os.chdir( tdir+'/basic' )
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        os.chdir( cwd )
+
+    def test_that_an_analyze_sees_restricted_parameters(self):
+        ""
+        util.writefile( 'basic.xml', """
+            <rtest name="basic">
+              <parameterize isize="1 2 4"/>
+              <execute> echo "execute basic isize = $isize" </execute>
+              <analyze>
+                echo "access PARAM_isize = $PARAM_isize"
+              </analyze>
+            </rtest> """ )
+
+        self.that_an_analyze_sees_restricted_parameters( '' )
+        self.that_an_analyze_sees_restricted_parameters(
+            '--plat '+util.core_platform_name()+' --batch' )
+
+    def that_an_analyze_sees_restricted_parameters(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt.split()+['-p','isize<=2 or not isize'] )
+        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        tdir = util.results_dir()
+        platname = util.platform_name( out )
+
+        assert os.path.exists( tdir+'/basic' )
+        L = util.filegrep( tdir+'/basic/execute.log', "access PARAM_isize" )
+        assert len(L) == 1
+        s = L[0]
+        ps = L[0].split('=',1)[1]
+        pL = ps.strip().split()
+        assert pL == ['1', '2']
+
+        cwd = os.getcwd()
+        os.chdir( tdir+'/basic' )
+        out,np,nd,nf,nn = util.run_vvtest( opt+' -R' )
+        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+
+        L = util.filegrep( 'execute.log', "access PARAM_isize" )
+        assert len(L) == 1
+        s = L[0]
+        ps = L[0].split('=',1)[1]
+        pL = ps.strip().split()
+        assert pL == ['1', '2']
+        os.chdir( cwd )
+
+    def test_using_parameterize_with_script_test(self):
+        ""
+        util.writescript( 'params1.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : animal = dog cat
+            import os
+            print ( "hello from "+os.path.basename(os.getcwd()) )
+            """ )
+        util.writescript( 'params2.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : A = dog cat
+            #VVT: parameterize : V = carrot celery
+            import os
+            print ( "hello from "+os.path.basename(os.getcwd()) )
+            """ )
+        util.writescript( 'params3.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : B,X = dog,carrot cat,celery
+            import os
+            print ( "hello from "+os.path.basename(os.getcwd()) )
+            """ )
+        util.writescript( 'params4.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : C, Y, Z = 1 ,2,3  4,5,6
+            #VVT::                         7 , 8 , 9   10, 11,12
+            import os
+            print ( "hello from "+os.path.basename(os.getcwd()) )
+            """ )
+
+        self.using_parameterize_with_script_test( '' )
+        self.using_parameterize_with_script_test(
+            '--plat '+util.core_platform_name()+' --batch' )
+
+    def using_parameterize_with_script_test(self, opt):
+        ""
+        util.remove_results()
+
+        out,np,nd,nf,nn = util.run_vvtest( opt )
+        tdir = util.results_dir()
+        platname = util.platform_name( out )
+
+        assert np == 12 and nd == 0 and nf == 0 and nn == 0
+        assert len( util.greptestlist(out,'pass.*.animal=dog') ) == 1
+        assert len( util.greptestlist(out,'pass.*.animal=cat') ) == 1
+        assert len( util.greptestlist(out,'pass.*.A=dog.V=carrot') ) == 1
+        assert len( util.greptestlist(out,'pass.*.A=cat.V=carrot') ) == 1
+        assert len( util.greptestlist(out,'pass.*.A=dog.V=celery') ) == 1
+        assert len( util.greptestlist(out,'pass.*.A=cat.V=celery') ) == 1
+        assert len( util.greptestlist(out,'pass.*.B=dog.X=carrot') ) == 1
+        assert len( util.greptestlist(out,'pass.*.B=cat.X=celery') ) == 1
+        assert len( util.greptestlist(out,'pass.*.B=cat.X=carrot') ) == 0
+        assert len( util.greptestlist(out,'pass.*.B=dog.X=celery') ) == 0
+        assert len( util.greptestlist(out,'pass.*.C=1.Y=2.Z=3') ) == 1
+        assert len( util.greptestlist(out,'pass.*.C=4.Y=5.Z=6') ) == 1
+        assert len( util.greptestlist(out,'pass.*.C=7.Y=8.Z=9') ) == 1
+        assert len( util.greptestlist(out,'pass.*.C=10.Y=11.Z=12') ) == 1
+
+        assert len( util.filegrep( tdir+'/params1.animal=dog/execute.log',
+                              "hello from params1.animal=dog" ) ) == 1
+        assert len( util.filegrep( tdir+'/params1.animal=cat/execute.log',
+                              "hello from params1.animal=cat" ) ) == 1
+
+        plat = '--plat '+platname
+        out,np,nd,nf,nn = util.run_vvtest( plat+' -ik animal' )
+        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( plat+' -ik dog' )
+        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+        out,np,nd,nf,nn = util.run_vvtest( plat+' -ik Z' )
+        assert np == 4 and nd == 0 and nf == 0 and nn == 0
 
 
 #####################################################################
 
-def test01():
-    """
-    nominal parameterize usage
-    """
-    writefile( 'basic.xml', """
-        <rtest name="basic">
-          <parameterize np="1 4 8"/>
-          <execute> echo "execute basic2 np = $np" </execute>
-        </rtest>""" )
-
-    run_test01( '' )
-    run_test01( '--plat '+core_platform_name()+' --batch --qsub-length 0' )
-
-def run_test01( opt ):
-    ""
-    remove_results()
-
-    out,np,nd,nf,nn = run_vvtest( opt+' -p np<8 -P np=1 -N 10' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-    platname = platform_name( out )
-    print3( "Extracted platname =", platname )
-    tdir = results_dir()
-    
-    L = filegrep( tdir + '/basic.np=4/execute.log', 'execute basic2' )
-    print3( "execute", L )
-    assert len(L) == 1 and L[0].strip() == 'execute basic2 np = 4'
-    
-    out,np,nd,nf,nn = run_vvtest( opt+' -p np<=8 -N 10' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    
-    out,np,nd,nf,nn = run_vvtest( '--plat '+platname+' -i' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    
-    out,np,nd,nf,nn = run_vvtest( '--plat '+platname+' -i -p np=4' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-
-def test02():
-    """
-    multiple parameterize
-    """
-    writefile( 'basic.xml', """
-        <rtest name="basic">
-          <parameterize np="1 4"/>
-          <parameterize dt="0.1 0.01"/>
-          <execute> echo "execute basic np = $np dt = $dt" </execute>
-        </rtest>""" )
-
-    run_test02( '' )
-    run_test02( '--plat '+core_platform_name()+' --batch --qsub-length 0' )
-
-def run_test02( opt ):
-    ""
-    remove_results()
-
-    out,np,nd,nf,nn = run_vvtest( opt+' -N 10' )
-    assert np == 4 and nd == 0 and nf == 0 and nn == 0
-
-    tdir = results_dir()
-    platname = platform_name( out )
-    
-    L = filegrep( tdir+'/basic.dt=0.01.np=4/execute.log', 'execute basic' )
-    print3( "execute", L )
-    assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.01'
-
-    remove_results()
-
-    out,np,nd,nf,nn = run_vvtest( opt+' -p np=4 -N 10' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    L = filegrep( tdir + '/basic.dt=0.01.np=4/execute.log', 'execute basic' )
-    assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.01'
-    L = filegrep( tdir + '/basic.dt=0.1.np=4/execute.log', 'execute basic' )
-    assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.1'
-
-    out,np,nd,nf,nn = run_vvtest( opt+' -N 10' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-
-def test03():
-    """
-    an empty parameterize
-    """
-    writefile( 'basic.xml', """
-        <rtest name="basic">
-          <keywords> foobar </keywords>
-          <parameterize/>
-          <execute> echo "execute basic3 np = $np" </execute>
-        </rtest>""" )
-
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-    tdir = results_dir()
-    platname = platform_name( out )
-
-    L = filegrep( tdir + '/basic/execute.log', 'execute basic3 np = 0' )
-    print3( "execute", L )
-    assert len(L) == 1 and L[0].strip() == 'execute basic3 np = 0'
-
-    remove_results()
-
-    writefile( 'basic.xml', """
-      <rtest name="basic">
-        <keywords> foobar </keywords>
-        <parameterize testname="basic"/>
-        <execute> echo "execute basic3 np = $np" </execute>
-      </rtest>""")
-
-    out,np,nd,nf,nn = run_vvtest( '-k foobar' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-    L = filegrep( tdir + '/basic/execute.log', 'execute basic3 np = 0' )
-    print3( "execute", L )
-    assert len(L) == 1 and L[0].strip() == 'execute basic3 np = 0'
-
-
-######################################################################
-
-def test05():
-    """
-    exercise filtering out by parameter on a subsequent run
-    """
-    writefile( 'params.xml', """
-        <rtest name="params">
-          <parameterize AA="1 2"/>
-          <parameterize BB="foo bar"/>
-          <execute> echo "params AA=$AA BB=$BB" </execute>
-        </rtest>""" )
-    
-    out,np,nd,nf,nn = run_vvtest()
-    assert np == 4 and nd == 0 and nf == 0 and nn == 0
-
-    tdir = results_dir()
-    
-    out,np,nd,nf,nn = run_vvtest( '-R -p AA=2' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-    os.chdir( tdir+'/params.AA=2.BB=bar' )
-    out,np,nd,nf,nn = run_vvtest( '-R' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    
-    
-#######################################################################
-
-def test06():
-    """
-    an analyze section has the parameters available
-    """
-    writefile( 'basic.xml', """
-        <rtest name="basic">
-          <parameterize np="1 4"/>
-          <parameterize dt="0.1 0.01"/>
-          <execute> echo "execute basic np = $np dt = $dt" </execute>
-          <analyze>
-            echo "access PARAM_np = $PARAM_np"
-            echo "access PARAM_dt = $PARAM_dt"
-          </analyze>
-        </rtest> """ )
-    
-    out,np,nd,nf,nn = run_vvtest( '-N 10' )
-    assert np == 5 and nd == 0 and nf == 0 and nn == 0
-
-    tdir = results_dir()
-
-    L = filegrep( tdir + '/basic/execute.log', 'access PARAM_np' )
-    assert len(L) == 1
-    pL = L[0].split( '=', 1 )[1].strip().split()
-    assert pL == ['1','4']
-    L = filegrep( tdir + '/basic/execute.log', 'access PARAM_dt' )
-    assert len(L) == 1
-    pL = L[0].split( '=', 1 )[1].strip().split()
-    assert pL == ['0.1','0.01']
-
-    cwd = os.getcwd()
-    os.chdir( tdir+'/basic' )
-    out,np,nd,nf,nn = run_vvtest( '-R -N 10' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    L = filegrep( 'execute.log', 'access PARAM_np' )
-    assert len(L) == 1
-    pL = L[0].split( '=', 1 )[1].strip().split()
-    assert pL == ['1','4']
-    L = filegrep( 'execute.log', 'access PARAM_dt' )
-    assert len(L) == 1
-    pL = L[0].split( '=', 1 )[1].strip().split()
-    assert pL == ['0.1','0.01']
-    os.chdir( cwd )
-    
-    rmallfiles()
-    
-    writefile( 'zip.xml', """
-        <rtest name="zip">
-          <parameterize np="1 4" dt="0.1 0.01"/>
-          <execute> echo "execute zip np = $np dt = $dt" </execute>
-          <analyze>
-            echo "access PARAM_dt_np = $PARAM_dt_np"
-          </analyze>
-        </rtest> """ )
-    
-    out,np,nd,nf,nn = run_vvtest( '-N 10' )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    L = filegrep( tdir+'/zip/execute.log', 'access PARAM_dt_np' )
-    assert len(L) == 1
-    pL = L[0].split( '=', 1 )[1].strip().split()
-    assert pL == ['0.1/1','0.01/4']
-    
-    os.chdir( tdir+'/zip' )
-    out,np,nd,nf,nn = run_vvtest( '-R -N 10' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    L = filegrep( 'execute.log', 'access PARAM_dt_np' )
-    assert len(L) == 1
-    pL = L[0].split( '=', 1 )[1].strip().split()
-    assert pL == ['0.1/1','0.01/4']
-
-
-#######################################################################
-
-def test07():
-    """
-    using a more complex parameter expression on the command line with a rerun
-    """
-    writefile( 'basic.xml', """
-        <rtest name="basic">
-          <parameterize isize="1 2 4"/>
-          <execute> echo "execute basic isize = $isize" </execute>
-          <analyze>
-            echo "access PARAM_isize = $PARAM_isize"
-          </analyze>
-        </rtest> """)
-
-    run_test07( '' )
-    run_test07( '--plat '+core_platform_name()+' --batch' )
-
-def run_test07( opt ):
-    ""
-    remove_results()
-
-    out,np,nd,nf,nn = run_vvtest( opt.split()+['-p','isize<=2 or not isize'] )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    
-    assert     os.path.exists( tdir+'/basic.isize=1' )
-    assert     os.path.exists( tdir+'/basic.isize=2' )
-    assert not os.path.exists( tdir+'/basic.isize=4' )
-    assert     os.path.exists( tdir+'/basic' )
-
-    cwd = os.getcwd()
-    os.chdir( tdir+'/basic' )
-    out,np,nd,nf,nn = run_vvtest( opt+' -R' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    os.chdir( cwd )
-
-
-def test08():
-    """
-    an analyze section sees restricted parameters
-    """
-    writefile( 'basic.xml', """
-        <rtest name="basic">
-          <parameterize isize="1 2 4"/>
-          <execute> echo "execute basic isize = $isize" </execute>
-          <analyze>
-            echo "access PARAM_isize = $PARAM_isize"
-          </analyze>
-        </rtest> """ )
-
-    run_test08( '' )
-    run_test08( '--plat '+core_platform_name()+' --batch' )
-
-def run_test08( opt ):
-    ""
-    remove_results()
-
-    out,np,nd,nf,nn = run_vvtest( opt.split()+['-p','isize<=2 or not isize'] )
-    assert np == 3 and nd == 0 and nf == 0 and nn == 0
-    tdir = results_dir()
-    platname = platform_name( out )
-
-    assert os.path.exists( tdir+'/basic' )
-    L = filegrep( tdir+'/basic/execute.log', "access PARAM_isize" )
-    assert len(L) == 1
-    s = L[0]
-    ps = L[0].split('=',1)[1]
-    pL = ps.strip().split()
-    assert pL == ['1', '2']
-
-    cwd = os.getcwd()
-    os.chdir( tdir+'/basic' )
-    out,np,nd,nf,nn = run_vvtest( opt+' -R' )
-    assert np == 1 and nd == 0 and nf == 0 and nn == 0
-    
-    L = filegrep( 'execute.log', "access PARAM_isize" )
-    assert len(L) == 1
-    s = L[0]
-    ps = L[0].split('=',1)[1]
-    pL = ps.strip().split()
-    assert pL == ['1', '2']
-    os.chdir( cwd )
-
-
-#####################################################################
-
-def test09():
-    """
-    using parameterize with script test
-    """
-    writescript( 'params1.vvt', """
-        #!/usr/bin/env python
-        #VVT: parameterize : animal = dog cat
-        import os
-        print ( "hello from "+os.path.basename(os.getcwd()) )
-        """ )
-    writescript( 'params2.vvt', """
-        #!/usr/bin/env python
-        #VVT: parameterize : A = dog cat
-        #VVT: parameterize : V = carrot celery
-        import os
-        print ( "hello from "+os.path.basename(os.getcwd()) )
-        """ )
-    writescript( 'params3.vvt', """
-        #!/usr/bin/env python
-        #VVT: parameterize : B,X = dog,carrot cat,celery
-        import os
-        print ( "hello from "+os.path.basename(os.getcwd()) )
-        """ )
-    writescript( 'params4.vvt', """
-        #!/usr/bin/env python
-        #VVT: parameterize : C, Y, Z = 1 ,2,3  4,5,6
-        #VVT::                         7 , 8 , 9   10, 11,12
-        import os
-        print ( "hello from "+os.path.basename(os.getcwd()) )
-        """ )
-
-    run_test09( '' )
-    run_test09( '--plat '+core_platform_name()+' --batch' )
-
-def run_test09( opt ):
-    ""
-    remove_results()
-
-    out,np,nd,nf,nn = run_vvtest( opt )
-    tdir = results_dir()
-    platname = platform_name( out )
-
-    assert np == 12 and nd == 0 and nf == 0 and nn == 0
-    assert len( greptestlist(out,'pass.*.animal=dog') ) == 1
-    assert len( greptestlist(out,'pass.*.animal=cat') ) == 1
-    assert len( greptestlist(out,'pass.*.A=dog.V=carrot') ) == 1
-    assert len( greptestlist(out,'pass.*.A=cat.V=carrot') ) == 1
-    assert len( greptestlist(out,'pass.*.A=dog.V=celery') ) == 1
-    assert len( greptestlist(out,'pass.*.A=cat.V=celery') ) == 1
-    assert len( greptestlist(out,'pass.*.B=dog.X=carrot') ) == 1
-    assert len( greptestlist(out,'pass.*.B=cat.X=celery') ) == 1
-    assert len( greptestlist(out,'pass.*.B=cat.X=carrot') ) == 0
-    assert len( greptestlist(out,'pass.*.B=dog.X=celery') ) == 0
-    assert len( greptestlist(out,'pass.*.C=1.Y=2.Z=3') ) == 1
-    assert len( greptestlist(out,'pass.*.C=4.Y=5.Z=6') ) == 1
-    assert len( greptestlist(out,'pass.*.C=7.Y=8.Z=9') ) == 1
-    assert len( greptestlist(out,'pass.*.C=10.Y=11.Z=12') ) == 1
-
-    assert len( filegrep( tdir+'/params1.animal=dog/execute.log',
-                          "hello from params1.animal=dog" ) ) == 1
-    assert len( filegrep( tdir+'/params1.animal=cat/execute.log',
-                          "hello from params1.animal=cat" ) ) == 1
-
-    plat = '--plat '+platname
-    out,np,nd,nf,nn = run_vvtest( plat+' -ik animal' )
-    assert np == 2 and nd == 0 and nf == 0 and nn == 0
-    out,np,nd,nf,nn = run_vvtest( plat+' -ik dog' )
-    assert np == 0 and nd == 0 and nf == 0 and nn == 0
-    out,np,nd,nf,nn = run_vvtest( plat+' -ik Z' )
-    assert np == 4 and nd == 0 and nf == 0 and nn == 0
-
-
-#####################################################################
-
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )
