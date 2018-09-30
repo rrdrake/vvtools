@@ -1,0 +1,149 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import re
+import glob
+import time
+import unittest
+
+import testutils as util
+from testutils import print3
+
+
+class postclean_tests( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_run_then_restart_with_postclean_removes_derived_files(self):
+        ""
+        util.writefile( "pclean.xml", """
+            <rtest name="pclean">
+                <execute>
+                    echo "Elvis has left the building" > afile.txt || exit 1
+                    mkdir asubdir || exit 1
+                    echo "True that" > asubdir/somefile.txt || exit 1
+                </execute>
+            </rtest>""" )
+        
+        util.writescript( 'ana.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : P = 1 2
+            #VVT: analyze : ana.py
+            import os
+            import script_util as vvt
+            print3 = vvt.print3
+            fp = open( 'genfile.txt', 'w' )
+            fp.write( 'param P='+vvt.P+'\\n' )
+            fp.close()
+            """ )
+        util.writescript( "ana.py", """
+            #!/usr/bin/env python
+            import os
+            import script_util as vvt
+            for P in vvt.PARAM_P:
+                fn = '../'+vvt.NAME+'.P='+P+'/genfile.txt'
+                assert os.path.exists( fn )
+                fp = open( 'anagen.txt', 'a' )
+                fp.write( 'file = '+fn+'\\n' )
+                fp.close()
+            """ )
+        time.sleep(1)
+
+        self.run_then_restart_with_postclean_removes_derived_files( '' )
+        self.run_then_restart_with_postclean_removes_derived_files(
+                '--plat '+util.core_platform_name()+' --batch' )
+
+    def run_then_restart_with_postclean_removes_derived_files(self, opt):
+        ""
+        util.remove_results()
+
+        vrun = util.vvtestRunner( opt )
+        assert vrun.num_pass == 4 and vrun.num_fail == 0
+        tdir = vrun.testdir
+
+        assert len( glob.glob( tdir+'/pclean/afile.txt' ) ) == 1
+        assert len( glob.glob( tdir+'/pclean/runscript' ) ) == 1
+        assert len( glob.glob( tdir+'/pclean/execute.log' ) ) == 1
+        assert os.path.isdir( tdir+'/pclean/asubdir' )
+        assert len( glob.glob( tdir+'/pclean/asubdir/somefile.txt' ) ) == 1
+
+        assert len( glob.glob( tdir+'/ana/ana.vvt' ) ) == 1
+        assert len( glob.glob( tdir+'/ana/ana.py' ) ) == 1
+        assert len( glob.glob( tdir+'/ana.P=1/execute.log' ) ) == 1
+        assert len( glob.glob( tdir+'/ana.P=1/ana.py' ) ) == 0
+        assert len( glob.glob( tdir+'/ana.P=2/execute.log' ) ) == 1
+        assert len( glob.glob( tdir+'/ana.P=2/ana.py' ) ) == 0
+        assert len( glob.glob( tdir+'/ana/execute.log' ) ) == 1
+        assert len( glob.glob( tdir+'/ana/anagen.txt' ) ) == 1
+
+        vrun = util.vvtestRunner( opt+' -R -C' )
+        assert vrun.num_pass == 4 and vrun.num_fail == 0
+        assert tdir == vrun.testdir
+
+        assert len( glob.glob( tdir+'/pclean/afile.txt' ) ) == 0
+        assert len( glob.glob( tdir+'/pclean/runscript' ) ) == 1
+        assert len( glob.glob( tdir+'/pclean/execute.log' ) ) == 1
+        assert not os.path.exists( tdir+'/pclean/asubdir' )
+        assert not os.path.exists( tdir+'/pclean/asubdir/somefile.txt' )
+
+        # note that the ana.P=1 & 2 tests still have genfile.txt (which if they
+        # did not, the analyze test would fail); that is, the postclean is not
+        # applied to child tests; BUT, analyze tests are cleaned
+        assert len( glob.glob( tdir+'/ana/ana.vvt' ) ) == 1
+        assert len( glob.glob( tdir+'/ana/ana.py' ) ) == 1
+        assert len( glob.glob( tdir+'/ana.P=1/execute.log' ) ) == 1
+        assert len( glob.glob( tdir+'/ana.P=1/ana.py' ) ) == 0
+        assert len( glob.glob( tdir+'/ana.P=2/execute.log' ) ) == 1
+        assert len( glob.glob( tdir+'/ana.P=2/ana.py' ) ) == 0
+        assert len( glob.glob( tdir+'/ana/execute.log' ) ) == 1
+        assert len( glob.glob( tdir+'/ana/anagen.txt' ) ) == 0
+
+    def test_post_clean_does_not_clean_general_dependencies(self):
+        ""
+        util.writefile( 'testX.vvt', """
+            #VVT: depends on : testY
+            import os, sys, shutil
+            import vvtest_util as vvt
+            fn = os.path.join( vvt.DEPDIRS[0], 'marker.txt' )
+            shutil.copyfile( fn, 'cpmarker.txt' )
+            """ )
+        util.writefile( 'testY.vvt', """
+            import os, time
+            fp = open( 'marker.txt', 'w' )
+            fp.write( 'hello'+os.linesep )
+            fp.close()
+            time.sleep(2)
+            """ )
+        time.sleep(1)
+
+        self.post_clean_does_not_clean_general_dependencies( '-C' )
+        self.post_clean_does_not_clean_general_dependencies(
+                '--plat '+util.core_platform_name()+' --batch -C' )
+
+    def post_clean_does_not_clean_general_dependencies(self, opt):
+        ""
+        util.remove_results()
+
+        vrun = util.vvtestRunner( opt )
+        assert vrun.num_pass == 2 and vrun.num_fail == 0
+        tdir = vrun.testdir
+        time.sleep(1)
+
+        assert len( glob.glob( tdir+'/testY/marker.txt' ) ) == 1
+        assert len( util.filegrep( tdir+'/testY/marker.txt', 'hello' ) ) == 1
+        assert len( glob.glob( tdir+'/testX/cpmarker.txt' ) ) == 0
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

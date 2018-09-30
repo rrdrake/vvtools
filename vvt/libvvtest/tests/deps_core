@@ -284,7 +284,7 @@ class dependency_related_functions( unittest.TestCase ):
     def test_addDependency_uniquifies_multiple_TestSpec(self):
         ""
         ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = TestExec( ts, None, False )
+        tx = TestExec( ts, None )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
         tx.addDependency( ts1 )
@@ -297,14 +297,14 @@ class dependency_related_functions( unittest.TestCase ):
     def test_addDependency_uniquifies_multiple_TestExec(self):
         ""
         ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = TestExec( ts, None, False )
+        tx = TestExec( ts, None )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx1 = TestExec( ts1, None, False )
+        tx1 = TestExec( ts1, None )
         tx.addDependency( tx1 )
 
         ts2 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx2 = TestExec( ts2, None, False )
+        tx2 = TestExec( ts2, None )
         tx.addDependency( tx2 )
 
         assert len( tx.getDependencies() ) == 1
@@ -312,13 +312,13 @@ class dependency_related_functions( unittest.TestCase ):
     def test_addDependency_uniquifies_TestSpec_then_TestExec(self):
         ""
         ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = TestExec( ts, None, False )
+        tx = TestExec( ts, None )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
         tx.addDependency( ts1 )
 
         ts2 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx2 = TestExec( ts2, None, False )
+        tx2 = TestExec( ts2, None )
         tx.addDependency( tx2 )
 
         assert len( tx.getDependencies() ) == 1
@@ -326,10 +326,10 @@ class dependency_related_functions( unittest.TestCase ):
     def test_addDependency_uniquifies_TestExec_then_TestSpec(self):
         ""
         ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = TestExec( ts, None, False )
+        tx = TestExec( ts, None )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx1 = TestExec( ts1, None, False )
+        tx1 = TestExec( ts1, None )
         tx.addDependency( tx1 )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )

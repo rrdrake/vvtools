@@ -411,6 +411,44 @@ class TestList_results_file( unittest.TestCase ):
         assert tm == None
 
 
+class format_versions( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_the_current_testlist_file_format_version(self):
+        ""
+        write_TestList_with_fake_test( 'testlist' )
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'testlist' )
+        tlr.read()
+        assert tlr.getFileVersion() == 32
+
+    def test_reading_testlist_format_version_31_is_an_exception(self):
+        ""
+        fp = open( 'testlist', 'w' )
+        fp.write( example_testlist_version_31 )
+        fp.close()
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'testlist' )
+        self.assertRaises( Exception, tlr.read )
+
+
+example_testlist_version_31 = \
+"""
+#VVT: Version = 31
+#VVT: Date = Sat Sep 29 16:12:43 2018
+
+py1 "/scratch/rrdrake/temp/prob" "py1.vvt" "_keywords_=bar foo py1" "state=Snotrun" "timeout=I3600" "xdate=I-1" "xtime=I-1"
+py1 "/scratch/rrdrake/temp/prob" "py1.vvt" "_keywords_=bar foo py1" "state=Snotdone" "timeout=I3600" "xdate=I1538259163" "xtime=I-1"
+py1 "/scratch/rrdrake/temp/prob" "py1.vvt" "_keywords_=bar foo py1" "result=Spass" "state=Sdone" "timeout=I3600" "xdate=I1538259163" "xtime=I1"
+
+#VVT: Finish = Sat Sep 29 16:12:44 2018
+"""
+
+
 ############################################################################
 
 def make_fake_TestSpec():

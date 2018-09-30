@@ -402,13 +402,9 @@ class TestList:
 
     def markTestsWithDependents(self):
         ""
-        for np,txL in self.xtlist.items():
-            for tx in txL:
-                for tdep,_,_ in tx.getDependencies():
-                    if isinstance( tdep, TestExec.TestExec ):
-                        tdep.atest.setAttr( 'hasdependent', True )
-                    else:
-                        tdep.setAttr( 'hasdependent', True )
+        for tx in self.getTestExecList():
+            if tx.hasDependent():
+                tx.atest.setAttr( 'hasdependent', True )
 
     def _test_group_has_analyze(self, grpL):
         ""
@@ -428,21 +424,6 @@ class TestList:
                 return t.getExecuteDirectory()
 
         return None
-
-    def _has_dependent_test(self, testobj):
-        ""
-        if testobj.getAttr( 'hasdependent', False ):
-            return True
-
-        key = ( testobj.getFilepath(), testobj.getName() )
-
-        grpL = self.groups[key]
-
-        for t in grpL:
-            if t != testobj and t.isAnalyze():
-                return True
-
-        return False
 
     def getActiveTests(self, sorting=''):
         """
@@ -620,10 +601,11 @@ class TestList:
 
           assert 'file' in t.getOrigin()
 
-          has_dependent = self._has_dependent_test( t )
+          xt = TestExec.TestExec( t, perms )
 
-          xt = TestExec.TestExec( t, perms, has_dependent )
-          
+          if t.getAttr( 'hasdependent', False ):
+              xt.setHasDependent()
+
           np = int( t.getParameters().get('np', 0) )
           if np in self.xtlist:
             self.xtlist[np].append(xt)
@@ -648,13 +630,13 @@ class TestList:
                 # this test has an analyze dependent
                 analyze_xt = xdir2testexec.get( analyze_xdir, None )
                 if analyze_xt != None:
-                    analyze_xt.addDependency( xt )
+                    connect_dependency( analyze_xt, xt )
             elif xt.atest.isAnalyze():
                 key = ( xt.atest.getFilepath(), xt.atest.getName() )
                 grpL = self.groups.get( key, None )
                 for gt in grpL:
                     if not gt.isAnalyze():
-                        xt.addDependency( gt )
+                        connect_dependency( xt, gt )
 
     def _add_general_dependencies(self, xdir2testexec):
         """
@@ -671,7 +653,7 @@ class TestList:
                                     dep_xdir,
                                     self.tspecs.get( dep_xdir, None ) )
                     if dep_obj != None:
-                        xt.addDependency( dep_obj, dep_pat, expr )
+                        connect_dependency( xt, dep_obj, dep_pat, expr )
 
     def sortTestExecList(self):
         """
@@ -878,6 +860,16 @@ def find_tests_by_execute_directory_match( xdir, pattern, xdir_list ):
             return set(L)
 
     return set()
+
+
+def connect_dependency( from_test, to_test, pattrn=None, expr=None ):
+    ""
+    assert isinstance( from_test, TestExec.TestExec )
+
+    from_test.addDependency( to_test, pattrn, expr )
+
+    if isinstance( to_test, TestExec.TestExec ):
+        to_test.setHasDependent()
 
 
 def print3( *args ):

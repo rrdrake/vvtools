@@ -29,14 +29,14 @@ class TestExec:
     The status and test results are saved in the TestSpec object.
     """
     
-    def __init__(self, atest, perms, has_dependent):
+    def __init__(self, atest, perms):
         """
         Constructs a test execution object which references a TestSpec obj.
         The 'perms' argument is a PermissionsSetter object.
         """
         self.atest = atest
         self.perms = perms
-        self.has_dependent = has_dependent
+        self.has_dependent = False
         
         self.platform = None
         self.timeout = 0
@@ -168,7 +168,15 @@ class TestExec:
             self.signalJob( signal.SIGTERM )
             time.sleep(5)
             self.poll()
-    
+
+    def setHasDependent(self):
+        ""
+        self.has_dependent = True
+
+    def hasDependent(self):
+        ""
+        return self.has_dependent
+
     def addDependency(self, testexec, match_pattern=None, expr=None):
         """
         A dependency can be either a TestExec object or a TestSpec object.

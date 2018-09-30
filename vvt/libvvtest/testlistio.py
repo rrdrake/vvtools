@@ -12,7 +12,7 @@ import shutil
 
 from . import TestSpec
 
-version = 1
+version = 32
 
 
 class TestListWriter:
@@ -29,7 +29,7 @@ class TestListWriter:
 
         fp = open( self.filename, 'w' )
         try:
-            fp.write( '#VVT: Version = testlist'+str(version)+'\n' )
+            fp.write( '#VVT: Version = '+str(version)+'\n' )
             fp.write( '#VVT: Start = '+datestamp+'\n' )
             fp.write( '#VVT: Attrs = '+repr( file_attrs )+'\n\n' )
         finally:
@@ -61,7 +61,6 @@ class TestListWriter:
         finally:
             fp.close()
 
-# magic: add a "num includes" in the reader class
 
 class TestListReader:
 
@@ -94,6 +93,13 @@ class TestListReader:
 
             except Exception:
                 pass
+
+        assert self.vers == 32, \
+            'corrupt test list file or older format: '+str(self.filename)
+
+    def getFileVersion(self):
+        ""
+        return self.vers
 
     def getStartDate(self):
         ""
@@ -162,11 +168,7 @@ class TestListReader:
 
             tlr = TestListReader( fname )
             tlr.read()
-
-            # magic: should just do this:
-            # self.tests.update( tlr.getTests() )
-            for xdir,tspec in tlr.getTests().items():
-                self.tests[ xdir ] = tspec
+            self.tests.update( tlr.getTests() )
 
 
 def inline_include_files( filename ):
