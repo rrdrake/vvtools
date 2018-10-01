@@ -41,39 +41,36 @@ class test_arguments( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.use_command_line_option_to_add_test_script_options( '' )
-        self.use_command_line_option_to_add_test_script_options(
-                '--plat '+util.core_platform_name()+' --batch' )
+        testargs = '--test-args=--dummy --test-args=foo'
 
-    def use_command_line_option_to_add_test_script_options(self, opt):
+        for batch in [False,True]:
+
+            util.remove_results()
+
+            vrun = util.runvvtest( testargs, batch=batch )
+            vrun.assertCounts( total=4, npass=4 )
+
+            assert vrun.countTestLines( 'pass.*atest\.nx=1' ) == 1
+            assert vrun.countTestLines( 'pass.*atest\.nx=4' ) == 1
+            assert vrun.countTestLines( 'pass.*btest\.planet=earth' ) == 1
+            assert vrun.countTestLines( 'pass.*btest\.planet=mars' ) == 1
+
+            tdir = vrun.resultsDir()
+            logL = glob.glob( tdir+'/*test.*/execute.log' )
+            assert len(logL) == 4
+            self.assert_test_args_are_in_log_files( logL )
+
+            vrun = util.runvvtest( testargs, '-R -p nx=4/planet=earth',
+                                   batch=batch, chdir=tdir )
+            vrun.assertCounts( total=2, npass=2 )
+
+            assert vrun.countTestLines( 'pass.*atest\.nx=4' ) == 1
+            assert vrun.countTestLines( 'pass.*btest\.planet=earth' ) == 1
+            self.assert_test_args_are_in_log_files( logL )
+
+    def assert_test_args_are_in_log_files(self, logfiles):
         ""
-        util.remove_results()
-
-        runr = util.vvtestRunner( opt+' --test-args=--dummy --test-args=foo' )
-        assert runr.num_total == 4 and runr.num_pass == 4
-
-        assert len( util.greptestlist(runr.out,'pass.*atest\.nx=1') ) == 1
-        assert len( util.greptestlist(runr.out,'pass.*atest\.nx=4') ) == 1
-        assert len( util.greptestlist(runr.out,'pass.*btest\.planet=earth') ) == 1
-        assert len( util.greptestlist(runr.out,'pass.*btest\.planet=mars') ) == 1
-
-        logL = glob.glob( runr.testdir+'/*test.*/execute.log' )
-        assert len(logL) == 4
-        for log in logL:
-            lineL = util.filegrep( log, 'script args' )
-            assert len(lineL) == 1
-            assert '--dummy' in lineL[0].split()
-            assert 'foo' in lineL[0].split()
-
-        runr = util.vvtestRunner( opt+' -R -p nx=4/planet=earth' + \
-                                      ' --test-args=--dummy --test-args=foo',
-                                  directory=runr.testdir )
-        assert runr.num_total == 2 and runr.num_pass == 2
-
-        assert len( util.greptestlist(runr.out,'pass.*atest\.nx=4') ) == 1
-        assert len( util.greptestlist(runr.out,'pass.*btest\.planet=earth') ) == 1
-
-        for log in logL:
+        for log in logfiles:
             lineL = util.filegrep( log, 'script args' )
             assert len(lineL) == 1
             assert '--dummy' in lineL[0].split()

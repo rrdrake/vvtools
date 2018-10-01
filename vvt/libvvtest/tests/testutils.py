@@ -255,6 +255,7 @@ def writescript( fname, content ):
 
 def run_cmd( cmd, directory=None ):
     """
+    this function is deprecated (in favor of runcmd)
     """
     dstr = ''
     if directory:
@@ -298,6 +299,37 @@ def run_cmd( cmd, directory=None ):
     if os.WIFEXITED(x) and os.WEXITSTATUS(x) == 0:
         return True, out
     return False, out
+
+
+def runcmd( cmd, chdir=None ):
+    ""
+    dstr = ''
+    if chdir:
+        dstr = 'cd '+chdir+' && '
+        cwd = os.getcwd()
+
+    print3( 'RUN: '+dstr+cmd )
+
+    if chdir:
+        os.chdir( chdir )
+
+    try:
+        pop = subprocess.Popen( cmd, shell=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT )
+
+        out,err = pop.communicate()
+
+        x = pop.returncode
+
+        if sys.version_info[0] >= 3:
+            out = out.decode()
+
+    finally:
+        if chdir:
+            os.chdir( cwd )
+
+    return x,out
 
 
 def run_redirect( cmd, redirect_filename ):
@@ -637,9 +669,139 @@ def run_vvtest( args='', ignore_errors=0, directory=None ):
     return out,numpass(out),numdiff(out),numfail(out),numnotrun(out)
 
 
-def parse_run_counts( vvtest_output ):
+class VvtestCommandRunner:
+
+    def __init__(self, cmd):
+        ""
+        self.cmd = cmd
+
+    def run(self, **options):
+        ""
+        quiet       = options.get( 'quiet',       False )
+        ignore_exit = options.get( 'ignore_exit', False )
+        chdir       = options.get( 'chdir',       None )
+
+        x,out = runcmd( self.cmd, chdir=chdir )
+
+        if not quiet:
+            print3( out )
+
+        self.out = out
+        self.cntD = parse_vvtest_counts( out )
+
+        assert ignore_exit or x == 0, \
+            'vvtest command returned nonzero exit status: '+str(x)
+
+    def assertCounts(self, total=None, finish=None,
+                           npass=None, diff=None,
+                           fail=None, timeout=None,
+                           notrun=None, notdone=None ):
+        ""
+        if total   != None: assert total   == self.cntD['total']
+        if npass   != None: assert npass   == self.cntD['npass']
+        if diff    != None: assert diff    == self.cntD['diff']
+        if fail    != None: assert fail    == self.cntD['fail']
+        if timeout != None: assert timeout == self.cntD['timeout']
+        if notrun  != None: assert notrun  == self.cntD['notrun']
+        if notdone != None: assert notdone == self.cntD['notdone']
+
+        if finish != None:
+            assert finish == self.cntD['npass'] + \
+                             self.cntD['diff'] + \
+                             self.cntD['fail']
+
+    def resultsDir(self):
+        ""
+        return get_results_dir( self.out )
+
+    def grepTestLines(self, regex):
+        ""
+        repat = re.compile( regex )
+        matchL = []
+
+        for line in testlines( self.out ):
+            if repat.search( line ):
+                matchL.append( line )
+
+        return matchL
+
+    def countTestLines(self, regex):
+        ""
+        return len( self.grepTestLines( regex ) )
+
+
+def runvvtest( *cmd_args, **options ):
+    """
+    Options:  batch=True (default=False)
+              quiet=True (default=False)
+              ignore_exit=True (default=False)
+              chdir=some/path (default=None)
+    """
+    cmd = vvtest_command_line( *cmd_args, **options )
+    vrun = VvtestCommandRunner( cmd )
+    vrun.run( **options )
+    return vrun
+
+
+def vvtest_command_line( *cmd_args, **options ):
+    """
+    Options:  batch=True (default=False)
+    """
+    argL = shlex.split( ' '.join( cmd_args ) )
+
+    cmdL = [ sys.executable, vvtest, '--plat', core_platform_name() ]
+
+    if options.get( 'batch', False ):
+
+        cmdL.append( '--batch' )
+
+        if '--qsub-limit' not in argL:
+            cmdL.extend( [ '--qsub-limit', '5' ] )
+
+        if '--qsub-length' not in argL:
+            cmdL.extend( [ '--qsub-length', '0' ] )
+
+    else:
+        if '-n' not in argL:
+            cmdL.extend( [ '-n', '8' ] )
+
+    cmdL.extend( argL )
+
+    cmd = ' '.join( cmdL )
+
+    return cmd
+
+
+def parse_vvtest_counts( out ):
     ""
-    return numpass(out), numdiff(out), numfail(out), numnotrun(out)
+    ntot = 0
+    np = 0 ; nf = 0 ; nd = 0 ; nn = 0 ; nt = 0 ; nr = 0
+
+    for line in testlines( out ):
+
+        lineL = line.strip().split()
+
+        ntot += 1
+
+        if   check_pass   ( lineL ): np += 1
+        elif check_fail   ( lineL ): nf += 1
+        elif check_diff   ( lineL ): nd += 1
+        elif check_notrun ( lineL ): nn += 1
+        elif check_timeout( lineL ): nt += 1
+        elif check_notdone( lineL ): nr += 1
+        else:
+            raise Exception( 'unable to parse test line: '+line )
+
+    cntD = { 'total'  : ntot,
+             'npass'  : np,
+             'fail'   : nf,
+             'diff'   : nd,
+             'notrun' : nn,
+             'timeout': nt,
+             'notdone': nr }
+
+    return cntD
+
 
 
 def platform_name( test_out ):
@@ -691,6 +853,7 @@ def check_fail(L): return len(L) >= 5 and L[2][:4] == 'fail'
 def check_diff(L): return len(L) >= 5 and L[2] == 'diff'
 def check_notrun(L): return len(L) >= 3 and L[1] == 'NotRun'
 def check_timeout(L): return len(L) >= 5 and L[1] == 'TimeOut'
+def check_notdone(L): return len(L) >= 3 and L[1] == 'Running'
 
 def numtotal(out):
     ""
@@ -820,18 +983,22 @@ def greptestlist(out, pat):
     return L
 
 def testlines(out):
-    L = []
-    mark = 0
+    ""
+    lineL = []
+    mark = False
     for line in out.split( os.linesep ):
         if mark:
             if line.startswith( "==========" ):
-                mark = 0
+                mark = False
             else:
-                L.append( line.rstrip() )
+                lineL.append( line.rstrip() )
+
         elif line.startswith( "==========" ):
-            mark = 1
-            L = []  # reset list so only last cluster is considered
-    return L
+            mark = True
+            del lineL[:]  # reset list so only last cluster is considered
+
+    return lineL
+
 
 def testtimes(out):
     """
