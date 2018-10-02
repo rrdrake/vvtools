@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import division  # Make python2 and python3 handle divisions the same.
 import sys
 import os
 import math
@@ -161,6 +162,11 @@ class SimpleAprepro:
         # For each call, make sure the override variables are in place.
         self.eval_locals.update(self.override)
 
+        if "^" in txt:
+            raise Exception("simple_aprepro() only supports exponentiation via **" +
+                  " and not ^. As aprepro supports both, please use ** instead." + 
+                  " Encountered while processing '{0}'".format(txt))
+
         if "=" in txt:
             name, expression = [_.strip() for _ in txt.split("=", 2)]
 
@@ -281,6 +287,27 @@ def test2():
     assert processor.dst_txt == ["# abc = 3.141592653589793",
                                  "# abc = 3.141592653589793"]
     assert out == {"abc": math.pi}
+
+def test3():
+    """
+    Test for integer division
+    """
+    processor = SimpleAprepro("", "")
+    processor.src_txt = ["# abc = {abc = 1 / 3}"]
+    out = processor.process()
+    assert out == {"abc": float(1.0) / float(3.0)}  # all floats, in case you were unsure
+    #                                    12345678901234567
+    assert processor.dst_txt[0][:17] == "# abc = 0.3333333"
+
+def test4():
+    """
+    Test for wrong exponentiation.
+    """
+    processor = SimpleAprepro("", "")
+    processor.src_txt = ["# abc = {abc = 2 ^ 2}"]
+    out = processor.process()
+    assert out == {"abc": 4}
+    assert processor.dst_txt == ["# abc = 4",]
 
 
 def simple_aprepro(src_f, dst_f,

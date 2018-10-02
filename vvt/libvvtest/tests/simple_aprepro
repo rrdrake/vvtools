@@ -24,6 +24,36 @@ class Simple_Aprepro( unittest.TestCase ):
     def setUp(self):
         util.setup_test()
 
+    def test_division(self):
+        ""
+        util.writefile( 'values.aprepro', """
+            # {secret = 1 / 9}
+            """ )
+        util.writefile( 'test_division.py.vvt', """
+            #VVT: copy : values.aprepro
+            import script_util as util
+
+            apr = util.simple_aprepro("values.aprepro", None)
+            print("this is apr", apr)
+
+            assert apr['secret'] != 0  # this would be true for integer division
+            assert apr['secret'] == float(1.0 / 9.0)  # this is a float
+            """ )
+        time.sleep(1)
+
+        self.division( '' )
+        self.division('--plat '+util.core_platform_name()+' --batch')
+
+    def division(self, opt):
+        ""
+        util.remove_results()
+
+        vrun = util.vvtestRunner( opt+' -N 4' )
+
+        assert vrun.num_pass == 1
+
+
+
     def test_simple1(self):
         ""
         util.writefile( 'values.aprepro', """
@@ -39,8 +69,8 @@ class Simple_Aprepro( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.simple2( '' )
-        self.simple2('--plat '+util.core_platform_name()+' --batch')
+        self.simple1( '' )
+        self.simple1('--plat '+util.core_platform_name()+' --batch')
 
     def simple1(self, opt):
         ""
@@ -85,19 +115,27 @@ class Simple_Aprepro( unittest.TestCase ):
 
 
     def test_simple3(self):
-        ""
+        """
+        The only difference between txt_out1 and txt_out2 is one extra digit
+        of precision for problems between python2 and python3.
+        """
         txt_in = """# abc = { abc = PI }
             # abc = { abc }
             # xyz = { xyz = 123.456 }
             # xyz = { xyz }"""
-        txt_out = """# abc = 3.141592653589793
+        txt_out1 = """# abc = 3.141592653589793
             # abc = 3.141592653589793
             # xyz = 123.456
             # xyz = 123.456"""
+        txt_out2 = """# abc = 3.1415926535897931
+            # abc = 3.1415926535897931
+            # xyz = 123.456
+            # xyz = 123.456"""
         util.writefile( 'values.aprepro', txt_in )
-        util.writefile( 'values.gold', txt_out )
+        util.writefile( 'values.gold1', txt_out1 )
+        util.writefile( 'values.gold2', txt_out2 )
         util.writefile( 'testA.py.vvt', """
-            #VVT: copy : values.aprepro values.gold
+            #VVT: copy : values.aprepro values.gold1 values.gold2
             import math
             import script_util as util
 
@@ -105,16 +143,24 @@ class Simple_Aprepro( unittest.TestCase ):
 
             assert apr == {'abc': math.pi, 'xyz': 123.456}
 
-            with open("values.gold", 'r') as F:
-                gold = F.read()
+            with open("values.gold1", 'r') as F:
+                gold1 = F.read()
+            print("gold1", gold1)
+
+            with open("values.gold2", 'r') as F:
+                gold2 = F.read()
+            print("gold2", gold2)
+
             with open("values.comp", 'r') as F:
                 comp = F.read()
-            assert gold == comp
+            print("comp", comp)
+
+            assert (gold1 == comp) or (gold2 == comp)
             """ )
         time.sleep(1)
 
-        self.simple2( '' )
-        self.simple2('--plat '+util.core_platform_name()+' --batch')
+        self.simple3( '' )
+        self.simple3('--plat '+util.core_platform_name()+' --batch')
 
     def simple3(self, opt):
         ""
@@ -183,7 +229,6 @@ class Simple_Aprepro( unittest.TestCase ):
         vrun = util.vvtestRunner( opt+' -N 4' )
 
         assert vrun.num_pass == 1
-
 
 
 
