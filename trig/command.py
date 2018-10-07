@@ -75,7 +75,7 @@ The following arguments are allowed in each of the run methods:
            the command is executed and the final result when the command
            returns
 
-    raise_on_error : defaults to False; if True and the command returns a
+    raise_on_error : defaults to True; if True and the command returns a
                      non-zero exit status, then a CommandException is raised
 
     stdout : redirects stdout to a file name, or to an integer file descriptor
@@ -223,7 +223,7 @@ class Command:
     def run(self, shell=True,
                   chdir=None,
                   echo="echo",
-                  raise_on_error=False,
+                  raise_on_error=True,
                   redirect=None, stdout=None, stderr=None,
                   machine=None, sshexe='ssh' ):
         """
@@ -241,7 +241,7 @@ class Command:
                          shell=True,
                          chdir=None,
                          echo="echo",
-                         raise_on_error=False,
+                         raise_on_error=True,
                          stdout=None, stderr=None,
                          machine=None, sshexe='ssh' ):
         """
@@ -260,7 +260,7 @@ class Command:
                           shell=True,
                           chdir=None,
                           echo="echo",
-                          raise_on_error=False,
+                          raise_on_error=True,
                           redirect=None, stdout=None, stderr=None,
                           machine=None, sshexe='ssh' ):
         """
@@ -536,7 +536,7 @@ def get_calling_frame_variables( call_depth ):
                 lclD.update( obj )
             elif n == 'f_globals':
                 gblD.update( obj )
-    except:
+    except Exception:
         pass
 
     return lclD, gblD
@@ -567,7 +567,7 @@ class SubprocessRunner:
         self.streams = streams
         self.echobj = echobj
 
-    def runCommand(self, raise_on_error=False, runit=True):
+    def runCommand(self, raise_on_error=True, runit=True):
         """
         Changes directory in a try/catch then dispatches to subprocessWrapper().
         """
@@ -576,7 +576,7 @@ class SubprocessRunner:
         try:
             dirswap = SwapDirectory( self.chdir )
 
-        except:
+        except Exception:
             if raise_on_error:
                 raise CommandException( 'Could not change to directory "' + \
                     str(self.chdir) + '": ' + str( sys.exc_info()[1] ) )
@@ -613,7 +613,7 @@ class SubprocessRunner:
         try:
             argD['stdout'] = self.streams.openStdout()
             argD['stderr'] = self.streams.openStderr()
-        except:
+        except Exception:
             xs,tb = capture_traceback( sys.exc_info() )
             sys.stderr.write( tb )
             x = 1
@@ -621,7 +621,7 @@ class SubprocessRunner:
         if x == 0:
             try:
                 x,rtn = self.runSubprocess( self.cmd, runit, argD )
-            except:
+            except Exception:
                 xs,tb = capture_traceback( sys.exc_info() )
                 sys.stderr.write( tb )
                 self.streams.close()
@@ -740,7 +740,7 @@ class TimeoutSubprocessRunner(SubprocessRunner):
                         x = None  # mark as timed out
                         break
 
-            except:
+            except Exception:
                 # should never get here, but just in case
                 ksp.kill( signal.SIGTERM, signal.SIGKILL )
                 raise
@@ -1067,7 +1067,7 @@ class CommandDryRun:
                     if n in self.allowed_programs:
                         return True
 
-                except:
+                except Exception:
                     pass  # a failure is treated as a dry run
 
             return False

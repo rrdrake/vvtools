@@ -26,63 +26,30 @@ trigfile = os.path.join( trigger.mydir, 'trigger.py' )
 localpy = sys.executable
 
 
-#######################################################################
-
-class catchall( unittest.TestCase ):
+class date_and_time_utilities( unittest.TestCase ):
 
     def setUp(self):
         ""
-        util.setup_test()
+        util.setup_test( cleanout=False )
 
     def test_recurse_dow_function(self):
         ""
-        spec = 'Mon tue 3am'
-        sL = [ s.strip() for s in spec.split(',') ]
-        dowL = []
-        R = trigger.recurse_dow( sL, dowL )
-        assert dowL == ['mon','tue'] and R == ['3am']
+        assert_recurse_dow( 'Mon tue 3am', ['mon','tue'], ['3am'] )
 
-        spec = 'Mon, tue, 3am'
-        sL = [ s.strip() for s in spec.split(',') ]
-        dowL = []
-        R = trigger.recurse_dow( sL, dowL )
-        assert dowL == ['mon','tue'] and R == ['3am']
+        assert_recurse_dow( 'Mon, tue, 3am', ['mon','tue'], ['3am'] )
 
-        spec = 'Mon, WEDNESDAY, 3am, fri'
-        sL = [ s.strip() for s in spec.split(',') ]
-        dowL = []
-        R = trigger.recurse_dow( sL, dowL )
-        assert dowL == ['mon','wed'] and R == ['3am','fri']
+        assert_recurse_dow( 'Mon, WEDNESDAY, 3am, fri',
+                            ['mon','wed'], ['3am','fri'] )
 
-        spec = 'Sunday'
-        sL = [ s.strip() for s in spec.split(',') ]
-        dowL = []
-        R = trigger.recurse_dow( sL, dowL )
-        assert dowL == ['sun'] and R == []
+        assert_recurse_dow( 'Sunday', ['sun'], [] )
 
-        spec = 'Sunday Monday'
-        sL = [ s.strip() for s in spec.split(',') ]
-        dowL = []
-        R = trigger.recurse_dow( sL, dowL )
-        assert dowL == ['sun','mon'] and R == []
+        assert_recurse_dow( 'Sunday Monday', ['sun','mon'], [] )
 
-        spec = 'Mon 3 am'
-        sL = [ s.strip() for s in spec.split(',') ]
-        dowL = []
-        R = trigger.recurse_dow( sL, dowL )
-        assert dowL == ['mon'] and R == ['3 am']
+        assert_recurse_dow( 'Mon 3 am', ['mon'], ['3 am'] )
 
-        spec = 'Mon, 3 am'
-        sL = [ s.strip() for s in spec.split(',') ]
-        dowL = []
-        R = trigger.recurse_dow( sL, dowL )
-        assert dowL == ['mon'] and R == ['3 am']
+        assert_recurse_dow( 'Mon, 3 am', ['mon'], ['3 am'] )
 
-        spec = 'Mon, 3am'
-        sL = [ s.strip() for s in spec.split(',') ]
-        dowL = []
-        R = trigger.recurse_dow( sL, dowL )
-        assert dowL == ['mon'] and R == ['3am']
+        assert_recurse_dow( 'Mon, 3am', ['mon'], ['3am'] )
 
     def test_next_trigger_time_function(self):
         ""
@@ -173,32 +140,11 @@ class catchall( unittest.TestCase ):
         dow = day_of_week( curtm )
         dow2 = day_of_week( midnight+26*60*60 )
 
-        try:
-            tm = trigger.next_trigger_time( '1mm', midnight )
-        except Exception:
-            err = str( sys.exc_info()[1] )
-            print3( err )
-            assert err.find('bad time syntax') >= 0
-        else:
-            raise Exception( "expected an exception" )
+        bad_next_trigger_time( '1mm', midnight )
 
-        try:
-            tm = trigger.next_trigger_time( dow+' 6am '+dow2, midnight+5*hr )
-        except Exception:
-            err = str( sys.exc_info()[1] )
-            print3( err )
-            assert err.find('bad time syntax') >= 0
-        else:
-            raise Exception( "expected an exception" )
+        bad_next_trigger_time( dow+' 6am '+dow2, midnight+5*hr )
 
-        try:
-            tm = trigger.next_trigger_time( '6am '+dow, midnight+5*hr )
-        except Exception:
-            err = str( sys.exc_info()[1] )
-            print3( err )
-            assert err.find('bad time syntax') >= 0
-        else:
-            raise Exception( "expected an exception" )
+        bad_next_trigger_time( '6am '+dow, midnight+5*hr )
 
     def test_hourly_trigger(self):
         ""
@@ -271,21 +217,44 @@ class catchall( unittest.TestCase ):
         tm = trigger.next_trigger_time( 'monthly '+dow1+' 6am', m1+10*hr )
         assert tm != None and tm >= (m2+6*hr)
 
+
+def assert_recurse_dow( spec, dow_answer, remainder_answer ):
+    ""
+    sL = [ s.strip() for s in spec.split(',') ]
+
+    dowL = []
+    R = trigger.recurse_dow( sL, dowL )
+
+    assert dowL == dow_answer
+    assert R == remainder_answer
+
+
+def bad_next_trigger_time( spec, curtime ):
+    ""
+    try:
+        tm = trigger.next_trigger_time( spec, curtime )
+    except Exception:
+        err = str( sys.exc_info()[1] )
+        print3( err )
+        assert err.find('bad time syntax') >= 0
+    else:
+        raise Exception( "expected an exception" )
+
+
+class logging_tests( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
     def test_log_print_and_read_functions(self):
         ""
         redir = trigger.Redirect( 'testlog.txt' )
         trigger.printlog( 'msgtype', 'arg2=value', 42 )
         redir.close()
 
-        lines = readlog( 'testlog.txt' )
-
-        assert len(lines) == 1
-        L = lines[0]
-        assert len(L) == 4
-        assert abs( time.time() - L[0] ) < 10
-        assert L[1] == "msgtype"
-        assert L[2] == "arg2=value"
-        assert L[3] == "42"
+        assert_log_lines( 'testlog.txt',
+                          [ 10, 'msgtype', 'arg2=value', '42' ] )
 
     def test_multiple_log_print_and_read_functions(self):
         ""
@@ -294,20 +263,9 @@ class catchall( unittest.TestCase ):
         trigger.printlog( 'foobar', 'so that happened' )
         redir.close()
 
-        lines = readlog( 'testlog.txt' )
-
-        assert len(lines) == 2
-        L = lines[0]
-        assert len(L) == 4
-        assert abs( time.time() - L[0] ) < 10
-        assert L[1] == "msgtype"
-        assert L[2] == "arg2=value"
-        assert L[3] == "42"
-        L = lines[1]
-        assert len(L) == 3
-        assert abs( time.time() - L[0] ) < 10
-        assert L[1] == "foobar"
-        assert L[2] == "so that happened"
+        assert_log_lines( 'testlog.txt',
+                          [ 10, 'msgtype', 'arg2=value', '42' ],
+                          [ 10, 'foobar', 'so that happened' ] )
 
     def test_log_file_with_extra_lines(self):
         ""
@@ -319,25 +277,10 @@ class catchall( unittest.TestCase ):
         trigger.printlog( 'zigzag', 'ok then' )
         redir.close()
 
-        lines = readlog( 'testlog.txt' )
-
-        assert len(lines) == 3
-        L = lines[0]
-        assert len(L) == 4
-        assert abs( time.time() - L[0] ) < 10
-        assert L[1] == "msgtype"
-        assert L[2] == "arg2=value"
-        assert L[3] == "42"
-        L = lines[1]
-        assert len(L) == 3
-        assert abs( time.time() - L[0] ) < 10
-        assert L[1] == "foobar"
-        assert L[2] == "so that happened"
-        L = lines[2]
-        assert len(L) == 3
-        assert abs( time.time() - L[0] ) < 10
-        assert L[1] == "zigzag"
-        assert L[2] == "ok then"
+        assert_log_lines( 'testlog.txt',
+                          [ 10, 'msgtype', 'arg2=value', '42' ],
+                          [ 10, 'foobar', 'so that happened' ],
+                          [ 10, 'zigzag', 'ok then' ] )
 
     def test_when_log_file_has_extra_lines_on_the_end(self):
         ""
@@ -347,262 +290,191 @@ class catchall( unittest.TestCase ):
         print3( '['+time.ctime()+'] 3 this is just mean' )
         redir.close()
 
-        lines = readlog( 'testlog.txt' )
+        assert_log_lines( 'testlog.txt',
+                          [ 10, 'msgtype', 'arg2=value', '42' ],
+                          [ 10, 'foobar', 'so that happened' ] )
 
-        assert len(lines) == 2
-        L = lines[0]
-        assert len(L) == 4
-        assert abs( time.time() - L[0] ) < 10
-        assert L[1] == "msgtype"
-        assert L[2] == "arg2=value"
-        assert L[3] == "42"
-        L = lines[1]
-        assert len(L) == 3
-        assert abs( time.time() - L[0] ) < 10
-        assert L[1] == "foobar"
-        assert L[2] == "so that happened"
+
+def assert_log_lines( logfile, *line_answers ):
+    ""
+    lines = readlog( logfile )
+
+    assert len( lines ) == len( line_answers ), \
+            'num lines differs: '+str(lines)+' != '+str(line_answers)
+
+    for i,line in enumerate( lines ):
+
+        ans_line = line_answers[i]
+
+        assert len( line ) == len( ans_line ), \
+            'line length differs: '+str(line)+' != '+str(ans_line)
+
+        for j,val in enumerate( line ):
+
+            if type( ans_line[j] ) == type(2):
+                assert abs( time.time() - val ) < ans_line[j]
+            else:
+                assert val == ans_line[j]
+
+
+class running_jobs( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
 
     def test_running_a_job(self):
         ""
         curtm = time.time()
 
-        util.writefile( 'job_foo.py', """
-            # JOB TRIGGER: """+string_time( curtm+3 )+"""
-            import os, sys
-            sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
-            sys.stdout.write( 'hello foo' + os.linesep )
-            sys.stdout.flush()
-            """ )
+        write_job_file( 'job_foo.py', 'foo', curtm+3 )
 
         os.mkdir( 'logs' )
         loc = os.path.abspath( 'logs' )
         
         cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
         out = util.runout( cmd )
-        #print3( out )
-        #os.system( cmd )
         assert not out.strip()
         
-        lines = readlog( 'logs/trigger.log' )
-
-        jf = os.path.abspath( 'job_foo.py' )
-
-        # get the log directory for the job
-        dL = glob.glob( 'logs/job_foo.py_*' )
-        assert len(dL) == 1
-        ldir = dL[0]
-        assert os.path.isdir( ldir )
-        joblog = os.path.join( ldir, 'log.txt' )
-        assert os.path.exists( joblog )
+        ldir,joblog = job_log_path( 'logs', 'job_foo.py' )
+        loglines = readlog( 'logs/trigger.log' )
 
         # check startup info
-        L = logfind( 'startup', lines )
-        assert len(L) > 3
-        t0 = L[0]
-        assert abs( time.time() - t0 ) < 20
-        L2 = L[2].split()
-        assert L2[0].startswith( 'mach=' ) or L2[1].startswith( 'mach=' )
-        assert L2[0].startswith( 'pid=' ) or L2[1].startswith( 'pid=' )
-        assert L[3].startswith( 'argv=' )
+        startD = log_line_dict( logfind( 'startup', loglines ) )
+        assert abs( time.time() - startD.get('date') ) < 20
+        assert startD['mach'] and startD['pid'] and startD['argv']
 
         # check launch info
-        t1,trig,f,d = loglaunch( lines )
-        assert t1 >= t0
-        assert os.path.samefile( f, jf )
-        assert os.path.samefile( d, ldir )
+        launchD = log_line_dict( logfind( 'launch', loglines ) )
+        assert launchD['date'] >= startD['date']
+        assert os.path.samefile( launchD['file'], 'job_foo.py' )
+        assert os.path.samefile( launchD['logdir'], ldir )
 
         # check finish message
-        t2,x,f,d = logfinish( lines )
-        assert t2 >= t1
-        assert x == '0'
-        assert os.path.samefile( f, jf )
-        assert os.path.samefile( d, ldir )
+        finishD = log_line_dict( logfind( 'finish', loglines ) )
+        assert finishD['date'] >= launchD['date']
+        assert finishD['exit'] == '0'
+        assert os.path.samefile( finishD['file'], 'job_foo.py' )
+        assert os.path.samefile( finishD['logdir'], ldir )
 
-        # check job log content
-        L = util.filegrep( joblog, 'PWD:' )
-        assert len(L) == 1
-        d = L[0].strip().split( 'PWD:', 1 )[1].strip()
-        assert os.path.samefile( d, ldir )
-        L = util.filegrep( joblog, 'hello foo' )
-        assert len(L) == 1 and L[0].strip() == 'hello foo'
+        assert_job_log_content( joblog, pwd=ldir, line_value='hello foo' )
 
     def test_running_two_jobs_at_the_same_time(self):
         ""
         curtm = time.time()
 
-        util.writefile( 'job_foo.py', """
-            # JOB TRIGGER: """+string_time( curtm+3 )+"""
-            import os, sys
-            sys.stdout.write( 'hello foo' + os.linesep )
-            sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
-            sys.stdout.flush()
-            """ )
-
-        util.writefile( 'job_bar.py', """
-            # JOB TRIGGER: """+string_time( curtm+3 )+"""
-            import os, sys
-            sys.stdout.write( 'hello bar' + os.linesep )
-            sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
-            sys.stdout.flush()
-            """ )
+        write_job_file( 'job_foo.py', 'foo', curtm+3 )
+        write_job_file( 'job_bar.py', 'bar', curtm+3 )
 
         os.mkdir( 'logs' )
         loc = os.path.abspath( 'logs' )
         
         cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
         out = util.runout( cmd )
-        #print3( out )
-        #os.system( cmd )
         assert not out.strip()
 
-        lines = readlog( 'logs/trigger.log' )
+        foodir,foolog = job_log_path( 'logs', 'job_foo.py' )
+        bardir,barlog = job_log_path( 'logs', 'job_bar.py' )
+        loglines = readlog( 'logs/trigger.log' )
 
-        jf1 = os.path.abspath( 'job_foo.py' )
-        jf2 = os.path.abspath( 'job_bar.py' )
-
-        # get the log directory for the jobs
-        dL = glob.glob( 'logs/job_foo.py_*' )
-        assert len(dL) == 1
-        ldir1 = dL[0]
-        assert os.path.isdir( ldir1 )
-        joblog1 = os.path.join( ldir1, 'log.txt' )
-        assert os.path.exists( joblog1 )
-        dL = glob.glob( 'logs/job_bar.py_*' )
-        assert len(dL) == 1
-        ldir2 = dL[0]
-        assert os.path.isdir( ldir2 )
-        joblog2 = os.path.join( ldir2, 'log.txt' )
-        assert os.path.exists( joblog2 )
-
-        t1 = os.path.basename( ldir1 ).split( 'job_foo.py_', 1 )[1]
-        t2 = os.path.basename( ldir2 ).split( 'job_bar.py_', 1 )[1]
+        t1 = os.path.basename( foodir ).split( 'job_foo.py_', 1 )[1]
+        t2 = os.path.basename( bardir ).split( 'job_bar.py_', 1 )[1]
         assert t1 != t2  # job time should not be the same
 
         # check launch info
-        L1 = logfind( 'launch', lines, 0 )
-        L2 = logfind( 'launch', lines, 1 )
-        assert L1[0] < L2[0]  # launch times should not be the same
+        D1 = log_line_dict( logfind( 'launch', loglines, 0 ) )
+        D2 = log_line_dict( logfind( 'launch', loglines, 1 ) )
+        assert D1['date'] != D2['date']
 
         # check finish message
-        L1 = logfind( 'finish', lines, 0 )
-        L2 = logfind( 'finish', lines, 1 )
-        assert L1[2].strip() == 'exit=0'
-        assert L2[2].strip() == 'exit=0'
+        D1 = log_line_dict( logfind( 'finish', loglines, 0 ) )
+        D2 = log_line_dict( logfind( 'finish', loglines, 1 ) )
+        assert D1['exit'] == '0' and D2['exit'] == '0'
 
-        # check job log content
-        L = util.filegrep( joblog1, 'hello foo' )
-        assert len(L) == 1 and L[0].strip() == 'hello foo'
-        L = util.filegrep( joblog2, 'hello bar' )
-        assert len(L) == 1 and L[0].strip() == 'hello bar'
+        assert len( util.grepfiles( 'hello foo', foolog ) ) == 1
+        assert len( util.grepfiles( 'hello bar', barlog ) ) == 1
 
     def test_that_newly_created_job_files_will_get_run(self):
         ""
         curtm = time.time()
-        util.writefile( 'job_foo.py', """
-            # JOB TRIGGER: """+string_time( curtm+2 )+"""
-            import os, sys, time
-            sys.stdout.write( 'hello foo' + os.linesep )
-            sys.stdout.flush()
-            time.sleep(11)
-            """ )
+        write_job_file( 'job_foo.py', 'foo', curtm+2,
+                        extra_line='time.sleep(11)' )
 
         os.mkdir( 'logs' )
         loc = os.path.abspath( 'logs' )
 
         cmd = localpy+' '+trigfile + ' -g 3 -Q 15 -r '+loc
-        bg = Background( cmd, outfile='bg1.log' )
+        bg = util.Background( cmd, outfile='bg1.log' )
 
         time.sleep(4)
 
         curtm = time.time()
-        util.writefile( 'job_bar.py', """
-            # JOB TRIGGER: """+string_time( curtm+2 )+"""
-            import os, sys
-            sys.stdout.write( 'hello bar' + os.linesep )
-            sys.stdout.flush()
-            """ )
+        write_job_file( 'job_bar.py', 'bar', curtm+2 )
         
         bg.wait()
-        fp = open( 'bg1.log', 'r' )
-        s = fp.read() ; fp.close()
-        #print3( s )
-        assert not s.strip()
+        assert not util.readfile( 'bg1.log' ).strip()
 
-        lines = readlog( 'logs/trigger.log' )
+        foodir,foolog = job_log_path( 'logs', 'job_foo.py' )
+        bardir,barlog = job_log_path( 'logs', 'job_bar.py' )
+        loglines = readlog( 'logs/trigger.log' )
 
         # check launch info
-        t1,trig,f1,d1 = loglaunch( lines, 0 )
-        t2,trig,f2,d2 = loglaunch( lines, 1 )
-        assert t2 - t1 >= 4
-        assert os.path.basename( f1 ) == 'job_foo.py'
-        assert os.path.basename( f2 ) == 'job_bar.py'
+        fooD = log_line_dict( logfind( 'launch', loglines, 0 ) )
+        barD = log_line_dict( logfind( 'launch', loglines, 1 ) )
+        assert barD['date'] - fooD['date'] >= 4
+        assert os.path.basename( fooD['file'] ) == 'job_foo.py'
+        assert os.path.basename( barD['file'] ) == 'job_bar.py'
 
         # check finish
-        t1,x1,f1,d1 = logfinish( lines, 0 )
-        t2,x2,f2,d2 = logfinish( lines, 1 )
-        assert t1 < t2
-        assert x1 == '0' and x2 == '0'
-        assert os.path.basename( f1 ) == 'job_bar.py'
-        assert os.path.basename( f2 ) == 'job_foo.py'
+        barD = log_line_dict( logfind( 'finish', loglines, 0 ) )
+        fooD = log_line_dict( logfind( 'finish', loglines, 1 ) )
+        assert barD['date'] < fooD['date']
+        assert fooD['exit'] == '0' and barD['exit'] == '0'
+        assert os.path.basename( fooD['file'] ) == 'job_foo.py'
+        assert os.path.basename( barD['file'] ) == 'job_bar.py'
 
     def test_job_location_specifications(self):
         ""
         curtm = time.time()
 
-        util.writefile( 'dir1/job_foo.py', """
-            # JOB TRIGGER: """+string_time( curtm+3 )+"""
-            import os, sys
-            sys.stdout.write( 'hello foo' + os.linesep )
-            sys.stdout.flush()
-            """ )
-
-        util.writefile( 'dir2/bar.py', """
-            # JOB TRIGGER: """+string_time( curtm+3 )+"""
-            import os, sys
-            sys.stdout.write( 'hello bar' + os.linesep )
-            sys.stdout.flush()
-            """ )
-
-        util.writefile( 'dir2/baz.py', """
-            # JOB TRIGGER: """+string_time( curtm+6 )+"""
-            import os, sys
-            sys.stdout.write( 'hello baz' + os.linesep )
-            sys.stdout.flush()
-            """ )
+        write_job_file( 'dir1/job_foo.py', 'foo', curtm+3 )
+        write_job_file( 'dir2/bar.py', 'bar', curtm+3 )
+        write_job_file( 'dir2/baz.py', 'baz', curtm+6 )
 
         os.mkdir( 'logs' )
         loc = os.path.abspath( 'logs' )
         
         cmd = localpy+' '+trigfile + \
-                ' -g 2 -Q 10 -r logs -C '+os.getcwd() + \
+                ' -g 2 -Q 10 -r logs '+os.getcwd() + \
                 ' dir1 dir2/*.py'
         out = util.runout( cmd )
-        #print3( out )
-        #os.system( cmd )
         assert not out.strip()
 
-        lines = readlog( 'logs/trigger.log' )
+        loglines = readlog( 'logs/trigger.log' )
 
-        t1,s,f1,d1 = loglaunch( lines, 0 )
-        t2,s,f2,d2 = loglaunch( lines, 1 )
-        t3,s,f3,d3 = loglaunch( lines, 2 )
-        assert logfind( 'launch', lines, 3 ) == None
+        D1 = log_line_dict( logfind( 'launch', loglines, 0 ) )
+        D2 = log_line_dict( logfind( 'launch', loglines, 1 ) )
+        D3 = log_line_dict( logfind( 'launch', loglines, 2 ) )
+        assert D1['file'] != D2['file'] and D2['file'] != D3['file']
 
-        a,b = os.path.split( f3 )
-        assert b == 'baz.py' and os.path.basename(a) == 'dir2'
+        assert os.path.basename( D3['file'] ) == 'baz.py'
+        assert os.path.dirname( D3['file'] ).endswith( 'dir2' )
 
-    def test_how_an_error_in_JOB_TRIGGER_syntax_is_handled(self):
+    def write_job_with_trigger_error(self, filename, trigtime):
         ""
-        curtm = time.time()
-
-        # put a syntax error in the job trigger
-        util.writefile( 'job_foo.py', """
-            # JOB TRIGGER: junk """+string_time( curtm+3 )+"""
+        util.writefile( filename, """
+            # JOB TRIGGER: junk """+string_time( trigtime )+"""
             import os, sys
             sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
             sys.stdout.write( 'hello foo' + os.linesep )
             sys.stdout.flush()
             """ )
+
+    def test_how_an_error_in_JOB_TRIGGER_syntax_is_handled(self):
+        ""
+        curtm = time.time()
+
+        self.write_job_with_trigger_error( 'job_foo.py', curtm+3 )
 
         # set the file date back a little to avoid time granularity issues
         t = time.time() - 59
@@ -611,37 +483,22 @@ class catchall( unittest.TestCase ):
         os.mkdir( 'logs' )
         loc = os.path.abspath( 'logs' )
 
-        cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -a 5 -r '+loc
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
         out = util.runout( cmd )
-        #print3( out )
-        #os.system( cmd )
+        print3( out )
         assert not out.strip()
 
         lines = readlog( 'logs/trigger.log' )
 
-        # expect exactly one exception log line and alive line
+        # expect exactly one exception log line
         assert logfind( 'exception', lines, 0 ) != None
         assert logfind( 'exception', lines, 1 ) == None
-        assert logfind( 'alive', lines, 0 ) != None
-        assert logfind( 'alive', lines, 1 ) == None
-        # the alive should come after the exception
-        i = 1
-        while lines[i][1] != 'exception':
-            i += 1
-        assert lines[i+1][1] == 'alive'
 
     def test_error_print_frequency_for_an_error_in_JOB_TRIGGER_syntax(self):
         ""
         curtm = time.time()
 
-        # put a syntax error in the job trigger
-        util.writefile( 'job_foo.py', """
-            # JOB TRIGGER: junk """+string_time( curtm+3 )+"""
-            import os, sys
-            sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
-            sys.stdout.write( 'hello foo' + os.linesep )
-            sys.stdout.flush()
-            """ )
+        self.write_job_with_trigger_error( 'job_foo.py', curtm+3 )
 
         # set the file date back a little to avoid time granularity issues
         t = time.time() - 59
@@ -653,13 +510,11 @@ class catchall( unittest.TestCase ):
         secs = str( 6./(60.0*60.0) )
         cmd = localpy+' '+trigfile + ' -g 2 -Q 10 -E '+secs+' -r '+loc
         out = util.runout( cmd )
-        #print3( out )
-        #os.system( cmd )
         assert not out.strip()
 
         lines = readlog( 'logs/trigger.log' )
 
-        # expect exactly one exception log line and alive line
+        # expect exactly one exception log line
         L0 = logfind( 'exception', lines, 0 )
         assert L0 != None
         L1 = logfind( 'exception', lines, 1 )
@@ -671,31 +526,14 @@ class catchall( unittest.TestCase ):
         ""
         curtm = time.time()
 
-        util.writefile( 'job_foo.py', """
-            # JOB TRIGGER: """+string_time( curtm-10 )+"""
-            # JOB TRIGGER: """+string_time( curtm+3 )+"""
-            import os, sys
-            sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
-            sys.stdout.write( 'hello foo' + os.linesep )
-            sys.stdout.flush()
-            """ )
-
-        util.writefile( 'job_bar.py', """
-            # JOB TRIGGER: """+string_time( curtm-10 )+"""
-            # JOB TRIGGER: """+string_time( curtm-20 )+"""
-            import os, sys
-            sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
-            sys.stdout.write( 'hello bar' + os.linesep )
-            sys.stdout.flush()
-            """ )
+        write_job_file( 'job_foo.py', 'foo', curtm-10, curtm+3 )
+        write_job_file( 'job_bar.py', 'bar', curtm-10, curtm-20 )
 
         os.mkdir( 'logs' )
         loc = os.path.abspath( 'logs' )
         
         cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
         out = util.runout( cmd )
-        #print3( out )
-        #os.system( cmd )
         assert not out.strip()
         
         lines = readlog( 'logs/trigger.log' )
@@ -717,8 +555,6 @@ class catchall( unittest.TestCase ):
         
         cmd = localpy+' '+trigfile + ' -g 2 -Q 6'
         out = util.runout( cmd )
-        #print3( out )
-        #os.system( cmd )
 
         assert time.time() - curtm < 5
         assert len( util.grep( out, 'Traceback' ) ) > 0
@@ -729,34 +565,79 @@ class catchall( unittest.TestCase ):
 
         #os.mkdir( 'logs' )
         loc = os.path.abspath( 'logs' )
-        
-        cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc
-        out = util.runout( cmd )
-        #print3( out )
-        #os.system( cmd )
-
-        # error not written without -S option, but should not start up
-        assert time.time() - curtm < 5
-        assert not out.strip()
 
         curtm = time.time()
-        cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -S -r '+loc
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc
         out = util.runout( cmd )
-        #print3( out )
+
         assert time.time() - curtm < 5
         assert len( util.grep( out, 'Traceback' ) ) > 0
+
+
+def write_job_file( filename, jobname, trigger_time,
+                    trigger_time2=None,
+                    extra_line=None ):
+    ""
+    content = """
+        # JOB TRIGGER: """+string_time( trigger_time )+"""
+        """
+    if trigger_time2:
+        content += """# JOB TRIGGER: """+string_time( trigger_time2 )+"""
+        """
+    content += """import os, sys, time
+        sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
+        sys.stdout.write( 'hello """+jobname+"""' + os.linesep )
+        """
+    if extra_line:
+        content += extra_line + """
+        """
+    content += """sys.stdout.flush()
+        """
+
+    util.writefile( filename, content )
+
+
+def job_log_path( log_dir, job_filename ):
+    ""
+    pat = os.path.join( log_dir, job_filename+'_*', 'log.txt' )
+    fL = glob.glob( pat )
+
+    assert len(fL) == 1
+    logfile = fL[0]
+
+    assert os.path.isfile( logfile )
+
+    logdir = os.path.dirname( logfile )
+
+    return logdir,logfile
+
+
+def assert_job_log_content( logname, pwd=None, line_value=None ):
+    ""
+    content = util.readfile( logname )
+
+    if pwd != None:
+        lines = util.grep( content, 'PWD:' )
+        assert len( lines ) == 1
+        file_pwd = lines[0].split(':',1)[1].strip()
+        assert os.path.samefile( pwd, file_pwd )
+
+    if line_value != None:
+        lines = util.grep( content, line_value )
+        assert len( lines ) == 1
+        assert lines[0].strip() == line_value
+
+
+class trigger_startup( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
 
     def test_a_second_startup_should_preserve_the_log_file(self):
         ""
         curtm = time.time()
-
-        util.writefile( 'job_foo.py', """
-            # JOB TRIGGER: """+string_time( curtm+2 )+"""
-            import os, sys, time
-            sys.stdout.write( 'hello foo' + os.linesep )
-            sys.stdout.flush()
-            time.sleep(1)
-            """ )
+        write_job_file( 'job_foo.py', 'foo', curtm+2 )
 
         jf = os.path.abspath( 'job_foo.py' )
 
@@ -765,8 +646,6 @@ class catchall( unittest.TestCase ):
         
         cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc
         out = util.runout( cmd )
-        #print3( out )
-        #os.system( cmd )
         assert not out.strip()
         
         lines1 = readlog( 'logs/trigger.log' )
@@ -778,18 +657,11 @@ class catchall( unittest.TestCase ):
         L = logfind( 'finish', lines1, 0 ) ; assert L != None
         L = logfind( 'finish', lines1, 1 ) ; assert L == None
 
-        util.writefile( 'job_bar.py', """
-            # JOB TRIGGER: """+string_time( time.time()+2 )+"""
-            import os, sys, time
-            sys.stdout.write( 'hello bar' + os.linesep )
-            sys.stdout.flush()
-            time.sleep(1)
-            """ )
+        curtm = time.time()
+        write_job_file( 'job_bar.py', 'bar', curtm+2 )
 
         cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc
         out = util.runout( cmd )
-        #print3( out )
-        #os.system( cmd )
         assert not out.strip()
         
         lines2 = readlog( 'logs/trigger.log' )
@@ -810,14 +682,7 @@ class catchall( unittest.TestCase ):
     def test_two_trigger_startups_in_different_directories_is_ok(self):
         ""
         curtm = time.time()
-
-        util.writefile( 'jobs1/job_foo.py', """
-            # JOB TRIGGER: """+string_time( curtm+2 )+"""
-            import os, sys, time
-            sys.stdout.write( 'hello foo' + os.linesep )
-            sys.stdout.flush()
-            time.sleep(1)
-            """ )
+        write_job_file( 'jobs1/job_foo.py', 'foo', curtm+2 )
 
         os.mkdir( 'logs1' )
         loc1 = os.path.abspath( 'logs1' )
@@ -826,22 +691,17 @@ class catchall( unittest.TestCase ):
 
         os.chdir( 'jobs1' )    
         cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc1
-        bg1 = Background( cmd, outfile='bg1.log' )
+        bg1 = util.Background( cmd, outfile='bg1.log' )
 
         os.chdir( '..' )
         time.sleep(1)
 
-        util.writefile( 'jobs2/job_bar.py', """
-            # JOB TRIGGER: """+string_time( time.time()+2 )+"""
-            import os, sys, time
-            sys.stdout.write( 'hello bar' + os.linesep )
-            sys.stdout.flush()
-            time.sleep(1)
-            """ )
+        curtm = time.time()
+        write_job_file( 'jobs2/job_bar.py', 'bar', curtm+2 )
 
         os.chdir( 'jobs2' )    
         cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc2
-        bg2 = Background( cmd, outfile='bg2.log' )
+        bg2 = util.Background( cmd, outfile='bg2.log' )
 
         x = bg1.wait() ; assert x == 0
         x = bg2.wait() ; assert x == 0
@@ -871,84 +731,6 @@ class catchall( unittest.TestCase ):
         tm,x,f,d = logfinish( lines2 )
         assert os.path.basename(f) == 'job_bar.py'
 
-    def test_that_im_alive_messages_appear_in_log_file(self):
-        ""
-        os.mkdir( 'logs' )
-        loc = os.path.abspath( 'logs' )
-
-        cmd = localpy+' '+trigfile + ' -g 2 -Q 10 -a 4 -r '+loc
-        out = util.runout( cmd )
-        #print3( out )
-        #os.system( cmd )
-        assert not out.strip()
-
-        lines = readlog( 'logs/trigger.log' )
-
-        L = logfind( 'alive', lines, 0 )
-        assert L != None
-        L = logfind( 'alive', lines, 1 )
-        assert L != None
-        L = logfind( 'alive', lines, 2 )
-        assert L == None
-
-    def test_a_second_trigger_launch_should_not_run(self):
-        ""
-        os.mkdir( 'logs' )
-        loc = os.path.abspath( 'logs' )
-
-        cmd = localpy+' '+trigfile + ' -g 1 -Q 5 -r '+loc
-        bg = Background( cmd, outfile='bg1.log' )
-
-        time.sleep(3)
-        out = util.runout( cmd )
-        #print3( out )
-        assert not out.strip()
-
-        bg.wait()
-        fp = open( 'bg1.log', 'r' )
-        s = fp.read() ; fp.close()
-        assert not s.strip()
-
-        lines = readlog( 'logs/trigger.log' )
-
-        # only one startup message should be in the log file
-        L = logfind( 'startup', lines, 0 )
-        assert L != None
-        L = logfind( 'startup', lines, 1 )
-        assert L == None
-
-    def test_trigger_launch_also_looks_for_alive_messages(self):
-        ""
-        os.mkdir( 'logs' )
-        loc = os.path.abspath( 'logs' )
-
-        cmd = localpy+' '+trigfile + ' -g 1 -Q 10 -a 4 -r '+loc
-        bg = Background( cmd, outfile='bg1.log' )
-
-        time.sleep(7)
-        out = util.runout( cmd )
-        #print3( out )
-        assert not out.strip()
-
-        bg.wait()
-        fp = open( 'bg1.log', 'r' )
-        s = fp.read() ; fp.close()
-        assert not s.strip()
-
-        lines = readlog( 'logs/trigger.log' )
-
-        # only one startup message should be in the log file
-        L = logfind( 'startup', lines, 0 )
-        assert L != None
-        L = logfind( 'startup', lines, 1 )
-        assert L == None
-
-        # should have at least two alive messages
-        L = logfind( 'alive', lines, 0 )
-        assert L != None
-        L = logfind( 'alive', lines, 1 )
-        assert L != None
-
     def test_a_second_launch_should_occur_if_first_process_exits(self):
         ""
         os.mkdir( 'logs' )
@@ -973,22 +755,24 @@ class catchall( unittest.TestCase ):
         L = logfind( 'startup', lines, 1 )
         assert L != None
 
+
+class misc_tests( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
     def test_handling_of_a_hang_when_reading_a_job_file(self):
         ""
         curtm = time.time()
-        util.writefile( 'job_foo.py', """
-            # JOB TRIGGER: """+string_time( curtm+2 )+"""
-            import os, sys, time
-            sys.stdout.write( 'hello foo' + os.linesep )
-            sys.stdout.flush()
-            time.sleep(15)
-            """ )
+        write_job_file( 'job_foo.py', 'foo', curtm+2,
+                        extra_line='time.sleep(15)' )
 
         os.mkdir( 'logs' )
         loc = os.path.abspath( 'logs' )
 
         cmd = localpy+' '+trigfile + ' -g 3 -Q 60 -r '+loc
-        bg = Background( cmd, outfile='bg1.log' )
+        bg = util.Background( cmd, outfile='bg1.log' )
 
         time.sleep(4)
 
@@ -997,7 +781,7 @@ class catchall( unittest.TestCase ):
             #TRIGGER_TEST_HANG_READ=60
             # JOB TRIGGER: """+string_time( time.time()+2 )+"""
             """ )
-        
+
         bg.wait()
         fp = open( 'bg1.log', 'r' )
         s = fp.read() ; fp.close()
@@ -1031,13 +815,13 @@ class catchall( unittest.TestCase ):
 
         os.mkdir( 'logs' )
         loc = os.path.abspath( 'logs' )
-        
+
         cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
         out = util.runout( cmd )
         #print3( out )
         #os.system( cmd )
         assert not out.strip()
-        
+
         lines = readlog( 'logs/trigger.log' )
 
         jf = os.path.abspath( 'job_foo.py' )
@@ -1087,6 +871,26 @@ def logfind( title, loglist, index=0 ):
                 return L
             i += 1
     return None
+
+
+def log_line_dict( logline ):
+    ""
+    D = { 'date': logline[0], 'title': logline[1] }
+
+    entry1 = logline[2]
+    if entry1.startswith( 'mach=' ):
+        for entry in entry1.split():
+            k,v = entry.split( '=', 1 )
+            D[ k.strip() ] = v.strip()
+    else:
+        k,v = entry1.split( '=', 1 )
+        D[ k.strip() ] = v.strip()
+
+    for entry in logline[3:]:
+        k,v = entry.split( '=', 1 )
+        D[ k.strip() ] = v.strip()
+
+    return D
 
 
 def loglaunch( loglist, index=0 ):
@@ -1162,43 +966,6 @@ def epoch_at_month_start( curtm ):
     raise Exception( 'algorithm failed' )
 
 
-class Background:
-
-    def __init__(self, cmd, outfile=None):
-        """
-        """
-        self.cmd = cmd
-        if outfile != None:
-            fp = open( outfile, 'w' )
-            self.p = subprocess.Popen( cmd, shell=True,
-                                       stdout=fp.fileno(), 
-                                       stderr=fp.fileno() )
-            fp.close()
-        else:
-            self.p = subprocess.Popen( cmd, shell=True )
-
-    def wait(self, timeout=30):
-        """
-        """
-        if timeout == None:
-            x = self.p.wait()
-            return x
-        for i in range(timeout):
-            x = self.p.poll()
-            if x != None:
-                return x
-            time.sleep(1)
-        self.stop()
-        return None
-    
-    def stop(self):
-        try:
-            os.kill( self.p.pid, signal.SIGINT )
-            self.p.wait()
-        except Exception:
-            if hasattr( self.p, 'terminate' ):
-                try: self.p.terminate()
-                except Exception: pass
 
 
 #######################################################################

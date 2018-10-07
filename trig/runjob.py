@@ -430,14 +430,16 @@ class Job:
                 x = cmd.run( shell=shl,
                              chdir=chd,
                              echo="none",
-                             redirect=logfp.fileno() )
+                             redirect=logfp.fileno(),
+                             raise_on_error=False )
             else:
                 x = cmd.run_timeout( timeout=timeout,
                                      poll_interval=ipoll,
                                      shell=shl,
                                      chdir=chd,
                                      echo="none",
-                                     redirect=logfp.fileno() )
+                                     redirect=logfp.fileno(),
+                                     raise_on_error=False )
         finally:
             logfp.close()
 

@@ -34,7 +34,7 @@ class catchall( unittest.TestCase ):
         time.sleep(1)
 
         out = util.runout( bashexec+' cat '+dummy )
-        print out
+        print3( out )
         assert 'dummy contents' in out
 
     def test_setting_a_PATH_directory(self):
@@ -48,12 +48,12 @@ class catchall( unittest.TestCase ):
 
         d = os.path.abspath( 'bin' )
         out = util.runout( bashexec+' -p '+d+' myscript' )
-        print out
+        print3( out )
         assert 'hello from myscript' in out
 
         d = os.path.abspath( 'bin' )
         out = util.runout( bashexec+' --path '+d+' myscript' )
-        print out
+        print3( out )
         assert 'hello from myscript' in out
 
     def test_using_PATH_values_preserves_order(self):
@@ -73,17 +73,17 @@ class catchall( unittest.TestCase ):
         d1 = os.path.abspath( 'bin1' )
         d2 = os.path.abspath( 'bin2' )
         out = util.runout( bashexec+' -p '+d1+' -p '+d2+' myscript' )
-        print out
+        print3( out )
         assert 'hello script one' in out
 
         out = util.runout( bashexec+' -p '+d2+' -p '+d1+' myscript' )
-        print out
+        print3( out )
         assert 'hello script two' in out
 
     def test_running_module_command(self):
         ""
         out = util.runout( bashexec+' -v -m list pwd' )
-        print out
+        print3( out )
         assert 'module list' in out
 
     def test_arguments_with_spaces_are_preserved(self):
@@ -98,17 +98,17 @@ class catchall( unittest.TestCase ):
 
         f = os.path.abspath( 'myscript' )
         out = util.runout( bashexec+' '+f+' "foo bar"' )
-        print out
+        print3( out )
         assert 'num arguments 1' in out
 
         f = os.path.abspath( 'myscript' )
         out = util.runout( bashexec+' '+f+' "foo bar" arg2' )
-        print out
+        print3( out )
         assert 'num arguments 2' in out
 
         f = os.path.abspath( 'myscript' )
         out = util.runout( bashexec+' '+f+' arg1 "foo bar"' )
-        print out
+        print3( out )
         assert 'num arguments 2' in out
 
 

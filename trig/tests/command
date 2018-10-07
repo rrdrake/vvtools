@@ -19,9 +19,10 @@ import traceback
 import stat
 import getopt
 import signal
+import unittest
 
-# this will os.chdir() to a subdirectory
-from testutils import *
+import testutils as util
+from testutils import print3
 
 # the module being tested
 import command
@@ -35,549 +36,351 @@ use_real_ssh = False
 localpy = sys.executable
 
 
-def main():
-
-    optL,argL = getopt.getopt( sys.argv[1:], 's' )
-
-    if ('-s','') in optL:
-        global use_real_ssh
-        use_real_ssh = True
-
-    if len(argL) == 0:
-        argL = """expand01 expand02 expand03 expand04
-                  args01 args02
-                  cmd01 cmd02 cmd03 cmd04 cmd05 cmd06 cmd07
-                  repr01
-                  frame01 frame02
-                  vars01 vars02
-                  redirect01 redirect02 redirect03 redirect04 redirect05
-                  redirect06
-                  echo01 echo02 echo03 echo04
-                  dirswap01
-                  makecmd01 makecmd02 makecmd03 makecmd04
-                  dry01
-                  run01 run02 run03 run04 run05 run06
-                  runout01 runout02 runout03 runout04
-                  timeout01 timeout02 timeout03 timeout04 timeout05
-               """.split()
-
-    savedir = os.getcwd()
-    for func in argL:
-        os.chdir( savedir )
-        rmallfiles()
-        if 'COMMAND_DRYRUN' in os.environ:
-            del os.environ['COMMAND_DRYRUN']
-        time.sleep(1)
-        print3( '====> ', func )
-        eval( func+'()' )
-
-
-######################################################################
-
-def expand01():
-    """
-    single variable substitution
-    """
-    vx = command.VariableExpander()
-
-    s = vx.expand( 'nothing', {} )
-    assert s == 'nothing'
-    s = vx.expand( 'nothing', {'var':'val'} )
-    assert s == 'nothing'
-
-    s = vx.expand( '$vname', {} )
-    assert s == '$vname'
-    s = vx.expand( '$vname', {'vname':'value'} )
-    assert s == 'value'
-
-    s = vx.expand( '${vname}', {} )
-    assert s == '${vname}'
-    s = vx.expand( '${vname}', {'vname':'value'} )
-    assert s == 'value'
-
-    s = vx.expand( ' $vname', {'foo':'bar'} )
-    assert s == ' $vname'
-    s = vx.expand( ' $vname', {'vname':'value'} )
-    assert s == ' value'
-
-    s = vx.expand( ' ${vname}', {'foo':'bar'} )
-    assert s == ' ${vname}'
-    s = vx.expand( ' ${vname}', {'vname':'value'} )
-    assert s == ' value'
-
-    s = vx.expand( '$vname ', {'foo':'bar'} )
-    assert s == '$vname '
-    s = vx.expand( '$vname ', {'vname':'value'} )
-    assert s == 'value '
-
-    s = vx.expand( '${vname} ', {'foo':'bar'} )
-    assert s == '${vname} '
-    s = vx.expand( '${vname} ', {'vname':'value'} )
-    assert s == 'value '
-
-    s = vx.expand( ' $vname ', {'foo':'bar'} )
-    assert s == ' $vname '
-    s = vx.expand( ' $vname ', {'vname':'value'} )
-    assert s == ' value '
-
-    s = vx.expand( ' ${vname} ', {'foo':'bar'} )
-    assert s == ' ${vname} '
-    s = vx.expand( ' ${vname} ', {'vname':'value'} )
-    assert s == ' value '
-
-
-def expand02():
-    """
-    escape dollar
-    """
-    vx = command.VariableExpander()
-
-    s = vx.expand( r' \${vname} ', {'foo':'bar'} )
-    assert s == r' ${vname} '
-    s = vx.expand( r' \$vname ', {'foo':'bar'} )
-    assert s == r' $vname '
-
-    s = vx.expand( r' \${vname} ', {'vname':'value'} )
-    assert s == r' ${vname} '
-    s = vx.expand( r' \$vname ', {'vname':'value'} )
-    assert s == r' $vname '
-
-    s = vx.expand( r' \${vname}$foo ', {'vname':'value','foo':'bar'} )
-    assert s == r' ${vname}bar '
-    s = vx.expand( r' \$vname${foo} ', {'vname':'value','foo':'bar'} )
-    assert s == r' $vnamebar '
-
-
-def expand03():
-    """
-    two variable substitutions
-    """
-    vx = command.VariableExpander()
-
-    s = vx.expand( '$var1$var2', {'foo':'bar'} )
-    assert s == '$var1$var2'
-    s = vx.expand( '${var1}${var2}', {'foo':'bar'} )
-    assert s == '${var1}${var2}'
-
-    s = vx.expand( '$var1$var2', {'var1':'bar'} )
-    assert s == 'bar$var2'
-    s = vx.expand( '${var1}${var2}', {'var1':'bar'} )
-    assert s == 'bar${var2}'
-
-    s = vx.expand( '$var1$var2', {'var2':'bar'} )
-    assert s == '$var1bar'
-    s = vx.expand( '${var1}${var2}', {'var2':'bar'} )
-    assert s == '${var1}bar'
-
-    s = vx.expand( '$var1$var2', {'var2':'bar', 'var1':'foo'} )
-    assert s == 'foobar'
-    s = vx.expand( '${var1}${var2}', {'var2':'bar', 'var1':'foo'} )
-    assert s == 'foobar'
-
-    s = vx.expand( '$var1${var2}', {'var2':'bar', 'var1':'foo'} )
-    assert s == 'foobar'
-    s = vx.expand( '${var1}$var2', {'var2':'bar', 'var1':'foo'} )
-    assert s == 'foobar'
-
-    s = vx.expand( '$var1 ${var2}', {'var2':'bar', 'var1':'foo'} )
-    assert s == 'foo bar'
-    s = vx.expand( '${var1} $var2', {'var2':'bar', 'var1':'foo'} )
-    assert s == 'foo bar'
-
-    s = vx.expand( '$var1$blah${var2}', {'var2':'bar', 'var1':'foo'} )
-    assert s == 'foo$blahbar'
-    s = vx.expand( '${var1}$blah$var2', {'var2':'bar', 'var1':'foo'} )
-    assert s == 'foo$blahbar'
-
-    D = { 'foo':'bar', 'ext':'txt' }
-    s = vx.expand( '${foo}bar$nope.$ext', D )
-    assert s == 'barbar$nope.txt'
-
-
-def expand04():
-    """
-    same variable substitution twice
-    """
-    vx = command.VariableExpander()
-
-    s = vx.expand( '$var1$var1', {'var1':'valA'} )
-    assert s == 'valAvalA'
-    s = vx.expand( '${var1}${var1}', {'var1':'valA'} )
-    assert s == 'valAvalA'
-
-    s = vx.expand( '$var1$var2$var1', {'var1':'valA'} )
-    assert s == 'valA$var2valA'
-    s = vx.expand( '${var1}${var2}${var1}', {'var1':'valA'} )
-    assert s == 'valA${var2}valA'
-
-    s = vx.expand( '$var1$var2$var1', {'var1':'valA', 'var2':'valB'} )
-    assert s == 'valAvalBvalA'
-    s = vx.expand( '${var1}${var2}${var1}', {'var1':'valA', 'var2':'valB'} )
-    assert s == 'valAvalBvalA'
-
-
-def args01():
-    """
-    the EscapedArgument class
-
-    Note that this test is somewhat fragile because it relies on the output
-    from pipes.quote(), which can vary a little over python versions.
-    """
-    cmd = command.EscapedArgument( 'hello' )
-    assert cmd.getArgument() == 'hello'
-    assert cmd.shellStringForExpansion() == 'hello'
-    assert cmd.shellStringWithoutExpansion() == 'hello'
-
-    cmd = command.EscapedArgument( 'hello world' )
-    assert cmd.getArgument() == "'hello world'"
-    assert cmd.shellStringForExpansion() == "'hello world'"
-    assert cmd.shellStringWithoutExpansion() == "'hello world'"
-
-    cmd = command.EscapedArgument( 'hello$world' )
-    assert cmd.getArgument() == "'hello$world'"
-    assert cmd.shellStringForExpansion() == "'hello$world'"
-    assert cmd.shellStringWithoutExpansion() == "'hello$world'"
-
-    cmd = command.EscapedArgument( '~/dirname/file.*' )
-    assert cmd.getArgument() == "'~/dirname/file.*'"
-    assert cmd.shellStringForExpansion() == "'~/dirname/file.*'"
-    assert cmd.shellStringWithoutExpansion() == "'~/dirname/file.*'"
-
-    # test the repr() function
-    from command import EscapedArgument
-    cmd = command.EscapedArgument( 'hello' )
-    s = repr(cmd)
-    cmd2 = eval( s )
-    assert cmd.getArgument() == cmd2.getArgument()
-
-
-def args02():
-    """
-    the SingleArgument class
-    """
-    cmd = command.SingleArgument( 'hello' )
-    assert cmd.getArgument() == 'hello'
-    assert cmd.shellStringForExpansion() == 'hello'
-    assert cmd.shellStringWithoutExpansion() == 'hello'
-
-    cmd = command.SingleArgument( 'hello world' )
-    assert cmd.getArgument() == 'hello world'
-    assert cmd.shellStringForExpansion() == 'hello\\ world'
-    assert cmd.shellStringWithoutExpansion() == "'hello world'"
-
-    cmd = command.SingleArgument( '"hello world"' )
-    assert cmd.getArgument() == '"hello world"'
-    assert cmd.shellStringForExpansion() == '\\"hello\\ world\\"'
-    assert cmd.shellStringWithoutExpansion() == '\'"hello world"\''
-
-    cmd = command.SingleArgument( '~/dir/""' )
-    assert cmd.getArgument() == '~/dir/""'
-    assert cmd.shellStringForExpansion() == '~/dir/\\"\\"'
-    assert cmd.shellStringWithoutExpansion() == '\'~/dir/""\''
-
-    # test the repr() function
-    from command import SingleArgument
-    cmd = command.SingleArgument( 'hello' )
-    s = repr(cmd)
-    cmd2 = eval( s )
-    assert cmd.getArgument() == cmd2.getArgument()
-
-
-def cmd01():
-    """
-    using add()
-    """
-    cmd = Command()
-    cmd.add( 'ls' )
-    assert cmd.asShellString( shell=False ) == 'ls'
-    assert cmd.asShellString() == 'ls'
-
-    cmd = Command()
-    cmd.add( 'echo hello' )
-    assert cmd.asShellString( shell=False ) == 'echo hello'
-    assert cmd.asShellString() == 'echo hello'
-
-    cmd = Command()
-    cmd.add( 'echo "hello world"' )
-    assert cmd.asShellString( shell=False ) == "echo 'hello world'"
-    assert cmd.asShellString() == "echo hello\\ world"
-
-    cmd = Command()
-    cmd.add( 'ls ~/bin/junk1 /usr/local/bin/junk2' )
-    assert cmd.asShellString( shell=False ) == \
-            "ls '~/bin/junk1' /usr/local/bin/junk2"
-    assert cmd.asShellString() == "ls ~/bin/junk1 /usr/local/bin/junk2"
-
-    cmd = Command()
-    cmd.add( 'echo' ).add( '~/bin/junk1', '/usr/local/bin/junk2' )
-    assert cmd.asShellString( shell=False ) == \
-            "echo '~/bin/junk1' /usr/local/bin/junk2"
-    assert cmd.asShellString() == "echo ~/bin/junk1 /usr/local/bin/junk2"
-
-    cmd = Command()
-    cmd.add( 'echo' ).add( '~/bin/junk1' ).add( '/usr/local/bin/junk2' )
-    assert cmd.asShellString( shell=False ) == \
-            "echo '~/bin/junk1' /usr/local/bin/junk2"
-    assert cmd.asShellString() == "echo ~/bin/junk1 /usr/local/bin/junk2"
-
-
-def cmd02():
-    """
-    giving Command() constructor arguments
-    """
-    cmd = Command( 'ls' )
-    assert cmd.asShellString( shell=False ) == 'ls'
-    assert cmd.asShellString() == 'ls'
-
-    cmd = Command( 'echo hello' )
-    assert cmd.asShellString( shell=False ) == 'echo hello'
-    assert cmd.asShellString() == 'echo hello'
-
-    cmd = Command( 'echo "hello world"' )
-    assert cmd.asShellString( shell=False ) == "echo 'hello world'"
-    assert cmd.asShellString() == "echo hello\\ world"
-
-    cmd = Command( 'echo ~/bin/junk1 /usr/local/bin/junk2' )
-    assert cmd.asShellString( shell=False ) == \
-            "echo '~/bin/junk1' /usr/local/bin/junk2"
-    assert cmd.asShellString() == "echo ~/bin/junk1 /usr/local/bin/junk2"
-
-    cmd = Command( 'echo' )
-    cmd.add( '~/bin/junk1', '/usr/local/bin/junk2' )
-    assert cmd.asShellString( shell=False ) == \
-            "echo '~/bin/junk1' /usr/local/bin/junk2"
-    assert cmd.asShellString() == "echo ~/bin/junk1 /usr/local/bin/junk2"
-
-    cmd = Command( 'echo' )
-    cmd.add( '~/bin/junk1' ).add( '/usr/local/bin/junk2' )
-    assert cmd.asShellString( shell=False ) == \
-            "echo '~/bin/junk1' /usr/local/bin/junk2"
-    assert cmd.asShellString() == "echo ~/bin/junk1 /usr/local/bin/junk2"
-
-
-def cmd03():
-    """
-    using arg()
-    """
-    cmd = Command().arg( 'ls' )
-    assert cmd.asShellString( shell=False ) == 'ls'
-    assert cmd.asShellString() == 'ls'
-
-    cmd = Command().arg( 'ls', 'file1', 'file2' )
-    assert cmd.asShellString( shell=False ) == 'ls file1 file2'
-    assert cmd.asShellString() == 'ls file1 file2'
-
-    cmd = Command().arg( 'ls', 'file name' )
-    assert cmd.asShellString( shell=False ) == "ls 'file name'"
-    assert cmd.asShellString() == 'ls file\\ name'
-
-    cmd = Command().arg( 'ls' ).arg( 'file name' )
-    assert cmd.asShellString( shell=False ) == "ls 'file name'"
-    assert cmd.asShellString() == 'ls file\\ name'
-
-    cmd = Command( 'ls' )
-    cmd.add( '~/bin/file name' ).arg( '/usr/local/bin/file name' )
-    assert cmd.asShellString( shell=False ) == \
-            "ls '~/bin/file' name '/usr/local/bin/file name'"
-    assert cmd.asShellString() == \
-            "ls ~/bin/file name /usr/local/bin/file\\ name"
-
-
-def cmd04():
-    """
-    using raw()
-    """
-    cmd = Command().raw( 'ls' )
-    assert cmd.asShellString( shell=False ) == 'ls'
-    assert cmd.asShellString() == 'ls'
-
-    cmd = Command().raw( 'ls', 'file1', 'file2' )
-    assert cmd.asShellString( shell=False ) == 'ls file1 file2'
-    assert cmd.asShellString() == 'ls file1 file2'
-
-    cmd = Command().raw( 'ls', 'file1 file2' )
-    assert cmd.asShellString( shell=False ) == "ls 'file1 file2'"
-    assert cmd.asShellString() == 'ls file1\\ file2'
-
-    cmd = Command().raw( 'ls' ).raw( 'file1 file2' )
-    assert cmd.asShellString( shell=False ) == "ls 'file1 file2'"
-    assert cmd.asShellString() == 'ls file1\\ file2'
-
-    cmd = Command( 'ls' )
-    cmd.add( '~/bin/file name'
-        ).arg( '/usr/local/bin/file name'
-        ).raw( './file name' )
-    assert cmd.asShellString( shell=False ) == \
-            "ls '~/bin/file' name '/usr/local/bin/file name' './file name'"
-    assert cmd.asShellString() == \
-            "ls ~/bin/file name /usr/local/bin/file\\ name ./file\\ name"
-
-
-def cmd05():
-    """
-    using escape()
-    """
-    cmd = Command().escape( 'ls' )
-    assert cmd.asShellString( shell=False ) == 'ls'
-    assert cmd.asShellString() == 'ls'
-
-    cmd = Command().escape( 'ls', '*' )
-    assert cmd.asShellString( shell=False ) == "ls '*'"
-    assert cmd.asShellString() == "ls '*'"
-
-    cmd = Command().escape( 'ls' ).escape( '*' )
-    assert cmd.asShellString( shell=False ) == "ls '*'"
-    assert cmd.asShellString() == "ls '*'"
-
-    cmd = Command().escape( 'ls' ).escape( '*' ).escape( 'filename' )
-    assert cmd.asShellString( shell=False ) == "ls '*' filename"
-    assert cmd.asShellString() == "ls '*' filename"
-
-    cmd = Command( 'ls' ).raw( '*' ).escape( '*' ).arg( '*' ).add( '*' )
-    assert cmd.asShellString( shell=False ) == "ls '*' '*' '*' '*'"
-    assert cmd.asShellString() == "ls * '*' * *"
-
-
-def cmd06():
-    """
-    giving a Command() instance as an argument
-    """
-    cmd1 = Command( 'ls -ltr' )
-    cmd2 = Command( cmd1, 'filename' )
-    assert cmd1.asShellString( shell=False ) == 'ls -ltr'
-    assert cmd1.asShellString() == 'ls -ltr'
-    assert cmd2.asShellString( shell=False ) == 'ls -ltr filename'
-    assert cmd2.asShellString() == 'ls -ltr filename'
-
-    cmd1 = Command( 'ls -ltr' )
-    cmd2 = Command().add( cmd1, 'filename' )
-    assert cmd1.asShellString( shell=False ) == 'ls -ltr'
-    assert cmd1.asShellString() == 'ls -ltr'
-    assert cmd2.asShellString( shell=False ) == 'ls -ltr filename'
-    assert cmd2.asShellString() == 'ls -ltr filename'
-
-    cmd1 = Command( 'ls -ltr' )
-    cmd2 = Command().arg( cmd1, 'filename' )
-    assert cmd1.asShellString( shell=False ) == 'ls -ltr'
-    assert cmd1.asShellString() == 'ls -ltr'
-    assert cmd2.asShellString( shell=False ) == 'ls -ltr filename'
-    assert cmd2.asShellString() == 'ls -ltr filename'
-
-    cmd1 = Command( 'ls -ltr' )
-    cmd2 = Command().raw( cmd1, 'filename' )
-    assert cmd1.asShellString( shell=False ) == 'ls -ltr'
-    assert cmd1.asShellString() == 'ls -ltr'
-    assert cmd2.asShellString( shell=False ) == 'ls -ltr filename'
-    assert cmd2.asShellString() == 'ls -ltr filename'
-
-    cmd1 = Command( 'ls -ltr' )
-    cmd2 = Command().escape( cmd1, 'filename' )
-    assert cmd1.asShellString( shell=False ) == 'ls -ltr'
-    assert cmd1.asShellString() == 'ls -ltr'
-    assert cmd2.asShellString( shell=False ) == 'ls -ltr filename'
-    assert cmd2.asShellString() == 'ls -ltr filename'
-
-    cmd1 = Command( '-ltr' )
-    cmd2 = Command( 'ls', cmd1, 'filename' )
-    assert cmd1.asShellString( shell=False ) == '-ltr'
-    assert cmd1.asShellString() == '-ltr'
-    assert cmd2.asShellString( shell=False ) == 'ls -ltr filename'
-    assert cmd2.asShellString() == 'ls -ltr filename'
-
-    cmd1 = Command( '-ltr' )
-    cmd2 = Command().add( 'ls', cmd1, 'filename' )
-    assert cmd1.asShellString( shell=False ) == '-ltr'
-    assert cmd1.asShellString() == '-ltr'
-    assert cmd2.asShellString( shell=False ) == 'ls -ltr filename'
-    assert cmd2.asShellString() == 'ls -ltr filename'
-
-    cmd1 = Command( '-ltr' )
-    cmd2 = Command().arg( 'ls', cmd1, 'filename' )
-    assert cmd1.asShellString( shell=False ) == '-ltr'
-    assert cmd1.asShellString() == '-ltr'
-    assert cmd2.asShellString( shell=False ) == 'ls -ltr filename'
-    assert cmd2.asShellString() == 'ls -ltr filename'
-
-    cmd1 = Command( '-ltr' )
-    cmd2 = Command().raw( 'ls', cmd1, 'filename' )
-    assert cmd1.asShellString( shell=False ) == '-ltr'
-    assert cmd1.asShellString() == '-ltr'
-    assert cmd2.asShellString( shell=False ) == 'ls -ltr filename'
-    assert cmd2.asShellString() == 'ls -ltr filename'
-
-    cmd1 = Command( '-ltr' )
-    cmd2 = Command().escape( 'ls', cmd1, 'filename' )
-    assert cmd1.asShellString( shell=False ) == '-ltr'
-    assert cmd1.asShellString() == '-ltr'
-    assert cmd2.asShellString( shell=False ) == 'ls -ltr filename'
-    assert cmd2.asShellString() == 'ls -ltr filename'
-
-
-def cmd07():
-    """
-    using invalid arguments to build the command
-    """
-    try:
-        cmd = Command( ['touch','file'] )
-    except command.CommandException:
-        pass
-    else:
-        raise Exception( 'expected an exception' )
-
-    try:
-        cmd = Command( ('touch','file') )
-    except command.CommandException:
-        pass
-    else:
-        raise Exception( 'expected an exception' )
-
-    try:
-        cmd = Command().add( ['touch','file'] )
-    except command.CommandException:
-        pass
-    else:
-        raise Exception( 'expected an exception' )
-
-    try:
-        cmd = Command().arg( ['touch','file'] )
-    except command.CommandException:
-        pass
-    else:
-        raise Exception( 'expected an exception' )
-
-    try:
-        cmd = Command().escape( ['touch','file'] )
-    except command.CommandException:
-        pass
-    else:
-        raise Exception( 'expected an exception' )
-
-
-def repr01():
-    """
-    convert a Command to and from a string using repr()
-    """
-    cmd1 = Command( 'ls -ltr' )
-    s = repr( cmd1 )
-    cmd2 = command.make_Command_from_repr(s)
-    assert cmd1.asShellString() == cmd2.asShellString()
-    assert cmd1.asShellString( shell=False ) == \
-           cmd2.asShellString( shell=False )
+class variable_substiution_tests( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_single_variable_substitution(self):
+        ""
+        vx = command.VariableExpander()
+
+        assert vx.expand( 'nothing', {} ) == 'nothing'
+        assert vx.expand( 'nothing', {'var':'val'} ) == 'nothing'
+
+        assert vx.expand( '$vname', {} ) == '$vname'
+        assert vx.expand( '$vname', {'vname':'value'} ) == 'value'
+
+        assert vx.expand( '${vname}', {} ) == '${vname}'
+        assert vx.expand( '${vname}', {'vname':'value'} ) == 'value'
+
+        assert vx.expand( ' $vname', {'foo':'bar'} ) == ' $vname'
+        assert vx.expand( ' $vname', {'vname':'value'} ) == ' value'
+
+        assert vx.expand( ' ${vname}', {'foo':'bar'} ) == ' ${vname}'
+        assert vx.expand( ' ${vname}', {'vname':'value'} ) == ' value'
+
+        assert vx.expand( '$vname ', {'foo':'bar'} ) == '$vname '
+        assert vx.expand( '$vname ', {'vname':'value'} ) == 'value '
+
+        assert vx.expand( '${vname} ', {'foo':'bar'} ) == '${vname} '
+        assert vx.expand( '${vname} ', {'vname':'value'} ) == 'value '
+
+        assert vx.expand( ' $vname ', {'foo':'bar'} ) == ' $vname '
+        assert vx.expand( ' $vname ', {'vname':'value'} ) == ' value '
+
+        assert vx.expand( ' ${vname} ', {'foo':'bar'} ) == ' ${vname} '
+        assert vx.expand( ' ${vname} ', {'vname':'value'} ) == ' value '
+
+    def test_dollar_escape(self):
+        ""
+        vx = command.VariableExpander()
+
+        assert vx.expand( r' \${vname} ', {'foo':'bar'} ) == r' ${vname} '
+        assert vx.expand( r' \$vname ', {'foo':'bar'} ) == r' $vname '
+
+        assert vx.expand( r' \${vname} ', {'vname':'value'} ) == r' ${vname} '
+        assert vx.expand( r' \$vname ', {'vname':'value'} ) == r' $vname '
+
+        D = {'vname':'value','foo':'bar'}
+        assert vx.expand( r' \${vname}$foo ', D ) == r' ${vname}bar '
+        assert vx.expand( r' \$vname${foo} ', D ) == r' $vnamebar '
+
+    def test_two_variable_substitutions(self):
+        ""
+        vx = command.VariableExpander()
+
+        assert vx.expand( '$var1$var2', {'foo':'bar'} ) == '$var1$var2'
+        assert vx.expand( '${var1}${var2}', {'foo':'bar'} ) == '${var1}${var2}'
+
+        assert vx.expand( '$var1$var2', {'var1':'bar'} ) == 'bar$var2'
+        assert vx.expand( '${var1}${var2}', {'var1':'bar'} ) == 'bar${var2}'
+
+        assert vx.expand( '$var1$var2', {'var2':'bar'} ) == '$var1bar'
+        assert vx.expand( '${var1}${var2}', {'var2':'bar'} ) == '${var1}bar'
+
+        D = {'var2':'bar', 'var1':'foo'}
+
+        assert vx.expand( '$var1$var2', D ) == 'foobar'
+        assert vx.expand( '${var1}${var2}', D ) == 'foobar'
+
+        assert vx.expand( '$var1${var2}', D ) == 'foobar'
+        assert vx.expand( '${var1}$var2', D ) == 'foobar'
+
+        assert vx.expand( '$var1 ${var2}', D ) == 'foo bar'
+        assert vx.expand( '${var1} $var2', D ) == 'foo bar'
+
+        assert vx.expand( '$var1$blah${var2}', D ) == 'foo$blahbar'
+        assert vx.expand( '${var1}$blah$var2', D ) == 'foo$blahbar'
+
+        D = { 'foo':'bar', 'ext':'txt' }
+        assert vx.expand( '${foo}bar$nope.$ext', D ) == 'barbar$nope.txt'
+
+    def test_same_variable_substitution_twice(self):
+        ""
+        vx = command.VariableExpander()
+
+        D = {'var1':'valA'}
+
+        assert vx.expand( '$var1$var1', D ) == 'valAvalA'
+        assert vx.expand( '${var1}${var1}', D ) == 'valAvalA'
+
+        assert vx.expand( '$var1$var2$var1', D ) == 'valA$var2valA'
+        assert vx.expand( '${var1}${var2}${var1}', D ) == 'valA${var2}valA'
+
+        D = {'var1':'valA', 'var2':'valB'}
+        assert vx.expand( '$var1$var2$var1', D ) == 'valAvalBvalA'
+        assert vx.expand( '${var1}${var2}${var1}', D ) == 'valAvalBvalA'
+
+
+def assert_EscapedArgument( in_arg, out_arg, out_shell, out_shell_no_expand ):
+    ""
+    cmd = command.EscapedArgument( in_arg )
+    assert cmd.getArgument() == out_arg
+    assert cmd.shellStringForExpansion() == out_shell
+    assert cmd.shellStringWithoutExpansion() == out_shell_no_expand
+
+def assert_SingleArgument( in_arg, out_arg, out_shell, out_shell_no_expand ):
+    ""
+    cmd = command.SingleArgument( in_arg )
+    assert cmd.getArgument() == out_arg
+    assert cmd.shellStringForExpansion() == out_shell
+    assert cmd.shellStringWithoutExpansion() == out_shell_no_expand
+
+def assert_asShell( cmd, shellfalse, shelltrue ):
+    ""
+    assert cmd.asShellString( shell=False ) == shellfalse
+    assert cmd.asShellString() == shelltrue
+
+
+class building_commands( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
+
+    def test_EscapedArgument_class(self):
+        """
+        Note that this test is somewhat fragile because it relies on the output
+        from pipes.quote(), which can vary a little over python versions.
+        """
+        assert_EscapedArgument( 'hello', 'hello', 'hello', 'hello' )
+
+        assert_EscapedArgument( 'hello world', "'hello world'",
+                                "'hello world'", "'hello world'" )
+
+        assert_EscapedArgument( 'hello$world', "'hello$world'",
+                                "'hello$world'", "'hello$world'" )
+
+        assert_EscapedArgument( '~/dirname/file.*', "'~/dirname/file.*'",
+                                "'~/dirname/file.*'", "'~/dirname/file.*'" )
+
+    def test_the_EscapedArgument_repr_function(self):
+        ""
+        from command import EscapedArgument
+        cmd = command.EscapedArgument( 'hello' )
+        s = repr(cmd)
+        cmd2 = eval( s )
+        assert cmd.getArgument() == cmd2.getArgument()
+
+    def test_the_SingleArgument_class(self):
+        ""
+        assert_SingleArgument( 'hello', 'hello', 'hello', 'hello' )
+
+        assert_SingleArgument( 'hello world', 'hello world',
+                               'hello\\ world', "'hello world'" )
+
+        assert_SingleArgument( '"hello world"', '"hello world"',
+                               '\\"hello\\ world\\"', '\'"hello world"\'' )
+
+        assert_SingleArgument( '~/dir/""', '~/dir/""',
+                               '~/dir/\\"\\"', '\'~/dir/""\'' )
+
+    def test_the_SingleArgument_repr_function(self):
+        ""
+        from command import SingleArgument
+        cmd = command.SingleArgument( 'hello' )
+        s = repr(cmd)
+        cmd2 = eval( s )
+        assert cmd.getArgument() == cmd2.getArgument()
+
+    def test_using_the_add_function(self):
+        ""
+        cmd = Command() ; cmd.add( 'ls' )
+        assert_asShell( cmd, 'ls', 'ls' )
+
+        cmd = Command() ; cmd.add( 'echo hello' )
+        assert_asShell( cmd, 'echo hello', 'echo hello' )
+
+        cmd = Command() ; cmd.add( 'echo "hello world"' )
+        assert_asShell( cmd, "echo 'hello world'", "echo hello\\ world" )
+
+        cmd = Command() ; cmd.add( 'ls ~/bin/junk1 /usr/local/bin/junk2' )
+        assert_asShell( cmd, "ls '~/bin/junk1' /usr/local/bin/junk2",
+                             "ls ~/bin/junk1 /usr/local/bin/junk2" )
+
+        cmd = Command()
+        cmd.add( 'echo' ).add( '~/bin/junk1', '/usr/local/bin/junk2' )
+        assert_asShell( cmd, "echo '~/bin/junk1' /usr/local/bin/junk2",
+                             "echo ~/bin/junk1 /usr/local/bin/junk2" )
+
+        cmd = Command()
+        cmd.add( 'echo' ).add( '~/bin/junk1' ).add( '/usr/local/bin/junk2' )
+        assert_asShell( cmd, "echo '~/bin/junk1' /usr/local/bin/junk2",
+                             "echo ~/bin/junk1 /usr/local/bin/junk2" )
+
+    def test_giving_Command_ctor_arguments(self):
+        ""
+        cmd = Command( 'ls' )
+        assert_asShell( cmd, 'ls', 'ls' )
+
+        cmd = Command( 'echo hello' )
+        assert_asShell( cmd, 'echo hello', 'echo hello' )
+
+        cmd = Command( 'echo "hello world"' )
+        assert_asShell( cmd, "echo 'hello world'", "echo hello\\ world" )
+
+        cmd = Command( 'echo ~/bin/junk1 /usr/local/bin/junk2' )
+        assert_asShell( cmd, "echo '~/bin/junk1' /usr/local/bin/junk2",
+                             "echo ~/bin/junk1 /usr/local/bin/junk2" )
+
+        cmd = Command( 'echo' )
+        cmd.add( '~/bin/junk1', '/usr/local/bin/junk2' )
+        assert_asShell( cmd, "echo '~/bin/junk1' /usr/local/bin/junk2",
+                             "echo ~/bin/junk1 /usr/local/bin/junk2" )
+
+        cmd = Command( 'echo' )
+        cmd.add( '~/bin/junk1' ).add( '/usr/local/bin/junk2' )
+        assert_asShell( cmd, "echo '~/bin/junk1' /usr/local/bin/junk2",
+                             "echo ~/bin/junk1 /usr/local/bin/junk2" )
+
+    def test_using_the_arg_function(self):
+        ""
+        cmd = Command().arg( 'ls' )
+        assert_asShell( cmd, 'ls', 'ls' )
+
+        cmd = Command().arg( 'ls', 'file1', 'file2' )
+        assert_asShell( cmd, 'ls file1 file2', 'ls file1 file2' )
+
+        cmd = Command().arg( 'ls', 'file name' )
+        assert_asShell( cmd, "ls 'file name'", 'ls file\\ name' )
+
+        cmd = Command().arg( 'ls' ).arg( 'file name' )
+        assert_asShell( cmd, "ls 'file name'", 'ls file\\ name' )
+
+        cmd = Command( 'ls' )
+        cmd.add( '~/bin/file name' ).arg( '/usr/local/bin/file name' )
+        assert_asShell( cmd, "ls '~/bin/file' name '/usr/local/bin/file name'",
+                             "ls ~/bin/file name /usr/local/bin/file\\ name" )
+
+    def test_using_the_raw_function(self):
+        ""
+        cmd = Command().raw( 'ls' )
+        assert_asShell( cmd, 'ls', 'ls' )
+
+        cmd = Command().raw( 'ls', 'file1', 'file2' )
+        assert_asShell( cmd, 'ls file1 file2', 'ls file1 file2' )
+
+        cmd = Command().raw( 'ls', 'file1 file2' )
+        assert_asShell( cmd, "ls 'file1 file2'", 'ls file1\\ file2' )
+
+        cmd = Command().raw( 'ls' ).raw( 'file1 file2' )
+        assert_asShell( cmd, "ls 'file1 file2'", 'ls file1\\ file2' )
+
+        cmd = Command( 'ls' )
+        cmd.add( '~/bin/file name'
+            ).arg( '/usr/local/bin/file name'
+            ).raw( './file name' )
+        assert_asShell( cmd,
+            "ls '~/bin/file' name '/usr/local/bin/file name' './file name'",
+            "ls ~/bin/file name /usr/local/bin/file\\ name ./file\\ name" )
+
+    def test_using_the_escape_function(self):
+        ""
+        cmd = Command().escape( 'ls' )
+        assert_asShell( cmd, 'ls', 'ls' )
+
+        cmd = Command().escape( 'ls', '*' )
+        assert_asShell( cmd, "ls '*'", "ls '*'" )
+
+        cmd = Command().escape( 'ls' ).escape( '*' )
+        assert_asShell( cmd, "ls '*'", "ls '*'" )
+
+        cmd = Command().escape( 'ls' ).escape( '*' ).escape( 'filename' )
+        assert_asShell( cmd, "ls '*' filename", "ls '*' filename" )
+
+        cmd = Command( 'ls' ).raw( '*' ).escape( '*' ).arg( '*' ).add( '*' )
+        assert_asShell( cmd, "ls '*' '*' '*' '*'", "ls * '*' * *" )
+
+    def test_giving_a_Command_instance_as_an_argument(self):
+        ""
+        cmd1 = Command( 'ls -ltr' )
+        cmd2 = Command( cmd1, 'filename' )
+        assert_asShell( cmd2, 'ls -ltr filename', 'ls -ltr filename' )
+
+        cmd1 = Command( 'ls -ltr' )
+        cmd2 = Command().add( cmd1, 'filename' )
+        assert_asShell( cmd2, 'ls -ltr filename', 'ls -ltr filename' )
+
+        cmd1 = Command( 'ls -ltr' )
+        cmd2 = Command().arg( cmd1, 'filename' )
+        assert_asShell( cmd2, 'ls -ltr filename', 'ls -ltr filename' )
+
+        cmd1 = Command( 'ls -ltr' )
+        cmd2 = Command().raw( cmd1, 'filename' )
+        assert_asShell( cmd2, 'ls -ltr filename', 'ls -ltr filename' )
+
+        cmd1 = Command( 'ls -ltr' )
+        cmd2 = Command().escape( cmd1, 'filename' )
+        assert_asShell( cmd2, 'ls -ltr filename', 'ls -ltr filename' )
+
+        cmd1 = Command( '-ltr' )
+        cmd2 = Command( 'ls', cmd1, 'filename' )
+        assert_asShell( cmd2, 'ls -ltr filename', 'ls -ltr filename' )
+
+        cmd1 = Command( '-ltr' )
+        cmd2 = Command().add( 'ls', cmd1, 'filename' )
+        assert_asShell( cmd2, 'ls -ltr filename', 'ls -ltr filename' )
+
+        cmd1 = Command( '-ltr' )
+        cmd2 = Command().arg( 'ls', cmd1, 'filename' )
+        assert_asShell( cmd2, 'ls -ltr filename', 'ls -ltr filename' )
+
+        cmd1 = Command( '-ltr' )
+        cmd2 = Command().raw( 'ls', cmd1, 'filename' )
+        assert_asShell( cmd2, 'ls -ltr filename', 'ls -ltr filename' )
+
+        cmd1 = Command( '-ltr' )
+        cmd2 = Command().escape( 'ls', cmd1, 'filename' )
+        assert_asShell( cmd2, 'ls -ltr filename', 'ls -ltr filename' )
+
+    def test_using_invalid_arguments_to_build_the_command(self):
+        ""
+        self.assertRaises( command.CommandException, Command, ['touch','file'] )
+
+        self.assertRaises( command.CommandException, Command, ('touch','file') )
+
+        self.assertRaises( command.CommandException,
+                           Command().add, ['touch','file'] )
+
+        self.assertRaises( command.CommandException,
+                           Command().arg, ['touch','file'] )
+
+        self.assertRaises( command.CommandException,
+                           Command().escape, ['touch','file'] )
+
+    def test_convert_a_Command_to_and_from_a_string_using_repr(self):
+        ""
+        cmd1 = Command( 'ls -ltr' )
+        s = repr( cmd1 )
+        cmd2 = command.make_Command_from_repr(s)
+        assert cmd1.asShellString() == cmd2.asShellString()
+        assert cmd1.asShellString( shell=False ) == \
+               cmd2.asShellString( shell=False )
 
 
 frameglobal = 'some value'
-
-def frame01():
-    """
-    check the function that gets calling function local variables
-    """
-    localvar = 1
-    lD,gD = command.get_calling_frame_variables( 1 )
-    assert 'localvar' in lD and lD['localvar'] == 1
-    assert 'frameglobal' in gD and gD['frameglobal'] == 'some value'
-
-    cls = SomeClass()
-    cls.somefunc2( 'first', 'second' )
 
 class SomeClass:
     def somefunc2(self, arg0, arg1 ):
@@ -607,636 +410,534 @@ def somefunc1( argzero ):
     assert 'cls' in lD and hasattr( lD['cls'], 'somefunc2' )
     assert 'localvar' in lD and lD['localvar'] == 1
 
-
-def frame02():
-    """
-    calling frame error
-    """
-    try:
-        lD,gD = command.get_calling_frame_variables( 0 )
-    except: pass
-    else: raise Exception( "expected an exception" )
-
-    try:
-        lD,gD = command.get_calling_frame_variables( -1 )
-    except: pass
-    else: raise Exception( "expected an exception" )
-
 globalvar = 'glob/value'
 
-def vars01():
-    """
-    substituting local and global variable values
-    """
-    localvar = 'loc/value'
 
-    cmd = Command( 'ls $globalvar $localvar' )
-    assert cmd.asShellString( shell=False ) == 'ls glob/value loc/value'
+class frame_variable_introspection( unittest.TestCase ):
 
-    cmd = Command().add( 'ls $globalvar', '$localvar' )
-    assert cmd.asShellString( shell=False ) == 'ls glob/value loc/value'
+    def setUp(self):
+        ""
+        util.setup_test( cleanout=False )
 
-    cmd = Command().arg( 'ls', '$globalvar $localvar' )
-    assert cmd.asShellString( shell=False ) == "ls 'glob/value loc/value'"
+    def test_get_local_variables_from_calling_function(self):
+        ""
+        localvar = 1
+        lD,gD = command.get_calling_frame_variables( 1 )
+        assert 'localvar' in lD and lD['localvar'] == 1
+        assert 'frameglobal' in gD and gD['frameglobal'] == 'some value'
 
-    cmd = Command().raw( 'ls', '$globalvar $localvar' )
-    assert cmd.asShellString( shell=False ) == "ls '$globalvar $localvar'"
+        cls = SomeClass()
+        cls.somefunc2( 'first', 'second' )
 
-    cmd = Command().escape( 'ls', '$globalvar $localvar' )
-    assert cmd.asShellString( shell=False ) == "ls '$globalvar $localvar'"
+    def test_calling_frame_error(self):
+        ""
+        self.assertRaises( Exception, command.get_calling_frame_variables, 0 )
+        self.assertRaises( Exception, command.get_calling_frame_variables, -1 )
+
+    def test_substituting_local_and_global_variable_values(self):
+        ""
+        localvar = 'loc/value'
+
+        cmd = Command( 'ls $globalvar $localvar' )
+        assert cmd.asShellString( shell=False ) == 'ls glob/value loc/value'
+
+        cmd = Command().add( 'ls $globalvar', '$localvar' )
+        assert cmd.asShellString( shell=False ) == 'ls glob/value loc/value'
+
+        cmd = Command().arg( 'ls', '$globalvar $localvar' )
+        assert cmd.asShellString( shell=False ) == "ls 'glob/value loc/value'"
+
+        cmd = Command().raw( 'ls', '$globalvar $localvar' )
+        assert cmd.asShellString( shell=False ) == "ls '$globalvar $localvar'"
+
+        cmd = Command().escape( 'ls', '$globalvar $localvar' )
+        assert cmd.asShellString( shell=False ) == "ls '$globalvar $localvar'"
+
+    def test_substituting_environment_variables(self):
+        ""
+        cmd = Command( 'hello $SHELL' )
+        assert cmd.asShellString(shell=True) == 'hello '+os.environ['SHELL']
+
+        cmd = Command().arg( 'hello', '$SHELL' )
+        assert cmd.asShellString(shell=True) == 'hello '+os.environ['SHELL']
+
+        cmd = Command().raw( 'hello', '$SHELL' )
+        assert cmd.asShellString(shell=True) == 'hello $SHELL'
+
+        cmd = Command().escape( 'hello', '$SHELL' )
+        assert cmd.asShellString(shell=True) == "hello '$SHELL'"
+
+        os.environ['UNIT_TEST_VAR'] = 'unit test value'
+
+        # whitespace expansion should happen after variable substitution
+        cmd = Command( 'hello $UNIT_TEST_VAR' )
+        assert cmd.asShellString(shell=True) == 'hello unit test value'
+
+        cmd = Command().arg( 'hello', '$UNIT_TEST_VAR' )
+        assert cmd.asShellString(shell=True) == 'hello unit\\ test\\ value'
 
 
-def vars02():
-    """
-    substituting environment variables
-    """
-    cmd = Command( 'hello $SHELL' )
-    assert cmd.asShellString(shell=True) == 'hello '+os.environ['SHELL']
-
-    cmd = Command().arg( 'hello', '$SHELL' )
-    assert cmd.asShellString(shell=True) == 'hello '+os.environ['SHELL']
-
-    cmd = Command().raw( 'hello', '$SHELL' )
-    assert cmd.asShellString(shell=True) == 'hello $SHELL'
-
-    cmd = Command().escape( 'hello', '$SHELL' )
-    assert cmd.asShellString(shell=True) == "hello '$SHELL'"
-
-    os.environ['UNIT_TEST_VAR'] = 'unit test value'
-
-    # whitespace expansion should happen after variable substitution
-    cmd = Command( 'hello $UNIT_TEST_VAR' )
-    assert cmd.asShellString(shell=True) == 'hello unit test value'
-
-    cmd = Command().arg( 'hello', '$UNIT_TEST_VAR' )
-    assert cmd.asShellString(shell=True) == 'hello unit\\ test\\ value'
+def open_write_close_RedirectToFilename( filename, data ):
+    ""
+    redir = command.RedirectToFilename( filename )
+    fd = redir.open()
+    os.write( fd, util._BYTES_(data) )
+    redir.close()
 
 
-def redirect01():
-    """
-    no redirection
-    """
-    streams = command.SubprocessStreams( None, None, None )
-    fd = streams.openStdout()
-    assert fd == None
-    fd = streams.openStderr()
-    assert fd == None
-    streams.close()  # check no exception occurs
+def streams_write( streams, to_stdout, to_stderr ):
+    ""
+    ofd = streams.openStdout()
+    efd = streams.openStderr()
 
+    if to_stdout: os.write( ofd, util._BYTES_(to_stdout) )
+    if to_stderr: os.write( efd, util._BYTES_(to_stderr) )
 
-def redirect02():
-    """
-    redirect to a filename
-    """
-    obj = command.RedirectToFilename( 'file.log' )
-    fd = obj.open()
-    os.write( fd, _BYTES_('hello world\n') )
-    obj.close()
+    streams.close()
     time.sleep(1)
-    assert readfile('file.log') == 'hello world\n'
 
-    obj = command.RedirectToFilename( '>>file.log' )
-    fd = obj.open()
-    os.write( fd, _BYTES_('goodbye now\n') )
-    obj.close()
-    time.sleep(1)
-    assert readfile('file.log') == 'hello world\ngoodbye now\n'
+    return ofd, efd
 
-    obj = command.RedirectToFilename( 'file.log' )
-    fd = obj.open()
-    os.write( fd, _BYTES_('this data rules\n') )
-    obj.close()
-    time.sleep(1)
-    assert readfile('file.log') == 'this data rules\n'
 
+class redirection_tests( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_subproc_without_redirection(self):
+        ""
+        streams = command.SubprocessStreams( None, None, None )
+        assert streams.openStdout() == None
+        assert streams.openStderr() == None
+        streams.close()  # check no exception occurs
+
+    def test_redirecting_to_a_filename(self):
+        ""
+        open_write_close_RedirectToFilename( 'file.log', 'hello world\n' )
+        time.sleep(1)
+        assert util.readfile('file.log') == 'hello world\n'
+
+        open_write_close_RedirectToFilename( '>>file.log', 'goodbye now\n' )
+        time.sleep(1)
+        assert util.readfile('file.log') == 'hello world\ngoodbye now\n'
+
+        open_write_close_RedirectToFilename( 'file.log', 'this data rules\n' )
+        time.sleep(1)
+        assert util.readfile('file.log') == 'this data rules\n'
+
+        self.assertRaises( Exception, command.RedirectToFilename, '>>' )
+
+    def test_redirect_to_an_open_file_descriptor(self):
+        ""
+        fp = open( 'file.log', 'w' )
+        fp.write( 'hello world\n' )
+        fp.flush()
+        obj = command.RedirectToFileDescriptor( fp.fileno() )
+        fd = obj.open()
+        assert fd == fp.fileno()
+        os.write( fd, util._BYTES_('goodbye now\n') )
+        obj.close()
+        fp.write( 'no, really\n' )
+        fp.close()
+        time.sleep(1)
+
+        data = util.readfile( 'file.log' )
+        assert data == 'hello world\ngoodbye now\nno, really\n'
+
+    def test_specify_one_of_redirect_or_stdout_or_stderr(self):
+        ""
+        streams = command.SubprocessStreams( 'file1.txt', None, None )
+        ofd,efd = streams_write( streams, 'to stdout\n', None )
+        assert efd == subprocess.STDOUT
+        assert util.readfile('file1.txt') == 'to stdout\n'
+
+        streams = command.SubprocessStreams( None, 'file2.txt', None )
+        ofd,efd = streams_write( streams, 'to stdout\n', None )
+        assert efd == None
+        assert util.readfile('file2.txt') == 'to stdout\n'
+
+        streams = command.SubprocessStreams( None, None, 'file3.txt' )
+        ofd,efd = streams_write( streams, None, 'to stderr\n' )
+        assert ofd == None
+        assert util.readfile('file3.txt') == 'to stderr\n'
+
+    def test_specify_stdout_and_stderr(self):
+        ""
+        streams = command.SubprocessStreams( None, 'file1.txt', 'file2.txt' )
+        ofd,efd = streams_write( streams, 'to stdout\n', 'to stderr\n' )
+        assert util.readfile('file1.txt') == 'to stdout\n'
+        assert util.readfile('file2.txt') == 'to stderr\n'
+
+        fp = open( 'file4.txt', 'w' )
+        streams = command.SubprocessStreams( None, 'file3.txt', fp.fileno() )
+        ofd,efd = streams_write( streams, 'to stdout\n', 'to stderr\n' )
+        fp.close()
+        assert util.readfile('file3.txt') == 'to stdout\n'
+        assert util.readfile('file4.txt') == 'to stderr\n'
+
+        fp = open( 'file5.txt', 'w' )
+        streams = command.SubprocessStreams( None, fp.fileno(), 'file6.txt' )
+        ofd,efd = streams_write( streams, 'to stdout\n', 'to stderr\n' )
+        fp.close()
+        assert util.readfile('file5.txt') == 'to stdout\n'
+        assert util.readfile('file6.txt') == 'to stderr\n'
+
+    def test_specify_redirect_and_stdout_stderr(self):
+        ""
+        fp = open( 'file.txt', 'w' )
+        streams = command.SubprocessStreams( fp.fileno(), None, None )
+        ofd,efd = streams_write( streams, 'to stdout\n', None )
+        assert efd == subprocess.STDOUT
+        fp.close()
+        assert util.readfile('file.txt') == 'to stdout\n'
+
+        fp1 = open( 'file1.txt', 'w' )
+        fp2 = open( 'file2.txt', 'w' )
+        streams = command.SubprocessStreams( fp1.fileno(), None, fp2.fileno() )
+        ofd,efd = streams_write( streams, 'to stdout\n', 'to stderr\n' )
+        fp1.close()
+        fp2.close()
+        assert util.readfile('file1.txt') == 'to stdout\n'
+        assert util.readfile('file2.txt') == 'to stderr\n'
+
+        streams = command.SubprocessStreams( 'file4.txt', 'file3.txt', None )
+        ofd,efd = streams_write( streams, 'to stdout\n', None )
+        assert efd == subprocess.STDOUT
+        assert util.readfile('file3.txt') == 'to stdout\n'
+        assert not os.path.exists( 'file4.txt' )
+
+        streams = command.SubprocessStreams( 'file5.txt', None, 'file6.txt' )
+        ofd,efd = streams_write( streams, 'to stdout\n', 'to stderr\n' )
+        assert util.readfile('file5.txt') == 'to stdout\n'
+        assert util.readfile('file6.txt') == 'to stderr\n'
+
+
+class echo_tests( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_using_CommandNoEcho(self):
+        ""
+        out = run_echo( command.CommandNoEcho, postexec=1 )
+        assert not out
+
+    def test_using_CommandEcho(self):
+        ""
+        out = run_echo( command.CommandEcho, 'my command', postexec=1 )
+        assert out == 'my command\n'
+
+        # command must be a string
+        self.assertRaises( Exception, command.CommandEcho, ['my','command'] )
+
+    def test_using_CommandLogging(self):
+        ""
+        out = run_echo( command.CommandLogging,
+                        'my command', None, None, postexec=1 )
+        lines = extract_log_lines( out )
+        assert len(lines) == 2
+
+        # check first log line
+        assert lines[0][1] == 'runcmd'
+        L = lines[0][2]
+        assert 'dir='+os.getcwd() in L
+        assert 'cmd=my command' in L
+        sL = list( filter( lambda s: s.startswith('start='), L ) )
+        assert len(sL) == 1
+        startid = sL[0]
+
+        # check second log line
+        assert lines[1][1] == 'return'
+        L = lines[1][2]
+        assert startid in L
+        assert 'exit=1' in L
+        assert 'cmd=my command' in L
+
+        # add in a chdir argument
+
+        os.mkdir( 'tmpdir' )
+        time.sleep(1)
+
+        out = run_echo( command.CommandLogging,
+                        'my command', None, None, chdir='tmpdir' )
+        lines = extract_log_lines( out )
+        assert len(lines) == 2
+
+        # check first log line
+        assert lines[0][1] == 'runcmd'
+        L = lines[0][2]
+        assert 'dir='+os.path.abspath('tmpdir') in L
+        assert 'cmd=my command' in L
+        sL = list( filter( lambda s: s.startswith('start='), L ) )
+        assert len(sL) == 1
+        startid = sL[0]
+
+        # check second log line
+        assert lines[1][1] == 'return'
+        L = lines[1][2]
+        assert startid in L
+        assert 'exit=None' in L
+        assert 'cmd=my command' in L
+
+        # add in a logfile argument
+
+        out = run_echo( command.CommandLogging,
+                        'my command', 'logname', None )
+        lines = extract_log_lines( out )
+        assert len(lines) == 2
+
+        # check first log line
+        assert lines[0][1] == 'runcmd'
+        L = lines[0][2]
+        assert 'dir='+os.getcwd() in L
+        assert 'cmd=my command' in L
+        assert 'logfile=logname' in L
+        sL = list( filter( lambda s: s.startswith('start='), L ) )
+        assert len(sL) == 1
+        startid = sL[0]
+
+        # check second log line
+        assert lines[1][1] == 'return'
+        L = lines[1][2]
+        assert startid in L
+        assert 'exit=None' in L
+        assert 'cmd=my command' in L
+
+        # absolute path logfile argument
+
+        abslogf = os.path.abspath('logname')
+        out = run_echo( command.CommandLogging,
+                        'my command', abslogf, None )
+        lines = extract_log_lines( out )
+        assert len(lines) == 2
+
+        # check first log line
+        assert lines[0][1] == 'runcmd'
+        L = lines[0][2]
+        assert 'dir='+os.getcwd() in L
+        assert 'cmd=my command' in L
+        assert 'logfile='+abslogf in L
+        sL = list( filter( lambda s: s.startswith('start='), L ) )
+        assert len(sL) == 1
+        startid = sL[0]
+
+        # check second log line
+        assert lines[1][1] == 'return'
+        L = lines[1][2]
+        assert startid in L
+        assert 'exit=None' in L
+        assert 'cmd=my command' in L
+
+        # adding a timeout
+
+        out = run_echo( command.CommandLogging,
+                        'my command', None, None, postexec=1 )
+        lines = extract_log_lines( out )
+        assert len(lines) == 2
+        L = list( filter( lambda x: str(x).startswith('timeout='), lines[0][2] ) )
+        assert len(L) == 0
+        L = list( filter( lambda x: str(x).startswith('timeout='), lines[1][2] ) )
+        assert len(L) == 0
+
+        out = run_echo( command.CommandLogging,
+                        'my command', None, 1.2, postexec=1 )
+        lines = extract_log_lines( out )
+        assert len(lines) == 2
+        L = list( filter( lambda x: str(x).startswith('timeout='), lines[0][2] ) )
+        assert len(L) == 1
+        assert L[0].startswith('timeout=1.2')
+        L = list( filter( lambda x: str(x).startswith('timeout='), lines[1][2] ) )
+        assert len(L) == 0
+
+    def test_constructing_an_echo_object(self):
+        ""
+        obj = command.construct_echo_object( 'echo', 'shell command', None )
+        assert isinstance( obj, command.CommandEcho )
+
+        obj = command.construct_echo_object( 'log', 'shell command', None )
+        assert isinstance( obj, command.CommandLogging )
+
+        obj = command.construct_echo_object( 'log', 'shell command', 1.2 )
+        assert isinstance( obj, command.CommandLogging )
+
+        obj = command.construct_echo_object( 'none', 'shell command', None )
+        assert isinstance( obj, command.CommandNoEcho )
+
+        obj = command.construct_echo_object( None, 'shell command', None )
+        assert isinstance( obj, command.CommandNoEcho )
+
+
+def run_echo( cmd_type, *logging_args, **kwargs ):
+    ""
+    cd = kwargs.get( 'chdir', None )
+
+    redir = util.RedirectStdout( 'stdout.log' )
     try:
-        obj = command.RedirectToFilename( '>>' )
-    except: pass
-    else: raise Exception( 'expected an exception' )
 
+        if cd:
+            cwd = os.getcwd()
+            os.chdir( cd )
 
-def redirect03():
-    """
-    redirect to an open file descriptor
-    """
-    fp = open( 'file.log', 'w' )
-    fp.write( 'hello world\n' )
-    fp.flush()
-    obj = command.RedirectToFileDescriptor( fp.fileno() )
-    fd = obj.open()
-    assert fd == fp.fileno()
-    os.write( fd, _BYTES_('goodbye now\n') )
-    obj.close()
-    fp.write( 'no, really\n' )
-    fp.close()
-    time.sleep(1)
-
-    data = readfile( 'file.log' )
-    assert data == 'hello world\ngoodbye now\nno, really\n'
-
-
-def redirect04():
-    """
-    SubprocessStreams: specify one of 'redirect' or stdout or stderr
-    """
-    streams = command.SubprocessStreams( 'file1.txt', None, None )
-    ofd = streams.openStdout()
-    efd = streams.openStderr()
-    os.write( ofd, _BYTES_('to stdout\n') )
-    assert efd == subprocess.STDOUT
-    streams.close()
-    time.sleep(1)
-    assert readfile('file1.txt') == 'to stdout\n'
-
-    streams = command.SubprocessStreams( None, 'file2.txt', None )
-    ofd = streams.openStdout()
-    efd = streams.openStderr()
-    os.write( ofd, _BYTES_('to stdout\n') )
-    assert efd == None
-    streams.close()
-    time.sleep(1)
-    assert readfile('file2.txt') == 'to stdout\n'
-
-    streams = command.SubprocessStreams( None, None, 'file3.txt' )
-    ofd = streams.openStdout()
-    efd = streams.openStderr()
-    assert ofd == None
-    os.write( efd, _BYTES_('to stderr\n') )
-    streams.close()
-    time.sleep(1)
-    assert readfile('file3.txt') == 'to stderr\n'
-
-
-def redirect05():
-    """
-    SubprocessStreams: specify stdout and stderr
-    """
-    streams = command.SubprocessStreams( None, 'file1.txt', 'file2.txt' )
-    ofd = streams.openStdout()
-    efd = streams.openStderr()
-    os.write( ofd, _BYTES_('to stdout\n') )
-    os.write( efd, _BYTES_('to stderr\n') )
-    streams.close()
-    time.sleep(1)
-    assert readfile('file1.txt') == 'to stdout\n'
-    assert readfile('file2.txt') == 'to stderr\n'
-
-    fp = open( 'file4.txt', 'w' )
-    streams = command.SubprocessStreams( None, 'file3.txt', fp.fileno() )
-    ofd = streams.openStdout()
-    efd = streams.openStderr()
-    os.write( ofd, _BYTES_('to stdout\n') )
-    os.write( efd, _BYTES_('to stderr\n') )
-    streams.close()
-    fp.close()
-    time.sleep(1)
-    assert readfile('file3.txt') == 'to stdout\n'
-    assert readfile('file4.txt') == 'to stderr\n'
-
-    fp = open( 'file5.txt', 'w' )
-    streams = command.SubprocessStreams( None, fp.fileno(), 'file6.txt' )
-    ofd = streams.openStdout()
-    efd = streams.openStderr()
-    os.write( ofd, _BYTES_('to stdout\n') )
-    os.write( efd, _BYTES_('to stderr\n') )
-    streams.close()
-    fp.close()
-    time.sleep(1)
-    assert readfile('file5.txt') == 'to stdout\n'
-    assert readfile('file6.txt') == 'to stderr\n'
-
-
-def redirect06():
-    """
-    SubprocessStreams: specify 'redirect' and stdout/stderr
-    """
-    fp = open( 'file.txt', 'w' )
-    streams = command.SubprocessStreams( fp.fileno(), None, None )
-    ofd = streams.openStdout()
-    efd = streams.openStderr()
-    os.write( ofd, _BYTES_('to stdout\n') )
-    assert efd == subprocess.STDOUT
-    streams.close()
-    fp.close()
-    time.sleep(1)
-    assert readfile('file.txt') == 'to stdout\n'
-
-    fp1 = open( 'file1.txt', 'w' )
-    fp2 = open( 'file2.txt', 'w' )
-    streams = command.SubprocessStreams( fp1.fileno(), None, fp2.fileno() )
-    ofd = streams.openStdout()
-    efd = streams.openStderr()
-    os.write( ofd, _BYTES_('to stdout\n') )
-    os.write( efd, _BYTES_('to stderr\n') )
-    streams.close()
-    fp1.close()
-    fp2.close()
-    time.sleep(1)
-    assert readfile('file1.txt') == 'to stdout\n'
-    assert readfile('file2.txt') == 'to stderr\n'
-
-    streams = command.SubprocessStreams( 'file4.txt', 'file3.txt', None )
-    ofd = streams.openStdout()
-    efd = streams.openStderr()
-    os.write( ofd, _BYTES_('to stdout\n') )
-    assert efd == subprocess.STDOUT
-    streams.close()
-    time.sleep(1)
-    assert readfile('file3.txt') == 'to stdout\n'
-    assert not os.path.exists( 'file4.txt' )
-
-    streams = command.SubprocessStreams( 'file5.txt', None, 'file6.txt' )
-    ofd = streams.openStdout()
-    efd = streams.openStderr()
-    os.write( ofd, _BYTES_('to stdout\n') )
-    os.write( efd, _BYTES_('to stderr\n') )
-    streams.close()
-    time.sleep(1)
-    assert readfile('file5.txt') == 'to stdout\n'
-    assert readfile('file6.txt') == 'to stderr\n'
-
-
-def echo01():
-    """
-    command echoing: CommanNoEcho
-    """
-    redir = RedirectStdout('stdout.log')
-    try:
-        echo = command.CommandNoEcho()
+        echo = cmd_type( *logging_args )
         echo.preExecute()
-        echo.postExecute( 1 )
+        echo.postExecute( kwargs.get( 'postexec', None ) )
+
     finally:
         redir.close()
-    time.sleep(1)
-    s = readfile('stdout.log').strip()
-    assert not s.strip()
+        if cd:
+            os.chdir( cwd )
 
-
-def echo02():
-    """
-    command echoing: CommandEcho
-    """
-    redir = RedirectStdout('stdout.log')
-    try:
-        echo = command.CommandEcho( 'my command' )
-        echo.preExecute()
-        echo.postExecute( 1 )
-    finally:
-        redir.close()
-    time.sleep(1)
-    assert readfile('stdout.log') == 'my command\n'
-
-    # command must be a string
-    try:
-        echo = command.CommandEcho( ['my','command'] )
-        echo.preExecute()
-        echo.postExecute( 1 )
-    except:
-        pass
-    else:
-        raise Exception( "expected an exception" )
-
-
-def echo03():
-    """
-    command echoing: CommandLogging
-    """
-    redir = RedirectStdout('stdout.log')
-    try:
-        echo = command.CommandLogging( 'my command', None, None )
-        echo.preExecute()
-        echo.postExecute( 1 )
-    finally:
-        redir.close()
-    time.sleep(1)
-    fp = open( 'stdout.log', 'r' )
-    lines = extract_log_lines(fp)
-    fp.close()
-    assert len(lines) == 2
-
-    # check first log line
-    assert lines[0][1] == 'runcmd'
-    L = lines[0][2]
-    assert 'dir='+os.getcwd() in L
-    assert 'cmd=my command' in L
-    sL = list( filter( lambda s: s.startswith('start='), L ) )
-    assert len(sL) == 1
-    startid = sL[0]
-
-    # check second log line
-    assert lines[1][1] == 'return'
-    L = lines[1][2]
-    assert startid in L
-    assert 'exit=1' in L
-    assert 'cmd=my command' in L
-
-    # add in a chdir argument
-
-    os.mkdir( 'tmpdir' )
     time.sleep(1)
 
-    redir = RedirectStdout('stdout.log')
-    try:
-        saved = os.getcwd()
-        os.chdir( 'tmpdir' )
-        echo = command.CommandLogging( 'my command', None, None )
-        echo.preExecute()
-        echo.postExecute( None )
-    finally:
-        redir.close()
-        os.chdir( saved )
-    time.sleep(1)
-    fp = open( 'stdout.log', 'r' )
-    lines = extract_log_lines(fp)
-    fp.close()
-    assert len(lines) == 2
-
-    # check first log line
-    assert lines[0][1] == 'runcmd'
-    L = lines[0][2]
-    assert 'dir='+os.path.abspath('tmpdir') in L
-    assert 'cmd=my command' in L
-    sL = list( filter( lambda s: s.startswith('start='), L ) )
-    assert len(sL) == 1
-    startid = sL[0]
-
-    # check second log line
-    assert lines[1][1] == 'return'
-    L = lines[1][2]
-    assert startid in L
-    assert 'exit=None' in L
-    assert 'cmd=my command' in L
-
-    # add in a logfile argument
-
-    redir = RedirectStdout('stdout.log')
-    try:
-        echo = command.CommandLogging( 'my command', 'logname', None )
-        echo.preExecute()
-        echo.postExecute( None )
-    finally:
-        redir.close()
-    time.sleep(1)
-    fp = open( 'stdout.log', 'r' )
-    lines = extract_log_lines(fp)
-    fp.close()
-    assert len(lines) == 2
-
-    # check first log line
-    assert lines[0][1] == 'runcmd'
-    L = lines[0][2]
-    assert 'dir='+os.getcwd() in L
-    assert 'cmd=my command' in L
-    assert 'logfile=logname' in L
-    sL = list( filter( lambda s: s.startswith('start='), L ) )
-    assert len(sL) == 1
-    startid = sL[0]
-
-    # check second log line
-    assert lines[1][1] == 'return'
-    L = lines[1][2]
-    assert startid in L
-    assert 'exit=None' in L
-    assert 'cmd=my command' in L
-
-    # absolute path logfile argument
-
-    abslogf = os.path.abspath('logname')
-    redir = RedirectStdout('stdout.log')
-    try:
-        echo = command.CommandLogging( 'my command', abslogf, None )
-        echo.preExecute()
-        echo.postExecute( None )
-    finally:
-        redir.close()
-    time.sleep(1)
-    fp = open( 'stdout.log', 'r' )
-    lines = extract_log_lines(fp)
-    fp.close()
-    assert len(lines) == 2
-
-    # check first log line
-    assert lines[0][1] == 'runcmd'
-    L = lines[0][2]
-    assert 'dir='+os.getcwd() in L
-    assert 'cmd=my command' in L
-    assert 'logfile='+abslogf in L
-    sL = list( filter( lambda s: s.startswith('start='), L ) )
-    assert len(sL) == 1
-    startid = sL[0]
-
-    # check second log line
-    assert lines[1][1] == 'return'
-    L = lines[1][2]
-    assert startid in L
-    assert 'exit=None' in L
-    assert 'cmd=my command' in L
-
-    # adding a timeout
-
-    redir = RedirectStdout('stdout.log')
-    try:
-        echo = command.CommandLogging( 'my command', None, None )
-        echo.preExecute()
-        echo.postExecute( 1 )
-    finally:
-        redir.close()
-    time.sleep(1)
-    fp = open( 'stdout.log', 'r' )
-    lines = extract_log_lines(fp)
-    fp.close()
-    assert len(lines) == 2
-    L = list( filter( lambda x: str(x).startswith('timeout='), lines[0][2] ) )
-    assert len(L) == 0
-    L = list( filter( lambda x: str(x).startswith('timeout='), lines[1][2] ) )
-    assert len(L) == 0
-
-    redir = RedirectStdout('stdout.log')
-    try:
-        echo = command.CommandLogging( 'my command', None, 1.2 )
-        echo.preExecute()
-        echo.postExecute( 1 )
-    finally:
-        redir.close()
-    time.sleep(1)
-    fp = open( 'stdout.log', 'r' )
-    lines = extract_log_lines(fp)
-    fp.close()
-    assert len(lines) == 2
-    L = list( filter( lambda x: str(x).startswith('timeout='), lines[0][2] ) )
-    assert len(L) == 1
-    assert L[0].startswith('timeout=1.2')
-    L = list( filter( lambda x: str(x).startswith('timeout='), lines[1][2] ) )
-    assert len(L) == 0
+    return util.readfile( 'stdout.log' )
 
 
-def echo04():
-    """
-    command echoing: construct_echo_object
-    """
-    obj = command.construct_echo_object( 'echo', 'shell command', None )
-    assert isinstance( obj, command.CommandEcho )
+class directory_swapping( unittest.TestCase ):
 
-    obj = command.construct_echo_object( 'log', 'shell command', None )
-    assert isinstance( obj, command.CommandLogging )
+    def setUp(self):
+        ""
+        util.setup_test()
 
-    obj = command.construct_echo_object( 'log', 'shell command', 1.2 )
-    assert isinstance( obj, command.CommandLogging )
+    def test_the_SwapDirectory_class(self):
+        ""
+        swap_dirs( None )
 
-    obj = command.construct_echo_object( 'none', 'shell command', None )
-    assert isinstance( obj, command.CommandNoEcho )
+        # an empty string behaves same as None
+        swap_dirs( '' )
 
-    obj = command.construct_echo_object( None, 'shell command', None )
-    assert isinstance( obj, command.CommandNoEcho )
+        # change to subdirectory
+        os.mkdir( 'tmpdir' )
+        time.sleep(1)
+        swap_dirs( 'tmpdir' )
 
-
-def dirswap01():
-    """
-    the SwapDirectory class
-    """
-    d = os.getcwd()
-    cd = command.SwapDirectory( None )
-    assert os.getcwd() == d
-    cd.swapBack()
-    assert os.getcwd() == d
-
-    # an empty string behaves same as None
-    d = os.getcwd()
-    cd = command.SwapDirectory( '' )
-    assert os.getcwd() == d
-    cd.swapBack()
-    assert os.getcwd() == d
-
-    os.mkdir( 'tmpdir' )
-    time.sleep(1)
-
-    # change to subdirectory
-    d = os.getcwd()
-    newdir = os.path.abspath( 'tmpdir' )
-    cd = command.SwapDirectory( 'tmpdir' )
-    assert os.getcwd() == newdir
-    cd.swapBack()
-    assert os.getcwd() == d
-
-    # change to bad directory raises an Exception
-    d = os.getcwd()
-    try:
-        cd = command.SwapDirectory( 'existentialcrisis' )
-    except:
-        pass
-    else:
-        raise Exception( 'expected an exception' )
-    assert os.getcwd() == d
-
-    # skip this test if user expansion fails
-    home = os.path.expanduser( '~' )
-    if home != '~' and os.path.exists(home):
-        # expand user is applied to path
+        # change to bad directory raises an Exception
         d = os.getcwd()
-        cd = command.SwapDirectory( '~' )
-        assert os.path.samefile( os.getcwd(), home )
-        cd.swapBack()
+        self.assertRaises( Exception, command.SwapDirectory,
+                           'existentialcrisis' )
         assert os.getcwd() == d
 
-
-def makecmd01():
-    """
-    getCommands(): no shell expansion
-    """
-    cmd = Command( sys.executable, 'args1' )
-    py,sh = cmd.getCommands( False )
-    check_commands( py, sh, 'args1' )
-
-    cmd = Command( sys.executable, 'args2', '-s', 'foo' )
-    py,sh = cmd.getCommands( False )
-    check_commands( py, sh, 'args2', '-s', 'foo' )
-
-    cmd = Command( sys.executable, 'args3', '~', '*' )
-    py,sh = cmd.getCommands( False )
-    check_commands( py, sh, 'args3', '~', '*' )
+        # skip this test if user expansion fails
+        home = os.path.expanduser( '~' )
+        if home != '~' and os.path.exists(home):
+            # expand user is applied to path
+            swap_dirs( '~' )
 
 
-def makecmd02():
-    """
-    getCommands(): shell expansion
-    """
-    cmd = Command( sys.executable, 'args1' )
-    py,sh = cmd.getCommands( True, None, None )
-    check_commands( py, sh, 'args1' )
+def swap_dirs( todir ):
+    ""
+    cwd = os.getcwd()
 
-    cmd = Command( sys.executable, 'args2', '-s', 'foo' )
-    py,sh = cmd.getCommands( True, None, None )
-    check_commands( py, sh, 'args2', '-s', 'foo' )
+    try:
+        if todir:
+            toabs = os.path.abspath( os.path.expanduser(todir) )
+        else:
+            toabs = cwd
 
-    # write two files to test globbing
-    writefile( 'file1.ext', 'foo\n' )
-    writefile( 'file2.ext', 'bar\n' )
-    time.sleep(1)
+        cd = command.SwapDirectory( todir )
+        assert os.getcwd() == toabs
 
-    cmd = Command( sys.executable, 'args3', '~', 'file*.ext' )
-    py,sh = cmd.getCommands( True, None, None )
-    check_commands( py, sh, 'args3',
-                    os.path.expanduser('~'), 'file1.ext', 'file2.ext' )
+        cd.swapBack()
+        assert os.getcwd() == cwd
 
-    cmd = Command( sys.executable, 'args4' ).escape( 'file*.ext' )
-    py,sh = cmd.getCommands( True, None, None )
-    check_commands( py, sh, 'args4', 'file*.ext' )
+    except Exception:
+        os.chdir( cwd )
 
 
-def makecmd03():
-    """
-    getCommands(): ssh with no shell expansion
-    """
-    sshprog,sshmach = get_ssh_pair()
+class making_commands( unittest.TestCase ):
 
-    cmd = Command( sys.executable, os.path.abspath('args1') )
-    py,sh = cmd.getCommands( False, sshmach, sshprog )
-    check_commands( py, sh, 'args1' )
+    def setUp(self):
+        ""
+        util.setup_test()
 
-    cmd = Command( sys.executable, os.path.abspath('args2'), '-s', 'foo' )
-    py,sh = cmd.getCommands( False, sshmach, sshprog )
-    check_commands( py, sh, 'args2', '-s', 'foo' )
+    def test_getCommands_with_no_shell_expansion(self):
+        ""
+        cmd = Command( sys.executable, 'args1' )
+        py,sh = cmd.getCommands( False )
+        check_commands( py, sh, 'args1' )
 
-    cmd = Command( sys.executable, os.path.abspath('args3'), '~', '*' )
-    py,sh = cmd.getCommands( False, sshmach, sshprog )
-    check_commands( py, sh, 'args3', '~', '*' )
+        cmd = Command( sys.executable, 'args2', '-s', 'foo' )
+        py,sh = cmd.getCommands( False )
+        check_commands( py, sh, 'args2', '-s', 'foo' )
 
+        cmd = Command( sys.executable, 'args3', '~', '*' )
+        py,sh = cmd.getCommands( False )
+        check_commands( py, sh, 'args3', '~', '*' )
 
-def makecmd04():
-    """
-    getCommands(): ssh with shell expansion
-    """
-    sshprog,sshmach = get_ssh_pair()
+    def test_getCommands_with_shell_expansion(self):
+        ""
+        cmd = Command( sys.executable, 'args1' )
+        py,sh = cmd.getCommands( True, None, None )
+        check_commands( py, sh, 'args1' )
 
-    cmd = Command( sys.executable, os.path.abspath('args1') )
-    py,sh = cmd.getCommands( True, sshmach, sshprog )
-    check_commands( py, sh, 'args1' )
+        cmd = Command( sys.executable, 'args2', '-s', 'foo' )
+        py,sh = cmd.getCommands( True, None, None )
+        check_commands( py, sh, 'args2', '-s', 'foo' )
 
-    cmd = Command( sys.executable, os.path.abspath('args2'), '-s', 'foo' )
-    py,sh = cmd.getCommands( True, sshmach, sshprog )
-    check_commands( py, sh, 'args2', '-s', 'foo' )
+        # write two files to test globbing
+        util.writefile( 'file1.ext', 'foo\n' )
+        util.writefile( 'file2.ext', 'bar\n' )
+        time.sleep(1)
 
-    # write two files to test globbing
-    writefile( 'file1.ext', 'foo\n' )
-    writefile( 'file2.ext', 'bar\n' )
-    time.sleep(1)
+        cmd = Command( sys.executable, 'args3', '~', 'file*.ext' )
+        py,sh = cmd.getCommands( True, None, None )
+        check_commands( py, sh, 'args3',
+                        os.path.expanduser('~'), 'file1.ext', 'file2.ext' )
 
-    # note that this test is not perfect because the ssh is either faked or
-    # the machine is the current machine, and therefore it is impossible to
-    # know for sure that the globbing is occuring by the local shell or the
-    # remote shell
-    cmd = Command( sys.executable, os.path.abspath('args3'),
-                   '~', os.path.abspath('file*.ext') )
-    py,sh = cmd.getCommands( True, sshmach, sshprog )
-    check_commands( py, sh, 'args3',
-                    os.path.expanduser('~'),
-                    os.path.abspath('file1.ext'),
-                    os.path.abspath('file2.ext') )
+        cmd = Command( sys.executable, 'args4' ).escape( 'file*.ext' )
+        py,sh = cmd.getCommands( True, None, None )
+        check_commands( py, sh, 'args4', 'file*.ext' )
 
-    cmd = Command( sys.executable, os.path.abspath('args4')
-                 ).escape( os.path.abspath('file*.ext') )
-    py,sh = cmd.getCommands( True, sshmach, sshprog )
-    check_commands( py, sh, 'args4', os.path.abspath('file*.ext') )
+    def test_getCommands_using_ssh_and_no_shell_expansion(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        cmd = Command( sys.executable, os.path.abspath('args1') )
+        py,sh = cmd.getCommands( False, sshmach, sshprog )
+        check_commands( py, sh, 'args1' )
+
+        cmd = Command( sys.executable, os.path.abspath('args2'), '-s', 'foo' )
+        py,sh = cmd.getCommands( False, sshmach, sshprog )
+        check_commands( py, sh, 'args2', '-s', 'foo' )
+
+        cmd = Command( sys.executable, os.path.abspath('args3'), '~', '*' )
+        py,sh = cmd.getCommands( False, sshmach, sshprog )
+        check_commands( py, sh, 'args3', '~', '*' )
+
+    def test_getCommands_using_ssh_and_shell_expansion(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+
+        cmd = Command( sys.executable, os.path.abspath('args1') )
+        py,sh = cmd.getCommands( True, sshmach, sshprog )
+        check_commands( py, sh, 'args1' )
+
+        cmd = Command( sys.executable, os.path.abspath('args2'), '-s', 'foo' )
+        py,sh = cmd.getCommands( True, sshmach, sshprog )
+        check_commands( py, sh, 'args2', '-s', 'foo' )
+
+        # write two files to test globbing
+        util.writefile( 'file1.ext', 'foo\n' )
+        util.writefile( 'file2.ext', 'bar\n' )
+        time.sleep(1)
+
+        # note that this test is not perfect because the ssh is either faked or
+        # the machine is the current machine, and therefore it is impossible to
+        # know for sure that the globbing is occuring by the local shell or the
+        # remote shell
+        cmd = Command( sys.executable, os.path.abspath('args3'),
+                       '~', os.path.abspath('file*.ext') )
+        py,sh = cmd.getCommands( True, sshmach, sshprog )
+        check_commands( py, sh, 'args3',
+                        os.path.expanduser('~'),
+                        os.path.abspath('file1.ext'),
+                        os.path.abspath('file2.ext') )
+
+        cmd = Command( sys.executable, os.path.abspath('args4')
+                     ).escape( os.path.abspath('file*.ext') )
+        py,sh = cmd.getCommands( True, sshmach, sshprog )
+        check_commands( py, sh, 'args4', os.path.abspath('file*.ext') )
 
 
 def check_commands( pycmd, shcmd, pyscript, *args ):
@@ -1253,7 +954,7 @@ def check_commands( pycmd, shcmd, pyscript, *args ):
     args = list(args)
 
     # the program to run is written as a python script;  it checks the args
-    writefile( pyscript, """
+    util.writefile( pyscript, """
         import sys, os
         if sys.argv[1:] != """+repr(args)+""":
             raise Exception( 'bad args: '+str(sys.argv[1:]) )
@@ -1261,7 +962,7 @@ def check_commands( pycmd, shcmd, pyscript, *args ):
 
     # to test the shell command, embed it in a shell script
     shscript = os.path.abspath( pyscript+'.sh' )
-    writescript( shscript, "#!/bin/sh", """
+    util.writescript( shscript, "#!/bin/sh", """
         echo shcmd: """+shcmd+"""
         """+shcmd+""" || exit 1
         """ )
@@ -1280,62 +981,66 @@ def check_commands( pycmd, shcmd, pyscript, *args ):
     assert subprocess.call( [ shscript ], shell=False ) == 0
 
 
-def dry01():
-    """
-    the CommandDryRun class
-    """
-    dr = command.CommandDryRun()
-    assert dr.runIt()
-    assert dr.runIt( '/hello/world -a foo' )
-    assert dr.runIt( ['/hello/world','-a','foo'] )
+class dryrun_testing( unittest.TestCase ):
 
-    os.environ['COMMAND_DRYRUN'] = '1'
-    dr = command.CommandDryRun()
-    assert not dr.runIt()
-    assert not dr.runIt( '/hello/world -a foo' )
-    assert not dr.runIt( ['/hello/world','-a','foo'] )
+    def setUp(self):
+        ""
+        util.setup_test()
 
-    os.environ['COMMAND_DRYRUN'] = ' '
-    dr = command.CommandDryRun()
-    assert not dr.runIt()
-    assert not dr.runIt( '/hello/world -a foo' )
-    assert not dr.runIt( ['/hello/world','-a','foo'] )
+    def test_CommandDryRun_class(self):
+        ""
+        dr = command.CommandDryRun()
+        assert dr.runIt()
+        assert dr.runIt( '/hello/world -a foo' )
+        assert dr.runIt( ['/hello/world','-a','foo'] )
 
-    os.environ['COMMAND_DRYRUN'] = 'hello'
-    dr = command.CommandDryRun()
-    assert not dr.runIt()
-    assert not dr.runIt( '/hello/world -a foo' )
-    assert not dr.runIt( ['/hello/world','-a','foo'] )
+        os.environ['COMMAND_DRYRUN'] = '1'
+        dr = command.CommandDryRun()
+        assert not dr.runIt()
+        assert not dr.runIt( '/hello/world -a foo' )
+        assert not dr.runIt( ['/hello/world','-a','foo'] )
 
-    os.environ['COMMAND_DRYRUN'] = 'world'
-    dr = command.CommandDryRun()
-    assert not dr.runIt()
-    assert dr.runIt( '/hello/world -a foo' )
-    assert dr.runIt( ['/hello/world','-a','foo'] )
+        os.environ['COMMAND_DRYRUN'] = ' '
+        dr = command.CommandDryRun()
+        assert not dr.runIt()
+        assert not dr.runIt( '/hello/world -a foo' )
+        assert not dr.runIt( ['/hello/world','-a','foo'] )
 
-    os.environ['COMMAND_DRYRUN'] = 'foo/bar'
-    dr = command.CommandDryRun()
-    assert not dr.runIt()
-    assert not dr.runIt( '/hello/world -a foo' )
-    assert not dr.runIt( ['/hello/world','-a','foo'] )
+        os.environ['COMMAND_DRYRUN'] = 'hello'
+        dr = command.CommandDryRun()
+        assert not dr.runIt()
+        assert not dr.runIt( '/hello/world -a foo' )
+        assert not dr.runIt( ['/hello/world','-a','foo'] )
 
-    os.environ['COMMAND_DRYRUN'] = 'world/bar'
-    dr = command.CommandDryRun()
-    assert not dr.runIt()
-    assert dr.runIt( '/hello/world -a foo' )
-    assert dr.runIt( ['/hello/world','-a','foo'] )
+        os.environ['COMMAND_DRYRUN'] = 'world'
+        dr = command.CommandDryRun()
+        assert not dr.runIt()
+        assert dr.runIt( '/hello/world -a foo' )
+        assert dr.runIt( ['/hello/world','-a','foo'] )
 
-    os.environ['COMMAND_DRYRUN'] = 'foo/world'
-    dr = command.CommandDryRun()
-    assert not dr.runIt()
-    assert dr.runIt( '/hello/world -a foo' )
-    assert dr.runIt( ['/hello/world','-a','foo'] )
+        os.environ['COMMAND_DRYRUN'] = 'foo/bar'
+        dr = command.CommandDryRun()
+        assert not dr.runIt()
+        assert not dr.runIt( '/hello/world -a foo' )
+        assert not dr.runIt( ['/hello/world','-a','foo'] )
 
-    os.environ['COMMAND_DRYRUN'] = 'foo/world'
-    dr = command.CommandDryRun()
-    assert not dr.runIt()
-    assert dr.runIt( '/hello/world -a foo' )
-    assert dr.runIt( ['/hello/foo','-a','foo'] )
+        os.environ['COMMAND_DRYRUN'] = 'world/bar'
+        dr = command.CommandDryRun()
+        assert not dr.runIt()
+        assert dr.runIt( '/hello/world -a foo' )
+        assert dr.runIt( ['/hello/world','-a','foo'] )
+
+        os.environ['COMMAND_DRYRUN'] = 'foo/world'
+        dr = command.CommandDryRun()
+        assert not dr.runIt()
+        assert dr.runIt( '/hello/world -a foo' )
+        assert dr.runIt( ['/hello/world','-a','foo'] )
+
+        os.environ['COMMAND_DRYRUN'] = 'foo/world'
+        dr = command.CommandDryRun()
+        assert not dr.runIt()
+        assert dr.runIt( '/hello/world -a foo' )
+        assert dr.runIt( ['/hello/foo','-a','foo'] )
 
 
 class MockEcho:
@@ -1348,550 +1053,617 @@ class MockStreams:
     def close(self): pass
 
 
+class run_command( unittest.TestCase ):
 
-def run01():
-    """
-    run command, quick check
-    """
-    cmd = sys.executable + ' -c "fp=open(\'foo.txt\',\'w\'); fp.close()"'
-    runr = command.SubprocessRunner( cmd, None, MockStreams(), MockEcho() )
-    runr.runCommand()
-    time.sleep(1)
-    assert os.path.exists( 'foo.txt' )
+    def setUp(self):
+        ""
+        util.setup_test()
 
-    cmd = [ sys.executable, '-c', 'fp=open("bar.txt","w"); fp.close()' ]
-    runr = command.SubprocessRunner( cmd, None, MockStreams(), MockEcho() )
-    runr.runCommand()
-    time.sleep(1)
-    assert os.path.exists( 'bar.txt' )
+        if 'COMMAND_DRYRUN' in os.environ:
+            del os.environ['COMMAND_DRYRUN']
 
-    cmd = Command( sys.executable )
-    cmd.escape( '-c', 'fp=open("baz.txt","w"); fp.close()' )
-    cmd.run()
-    assert os.path.exists( 'baz.txt' )
-
-    cmd = Command( sys.executable )
-    cmd.arg( '-c', 'fp=open("fore.txt","w"); fp.close()' )
-    cmd.run( shell=False )
-    assert os.path.exists( 'fore.txt' )
-
-
-def run02():
-    """
-    run command, echo check
-    """
-    # first check without echo
-    cmd = [ sys.executable, '-c',
-            'import os,sys; sys.stdout.write("hello"+os.linesep); ' + \
-            'sys.stderr.write("world"+os.linesep);' ]
-    runr = command.SubprocessRunner( cmd, None, MockStreams(), MockEcho() )
-    redir = RedirectStdout('stdout.log','stderr.log')
-    try:
+    def test_nominal_use(self):
+        ""
+        cmd = sys.executable + ' -c "fp=open(\'foo.txt\',\'w\'); fp.close()"'
+        runr = command.SubprocessRunner( cmd, None, MockStreams(), MockEcho() )
         runr.runCommand()
-    finally:
-        redir.close()
-    time.sleep(1)
-    assert readfile('stdout.log') == 'hello\n'
-    assert readfile('stderr.log') == 'world\n'
+        time.sleep(1)
+        assert os.path.exists( 'foo.txt' )
 
-    echo = command.construct_echo_object( "echo", ' '.join(cmd), None )
-    runr = command.SubprocessRunner( cmd, None, MockStreams(), echo )
-    redir = RedirectStdout('stdout2.log','stderr2.log')
-    try:
+        cmd = [ sys.executable, '-c', 'fp=open("bar.txt","w"); fp.close()' ]
+        runr = command.SubprocessRunner( cmd, None, MockStreams(), MockEcho() )
         runr.runCommand()
-    finally:
-        redir.close()
-    time.sleep(1)
-    L = filegrep( 'stdout2.log', 'sys.stdout' )
-    assert len(L) == 1
-    L = filegrep( 'stdout2.log', 'hello' )
-    assert len(L) == 2
-    assert L[1].strip() == 'hello'
-    assert readfile('stderr.log') == 'world\n'
+        time.sleep(1)
+        assert os.path.exists( 'bar.txt' )
 
-    cmd = Command( sys.executable, '-c' )
-    cmd.escape( 'import os,sys; sys.stdout.write("hello"+os.linesep); ' + \
-                'sys.stderr.write("world"+os.linesep);' )
-    redir = RedirectStdout('stdout3.log','stderr3.log')
-    try:
+        cmd = Command( sys.executable )
+        cmd.escape( '-c', 'fp=open("baz.txt","w"); fp.close()' )
         cmd.run()
-    finally:
-        redir.close()
-    time.sleep(1)
-    L = filegrep( 'stdout3.log', 'sys.stdout' )
-    assert len(L) == 1
-    L = filegrep( 'stdout3.log', 'hello' )
-    assert len(L) == 2
-    assert L[1].strip() == 'hello'
-    assert readfile('stderr.log') == 'world\n'
+        assert os.path.exists( 'baz.txt' )
 
-    cmd = Command( sys.executable, '-c' )
-    cmd.escape( 'import os,sys; sys.stdout.write("hello"+os.linesep); ' + \
-                'sys.stderr.write("world"+os.linesep);' )
-    redir = RedirectStdout('stdout4.log','stderr4.log')
-    try:
-        cmd.run( echo="none" )
-    finally:
-        redir.close()
-    time.sleep(1)
-    L = filegrep( 'stdout4.log', 'sys.stdout' )
-    assert len(L) == 0
-    assert readfile('stdout4.log') == 'hello\n'
-    assert readfile('stderr4.log') == 'world\n'
+        cmd = Command( sys.executable )
+        cmd.arg( '-c', 'fp=open("fore.txt","w"); fp.close()' )
+        cmd.run( shell=False )
+        assert os.path.exists( 'fore.txt' )
 
+    def test_using_echo_variations(self):
+        ""
+        # first check without echo
+        cmd = [ sys.executable, '-c',
+                'import os,sys; sys.stdout.write("hello"+os.linesep); ' + \
+                'sys.stderr.write("world"+os.linesep);' ]
+        runr = command.SubprocessRunner( cmd, None, MockStreams(), MockEcho() )
+        rtn,out,err = util.call_capture_output( runr.runCommand )
 
-def run03():
-    """
-    run command, streams check
-    """
-    # first check without streams
-    cmd = [ sys.executable, '-c',
-            'import os,sys; sys.stdout.write("hello"+os.linesep); ' + \
-            'sys.stderr.write("world"+os.linesep);' ]
-    runr = command.SubprocessRunner( cmd, None, MockStreams(), MockEcho() )
-    redir = RedirectStdout('stdout.log','stderr.log')
-    try:
-        runr.runCommand()
-    finally:
-        redir.close()
-    time.sleep(1)
-    assert readfile('stdout.log') == 'hello\n'
-    assert readfile('stderr.log') == 'world\n'
+        assert out == 'hello\n' and err == 'world\n'
 
-    streams = command.SubprocessStreams( 'redir.log', None, None )
-    runr = command.SubprocessRunner( cmd, None, streams, MockEcho() )
-    redir = RedirectStdout('stdout2.log','stderr2.log')
-    try:
-        runr.runCommand()
-    finally:
-        redir.close()
-    time.sleep(1)
-    assert not readfile('stdout2.log').strip()
-    assert not readfile('stderr2.log').strip()
-    L = filegrep( 'redir.log', 'hello' )
-    assert len(L) == 1 and L[0].strip() == 'hello'
-    L = filegrep( 'redir.log', 'world' )
-    assert len(L) == 1 and L[0].strip() == 'world'
+        echo = command.construct_echo_object( "echo", ' '.join(cmd), None )
+        runr = command.SubprocessRunner( cmd, None, MockStreams(), echo )
+        rtn,out,err = util.call_capture_output( runr.runCommand )
 
-    cmd = Command( sys.executable, '-c' )
-    cmd.escape( 'import os,sys; sys.stdout.write("hello"+os.linesep); ' + \
-                'sys.stderr.write("world"+os.linesep);' )
-    redir = RedirectStdout('stdout3.log','stderr3.log')
-    try:
-        cmd.run( echo="none", redirect="redir3.log" )
-    finally:
-        redir.close()
-    time.sleep(1)
-    assert not readfile('stdout3.log').strip()
-    assert not readfile('stderr3.log').strip()
-    L = filegrep( 'redir3.log', 'hello' )
-    assert len(L) == 1 and L[0].strip() == 'hello'
-    L = filegrep( 'redir3.log', 'world' )
-    assert len(L) == 1 and L[0].strip() == 'world'
+        L = util.grep( out, 'sys.stdout' )
+        assert len(L) == 1
+        L = util.grep( out, 'hello' )
+        assert len(L) == 2
+        assert L[1].strip() == 'hello'
+        assert err == 'world\n'
 
+        cmd = Command( sys.executable, '-c' )
+        cmd.escape( 'import os,sys; sys.stdout.write("hello"+os.linesep); ' + \
+                    'sys.stderr.write("world"+os.linesep);' )
+        rtn,out,err = util.call_capture_output( cmd.run )
 
-def run04():
-    """
-    run command, failures
-    """
-    runr = command.SubprocessRunner( '/path/junk',
-                                     None, MockStreams(), MockEcho() )
-    x,out,err = call_capture_output( runr.runCommand )
-    assert x != 0 and x != None
-    assert err.strip()
+        L = util.grep( out, 'sys.stdout' )
+        assert len(L) == 1
+        L = util.grep( out, 'hello' )
+        assert len(L) == 2
+        assert L[1].strip() == 'hello'
+        assert err == 'world\n'
 
-    runr = command.SubprocessRunner( '/path/junk',
-                                     None, MockStreams(), MockEcho() )
-    x,out,err = call_capture_output( runr.runCommand, raise_on_error=False )
-    assert x != 0 and x != None
-    assert err.strip()
+        cmd = Command( sys.executable, '-c' )
+        cmd.escape( 'import os,sys; sys.stdout.write("hello"+os.linesep); ' + \
+                    'sys.stderr.write("world"+os.linesep);' )
+        rtn,out,err = util.call_capture_output( cmd.run, echo="none" )
 
-    runr = command.SubprocessRunner( '/path/junk',
-                                     None, MockStreams(), MockEcho() )
-    try:
-        x,out,err = call_capture_output( runr.runCommand, raise_on_error=True )
-    except:
-        pass
-    else:
-        raise Exception( 'expected an exception' )
+        L = util.grep( out, 'sys.stdout' )
+        assert len(L) == 0
+        assert out == 'hello\n' and err == 'world\n'
 
-    # as a python list, the subprocess.Popen() call will raise exception
-    runr = command.SubprocessRunner( ['/path/junk'],
-                                     None, MockStreams(), MockEcho() )
-    x,out,err = call_capture_output( runr.runCommand )
-    assert x != 0 and x != None
-    assert err.strip()
+    def test_redirection_streams(self):
+        ""
+        # first check without streams
+        cmd = [ sys.executable, '-c',
+                'import os,sys; sys.stdout.write("hello"+os.linesep); ' + \
+                'sys.stderr.write("world"+os.linesep);' ]
+        runr = command.SubprocessRunner( cmd, None, MockStreams(), MockEcho() )
+        rtn,out,err = util.call_capture_output( runr.runCommand )
 
-    runr = command.SubprocessRunner( ['/path/junk'],
-                                     None, MockStreams(), MockEcho() )
-    try:
-        x,out,err = call_capture_output( runr.runCommand, raise_on_error=True )
-    except command.CommandException:
-        pass
-    else:
-        raise Exception( 'expected an exception' )
+        assert out == 'hello\n' and err == 'world\n'
 
-    cmd = [ sys.executable, '-c', 'raise Exception("fake exception")' ]
-    runr = command.SubprocessRunner( cmd, None, MockStreams(), MockEcho() )
-    x,out,err = call_capture_output( runr.runCommand )
-    assert x != 0 and x != None
-    assert err.strip()
+        streams = command.SubprocessStreams( 'redir.log', None, None )
+        runr = command.SubprocessRunner( cmd, None, streams, MockEcho() )
+        rtn,out,err = util.call_capture_output( runr.runCommand )
 
-    try:
-        x,out,err = call_capture_output( runr.runCommand, raise_on_error=True )
-    except command.CommandException:
-        pass
-    else:
-        raise Exception( 'expected an exception' )
+        assert not out.strip() and not err.strip()
+        L = util.grepfiles( 'hello', 'redir.log' )
+        assert len(L) == 1 and L[0].strip() == 'hello'
+        L = util.grepfiles( 'world', 'redir.log' )
+        assert len(L) == 1 and L[0].strip() == 'world'
 
-    cmd = Command( '/path/junk' )
-    x,out,err = call_capture_output( cmd.run )
-    assert x != 0 and x != None
-    assert err.strip()
+        cmd = Command( sys.executable, '-c' )
+        cmd.escape( 'import os,sys; sys.stdout.write("hello"+os.linesep); ' + \
+                    'sys.stderr.write("world"+os.linesep);' )
+        rtn,out,err = util.call_capture_output( cmd.run,
+                                                echo="none",
+                                                redirect="redir3.log" )
 
-    try:
-        x,out,err = call_capture_output( cmd.run, raise_on_error=True )
-    except command.CommandException:
-        pass
-    else:
-        raise Exception( 'expected an exception' )
+        assert not out.strip() and not err.strip()
+        L = util.grepfiles( 'hello', 'redir3.log' )
+        assert len(L) == 1 and L[0].strip() == 'hello'
+        L = util.grepfiles( 'world', 'redir3.log' )
+        assert len(L) == 1 and L[0].strip() == 'world'
 
-    # redirect error
-    cmd = Command( sys.executable, '-c' )
-    cmd.escape( 'import os' )
-    x,out,err = call_capture_output( cmd.run,
-                                     redirect='/path/noexist/foobar.log' )
-    assert x != 0 and x != None
-    assert err.strip()
+    def test_command_failures(self):
+        ""
+        runr = command.SubprocessRunner( '/path/junk',
+                                         None, MockStreams(), MockEcho() )
+        x,out,err = util.call_capture_output( runr.runCommand,
+                                              raise_on_error=False )
+        assert x != 0 and x != None
+        assert err.strip()
 
-    try:
-        x,out,err = call_capture_output( cmd.run,
+        runr = command.SubprocessRunner( '/path/junk',
+                                         None, MockStreams(), MockEcho() )
+        x,out,err = util.call_capture_output( runr.runCommand,
+                                              raise_on_error=False )
+        assert x != 0 and x != None
+        assert err.strip()
+
+        runr = command.SubprocessRunner( '/path/junk',
+                                         None, MockStreams(), MockEcho() )
+        self.assertRaises( Exception,
+                util.call_capture_output, runr.runCommand, raise_on_error=True )
+
+        # as a python list, the subprocess.Popen() call will raise exception
+        runr = command.SubprocessRunner( ['/path/junk'],
+                                         None, MockStreams(), MockEcho() )
+        x,out,err = util.call_capture_output( runr.runCommand,
+                                              raise_on_error=False )
+        assert x != 0 and x != None
+        assert err.strip()
+
+        runr = command.SubprocessRunner( ['/path/junk'],
+                                         None, MockStreams(), MockEcho() )
+        self.assertRaises( Exception,
+                util.call_capture_output, runr.runCommand, raise_on_error=True )
+
+        cmd = [ sys.executable, '-c', 'raise Exception("fake exception")' ]
+        runr = command.SubprocessRunner( cmd, None, MockStreams(), MockEcho() )
+        x,out,err = util.call_capture_output( runr.runCommand,
+                                              raise_on_error=False )
+        assert x != 0 and x != None
+        assert err.strip()
+
+        self.assertRaises( Exception,
+                util.call_capture_output, runr.runCommand, raise_on_error=True )
+
+        cmd = Command( '/path/junk' )
+        x,out,err = util.call_capture_output( cmd.run,
+                                              raise_on_error=False )
+        assert x != 0 and x != None
+        assert err.strip()
+
+        self.assertRaises( Exception,
+                util.call_capture_output, cmd.run, raise_on_error=True )
+
+        # redirect error
+        cmd = Command( sys.executable, '-c' )
+        cmd.escape( 'import os' )
+        x,out,err = util.call_capture_output( cmd.run,
                                          redirect='/path/noexist/foobar.log',
-                                         raise_on_error=True )
-    except command.CommandException:
-        pass
-    else:
-        raise Exception( 'expected an exception' )
+                                         raise_on_error=False )
+        assert x != 0 and x != None
+        assert err.strip()
 
-    # change directory error
-    cmd = Command( sys.executable, '-c' )
-    cmd.escape( 'import os' )
-    x,out,err = call_capture_output( cmd.run, chdir='/path/noexist' )
-    assert x != 0 and x != None
-    assert err.strip()
+        self.assertRaises( Exception,
+            util.call_capture_output, cmd.run,
+                                      redirect='/path/noexist/foobar.log',
+                                      raise_on_error=True )
 
-    try:
-        x,out,err = call_capture_output( cmd.run,
-                                         chdir='/path/noexist',
-                                         raise_on_error=True )
-    except command.CommandException:
-        pass
-    else:
-        raise Exception( 'expected an exception' )
+        # change directory error
+        cmd = Command( sys.executable, '-c' )
+        cmd.escape( 'import os' )
+        x,out,err = util.call_capture_output( cmd.run, chdir='/path/noexist',
+                                                       raise_on_error=False )
+        assert x != 0 and x != None
+        assert err.strip()
 
+        self.assertRaises( Exception,
+            util.call_capture_output, cmd.run, chdir='/path/noexist',
+                                               raise_on_error=True )
 
-def run05():
-    """
-    run command, check runit argument
-    """
-    runr = command.SubprocessRunner( '/path/junk',
-                                     None, MockStreams(), MockEcho() )
-    x = runr.runCommand( runit=False )
-    assert x == 0
+    def test_using_runit_argument(self):
+        ""
+        runr = command.SubprocessRunner( '/path/junk',
+                                         None, MockStreams(), MockEcho() )
+        x = runr.runCommand( runit=False )
+        assert x == 0
 
-    runr = command.SubprocessRunner( ['/path/junk'],
-                                     None, MockStreams(), MockEcho() )
-    x = runr.runCommand( runit=False )
-    assert x == 0
+        runr = command.SubprocessRunner( ['/path/junk'],
+                                         None, MockStreams(), MockEcho() )
+        x = runr.runCommand( runit=False )
+        assert x == 0
 
-    cmd = [ sys.executable, '-c', 'raise Exception("fake exception")' ]
-    runr = command.SubprocessRunner( cmd, None, MockStreams(), MockEcho() )
-    x = runr.runCommand( runit=False )
-    assert x == 0
+        cmd = [ sys.executable, '-c', 'raise Exception("fake exception")' ]
+        runr = command.SubprocessRunner( cmd, None, MockStreams(), MockEcho() )
+        x = runr.runCommand( runit=False )
+        assert x == 0
 
-    cmd = Command( sys.executable, '-c' )
-    cmd.escape( 'raise Exception("fake exception")' )
-    os.environ['COMMAND_DRYRUN'] = '1'
-    x = cmd.run()
-    assert x == 0
+        cmd = Command( sys.executable, '-c' )
+        cmd.escape( 'raise Exception("fake exception")' )
+        os.environ['COMMAND_DRYRUN'] = '1'
+        x = cmd.run()
+        assert x == 0
 
+    def test_using_chdir(self):
+        ""
+        os.mkdir( 'rundir' )
+        time.sleep(1)
 
-def run06():
-    """
-    run() with chdir
-    """
-    os.mkdir( 'rundir' )
-    time.sleep(1)
+        cwd = os.getcwd()
+        cmd = Command( sys.executable )
+        cmd.arg( '-c', 'fp=open("foo.txt","w"); fp.close()' )
+        cmd.run( shell=False, chdir='rundir' )
+        time.sleep(1)
+        assert os.getcwd() == cwd
+        assert os.path.exists( 'rundir/foo.txt' )
 
-    cwd = os.getcwd()
-    cmd = Command( sys.executable )
-    cmd.arg( '-c', 'fp=open("foo.txt","w"); fp.close()' )
-    cmd.run( shell=False, chdir='rundir' )
-    time.sleep(1)
-    assert os.getcwd() == cwd
-    assert os.path.exists( 'rundir/foo.txt' )
-
-    # even with an exception, the final directory should not change
-    cmd = Command( '/path/junk' )
-    try:
-        x,out,err = call_capture_output( cmd.run,
-                                         shell=False, raise_on_error=True )
-    except command.CommandException:
-        pass
-    else:
-        raise Exception( "expected an exception" )
-    assert os.getcwd() == cwd
+        # even with an exception, the final directory should not change
+        cmd = Command( '/path/junk' )
+        self.assertRaises( Exception,
+            util.call_capture_output, cmd.run, shell=False, raise_on_error=True )
+        assert os.getcwd() == cwd
 
 
-def runout01():
-    """
-    OutputSubprocessRunner
-    """
-    cmd = sys.executable + ' -c ' + \
-            '''"import os,sys;''' + \
-            '''sys.stdout.write('hello'+os.linesep); sys.stdout.flush();''' + \
-            '''sys.stderr.write('world'+os.linesep); sys.stderr.flush()"'''
+class run_output_command( unittest.TestCase ):
 
-    ech = MockEcho()
+    def setUp(self):
+        ""
+        util.setup_test()
 
-    streams = command.SubprocessStreams( None, None, None )
-    runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
-    rtn,out,err = call_capture_output( runr.runCommand )
-    assert not rtn.strip()
-    assert out.strip() == 'hello'
-    assert err.strip() == 'world'
+        if 'COMMAND_DRYRUN' in os.environ:
+            del os.environ['COMMAND_DRYRUN']
 
-    streams = command.SubprocessStreams( None, None, None, capture=None )
-    runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
-    rtn,out,err = call_capture_output( runr.runCommand )
-    assert not rtn.strip()
-    assert out.strip() == 'hello'
-    assert err.strip() == 'world'
+    def test_OutputSubprocessRunner_utility(self):
+        ""
+        cmd = sys.executable + ' -c ' + \
+                '''"import os,sys;''' + \
+                '''sys.stdout.write('hello'+os.linesep); sys.stdout.flush();''' + \
+                '''sys.stderr.write('world'+os.linesep); sys.stderr.flush()"'''
 
-    streams = command.SubprocessStreams( None, None, None, capture='stdout' )
-    runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
-    rtn,out,err = call_capture_output( runr.runCommand )
-    assert rtn == 'hello'+os.linesep
-    assert not out.strip()
-    assert err.strip() == 'world'
+        ech = MockEcho()
 
-    streams = command.SubprocessStreams( None, None, None, capture='stdouterr' )
-    runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
-    rtn,out,err = call_capture_output( runr.runCommand )
-    assert 'hello' in rtn
-    assert 'world' in rtn
-    assert not out.strip()
-    assert not err.strip()
+        streams = command.SubprocessStreams( None, None, None )
+        runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
+        rtn,out,err = util.call_capture_output( runr.runCommand )
+        assert not rtn.strip()
+        assert out.strip() == 'hello' and err.strip() == 'world'
 
+        streams = command.SubprocessStreams( None, None, None, capture=None )
+        runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
+        rtn,out,err = util.call_capture_output( runr.runCommand )
+        assert not rtn.strip()
+        assert out.strip() == 'hello' and err.strip() == 'world'
 
-def runout02():
-    """
-    OutputSubprocessRunner mixed with redirects
-    """
-    cmd = sys.executable + ' -c ' + \
-            '''"import os,sys;''' + \
-            '''sys.stdout.write('hello'+os.linesep); sys.stdout.flush();''' + \
-            '''sys.stderr.write('world'+os.linesep); sys.stderr.flush()"'''
+        streams = command.SubprocessStreams( None, None, None, capture='stdout' )
+        runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
+        rtn,out,err = util.call_capture_output( runr.runCommand )
+        assert rtn == 'hello\n'
+        assert not out.strip() and err.strip() == 'world'
 
-    ech = MockEcho()
+        streams = command.SubprocessStreams( None, None, None, capture='stdouterr' )
+        runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
+        rtn,out,err = util.call_capture_output( runr.runCommand )
+        assert 'hello' in rtn and 'world' in rtn
+        assert not out.strip() and not err.strip()
 
-    # capture takes precedence
-    streams = command.SubprocessStreams( None, 'ofile1.txt', None,
-                                         capture="stdout" )
-    runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
-    rtn,out,err = call_capture_output( runr.runCommand )
-    assert rtn.strip() == 'hello'
-    assert not out.strip()
-    assert err.strip() == 'world'
-    assert not os.path.exists('ofile1.txt')
+    def test_OutputSubprocessRunner_mixed_with_redirects(self):
+        ""
+        cmd = sys.executable + ' -c ' + \
+                '''"import os,sys;''' + \
+                '''sys.stdout.write('hello'+os.linesep); sys.stdout.flush();''' + \
+                '''sys.stderr.write('world'+os.linesep); sys.stderr.flush()"'''
 
-    streams = command.SubprocessStreams( None, None, 'efile2.txt',
-                                         capture="stdout" )
-    runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
-    rtn,out,err = call_capture_output( runr.runCommand )
-    assert rtn.strip() == 'hello'
-    assert not out.strip()
-    assert readfile('efile2.txt').strip() == 'world'
+        ech = MockEcho()
 
-    streams = command.SubprocessStreams( None, 'ofile3.txt', None,
-                                         capture="stderr" )
-    runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
-    rtn,out,err = call_capture_output( runr.runCommand )
-    assert rtn.strip() == 'world'
-    assert not out.strip()
-    assert not err.strip()
-    assert readfile('ofile3.txt').strip() == 'hello'
+        # capture takes precedence
+        streams = command.SubprocessStreams( None, 'ofile1.txt', None,
+                                             capture="stdout" )
+        runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
+        rtn,out,err = util.call_capture_output( runr.runCommand )
+        assert rtn.strip() == 'hello'
+        assert not out.strip() and err.strip() == 'world'
+        assert not os.path.exists('ofile1.txt')
 
-    streams = command.SubprocessStreams( None, None, 'efile4.txt',
-                                         capture="stderr" )
-    runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
-    rtn,out,err = call_capture_output( runr.runCommand )
-    assert rtn.strip() == 'world'
-    assert out.strip() == 'hello'
-    assert not err.strip()
-    assert not os.path.exists( 'efile4.txt' )
+        streams = command.SubprocessStreams( None, None, 'efile2.txt',
+                                             capture="stdout" )
+        runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
+        rtn,out,err = util.call_capture_output( runr.runCommand )
+        assert rtn.strip() == 'hello'
+        assert not out.strip()
+        assert util.readfile('efile2.txt').strip() == 'world'
 
-    streams = command.SubprocessStreams( None, 'ofile5.txt', None,
-                                         capture="stdouterr" )
-    runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
-    rtn,out,err = call_capture_output( runr.runCommand )
-    assert 'hello' in rtn
-    assert 'world' in rtn
-    assert not out.strip()
-    assert not err.strip()
-    assert not os.path.exists('ofile5.txt')
+        streams = command.SubprocessStreams( None, 'ofile3.txt', None,
+                                             capture="stderr" )
+        runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
+        rtn,out,err = util.call_capture_output( runr.runCommand )
+        assert rtn.strip() == 'world'
+        assert not out.strip() and not err.strip()
+        assert util.readfile('ofile3.txt').strip() == 'hello'
 
-    streams = command.SubprocessStreams( None, None, 'efile6.txt',
-                                         capture="stdouterr" )
-    runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
-    rtn,out,err = call_capture_output( runr.runCommand )
-    assert 'hello' in rtn
-    assert 'world' in rtn
-    assert not out.strip()
-    assert not err.strip()
-    assert not os.path.exists( 'efile6.txt' )
+        streams = command.SubprocessStreams( None, None, 'efile4.txt',
+                                             capture="stderr" )
+        runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
+        rtn,out,err = util.call_capture_output( runr.runCommand )
+        assert rtn.strip() == 'world'
+        assert out.strip() == 'hello' and not err.strip()
+        assert not os.path.exists( 'efile4.txt' )
 
+        streams = command.SubprocessStreams( None, 'ofile5.txt', None,
+                                             capture="stdouterr" )
+        runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
+        rtn,out,err = util.call_capture_output( runr.runCommand )
+        assert 'hello' in rtn and 'world' in rtn
+        assert not out.strip() and not err.strip()
+        assert not os.path.exists('ofile5.txt')
 
-def runout03():
-    """
-    run_output, check capturing
-    """
-    cmd = Command( sys.executable, '-c' )
-    cmd.escape(
-        "import os,sys;" + \
-        "sys.stdout.write('hello'+os.linesep); sys.stdout.flush();" + \
-        "sys.stderr.write('world'+os.linesep); sys.stderr.flush()" )
+        streams = command.SubprocessStreams( None, None, 'efile6.txt',
+                                             capture="stdouterr" )
+        runr = command.OutputSubprocessRunner( cmd, None, streams, ech )
+        rtn,out,err = util.call_capture_output( runr.runCommand )
+        assert 'hello' in rtn and 'world' in rtn
+        assert not out.strip() and not err.strip()
+        assert not os.path.exists( 'efile6.txt' )
 
-    rtn,out,err = call_capture_output( cmd.run_output )
-    assert rtn.strip() == 'hello'
-    assert 'hello' in out  # the command gets echoed
-    assert err.strip() == 'world'
+    def test_run_with_output_capturing(self):
+        ""
+        cmd = Command( sys.executable, '-c' )
+        cmd.escape(
+            "import os,sys;" + \
+            "sys.stdout.write('hello'+os.linesep); sys.stdout.flush();" + \
+            "sys.stderr.write('world'+os.linesep); sys.stderr.flush()" )
 
-    rtn,out,err = call_capture_output( cmd.run_output, 'stdout' )
-    assert rtn.strip() == 'hello'
-    assert 'hello' in out
-    assert err.strip() == 'world'
+        rtn,out,err = util.call_capture_output( cmd.run_output )
+        assert rtn.strip() == 'hello'
+        assert 'hello' in out  # the command gets echoed
+        assert err.strip() == 'world'
 
-    rtn,out,err = call_capture_output( cmd.run_output, capture='stdout' )
-    assert rtn.strip() == 'hello'
-    assert 'hello' in out
-    assert err.strip() == 'world'
+        rtn,out,err = util.call_capture_output( cmd.run_output, 'stdout' )
+        assert rtn.strip() == 'hello'
+        assert 'hello' in out and err.strip() == 'world'
 
-    rtn,out,err = call_capture_output( cmd.run_output, 'stderr' )
-    assert rtn.strip() == 'world'
-    assert 'hello' in out
-    assert not err.strip()
+        rtn,out,err = util.call_capture_output( cmd.run_output, capture='stdout' )
+        assert rtn.strip() == 'hello'
+        assert 'hello' in out and err.strip() == 'world'
 
-    rtn,out,err = call_capture_output( cmd.run_output, 'stdouterr' )
-    assert 'hello' in rtn.strip()
-    assert 'world' in rtn.strip()
-    assert 'hello' in out
-    assert not err.strip()
+        rtn,out,err = util.call_capture_output( cmd.run_output, 'stderr' )
+        assert rtn.strip() == 'world'
+        assert 'hello' in out and not err.strip()
 
+        rtn,out,err = util.call_capture_output( cmd.run_output, 'stdouterr' )
+        assert 'hello' in rtn.strip() and 'world' in rtn.strip()
+        assert 'hello' in out and not err.strip()
 
-def runout04():
-    """
-    run_output, exercise options
-    """
-    sshprog,sshmach = get_ssh_pair()
-    os.mkdir( 'temp' )
-    time.sleep(1)
+    def test_excercising_run_output_options(self):
+        ""
+        sshprog,sshmach = get_ssh_pair()
+        os.mkdir( 'temp' )
+        time.sleep(1)
 
-    cmd = Command( sys.executable, '-c' )
-    cmd.escape(
-        "import os,sys;" + \
-        "sys.stderr.write(os.getcwd()+os.linesep); sys.stderr.flush()" )
+        cmd = Command( sys.executable, '-c' )
+        cmd.escape(
+            "import os,sys;" + \
+            "sys.stderr.write(os.getcwd()+os.linesep); sys.stderr.flush()" )
 
-    rtn,out,err = call_capture_output( cmd.run_output, capture="stderr",
-                                       chdir='temp', echo="none" )
-    assert os.path.basename( rtn.strip() ) == 'temp'
-    assert os.path.basename( os.getcwd() ) != 'temp'
-    assert not out.strip()
-    assert not err.strip()
+        rtn,out,err = util.call_capture_output( cmd.run_output,
+                                                capture="stderr",
+                                                chdir='temp', echo="none" )
+        assert os.path.basename( rtn.strip() ) == 'temp'
+        assert os.path.basename( os.getcwd() ) != 'temp'
+        assert not out.strip() and not err.strip()
 
-    cmd = Command( sys.executable, '-c' )
-    cmd.arg(
-        "import os,sys;" + \
-        "sys.stderr.write('foobarbaz'+os.linesep); sys.stderr.flush()" )
+        cmd = Command( sys.executable, '-c' )
+        cmd.arg(
+            "import os,sys;" + \
+            "sys.stderr.write('foobarbaz'+os.linesep); sys.stderr.flush()" )
 
-    rtn,out,err = call_capture_output( cmd.run_output, capture="stderr",
-                                       shell=False,
-                                       machine=sshmach, sshexe=sshprog )
-    assert 'foobarbaz' in rtn.strip()
-    assert 'flush' in out
-    assert not err.strip()
+        rtn,out,err = util.call_capture_output( cmd.run_output,
+                                                capture="stderr",
+                                                shell=False,
+                                                machine=sshmach,
+                                                sshexe=sshprog )
+        assert 'foobarbaz' in rtn.strip()
+        assert 'flush' in out and not err.strip()
 
-    cmd = Command( sys.executable, '-c' )
-    cmd.arg( "raise Exception('fake error')" )
+        cmd = Command( sys.executable, '-c' )
+        cmd.arg( "raise Exception('fake error')" )
 
-    try:
-        rtn,out,err = call_capture_output( cmd.run_output, capture="stderr",
-                                           shell=False,
-                                           raise_on_error=True )
-    except:
-        pass
-    else:
-        raise Exception( 'expected an exception' )
+        self.assertRaises( Exception,
+            util.call_capture_output, cmd.run_output, capture="stderr",
+                                                      shell=False,
+                                                      raise_on_error=True )
 
 
-def timeout01():
-    """
-    compute_timeout_value
-    """
-    try:
-        t = command.compute_timeout_value( None, None )
-    except:
-        pass
-    else:
-        raise Exception( "expected an exception" )
+class run_timeout_command( unittest.TestCase ):
 
-    command.compute_timeout_value( '2', None )
-    command.compute_timeout_value( None, '3' )
-    command.compute_timeout_value( '2.1', None )
-    command.compute_timeout_value( None, '3.2' )
+    def setUp(self):
+        ""
+        util.setup_test()
 
-    t = command.compute_timeout_value( 5, None )
-    assert abs( t - 5 ) < 1
+        if 'COMMAND_DRYRUN' in os.environ:
+            del os.environ['COMMAND_DRYRUN']
 
-    t = command.compute_timeout_value( 5.5, None )
-    assert abs( t - 5.5 ) < 1
+    def test_compute_timeout_value_function(self):
+        ""
+        self.assertRaises( Exception, command.compute_timeout_value, None, None )
 
-    t = command.compute_timeout_value( '5.5', None )
-    assert abs( t - 5.5 ) < 1
+        command.compute_timeout_value( '2', None )
+        command.compute_timeout_value( None, '3' )
+        command.compute_timeout_value( '2.1', None )
+        command.compute_timeout_value( None, '3.2' )
 
-    t = command.compute_timeout_value( -5, None )
-    assert t > 0 and t < 1
+        t = command.compute_timeout_value( 5, None )
+        assert abs( t - 5 ) < 1
 
-    d = time.time() + 10
-    t = command.compute_timeout_value( None, d )
-    assert abs( t - 10 ) < 2
+        t = command.compute_timeout_value( 5.5, None )
+        assert abs( t - 5.5 ) < 1
 
-    d = time.time() - 10
-    t = command.compute_timeout_value( None, d )
-    assert t > 0 and t < 1
+        t = command.compute_timeout_value( '5.5', None )
+        assert abs( t - 5.5 ) < 1
 
-    d = time.time() + 10
-    t = command.compute_timeout_value( 10, d )
-    assert abs( t - 10 ) < 2
+        t = command.compute_timeout_value( -5, None )
+        assert t > 0 and t < 1
 
-    d = time.time() + 20
-    t = command.compute_timeout_value( 10, d )
-    assert abs( t - 10 ) < 2
+        d = time.time() + 10
+        t = command.compute_timeout_value( None, d )
+        assert abs( t - 10 ) < 2
 
-    d = time.time() + 10
-    t = command.compute_timeout_value( 20, d )
-    assert abs( t - 10 ) < 2
+        d = time.time() - 10
+        t = command.compute_timeout_value( None, d )
+        assert t > 0 and t < 1
 
-    d = time.time() + 10
-    t = command.compute_timeout_value( -10, d )
-    assert t > 0 and t < 1
+        d = time.time() + 10
+        t = command.compute_timeout_value( 10, d )
+        assert abs( t - 10 ) < 2
+
+        d = time.time() + 20
+        t = command.compute_timeout_value( 10, d )
+        assert abs( t - 10 ) < 2
+
+        d = time.time() + 10
+        t = command.compute_timeout_value( 20, d )
+        assert abs( t - 10 ) < 2
+
+        d = time.time() + 10
+        t = command.compute_timeout_value( -10, d )
+        assert t > 0 and t < 1
+
+    def test_killing_a_subprocess(self):
+        ""
+        cwd = os.getcwd()
+
+        write_sub_helper()
+
+        # first, check running a subprocess
+
+        write_sub_script( 'sub1.py', 1 )
+        time.sleep(1)
+
+        ksp = command.KillableSubprocess( [sys.executable,'sub1.py'] )
+        time.sleep(3)
+        assert ksp.checkIfDone(1)
+        assert ksp.getSubproc().returncode == 0
+        assert len( util.grepfiles( 'START', 'sub1.log' ) ) == 1
+        assert len( util.grepfiles( 'DONE', 'sub1.log' ) ) == 1
+
+        # next, timeout a subprocess
+
+        write_sub_script( 'sub2.py', 20 )
+        time.sleep(1)
+
+        ksp = command.KillableSubprocess( [sys.executable,'sub2.py'] )
+        time.sleep(2)
+        t0 = time.time()
+        assert not ksp.checkIfDone(1)
+        ksp.kill( signal.SIGTERM, signal.SIGKILL )
+        t1 = time.time()
+        assert t1 - t0 < 6
+        assert len( util.grepfiles( 'START', 'sub2.log' ) ) == 1
+        assert len( util.grepfiles( 'DONE', 'sub2.log' ) ) == 0
+
+    def test_kill_a_subprocess_that_runs_a_subprocess(self):
+        ""
+        cwd = os.getcwd()
+
+        write_sub_helper()
+
+        write_sub_script( 'sub1.py', 1, 'sub2.py' )
+        write_sub_script( 'sub2.py', 20 )
+
+        time.sleep(1)
+
+        ksp = command.KillableSubprocess( [sys.executable,'sub1.py'] )
+        time.sleep(2)
+
+        plist1 = util.get_process_list()
+
+        t0 = time.time()
+        assert not ksp.checkIfDone(1)
+        ksp.kill( signal.SIGTERM, signal.SIGKILL )
+        t1 = time.time()
+        time.sleep(1)
+
+        plist2 = util.get_process_list()
+
+        assert t1 - t0 < 6
+        L = util.grepfiles( 'START', 'sub1.log' )
+        assert len(L) == 1
+        pid1 = int( L[0].split()[1] )
+
+        L = util.grepfiles( 'START', 'sub2.log' )
+        assert len(L) == 1
+        pid2 = int( L[0].split()[1] )
+        assert pid2 != pid1
+
+        assert len( util.grepfiles( 'DONE', 'sub1.log' ) ) == 0
+        assert len( util.grepfiles( 'DONE', 'sub2.log' ) ) == 0
+
+        assert util.find_process_in_list( plist1, pid1 ) != None
+        assert util.find_process_in_list( plist1, pid2 ) != None
+        assert util.find_process_in_list( plist2, pid1 ) == None
+        assert util.find_process_in_list( plist2, pid2 ) == None
+
+    def test_timeout_a_single_subprocess(self):
+        ""
+        cwd = os.getcwd()
+
+        write_sub_helper()
+
+        # first, check running a subprocess
+
+        write_sub_script( 'sub1.py', 1 )
+        time.sleep(1)
+
+        cmd = Command( sys.executable, 'sub1.py' )
+
+        t1 = time.time()
+        x = cmd.run_timeout( 60 )
+        t2 = time.time()
+
+        assert t2-t1 < 5
+        assert x == 0
+        assert len( util.grepfiles( 'START', 'sub1.log' ) ) == 1
+        assert len( util.grepfiles( 'DONE', 'sub1.log' ) ) == 1
+
+        # next, timeout a subprocess
+
+        write_sub_script( 'sub2.py', 20 )
+        time.sleep(1)
+
+        cmd = Command( sys.executable, 'sub2.py' )
+
+        t1 = time.time()
+        x = cmd.run_timeout( 3, raise_on_error=False )
+        t2 = time.time()
+
+        assert t2-t1 < 6
+        assert x == None
+        assert len( util.grepfiles( 'START', 'sub2.log' ) ) == 1
+        assert len( util.grepfiles( 'DONE''sub2.log' ) ) == 0
+
+    def test_timeout_a_subprocess_that_runs_a_subprocess(self):
+        ""
+        cwd = os.getcwd()
+
+        write_sub_helper()
+
+        write_sub_script( 'sub1.py', 1, 'sub2.py' )
+        write_sub_script( 'sub2.py', 20 )
+        time.sleep(1)
+
+        cmd = Command( sys.executable, 'sub1.py' )
+
+        t1 = time.time()
+        x = cmd.run_timeout( 3, raise_on_error=False )
+        t2 = time.time()
+        plist = util.get_process_list()
+
+        assert t2-t1 < 6
+        assert x == None
+
+        L = util.grepfiles( 'START', 'sub1.log' )
+        assert len(L) == 1
+        pid1 = int( L[0].split()[1] )
+
+        L = util.grepfiles( 'START', 'sub2.log' )
+        assert len(L) == 1
+        pid2 = int( L[0].split()[1] )
+        assert pid2 != pid1
+
+        assert len( util.grepfiles( 'DONE', 'sub1.log' ) ) == 0
+        assert len( util.grepfiles( 'DONE', 'sub2.log' ) ) == 0
+
+        assert util.find_process_in_list( plist, pid1 ) == None
+        assert util.find_process_in_list( plist, pid2 ) == None
 
 
-def write_subproc_helper():
+######################################################################
+
+def write_sub_helper():
     """
     writes a python script with helper functions for import into test scripts
     """
-    writefile( 'subhelper.py', """
+    util.writefile( 'subhelper.py', """
         import os, sys, time, subprocess
         def log( filename, *args ):
             fp = open( filename, 'a' )
@@ -1900,244 +1672,36 @@ def write_subproc_helper():
         """ )
 
 
-def timeout02():
-    """
-    KillableSubprocess, kill a subprocess
-    """
-    cwd = os.getcwd()
+def write_sub_script( scriptpath, sleeptime, subscript=None ):
+    ""
+    logpath = os.path.splitext( scriptpath )[0]+'.log'
 
-    write_subproc_helper()
+    subcmd = ''
+    if subscript:
+        subcmd = 'subprocess.call( [ sys.executable, "' + \
+                    os.path.abspath(subscript) + '" ] )'
 
-    # first, check running a subprocess
-
-    writefile( 'sub1.py', """
+    util.writefile( scriptpath, """
         import os, sys, time, subprocess
-        sys.path.insert( 0, '"""+cwd+"""' )
+        sys.path.insert( 0, '"""+os.getcwd()+"""' )
         from subhelper import *
-        log( 'sub1.log', 'START', os.getpid(), time.time() )
-        time.sleep(1)
-        log( 'sub1.log', 'DONE', time.time() )
+        log( '"""+logpath+"""', 'START', os.getpid(), time.time() )
+        """+subcmd+"""
+        time.sleep( """+str(sleeptime)+""" )
+        log( '"""+logpath+"""', 'DONE', time.time() )
         """ )
 
-    time.sleep(1)
 
-    ksp = command.KillableSubprocess( [sys.executable,'sub1.py'] )
-    time.sleep(3)
-    assert ksp.checkIfDone(1)
-    assert ksp.getSubproc().returncode == 0
-    assert len( filegrep( 'sub1.log', 'START' ) ) == 1
-    assert len( filegrep( 'sub1.log', 'DONE' ) ) == 1
-
-    # next, timeout a subprocess
-
-    writefile( 'sub2.py', """
-        import os, sys, time, subprocess
-        sys.path.insert( 0, '"""+cwd+"""' )
-        from subhelper import *
-        log( 'sub2.log', 'START', os.getpid(), time.time() )
-        time.sleep(20)
-        log( 'sub2.log', 'DONE', time.time() )
-        """ )
-
-    time.sleep(1)
-
-    ksp = command.KillableSubprocess( [sys.executable,'sub2.py'] )
-    time.sleep(2)
-    t0 = time.time()
-    assert not ksp.checkIfDone(1)
-    ksp.kill( signal.SIGTERM, signal.SIGKILL )
-    t1 = time.time()
-    assert t1 - t0 < 6
-    assert len( filegrep( 'sub2.log', 'START' ) ) == 1
-    assert len( filegrep( 'sub2.log', 'DONE' ) ) == 0
-
-
-def timeout03():
+def extract_log_lines( output ):
     """
-    KillableSubprocess, kill a subprocess that runs a subprocess
-    """
-    cwd = os.getcwd()
-
-    write_subproc_helper()
-
-    writefile( 'sub1.py', """
-        import os, sys, time, subprocess
-        sys.path.insert( 0, '"""+cwd+"""' )
-        from subhelper import *
-        log( 'sub1.log', 'START', os.getpid(), time.time() )
-        subprocess.call( [sys.executable,'"""+cwd+"""/sub2.py'] )
-        time.sleep(1)
-        log( 'sub1.log', 'DONE', time.time() )
-        """ )
-
-    writefile( 'sub2.py', """
-        import os, sys, time, subprocess
-        sys.path.insert( 0, '"""+cwd+"""' )
-        from subhelper import *
-        log( 'sub2.log', 'START', os.getpid(), time.time() )
-        time.sleep(20)
-        log( 'sub2.log', 'DONE', time.time() )
-        """ )
-
-    time.sleep(1)
-
-    ksp = command.KillableSubprocess( [sys.executable,'sub1.py'] )
-    time.sleep(2)
-
-    plist1 = get_process_list()
-
-    t0 = time.time()
-    assert not ksp.checkIfDone(1)
-    ksp.kill( signal.SIGTERM, signal.SIGKILL )
-    t1 = time.time()
-    time.sleep(1)
-
-    plist2 = get_process_list()
-
-    assert t1 - t0 < 6
-    L = filegrep( 'sub1.log', 'START' )
-    assert len(L) == 1
-    pid1 = int( L[0].split()[1] )
-
-    L = filegrep( 'sub2.log', 'START' )
-    assert len(L) == 1
-    pid2 = int( L[0].split()[1] )
-    assert pid2 != pid1
-
-    assert len( filegrep( 'sub1.log', 'DONE' ) ) == 0
-    assert len( filegrep( 'sub2.log', 'DONE' ) ) == 0
-
-    assert find_process_in_list( plist1, pid1 ) != None
-    assert find_process_in_list( plist1, pid2 ) != None
-    assert find_process_in_list( plist2, pid1 ) == None
-    assert find_process_in_list( plist2, pid2 ) == None
-
-
-
-def timeout04():
-    """
-    run_timeout, a single subprocess
-    """
-    cwd = os.getcwd()
-
-    write_subproc_helper()
-
-    # first, check running a subprocess
-
-    writefile( 'sub1.py', """
-        import os, sys, time, subprocess
-        sys.path.insert( 0, '"""+cwd+"""' )
-        from subhelper import *
-        log( 'sub1.log', 'START', os.getpid(), time.time() )
-        time.sleep(1)
-        log( 'sub1.log', 'DONE', time.time() )
-        """ )
-
-    time.sleep(1)
-
-    cmd = Command( sys.executable, 'sub1.py' )
-
-    t1 = time.time()
-    x = cmd.run_timeout( 60 )
-    t2 = time.time()
-
-    assert t2-t1 < 5
-    assert x == 0
-    assert len( filegrep( 'sub1.log', 'START' ) ) == 1
-    assert len( filegrep( 'sub1.log', 'DONE' ) ) == 1
-
-    # next, timeout a subprocess
-
-    writefile( 'sub2.py', """
-        import os, sys, time, subprocess
-        sys.path.insert( 0, '"""+cwd+"""' )
-        from subhelper import *
-        log( 'sub2.log', 'START', os.getpid(), time.time() )
-        time.sleep(20)
-        log( 'sub2.log', 'DONE', time.time() )
-        """ )
-
-    time.sleep(1)
-
-    cmd = Command( sys.executable, 'sub2.py' )
-
-    t1 = time.time()
-    x = cmd.run_timeout( 3 )
-    t2 = time.time()
-
-    assert t2-t1 < 6
-    assert x == None
-    assert len( filegrep( 'sub2.log', 'START' ) ) == 1
-    assert len( filegrep( 'sub2.log', 'DONE' ) ) == 0
-
-
-def timeout05():
-    """
-    run_timeout, a subprocess that runs a subprocess
-    """
-    cwd = os.getcwd()
-
-    write_subproc_helper()
-
-    writefile( 'sub1.py', """
-        import os, sys, time, subprocess
-        sys.path.insert( 0, '"""+cwd+"""' )
-        from subhelper import *
-        log( 'sub1.log', 'START', os.getpid(), time.time() )
-        subprocess.call( [sys.executable,'"""+cwd+"""/sub2.py'] )
-        time.sleep(1)
-        log( 'sub1.log', 'DONE', time.time() )
-        """ )
-
-    writefile( 'sub2.py', """
-        import os, sys, time, subprocess
-        sys.path.insert( 0, '"""+cwd+"""' )
-        from subhelper import *
-        log( 'sub2.log', 'START', os.getpid(), time.time() )
-        time.sleep(20)
-        log( 'sub2.log', 'DONE', time.time() )
-        """ )
-
-    time.sleep(1)
-
-    cmd = Command( sys.executable, 'sub1.py' )
-
-    t1 = time.time()
-    x = cmd.run_timeout( 3 )
-    t2 = time.time()
-    plist = get_process_list()
-
-    assert t2-t1 < 6
-    assert x == None
-
-    L = filegrep( 'sub1.log', 'START' )
-    assert len(L) == 1
-    pid1 = int( L[0].split()[1] )
-
-    L = filegrep( 'sub2.log', 'START' )
-    assert len(L) == 1
-    pid2 = int( L[0].split()[1] )
-    assert pid2 != pid1
-
-    assert len( filegrep( 'sub1.log', 'DONE' ) ) == 0
-    assert len( filegrep( 'sub2.log', 'DONE' ) ) == 0
-
-    assert find_process_in_list( plist, pid1 ) == None
-    assert find_process_in_list( plist, pid2 ) == None
-
-
-######################################################################
-
-
-def extract_log_lines( fp ):
-    """
-    Loops over lines in a file and extracts the lines with log markers.
-    Returns a list of
+    Loops over lines in the given log output and extracts the lines with
+    log markers.  Returns a list of
 
         [ epoch time, marker name, data list ]
     """
     lines = []
-    for line in fp.readlines():
+
+    for line in output.splitlines():
         L = parse_log_line( line )
         if L:
             lines.append( [ L[0], L[1], eval(L[2]) ] )
@@ -2156,7 +1720,7 @@ def parse_log_line( line ):
 
     markers = [ 'runcmd: ', 'return: ' ]
 
-    line = _STRING_(line).rstrip()
+    line = line.rstrip()
     datemark = re.compile(
         r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+?' )
     m = datemark.match( line )
@@ -2171,7 +1735,7 @@ def parse_log_line( line ):
                     L = [ tm, n.strip().rstrip(':'), data ]
                     logline = L
                     break
-        except:
+        except Exception:
             #traceback.print_exc()  # uncomment to debug
             pass
 
@@ -2179,206 +1743,6 @@ def parse_log_line( line ):
 
 
 ######################################################################
-
-class RedirectStdout:
-    """
-    A convenience class to redirect the current process's stdout to a file.
-    Constructor initiates the redirection, close() stops it.
-    """
-
-    def __init__(self, filename, stderr_filename=None):
-        """
-        If 'stderr_filename' is not None, stderr goes to that filename.
-        """
-        self.filep = open( filename, 'w' )
-        self.save_stdout_fd = os.dup(1)
-        os.dup2( self.filep.fileno(), 1 )
-        self.filep2 = None
-        if stderr_filename:
-            self.filep2 = open( stderr_filename, 'w' )
-            self.save_stderr_fd = os.dup(2)
-            os.dup2( self.filep2.fileno(), 2 )
-
-    def close(self):
-        sys.stdout.flush()
-        os.dup2( self.save_stdout_fd, 1 )
-        os.close( self.save_stdout_fd )
-        self.filep.close()
-        if self.filep2 != None:
-            sys.stderr.flush()
-            os.dup2( self.save_stderr_fd, 2 )
-            os.close( self.save_stderr_fd )
-            self.filep2.close()
-
-call_capture_id = 0
-
-def call_capture_output( func, *args, **kwargs ):
-    """
-    """
-    global call_capture_id
-    outid = call_capture_id
-    call_capture_id += 1
-
-    of = 'stdout'+str(outid)+'.log'
-    ef = 'stderr'+str(outid)+'.log'
-
-    redir = RedirectStdout( of, ef )
-    try:
-        rtn = func( *args, **kwargs )
-    finally:
-        redir.close()
-    time.sleep(1)
-
-    return rtn, readfile(of), readfile(ef)
-
-
-def get_process_list():
-    """
-    Return a python list of all processes on the current machine, where each
-    entry is a length three list of form
-
-        [ user, pid, ppid ]
-    """
-    plat = sys.platform.lower()
-    if plat.startswith( 'darwin' ):
-        cmd = 'ps -o user,pid,ppid'
-    else:
-        cmd = 'ps -o user,pid,ppid'
-    cmd += ' -e'
-
-    p = subprocess.Popen( 'ps -o user,pid,ppid -e',
-                          shell=True, stdout=subprocess.PIPE )
-    sout,serr = p.communicate()
-
-    sout = _STRING_(sout)
-
-    # strip off first non-empty line (the header)
-
-    first = True
-    lineL = []
-    for line in sout.split( os.linesep ):
-        line = line.strip()
-        if line:
-            if first:
-                first = False
-            else:
-                L = line.split()
-                if len(L) == 3:
-                    try:
-                        L[1] = int(L[1])
-                        L[2] = int(L[2])
-                    except:
-                        pass
-                    else:
-                        lineL.append( L )
-
-    return lineL
-
-
-def find_process_in_list( proclist, pid ):
-    """
-    Searches for the given 'pid' in 'proclist' (which should be the output
-    from get_process_list().  If not found, None is returned.  Otherwise a
-    list
-
-        [ user, pid, ppid ]
-    """
-    for L in proclist:
-        if pid == L[1]:
-            return L
-    return None
-
-
-if sys.version_info[0] < 3:
-    # with python 2.x, files, pipes, and sockets work naturally
-    def _BYTES_(s): return s
-    def _STRING_(b): return b
-
-else:
-    # with python 3.x, read/write to files, pipes, and sockets is tricky
-    bytes_type = type( ''.encode() )
-
-    def _BYTES_(s):
-        if type(s) == bytes_type:
-            return s
-        return s.encode( 'ascii' )
-
-    def _STRING_(b):
-        if type(b) == bytes_type:
-            return b.decode()
-        return b
-
-
-def writefile( fname, content, header=None ):
-    """
-    Open and write 'content' to file 'fname'.  The content is modified to
-    remove leading spaces on each line.  The first non-empty line is used
-    to determine how many spaces to remove.
-    """
-    # determine indent pad of the given content
-    pad = None
-    lineL = []
-    for line in content.split( '\n' ):
-        line = line.rstrip( '\r' )
-        lineL.append( line )
-        if pad == None and line.strip():
-            for i in range(len(line)):
-                if line[i] != ' ':
-                    pad = i
-                    break
-    # make the directory to contain the file, if not already exist
-    d = os.path.dirname( fname )
-    if os.path.normpath(d) not in ['','.']:
-      if not os.path.exists(d):
-        os.makedirs(d)
-    # open and write contents
-    fp = open( fname, 'w' )
-    if header != None:
-        fp.write( header.strip() + '\n' )
-    for line in lineL:
-        if pad != None: fp.write( line[pad:] + '\n' )
-        else:           fp.write( line + '\n' )
-    fp.close()
-
-
-def writescript( fname, header, content ):
-    """
-    The 'header' is something like "#!/bin/sh" and 'content' is the same as
-    for writefile().
-    """
-    writefile( fname, content, header )
-    perm = stat.S_IMODE( os.stat(fname)[stat.ST_MODE] )
-    perm = perm | stat.S_IXUSR
-    try: os.chmod(fname, perm)
-    except: pass
-
-
-def filegrep(fname, pat):
-    """
-    returns list of lines that match 'pat'
-    """
-    L = []
-    fp = open(fname,"r")
-    repat = re.compile(pat)
-    for line in fp.readlines():
-      line = line.rstrip()
-      if repat.search(line):
-        L.append(line)
-    fp.close()
-    return L
-
-
-def readfile( fname ):
-    """
-    Read and return the contents of the given filename.
-    """
-    fp = open(fname,'r')
-    try:
-        s = fp.read()
-    finally:
-        fp.close()
-    return s
-
 
 def get_ssh_pair( fake_ssh_pause=None ):
     """
@@ -2393,7 +1757,7 @@ def get_ssh_pair( fake_ssh_pause=None ):
         st = str(1)
         if fake_ssh_pause != None:
             st = str(fake_ssh_pause)
-        writescript( 'fakessh', "#!"+localpy+" -E", """
+        util.writescript( 'fakessh', "#!"+localpy+" -E", """
             import os, sys, getopt, time
             optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
             argL.pop(0)  # remove the machine name
@@ -2408,25 +1772,4 @@ def get_ssh_pair( fake_ssh_pause=None ):
 
 ######################################################################
 
-def rmallfiles( not_these=None ):
-    for f in os.listdir("."):
-        if not_these == None or not fnmatch.fnmatch( f, not_these ):
-            if os.path.islink(f):
-                os.remove(f)
-            elif os.path.isdir(f):
-                shutil.rmtree(f)
-            else:
-                os.remove(f)
-
-def print3( *args ):
-    """
-    Python 2 & 3 compatible print function.
-    """
-    s = ' '.join( [ str(x) for x in args ] )
-    sys.stdout.write( s + '\n' )
-    sys.stdout.flush()
-
-
-######################################################################
-
-main()
+util.run_test_cases( sys.argv, sys.modules[__name__] )

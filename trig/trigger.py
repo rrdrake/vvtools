@@ -26,20 +26,16 @@ USAGE
 
 SYNOPSIS
 
-    This is a job script launch, logging, and monitoring tool.  Job scripts
-specify a launch time of day, day of week, etc using a comment at the top of
-the script.  When a job is launched, all output is logged (to files in the
-directory specified by the -r option).  The arguments to this script are the
-job files or directories containing the job files.
+    This is a job script launch and logging tool.  Job scripts specify a
+launch time of day, day of week, etc using a comment at the top of the script.
+When a job is launched, all output is logged.  The arguments to this script
+are job files and/or directories containing the job files, and can be glob
+patterns.
 
-    This script should be placed in a cron table so that it is run every five
-minutes or so.  There is a built in mechanism to only allow one trigger.py to
-run in the same -r directory at any one time.
+Run this script in a cron table, something like this:
 
-    The 'jobs' arguments can either be directories or glob patterns.  If a
-directory, files that match the pattern "job_*.py" in the directory are
-globbed.  If no 'jobs' arguments are given, the current working directory is
-assumed.
+    1-59/5 * * * * /path/runner --exlusive-id myname /path/trigger.py \ 
+                                -r /log/path /path/jobs_dir
 
 OPTIONS
 
@@ -47,19 +43,8 @@ OPTIONS
                    contains the main log file as well as the individual job
                    log directories
 
-  -C <directory> : change to this directory first thing;  relative paths given
-                   by -r and the 'jobs' arguments are affected
-
-  -g <integer> : granularity in seconds (default 15); this is the time between
-                 job file scans (which then may result in job launches)
-
-  -a <integer> : seconds between activity log messages (default one hour);
-                 a short message is periodically written to the log file in
-                 order to detect hangs; this is the time between messages
-
-  -S : show errors; by default, exceptions are suppressed (although they are
-       logged once logging starts); this option will show exceptions, which
-       can be useful for diagnosing startup errors
+  -g <integer> : granularity in seconds (default 15); this is the time
+                 between job file scans and possible job launches
 
   -Q <integer> : quit after this number of seconds; used in unit testing
 
@@ -128,20 +113,16 @@ containing this file.  That way, jobs can easily import utility modules.
 
 
 DEFAULT_GRANULARITY = 15
-DEFAULT_ACTIVITY = 60*60  # one hour
 DEFAULT_ERROR_REPEAT = 1  # hours
 
 
 def main( arglist ):
-    """
-    TODO:   - could check if a checkRun() takes longer than window and if so
-              then print a warning about possible missed job triggers
-    """
-    optL,argL = getopt.getopt( arglist, 'hSr:C:g:Q:a:E:', ['help'] )
+    ""
+    optL,argL = getopt.getopt( arglist, 'hr:g:Q:E:', ['help'] )
 
     optD = {}
     for n,v in optL:
-        if n in ['-g','-Q','-a']:
+        if n in ['-g','-Q']:
             v = int( v )
             assert v > 0
         optD[n] = v
@@ -152,137 +133,7 @@ def main( arglist ):
 
     assert '-r' in optD, "the -r option is required"
 
-    if '-S' in optD:
-        if '-C' in optD:
-            os.chdir( optD['-C'] )
-        if activate( optD, argL ):
-            mainloop( optD, argL )
-    else:
-        try:
-            if '-C' in optD:
-                os.chdir( optD['-C'] )
-            if activate( optD, argL ):
-                mainloop( optD, argL )
-        except Exception:
-            pass
-
-
-def activate( optD, argL ):
-    """
-    Returns False if there is already a trigger process running and active.
-    It does this by reading the trigger.log file and checking date stamps.
-    """
-    logdir = os.path.abspath( optD['-r'] )
-    logfile = os.path.join( logdir, 'trigger.log' )
-
-    if os.path.exists( logfile ):
-
-        last = None
-        fp = open( logfile, 'r' )
-        while True:
-            logL = logreadline( fp )
-            if not logL:
-                break
-            # look for startup and alive messages
-            if len( logL ) > 1:
-                L = logL[2].split()
-                if len(logL) >= 3 and len(L) == 2 and \
-                   (logL[1] == 'startup' or logL[1] == 'alive') and \
-                   L[0].startswith( 'mach=' ) and L[1].startswith( 'pid=' ):
-                    try:
-                        tm = logL[0]
-                        mach = L[0].split('mach=',1)[1]
-                        assert mach
-                        pid = int( L[1].split('pid=',1)[1] )
-                    except Exception:
-                        pass  # hopefully ignoring corrupted messages is ok
-                    else:
-                        last = ( tm, mach, pid )
-        fp.close()
-
-        if last != None:
-            tm,mach,pid = last
-
-            ps = None
-            if mach == os.uname()[1]:
-                # look for the process on this machine; if not found, an
-                # empty string is returned
-                ps = processes( pid=pid ).strip()
-
-            if ps == None or ps:
-                # process is on another machine or the process exists on this
-                # machine; in either case, determine if the last activity is
-                # recent enough
-                tactive = optD.get( '-a', DEFAULT_ACTIVITY )
-                tgrain = optD.get( '-g', DEFAULT_GRANULARITY )
-                tspan = max( 3*tgrain, 3*tactive )
-                if time.time() - tm < tspan:
-                    # the only return of False from this function; it means
-                    # the last active message in the log file is too recent
-                    # (another trigger process is still running)
-                    return False
-
-    return True
-
-
-readpat = re.compile( r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+?' )
-
-def logreadline( fp ):
-    """
-    Given an open file pointer, this will read one printlog() line (which may
-    contain multiple newlines).  Returns a list
-
-        [ seconds since epoch, arg1, arg2, ... ]
-
-    or None if there are no more lines in the file.
-    """
-    val = None
-
-    try:
-        line = None
-        while True:
-
-            if line == None:
-                line = fp.readline()
-            if not line:
-                break
-
-            val = None
-            try:
-                line = line.rstrip()
-                m = readpat.match( line )
-                if m != None:
-                    L = line[m.end():].strip().split( ' ', 1 )
-                    n = int( L.pop(0) )
-                    assert n < 1000  # if large, probably corruption
-                    ts = line[:m.end()].strip().strip('[').strip(']')
-                    tm = time.mktime( time.strptime( ts ) )
-                    val = [ tm ]
-                    if n > 0:
-                        aL = L[0].split( ':', 1 )
-                        val.append( aL[0].strip() )
-                        if n > 1:
-                            val.append( aL[1].strip() )
-            except Exception:
-                val = None
-            line = None
-
-            if val != None:
-                if n > 2:
-                    for i in range(n-2):
-                        line = fp.readline()
-                        assert line
-                        if line.startswith( '    ' ):
-                            val.append( line[4:].rstrip() )
-                        else:
-                            val = None
-                            break
-                if val != None:
-                    break
-    except Exception:
-        val = None
-
-    return val
+    mainloop( optD, argL )
 
 
 # use signals to implement a timeout mechanism
@@ -306,7 +157,6 @@ def mainloop( optD, argL ):
 
     tgrain = optD.get( '-g', DEFAULT_GRANULARITY )
     tlimit = optD.get( '-Q', None )
-    tactive = optD.get( '-a', DEFAULT_ACTIVITY )
     v = optD.get( '-E', DEFAULT_ERROR_REPEAT )
     erreset = int( max( 0, float(v) ) * 60*60 )
 
@@ -320,7 +170,6 @@ def mainloop( optD, argL ):
         append_to_python_path( mydir )
 
         tlimit_0 = time.time()
-        tactive_0 = time.time()
         while tlimit == None or time.time()-tlimit_0 < tlimit:
 
             # use alarm to timeout the file and subprocess work (resilience)
@@ -328,13 +177,8 @@ def mainloop( optD, argL ):
             rjobs.checkRun( tgrain )
             signal.alarm(0)
 
-            if time.time()-tactive_0 > tactive:
-                # log an "I'm alive" message every so often
-                printlog( 'alive', 'mach='+os.uname()[1] + \
-                                   ' pid='+str( os.getpid() ) )
-                tactive_0 = time.time()
-
             time.sleep( tgrain )
+
     except Exception:
         # all exceptions are caught and logged, before returning (exiting)
         traceback.print_exc()
@@ -670,11 +514,8 @@ def recurse_dow( sL, dowL ):
 #########################################################################
 
 def print3( *args ):
-    """
-    Python 2 & 3 compatible print function.
-    """
-    s = ' '.join( [ str(x) for x in args ] )
-    sys.stdout.write( s + '\n' )
+    ""
+    sys.stdout.write( ' '.join( [ str(x) for x in args ] ) + '\n' )
     sys.stdout.flush()
 
 
@@ -690,6 +531,66 @@ def printlog( *args ):
         s += '\n    '+str(v)
     sys.stdout.write( s + '\n' )
     sys.stdout.flush()
+
+
+readpat = re.compile( r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+?' )
+
+def logreadline( fp ):
+    """
+    Given an open file pointer, this will read one printlog() line (which may
+    contain multiple newlines).  Returns a list
+
+        [ seconds since epoch, title, arg1, arg2, ... ]
+
+    or None if there are no more lines in the file.
+    """
+    val = None
+
+    try:
+        line = None
+        while True:
+
+            if line == None:
+                line = fp.readline()
+            if not line:
+                break
+
+            val = None
+            try:
+                line = line.rstrip()
+                m = readpat.match( line )
+                if m != None:
+                    L = line[m.end():].strip().split( ' ', 1 )
+                    n = int( L.pop(0) )
+                    assert n < 1000  # if large, probably corruption
+                    ts = line[:m.end()].strip().strip('[').strip(']')
+                    tm = time.mktime( time.strptime( ts ) )
+                    val = [ tm ]
+                    if n > 0:
+                        aL = L[0].split( ':', 1 )
+                        val.append( aL[0].strip() )
+                        if n > 1:
+                            val.append( aL[1].strip() )
+            except Exception:
+                val = None
+            line = None
+
+            if val != None:
+                if n > 2:
+                    for i in range(n-2):
+                        line = fp.readline()
+                        assert line
+                        if line.startswith( '    ' ):
+                            val.append( line[4:].rstrip() )
+                        else:
+                            val = None
+                            break
+                if val != None:
+                    break
+    except Exception:
+        val = None
+
+    return val
 
 
 class Redirect:
@@ -726,81 +627,6 @@ class Redirect:
         os.close( self.save_stdout_fd )
         os.close( self.save_stderr_fd )
         self.filep.close()
-
-
-def processes( pid=None, user=None, showall=False, fields=None, noheader=True ):
-    """
-    The 'fields' defaults to 'user,pid,ppid,etime,pcpu,vsz,args'.
-    """
-    plat = sys.platform.lower()
-    if fields == None:
-        fields = 'user,pid,ppid,etime,pcpu,vsz,args'
-    if plat.startswith( 'darwin' ):
-        cmd = 'ps -o ' + fields.replace( 'args', 'command' )
-    elif plat.startswith( 'sunos' ):
-        cmd = '/usr/bin/ps -o ' + fields
-    else:
-        cmd = 'ps -o ' + fields
-
-    if pid != None:
-        cmd += ' -p '+str(pid)
-    elif user:
-        cmd += ' -u '+str(user)
-    elif showall:
-        cmd += ' -e'
-
-    x,out = runout( cmd )
-
-    if noheader:
-        # strip off first non-empty line
-        out = out.strip() + os.linesep
-        i = 0
-        while i < len(out):
-            if out[i:].startswith( os.linesep ):
-                out = out[i:].lstrip()
-                break
-            i += 1
-
-    out = out.strip()
-    if out:
-        out += os.linesep
-
-    return out
-
-
-def runout( cmd, include_stderr=False ):
-    """
-    Run a command and return the exit status & output as a pair.
-    """
-    argD = {}
-
-    if type(cmd) == type(''):
-        argD['shell'] = True
-
-    fp = None
-    argD['stdout'] = subprocess.PIPE
-    if include_stderr:
-        argD['stderr'] = subprocess.STDOUT
-    else:
-        fp = open( os.devnull, 'w' )
-        argD['stderr'] = fp.fileno()
-
-    try:
-        p = subprocess.Popen( cmd, **argD )
-        out,err = p.communicate()
-    except Exception:
-        fp.close()
-        raise
-
-    if fp != None:
-        fp.close()
-
-    x = p.returncode
-
-    if type(out) != type(''):
-        out = out.decode()  # convert bytes to a string
-
-    return x, out
 
 
 def append_to_python_path( dirpath ):

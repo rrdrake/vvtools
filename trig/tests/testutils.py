@@ -17,6 +17,7 @@ import subprocess
 import signal
 import shlex
 import pipes
+import glob
 import getopt
 import unittest
 
@@ -134,7 +135,7 @@ class TestSuiteAccumulator:
 
         try:
             suite = self.loader.loadTestsFromName( test_name, module=self.testmod )
-        except:
+        except Exception:
             return False
 
         if haserrors and len(self.loader.errors) > 0:
@@ -155,7 +156,7 @@ def get_TestCase_classes( test_module ):
         try:
             if issubclass( obj, unittest.TestCase ):
                 tcD[name] = obj
-        except:
+        except Exception:
             pass
 
     return tcD
@@ -240,7 +241,7 @@ def writescript( fname, header, content ):
     perm = stat.S_IMODE( os.stat(fname)[stat.ST_MODE] )
     perm = perm | stat.S_IXUSR
     try: os.chmod(fname, perm)
-    except: pass
+    except Exception: pass
 
 
 def runout( cmd, raise_on_failure=False ):
@@ -256,7 +257,7 @@ def runout( cmd, raise_on_failure=False ):
     try:
         s = out.decode()
         out = s
-    except:
+    except Exception:
         pass
 
     x = p.returncode
@@ -287,9 +288,48 @@ def runout( cmd, raise_on_failure=False ):
     #try:
     #    s = out.decode()
     #    out = s
-    #except:
+    #except Exception:
     #    pass
     #return out
+
+
+class Background:
+
+    def __init__(self, cmd, outfile=None):
+        """
+        """
+        self.cmd = cmd
+        if outfile != None:
+            fp = open( outfile, 'w' )
+            self.p = subprocess.Popen( cmd, shell=True,
+                                       stdout=fp.fileno(), 
+                                       stderr=fp.fileno() )
+            fp.close()
+        else:
+            self.p = subprocess.Popen( cmd, shell=True )
+
+    def wait(self, timeout=30):
+        """
+        """
+        if timeout == None:
+            x = self.p.wait()
+            return x
+        for i in range(timeout):
+            x = self.p.poll()
+            if x != None:
+                return x
+            time.sleep(1)
+        self.stop()
+        return None
+    
+    def stop(self):
+        try:
+            os.kill( self.p.pid, signal.SIGINT )
+            self.p.wait()
+        except Exception:
+            if hasattr( self.p, 'terminate' ):
+                try: self.p.terminate()
+                except Exception: pass
 
 
 def run_redirect( cmd, redirect_filename ):
@@ -350,6 +390,64 @@ def run_redirect( cmd, redirect_filename ):
     return x == 0
 
 
+class RedirectStdout:
+    """
+    A convenience class to redirect the current process's stdout to a file.
+    Constructor initiates the redirection, close() stops it.
+    """
+
+    def __init__(self, filename, stderr_filename=None):
+        """
+        If 'stderr_filename' is not None, stderr goes to that filename.
+        """
+        self.filep = open( filename, 'w' )
+        self.save_stdout_fd = os.dup(1)
+        os.dup2( self.filep.fileno(), 1 )
+        self.filep2 = None
+        if stderr_filename:
+            self.filep2 = open( stderr_filename, 'w' )
+            self.save_stderr_fd = os.dup(2)
+            os.dup2( self.filep2.fileno(), 2 )
+
+    def close(self):
+        ""
+        sys.stdout.flush()
+        os.dup2( self.save_stdout_fd, 1 )
+        os.close( self.save_stdout_fd )
+        self.filep.close()
+        if self.filep2 != None:
+            sys.stderr.flush()
+            os.dup2( self.save_stderr_fd, 2 )
+            os.close( self.save_stderr_fd )
+            self.filep2.close()
+
+
+call_capture_id = 0
+
+def call_capture_output( func, *args, **kwargs ):
+    """
+    Redirect current process stdout & err to files, calls the given function
+    with the given arguments, returns
+
+        ( the output of the function, all stdout, all stderr )
+    """
+    global call_capture_id
+    outid = call_capture_id
+    call_capture_id += 1
+
+    of = 'stdout'+str(outid)+'.log'
+    ef = 'stderr'+str(outid)+'.log'
+
+    redir = RedirectStdout( of, ef )
+    try:
+        rtn = func( *args, **kwargs )
+    finally:
+        redir.close()
+    time.sleep(1)
+
+    return rtn, readfile(of), readfile(ef)
+
+
 def shell_escape( cmd ):
     """
     Returns a string with shell special characters escaped so they are not
@@ -383,6 +481,40 @@ def filegrep(fname, pat):
     fp.close()
     return L
 
+
+def grepfiles( pattern, *paths ):
+    ""
+    # slight modification to the ends of the pattern in order to use
+    # fnmatch to simulate basic shell style matching
+    if pattern.startswith('^'):
+        pattern = pattern[1:]
+    else:
+        pattern = '*'+pattern
+    if pattern.endswith('$'):
+        pattern = pattern[:-1]
+    else:
+        pattern += '*'
+
+    matchlines = []
+
+    for path in paths:
+
+        for gp in glob.glob( path ):
+
+            fp = open( gp, "r" )
+
+            try:
+                for line in fp:
+                    line = line.rstrip( os.linesep )
+                    if fnmatch.fnmatch( line, pattern ):
+                        matchlines.append( line )
+
+            finally:
+                fp.close()
+
+    return matchlines
+
+
 def grep(out, pat):
     L = []
     repat = re.compile(pat)
@@ -402,7 +534,27 @@ def readfile( fname ):
         s = fp.read()
     finally:
         fp.close()
-    return s
+    return _STRING_(s)
+
+
+if sys.version_info[0] < 3:
+    # with python 2.x, files, pipes, and sockets work naturally
+    def _BYTES_(s): return s
+    def _STRING_(b): return b
+
+else:
+    # with python 3.x, read/write to files, pipes, and sockets is tricky
+    bytes_type = type( ''.encode() )
+
+    def _BYTES_(s):
+        if type(s) == bytes_type:
+            return s
+        return s.encode( 'ascii' )
+
+    def _STRING_(b):
+        if type(b) == bytes_type:
+            return b.decode()
+        return b
 
 
 def which( program ):
@@ -423,13 +575,58 @@ def which( program ):
     return None
 
 
-###########################################################################
+def get_process_list():
+    """
+    Return a python list of all processes on the current machine, where each
+    entry is a length three list of form
 
-if 'TOOLSET_RUNDIR' not in os.environ:
-    # directly executing a test script can be done but rm -rf * is performed;
-    # to avoid accidental removal of files, cd into a working directory
-    d = os.path.join( os.path.basename( sys.argv[0] )+'_dir' )
-    if not os.path.exists(d):
-        os.mkdir(d)
-    os.environ['TOOLSET_RUNDIR'] = d
-    os.chdir(d)
+        [ user, pid, ppid ]
+    """
+    plat = sys.platform.lower()
+    if plat.startswith( 'darwin' ):
+        cmd = 'ps -o user,pid,ppid'
+    else:
+        cmd = 'ps -o user,pid,ppid'
+    cmd += ' -e'
+
+    p = subprocess.Popen( 'ps -o user,pid,ppid -e',
+                          shell=True, stdout=subprocess.PIPE )
+    sout,serr = p.communicate()
+
+    sout = _STRING_(sout)
+
+    # strip off first non-empty line (the header)
+
+    first = True
+    lineL = []
+    for line in sout.split( os.linesep ):
+        line = line.strip()
+        if line:
+            if first:
+                first = False
+            else:
+                L = line.split()
+                if len(L) == 3:
+                    try:
+                        L[1] = int(L[1])
+                        L[2] = int(L[2])
+                    except Exception:
+                        pass
+                    else:
+                        lineL.append( L )
+
+    return lineL
+
+
+def find_process_in_list( proclist, pid ):
+    """
+    Searches for the given 'pid' in 'proclist' (which should be the output
+    from get_process_list().  If not found, None is returned.  Otherwise a
+    list
+
+        [ user, pid, ppid ]
+    """
+    for L in proclist:
+        if pid == L[1]:
+            return L
+    return None
