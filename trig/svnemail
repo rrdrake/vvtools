@@ -255,22 +255,28 @@ def get_recent_commits( repo, svnexe, age, noop ):
     else:
         echo = 'none'
 
-    etree = svn_log_as_xml( repo, age, svnexe=svnexe, echo=echo )
-
-    curtime = time.time()
+    etree = svn_log_as_xml( repo, age,
+                            svnexe=svnexe,
+                            echo=echo,
+                            showerrors=noop )
 
     cmtL = []
-    for nd in etree:
-        cmt = Commit( nd )
-        if cmt.getDate() >= curtime - age:
-            cmtL.append( cmt )
 
-    if noop:
-        for cmt in cmtL:
-            print3( cmt.getRevision(), cmt.getAuthor(),
-                    time.ctime(cmt.getDate()),
-                    cmt.getBranch(), cmt.getCommonPrefix(),
-                    cmt.getShortMessage(), '\n'+cmt.formatFileList() )
+    if etree != None:
+
+        curtime = time.time()
+
+        for nd in etree:
+            cmt = Commit( nd )
+            if cmt.getDate() >= curtime - age:
+                cmtL.append( cmt )
+
+        if noop:
+            for cmt in cmtL:
+                print3( cmt.getRevision(), cmt.getAuthor(),
+                        time.ctime(cmt.getDate()),
+                        cmt.getBranch(), cmt.getCommonPrefix(),
+                        cmt.getShortMessage(), '\n'+cmt.formatFileList() )
 
     return cmtL
 
@@ -322,15 +328,25 @@ def get_paths( elmt ):
     return pathL
 
 
-def svn_log_as_xml( repo, age, svnexe='svn', echo="none" ):
+def svn_log_as_xml( repo, age, svnexe='svn', echo="none", showerrors=False ):
     ""
     tm = time.localtime( time.time() - age )
     ts = time.strftime( '%Y-%m-%d %H:%M:%S', tm )
 
-    cmd = Command( '$svnexe log --xml -v -r' ).arg( '{$ts}:HEAD' ).add( repo )
-    out = cmd.run_output( shell=False, echo=echo )
+    etree = None
 
-    etree = ET.fromstring( out )
+    try:
+        cmd = Command( '$svnexe log --xml -v -r' ).arg( '{$ts}:HEAD' ).add( repo )
+        out = cmd.run_output( shell=False, echo=echo )
+    except Exception:
+        if showerrors:
+            sys.stderr.write( '*** error getting svn log ***\n' )
+            traceback.print_exc()
+            sys.stderr.write( '*****************************\n' )
+        etree = None
+    else:
+        etree = ET.fromstring( out )
+
     return etree
 
 
