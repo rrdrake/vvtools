@@ -65,7 +65,7 @@ class test_results_tests( unittest.TestCase ):
         tdir = vrun.resultsDir()
 
         util.runvvtest( '-i --save-results' )
-        resultsfname = glob.glob('results.*')[0]
+        resultsfname = util.globfile('results.*')
 
         # without a runtimes file, no tests should have been added (because the
         # --save-results logic cannot determine the test root relative paths)
@@ -145,7 +145,7 @@ class test_results_tests( unittest.TestCase ):
 
         create_and_save_runtimes()
 
-        resultsfname = glob.glob('results.*')[0]
+        resultsfname = util.globfile('results.*')
         tr = results.TestResults( resultsfname )
 
         assert len( util.grepfiles( "cat", resultsfname ) ) == 4
@@ -175,7 +175,7 @@ class test_results_tests( unittest.TestCase ):
 
         create_and_save_runtimes()
 
-        resultsfname = glob.glob('results.*')[0]
+        resultsfname = util.globfile('results.*')
         tr = results.TestResults( resultsfname )
 
         assert len( util.grepfiles( "cat", resultsfname ) ) == 5
@@ -201,7 +201,7 @@ class test_results_tests( unittest.TestCase ):
 
         create_and_save_runtimes()
 
-        resultsfname = glob.glob('results.*')[0]
+        resultsfname = util.globfile('results.*')
         tr = results.TestResults( resultsfname )
 
         assert len( util.grepfiles( "cat", resultsfname ) ) == 2
@@ -228,7 +228,7 @@ class test_results_tests( unittest.TestCase ):
 
         create_and_save_runtimes()
 
-        resultsfname = glob.glob('results.*')[0]
+        resultsfname = util.globfile('results.*')
         tr = results.TestResults( resultsfname )
 
         assert len( util.grepfiles( "cat", resultsfname ) ) == 3
@@ -249,7 +249,7 @@ class test_results_tests( unittest.TestCase ):
         util.runcmd( util.resultspy + ' save', chdir='two' )
         util.runvvtest( '-i --save-results' )
 
-        resultsfname = glob.glob('results.*')[0]
+        resultsfname = util.globfile('results.*')
         tr = results.TestResults( resultsfname )
         platname,cplrname = tr.platform(), tr.compiler()
 
@@ -323,7 +323,7 @@ class test_results_tests( unittest.TestCase ):
         # create a multiplatform timings file
         util.runcmd( util.resultspy + ' save' )
         util.runvvtest( '-i --save-results' )
-        resultsfname = glob.glob('results.*')[0]
+        resultsfname = util.globfile('results.*')
         util.runcmd( util.resultspy + ' merge -x '+resultsfname )
 
         # get the platform name & compiler
@@ -442,7 +442,7 @@ class test_results_tests( unittest.TestCase ):
         os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
 
         util.runvvtest( '-i --save-results' )
-        resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+        resultsfname = os.path.abspath( util.globfile('testing/results.*') )
 
         # create initial multiplat file
         util.runcmd( util.resultspy + ' merge -x '+ resultsfname,
@@ -487,7 +487,7 @@ class test_results_tests( unittest.TestCase ):
         os.environ['TESTING_DIRECTORY'] = os.path.join( os.getcwd(), 'testing' )
 
         util.runvvtest( '-i --save-results' )
-        resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+        resultsfname = os.path.abspath( util.globfile('testing/results.*') )
 
         # use the results.py script to save the results to the runtimes file
         util.runcmd( util.resultspy + ' save ' + resultsfname, chdir='tsrc' )
@@ -514,7 +514,7 @@ class test_results_tests( unittest.TestCase ):
         vrun.assertCounts( total=1, npass=1 )
         util.runvvtest( '-i --save-results --results-tag 2nd' )
 
-        rfn2 = os.path.abspath( glob.glob( 'testing/results.*.2nd' )[0] )
+        rfn2 = os.path.abspath( util.globfile( 'testing/results.*.2nd' ) )
 
         # extract the runtime for the second cat test
         tr = results.TestResults( rfn2 )
@@ -544,7 +544,7 @@ class test_results_tests( unittest.TestCase ):
         vrun = util.runvvtest()
         vrun.assertCounts( total=3, npass=3 )
         util.runvvtest( '-i --save-results --results-tag 3rd' )
-        rfn3 = os.path.abspath( glob.glob( 'testing/results.*.3rd' )[0] )
+        rfn3 = os.path.abspath( util.globfile( 'testing/results.*.3rd' ) )
         # force the results to be a different platform/compiler
         tr = results.TestResults( rfn3 )
         mach = os.uname()[1]
@@ -577,7 +577,7 @@ class test_results_tests( unittest.TestCase ):
 
         # create a multiplatform timings file
         util.runvvtest( '-i --save-results' )
-        resultsfname = os.path.abspath( glob.glob('results.*')[0] )
+        resultsfname = os.path.abspath( util.globfile('results.*') )
         util.runcmd( util.resultspy + ' merge '+resultsfname )
 
         # get the platform name & compiler
@@ -668,7 +668,7 @@ class test_results_tests( unittest.TestCase ):
 
         # create a multiplatform timings file
         util.runvvtest( '-i --save-results --results-tag first' )
-        resultsfname = os.path.abspath( glob.glob('results.*')[0] )
+        resultsfname = os.path.abspath( util.globfile('results.*') )
 
         # get the platform name & compiler
         tr = results.TestResults( resultsfname )
@@ -686,7 +686,7 @@ class test_results_tests( unittest.TestCase ):
 
         # save a second results file
         util.runvvtest( '-i --save-results --results-tag second' )
-        results2fname = os.path.abspath( glob.glob('results.*.second')[0] )
+        results2fname = os.path.abspath( util.globfile('results.*.second') )
         assert results2fname != resultsfname
 
         time.sleep(1)  # force a gap between vvtest invocations
@@ -700,7 +700,7 @@ class test_results_tests( unittest.TestCase ):
 
         # save a second results file
         util.runvvtest( '-i --save-results --results-tag third' )
-        results3fname = os.path.abspath( glob.glob('results.*.third')[0] )
+        results3fname = os.path.abspath( util.globfile('results.*.third') )
         assert results3fname != resultsfname and results3fname != results2fname
 
         # merge the first and second results files
@@ -745,7 +745,7 @@ class test_results_tests( unittest.TestCase ):
 
         # save the results
         util.runvvtest( '-i --save-results' )
-        resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+        resultsfname = os.path.abspath( util.globfile('testing/results.*') )
 
         # create a runtimes file in a subdirectory
         util.runcmd( util.resultspy + ' save ' + resultsfname, chdir='tsrc/one' )
@@ -797,9 +797,9 @@ class test_results_tests( unittest.TestCase ):
 
         # save the results
         util.runvvtest( '-i --save-results' )
-        resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+        resultsfname = os.path.abspath( util.globfile('testing/results.*') )
 
-        resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+        resultsfname = os.path.abspath( util.globfile('testing/results.*') )
 
         # create a runtimes file in a subdirectory
         util.runcmd( util.resultspy + ' save ' + resultsfname, chdir='tsrc' )
@@ -839,7 +839,7 @@ class test_results_tests( unittest.TestCase ):
         os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
 
         util.runvvtest( '-i --save-results' )
-        resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+        resultsfname = os.path.abspath( util.globfile('testing/results.*') )
 
         # create a duplicate results file with known platform/compiler names
         tr = results.TestResults( resultsfname )
@@ -1058,7 +1058,7 @@ class test_results_tests( unittest.TestCase ):
         util.runcmd( util.resultspy + ' save', chdir='one' )
         util.runvvtest( '--config config -i --save-results' )
 
-        rf1 = glob.glob('results.*')[0]
+        rf1 = util.globfile('results.*')
         tr = results.TestResults( rf1 )
         platname,cplrname = tr.platform(), tr.compiler()
         L = rf1.split('.')
@@ -1098,7 +1098,7 @@ class test_results_tests( unittest.TestCase ):
         util.runcmd( util.resultspy + ' save', chdir='one' )
         util.runvvtest( '-i --save-results' )
 
-        rf = glob.glob('results.*')[0]
+        rf = util.globfile('results.*')
 
         x,out = util.runcmd( util.resultspy + ' report -G ' + rf )
 
@@ -1135,7 +1135,7 @@ class test_results_tests( unittest.TestCase ):
         util.interrupt_vvtest_run( '--save-results', count=2 )
         tdir = os.path.abspath( util.results_dir() )
 
-        resultsfname = glob.glob('results.*')[0]
+        resultsfname = util.globfile('results.*')
 
         x,out = util.runcmd( util.resultspy + ' report ' + resultsfname )
 
@@ -1169,7 +1169,7 @@ class test_results_tests( unittest.TestCase ):
             '--save-results --results-date ' + str(olddate) )
         vrun.assertCounts( total=3, npass=3 )
 
-        rfile1 = glob.glob('results.*')[0]
+        rfile1 = util.globfile('results.*')
 
         vrun = util.runvvtest( '-w --save-results' )
         vrun.assertCounts( total=3, npass=3 )
@@ -1217,7 +1217,7 @@ class test_results_tests( unittest.TestCase ):
         util.runvvtest( '-i --save-results' )
 
         # compute a new result date to be yesterday's date
-        rf1 = glob.glob('results.*')[0]
+        rf1 = util.globfile('results.*')
         s1,d,s2 = rf1.split('.',2)
         y,m,d = d.split('_')
         if d == '01':

@@ -10,7 +10,6 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
-import glob
 import unittest
 import time
 
@@ -141,9 +140,7 @@ def write_test_script( filename, depends_on=None, add_time2=False ):
 
 def extract_times_from_log( testname ):
     ""
-    logfL = glob.glob( 'TestResults*/'+testname+'/execute.log' )
-    assert len( logfL ) == 1
-    logf = logfL[0]
+    logf = util.globfile( 'TestResults*/'+testname+'/execute.log' )
 
     lineL = util.grepfiles( 'time1=', logf )
     assert len( lineL ) == 1

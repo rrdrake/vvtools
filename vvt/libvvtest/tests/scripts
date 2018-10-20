@@ -11,7 +11,6 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
-import glob
 import unittest
 
 import testutils as util
@@ -612,9 +611,8 @@ class script_tests( unittest.TestCase ):
             vrun = util.runvvtest( '-o dbg', batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
-            fL = glob.glob( 'TestResults*/another/file3.txt' )
-            assert len(fL) == 1
-            assert not os.path.islink( fL[0] )
+            fn = util.globfile( 'TestResults*/another/file3.txt' )
+            assert not os.path.islink( fn )
 
     def test_using_the_vvtest_system_utility_functions(self):
         ""
@@ -1041,7 +1039,7 @@ class script_tests( unittest.TestCase ):
         vrun = util.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
 
-        xlog = glob.glob( 'TestResults*/py1/execute.log' )[0]
+        xlog = util.globfile( 'TestResults*/py1/execute.log' )
 
         assert len( util.grepfiles(
             'myfunc( *ivar *)*py1.vvt:15', xlog ) ) == 1

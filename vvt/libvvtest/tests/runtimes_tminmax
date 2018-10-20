@@ -11,7 +11,6 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
-from glob import glob
 import unittest
 
 import testutils as util
@@ -87,7 +86,7 @@ class runtimes_and_tmin_tmax( unittest.TestCase ):
             # create a timings file
             util.runcmd( util.resultspy + ' save', chdir='tests' )
             util.runvvtest( '-i --save-results', chdir=tdir )
-            resultsfname = glob('results.*')[0]
+            resultsfname = util.globfile('results.*')
             util.runcmd( util.resultspy + ' merge -x '+resultsfname )
 
             util.remove_results()
@@ -155,7 +154,7 @@ class runtimes_and_tmin_tmax( unittest.TestCase ):
             # create a timings file
             util.runcmd( util.resultspy + ' save', chdir='tests' )
             util.runvvtest( '-i --save-results', chdir=tdir )
-            resultsfname = glob('results.*')[0]
+            resultsfname = util.globfile('results.*')
             util.runcmd( util.resultspy + ' merge -x '+resultsfname )
 
             util.remove_results()

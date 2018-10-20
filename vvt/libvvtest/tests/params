@@ -134,7 +134,7 @@ class parameter_tests( unittest.TestCase ):
         vrun = util.runvvtest( '-R -p AA=2' )
         vrun.assertCounts( total=2, npass=2 )
 
-        cd = glob.glob( 'TestResults*/params.AA=2.BB=bar' )[0]
+        cd = util.globfile( 'TestResults*/params.AA=2.BB=bar' )
         vrun = util.runvvtest( '-R', chdir=cd )
         vrun.assertCounts( total=1, npass=1 )
 
@@ -220,9 +220,7 @@ class parameter_tests( unittest.TestCase ):
             vrun.assertCounts( total=3, npass=3 )
 
             assert len( glob.glob( 'TestResults*/basic.isize=*' ) ) == 2
-            fL = glob.glob( 'TestResults*/basic' )
-            assert len( fL ) == 1
-            basic_dir = fL[0]
+            basic_dir = util.globfile( 'TestResults*/basic' )
 
             vrun = util.runvvtest( "-R", batch=batch, chdir=basic_dir )
             vrun.assertCounts( total=1, npass=1 )
