@@ -16,6 +16,7 @@ import time
 import subprocess
 import unittest
 import shutil
+from glob import glob
 
 import testutils as util
 from testutils import print3
@@ -31,65 +32,56 @@ class rundir_usage( unittest.TestCase ):
         write_unit_test_files()
         time.sleep(1)
 
-        self.using_rundir_option( '' )
-        self.using_rundir_option(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def using_rundir_option(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        if os.path.exists( 'myrundir' ):
-            shutil.rmtree( 'myrundir' )
+            if os.path.exists( 'myrundir' ):
+                shutil.rmtree( 'myrundir' )
 
-        vrun = util.vvtestRunner( opt+' --run-dir myrundir' )
-        assert vrun.num_pass == 2
+            vrun = util.runvvtest( '--run-dir myrundir', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
-        assert len( glob.glob( 'TestResults*' ) ) == 0
-        assert os.path.isdir( 'myrundir' )
-        logL = glob.glob( 'myrundir/test*/execute.log' )
-        assert len(logL) == 2
+            assert len( glob( 'TestResults*' ) ) == 0
+            assert os.path.isdir( 'myrundir' )
+            logL = glob( 'myrundir/test*/execute.log' )
+            assert len(logL) == 2
 
     def test_using_rundir_option_and_M_option(self):
         ""
-        self.using_rundir_option_and_M_option( '' )
-        self.using_rundir_option_and_M_option(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def using_rundir_option_and_M_option(self, opt):
-        ""
-        util.rmallfiles()
-        write_unit_test_files()
-        os.mkdir( 'mymirror' )
-        time.sleep(1)
+            util.rmallfiles()
 
-        cwd = os.getcwd()
-        vrun = util.vvtestRunner( opt+' --run-dir myrundir ' + \
-                                      '-M '+cwd+'/mymirror' )
-        assert vrun.num_pass == 2
+            write_unit_test_files()
+            os.mkdir( 'mymirror' )
+            time.sleep(1)
 
-        assert len( glob.glob( 'TestResults*' ) ) == 0
+            mymir = os.path.abspath( 'mymirror' )
+            vrun = util.runvvtest( '--run-dir myrundir -M '+mymir, batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
-        assert os.path.islink( 'myrundir' )
-        lnk = os.readlink( 'myrundir' )
-        assert os.path.exists( lnk )
-        assert os.path.samefile( lnk, 'mymirror/myrundir' )
+            assert len( glob( 'TestResults*' ) ) == 0
 
-        logL = glob.glob( 'mymirror/myrundir/test*/execute.log' )
-        assert len(logL) == 2
+            assert os.path.islink( 'myrundir' )
+            lnk = os.readlink( 'myrundir' )
+            assert os.path.exists( lnk )
+            assert os.path.samefile( lnk, 'mymirror/myrundir' )
 
-        logL = glob.glob( 'myrundir/test*/execute.log' )
-        assert len(logL) == 2
+            logL = glob( 'mymirror/myrundir/test*/execute.log' )
+            assert len(logL) == 2
+
+            logL = glob( 'myrundir/test*/execute.log' )
+            assert len(logL) == 2
 
     def test_rundir_can_only_be_a_single_word(self):
         ""
-        util.rmallfiles()
         write_unit_test_files()
         time.sleep(1)
 
-        self.assertRaises( Exception, util.vvtestRunner, '--run-dir foo/bar' )
-        self.assertRaises( Exception, util.vvtestRunner,
-            '--run-dir '+os.path.abspath('myrundir') )
+        self.assertRaises( Exception, util.runvvtest, '--run-dir foo/bar' )
+        self.assertRaises( Exception, util.runvvtest,
+                           '--run-dir '+os.path.abspath('myrundir') )
 
 
 def write_unit_test_files():

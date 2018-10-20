@@ -32,7 +32,6 @@ class test_arguments( unittest.TestCase ):
                 echo "script args $argv"
               </execute>
             </rtest>""" )
-
         util.writescript( 'btest.vvt', """
             #!/usr/bin/env python
             #VVT: parameterize : planet=earth mars
@@ -49,32 +48,23 @@ class test_arguments( unittest.TestCase ):
 
             vrun = util.runvvtest( testargs, batch=batch )
             vrun.assertCounts( total=4, npass=4 )
+            assert vrun.getTestIds() == [ 'atest.nx=1',
+                                          'atest.nx=4',
+                                          'btest.planet=earth',
+                                          'btest.planet=mars' ]
 
-            assert vrun.countTestLines( 'pass.*atest\.nx=1' ) == 1
-            assert vrun.countTestLines( 'pass.*atest\.nx=4' ) == 1
-            assert vrun.countTestLines( 'pass.*btest\.planet=earth' ) == 1
-            assert vrun.countTestLines( 'pass.*btest\.planet=mars' ) == 1
+            assert vrun.countGrepLogs( 'script args *--dummy *foo' ) == 4
 
             tdir = vrun.resultsDir()
-            logL = glob.glob( tdir+'/*test.*/execute.log' )
-            assert len(logL) == 4
-            self.assert_test_args_are_in_log_files( logL )
 
             vrun = util.runvvtest( testargs, '-R -p nx=4/planet=earth',
                                    batch=batch, chdir=tdir )
             vrun.assertCounts( total=2, npass=2 )
 
-            assert vrun.countTestLines( 'pass.*atest\.nx=4' ) == 1
-            assert vrun.countTestLines( 'pass.*btest\.planet=earth' ) == 1
-            self.assert_test_args_are_in_log_files( logL )
+            assert vrun.getTestIds() == [ 'atest.nx=4',
+                                          'btest.planet=earth' ]
 
-    def assert_test_args_are_in_log_files(self, logfiles):
-        ""
-        for log in logfiles:
-            lineL = util.filegrep( log, 'script args' )
-            assert len(lineL) == 1
-            assert '--dummy' in lineL[0].split()
-            assert 'foo' in lineL[0].split()
+            assert vrun.countGrepLogs( 'script args *--dummy *foo' ) == 4
 
 
 ########################################################################

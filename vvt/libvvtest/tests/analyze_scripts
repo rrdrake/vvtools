@@ -38,23 +38,20 @@ class parameterize_analyze_script_specs( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.run_simple_use_case( '' )
-        self.run_simple_use_case(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_simple_use_case(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
 
-        assert len( glob.glob( tdir+'/ana*/execute.log' ) ) == 3
-        assert len( util.filegrep( tdir+'/ana.V=a/execute.log', 'running execute' ) ) == 1
-        assert len( util.filegrep( tdir+'/ana.V=b/execute.log', 'running execute' ) ) == 1
-        assert len( util.filegrep( tdir+'/ana/execute.log', 'running analyze' ) ) == 1
+            assert len( glob.glob( 'TestResults.*/ana*/execute.log' ) ) == 3
+            assert len( util.grepfiles( 'running execute',
+                        'TestResults.*/ana.V=a/execute.log' ) ) == 1
+            assert len( util.grepfiles( 'running execute',
+                        'TestResults.*/ana.V=b/execute.log' ) ) == 1
+            assert len( util.grepfiles( 'running analyze',
+                        'TestResults.*/ana/execute.log' ) ) == 1
 
     def test_analyze_with_only_one_parameterize_value(self):
         ""
@@ -71,22 +68,18 @@ class parameterize_analyze_script_specs( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.run_analyze_with_only_one_parameterize_value( '' )
-        self.run_analyze_with_only_one_parameterize_value(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_analyze_with_only_one_parameterize_value(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
-        assert len( glob.glob( tdir+'/ana*/execute.log' ) ) == 2
-        assert len( util.filegrep( tdir+'/ana.V=a/execute.log', 'running execute' ) ) == 1
-        assert len( util.filegrep( tdir+'/ana/execute.log', 'running analyze' ) ) == 1
+            assert len( glob.glob( 'TestResults.*/ana*/execute.log' ) ) == 2
+            assert len( util.grepfiles( 'running execute',
+                        'TestResults.*/ana.V=a/execute.log' ) ) == 1
+            assert len( util.grepfiles( 'running analyze',
+                        'TestResults.*/ana/execute.log' ) ) == 1
 
     def test_analyze_is_a_separate_script(self):
         ""    
@@ -106,26 +99,26 @@ class parameterize_analyze_script_specs( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.run_analyze_is_a_separate_script( '' )
-        self.run_analyze_is_a_separate_script(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_analyze_is_a_separate_script(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
 
-        assert len( glob.glob( tdir+'/ana*/execute.log' ) ) == 3
-        assert len( util.filegrep( tdir+'/ana.V=a/execute.log', 'running execute' ) ) == 1
-        assert len( util.filegrep( tdir+'/ana.V=a/execute.log', 'param a' ) ) == 1
-        assert len( util.filegrep( tdir+'/ana.V=b/execute.log', 'running execute' ) ) == 1
-        assert len( util.filegrep( tdir+'/ana.V=b/execute.log', 'param b' ) ) == 1
-        assert len( util.filegrep( tdir+'/ana/execute.log', 'running analyze' ) ) == 1
-        assert len( util.filegrep( tdir+'/ana/execute.log', 'params a b' ) ) == 1
+            assert len( glob.glob( 'TestResults.*/ana*/execute.log' ) ) == 3
+            assert len( util.grepfiles( 'running execute',
+                        'TestResults.*/ana.V=a/execute.log' ) ) == 1
+            assert len( util.grepfiles( 'param a',
+                        'TestResults.*/ana.V=a/execute.log' ) ) == 1
+            assert len( util.grepfiles( 'running execute',
+                        'TestResults.*/ana.V=b/execute.log' ) ) == 1
+            assert len( util.grepfiles( 'param b',
+                        'TestResults.*/ana.V=b/execute.log' ) ) == 1
+            assert len( util.grepfiles( 'running analyze',
+                        'TestResults.*/ana/execute.log' ) ) == 1
+            assert len( util.grepfiles( 'params a b',
+                        'TestResults.*/ana/execute.log' ) ) == 1
 
     def test_non_executable_analyze_file_should_be_run_using_python(self):
         ""    
@@ -143,23 +136,20 @@ class parameterize_analyze_script_specs( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.non_executable_analyze_file_should_be_run_using_python( '' )
-        self.non_executable_analyze_file_should_be_run_using_python(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def non_executable_analyze_file_should_be_run_using_python(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
-        
-        assert len( glob.glob( tdir+'/ana*/execute.log' ) ) == 3
-        assert len( util.filegrep( tdir+'/ana.V=a/execute.log', 'running py execute' ) ) == 1
-        assert len( util.filegrep( tdir+'/ana.V=b/execute.log', 'running py execute' ) ) == 1
-        assert len( util.filegrep( tdir+'/ana/execute.log', 'running py analyze' ) ) == 1
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
+
+            assert len( glob.glob( 'TestResults.*/ana*/execute.log' ) ) == 3
+            assert len( util.grepfiles( 'running py execute',
+                        'TestResults.*/ana.V=a/execute.log' ) ) == 1
+            assert len( util.grepfiles( 'running py execute',
+                        'TestResults.*/ana.V=b/execute.log' ) ) == 1
+            assert len( util.grepfiles( 'running py analyze',
+                        'TestResults.*/ana/execute.log' ) ) == 1
 
     def test_parameterize_values_get_filtered_out(self):
         """
@@ -178,26 +168,21 @@ class parameterize_analyze_script_specs( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.run_parameterize_values_get_filtered_out( [] )
-        self.run_parameterize_values_get_filtered_out(
-                ['--plat',util.core_platform_name(),'--batch'] )
+        for batch in [False,True]:
 
-    def run_parameterize_values_get_filtered_out(self, optL):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        ok,out = util.run_cmd( [util.vvtest]+optL+['-p','V<b or !V'] )
-        assert ok
-        np,nd = util.numpass(out),util.numdiff(out)
-        nf,nn = util.numfail(out),util.numnotrun(out)
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( '-p "V<b or !V"', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
-        assert len( glob.glob( tdir+'/scr*/execute.log' ) ) == 2
-        assert len( util.filegrep( tdir+'/scr.V=a/execute.log', 'running execute' ) ) == 1
-        assert not os.path.exists( tdir+'/scr.V=b/execute.log' )
-        assert len( util.filegrep( tdir+'/scr/execute.log', 'running analyze' ) ) == 1
+            assert len( glob.glob( 'TestResults.*/scr*/execute.log' ) ) == 2
+            assert len( util.grepfiles( 'running execute',
+                        'TestResults.*/scr.V=a/execute.log' ) ) == 1
+            assert len( util.grepfiles( 'running execute',
+                        'TestResults.*/scr.V=a/execute.log' ) ) == 1
+            assert len( glob.glob( 'TestResults.*/scr.V=b/execute.log' ) ) == 0
+            assert len( util.grepfiles( 'running analyze',
+                        'TestResults.*/scr/execute.log' ) ) == 1
 
     def test_using_analyze_command_line_option(self):
         """
@@ -239,49 +224,43 @@ class parameterize_analyze_script_specs( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.run_using_analyze_command_line_option( '' )
-        self.run_using_analyze_command_line_option(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_using_analyze_command_line_option(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
-        
-        for tname in ['pytest','shtest']:
-            assert len( util.filegrep( tdir+'/'+tname+'.ival=1/execute.log',
-                                       'running touch' ) ) == 1
-            assert len( util.filegrep( tdir+'/'+tname+'.ival=1/execute.log',
-                                       'running execute' ) ) == 1
-            assert len( util.filegrep( tdir+'/'+tname+'.ival=2/execute.log',
-                                       'running touch' ) ) == 1
-            assert len( util.filegrep( tdir+'/'+tname+'.ival=2/execute.log',
-                                       'running execute' ) ) == 1
-            assert len( util.filegrep( tdir+'/'+tname+'/execute.log',
-                                       'running analyze' ) ) == 1
-            assert len( util.filegrep( tdir+'/'+tname+'/execute.log',
-                                       'running touch' ) ) == 0
-        
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -Ra' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-        
-        for tname in ['pytest','shtest']:
-            assert len( util.filegrep( tdir+'/'+tname+'.ival=1/execute.log',
-                                       'running touch' ) ) == 0
-            assert len( util.filegrep( tdir+'/'+tname+'.ival=1/execute.log',
-                                       'running execute' ) ) == 1
-            assert len( util.filegrep( tdir+'/'+tname+'.ival=2/execute.log',
-                                       'running touch' ) ) == 0
-            assert len( util.filegrep( tdir+'/'+tname+'.ival=2/execute.log',
-                                       'running execute' ) ) == 1
-            assert len( util.filegrep( tdir+'/'+tname+'/execute.log',
-                                       'running analyze' ) ) == 1
-            assert len( util.filegrep( tdir+'/'+tname+'/execute.log',
-                                       'running touch' ) ) == 0
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
+
+            for tname in ['pytest','shtest']:
+                assert len( util.grepfiles( 'running touch',
+                    'TestResults.*/'+tname+'.ival=1/execute.log' ) ) == 1
+                assert len( util.grepfiles( 'running execute',
+                    'TestResults.*/'+tname+'.ival=1/execute.log' ) ) == 1
+                assert len( util.grepfiles( 'running touch',
+                    'TestResults.*/'+tname+'.ival=2/execute.log' ) ) == 1
+                assert len( util.grepfiles( 'running execute',
+                    'TestResults.*/'+tname+'.ival=2/execute.log' ) ) == 1
+                assert len( util.grepfiles( 'running analyze',
+                    'TestResults.*/'+tname+'/execute.log' ) ) == 1
+                assert len( util.grepfiles( 'running touch',
+                    'TestResults.*/'+tname+'/execute.log' ) ) == 0
+
+            vrun = util.runvvtest( '-Ra', batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
+
+            for tname in ['pytest','shtest']:
+                assert len( util.grepfiles( 'running touch',
+                    'TestResults.*/'+tname+'.ival=1/execute.log' ) ) == 0
+                assert len( util.grepfiles( 'running execute',
+                    'TestResults.*/'+tname+'.ival=1/execute.log' ) ) == 1
+                assert len( util.grepfiles( 'running touch',
+                    'TestResults.*/'+tname+'.ival=2/execute.log' ) ) == 0
+                assert len( util.grepfiles( 'running execute',
+                    'TestResults.*/'+tname+'.ival=2/execute.log' ) ) == 1
+                assert len( util.grepfiles( 'running analyze',
+                    'TestResults.*/'+tname+'/execute.log' ) ) == 1
+                assert len( util.grepfiles( 'running touch',
+                    'TestResults.*/'+tname+'/execute.log' ) ) == 0
 
 
 ########################################################################

@@ -11,7 +11,7 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
-import glob
+from glob import glob
 import unittest
 
 import testutils as util
@@ -42,23 +42,17 @@ class runtimes_and_tmin_tmax( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        util.runvvtest().assertCounts( total=3, npass=3 )
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        util.runvvtest( '-i' ).assertCounts( total=3, npass=3 )
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i --tmax 6' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist( out, 'AA' ) ) == 1
-        assert len( util.greptestlist( out, 'BB' ) ) == 1
-        assert len( util.greptestlist( out, 'CC' ) ) == 0
+        vrun = util.runvvtest( '-i --tmax 6' )
+        vrun.assertCounts( total=2, npass=2 )
+        assert vrun.getTestIds() == [ 'AA', 'BB' ]
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i --tmin 3' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist( out, 'AA' ) ) == 0
-        assert len( util.greptestlist( out, 'BB' ) ) == 1
-        assert len( util.greptestlist( out, 'CC' ) ) == 1
+        vrun = util.runvvtest( '-i --tmin 3' )
+        vrun.assertCounts( total=2, npass=2 )
+        assert vrun.getTestIds() == [ 'BB', 'CC' ]
 
     def test_if_tmax_filtered_out_a_test_then_its_not_rerun(self):
         ""
@@ -77,55 +71,44 @@ class runtimes_and_tmin_tmax( unittest.TestCase ):
             import os, sys, time
             time.sleep(7)
             """ )
+        time.sleep(1)
 
-        platname = self.run_if_tmax_filtered_out_a_test_then_its_not_rerun( '' )
-        if platname in util.nonqueued_platform_names:
-            self.run_if_tmax_filtered_out_a_test_then_its_not_rerun( '--batch' )
+        for batch in [False,True]:
 
-    def run_if_tmax_filtered_out_a_test_then_its_not_rerun(self, opt):
-        ""
-        util.remove_results()
-        if os.path.exists( 'timings' ):
-            os.remove( 'timings' )
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' tests' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+            if os.path.exists( 'timings' ):
+                os.remove( 'timings' )
 
-        tdir = os.path.abspath( util.results_dir() )
-        platname = util.platform_name(out)
+            vrun = util.runvvtest( 'tests', batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
+            tdir = vrun.resultsDir()
 
-        # create a timings file
-        util.run_cmd( util.resultspy + ' save', directory='tests' )
-        util.run_vvtest( '--plat '+platname+' -i --save-results', directory=tdir )
-        resultsfname = glob.glob('results.*')[0]
-        ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
-        assert ok
+            # create a timings file
+            util.run_cmd( util.resultspy + ' save', directory='tests' )
+            util.runvvtest( '-i --save-results', chdir=tdir )
+            resultsfname = glob('results.*')[0]
+            ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
+            assert ok
 
-        # select tests based on the timings file
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' --tmax 6 tests' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = util.testlist( out )
-        assert len(L) == 2
-        assert L[0][0] == 'AA'
-        assert L[1][0] == 'BB'
+            util.remove_results()
 
-        # the --tmax 6 above filtered out test CC, which means test CC should
-        # not be in the TestResults test list;  check this by running vvtest
-        # inside the TestResults directory (test CC should never be run)
+            # select tests based on the timings file
+            vrun = util.runvvtest( '--tmax 6 tests', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
+            assert vrun.getTestIds() == [ 'AA', 'BB' ]
 
-        out,np,nd,nf,nn = util.run_vvtest( opt, directory=tdir )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+            # the --tmax 6 above filtered out test CC, which means test CC should
+            # not be in the TestResults test list;  check this by running vvtest
+            # inside the TestResults directory (test CC should never be run)
 
-        # if we force tests to rerun, only 2 should be run
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R', directory=tdir )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = util.testlist( out )
-        assert len(L) == 2
-        assert L[0][0] == 'AA'
-        assert L[1][0] == 'BB'
+            vrun = util.runvvtest( batch=batch, chdir=tdir )
+            vrun.assertCounts( total=0 )
 
-        return platname
+            # if we force tests to rerun, only 2 should be run
+            vrun = util.runvvtest( '-R', batch=batch, chdir=tdir )
+            vrun.assertCounts( total=2, npass=2 )
+            assert vrun.getTestIds() == [ 'AA', 'BB' ]
 
     def test_that_tmin_tmax_work_with_execute_analyze_tests(self):
         """
@@ -157,48 +140,39 @@ class runtimes_and_tmin_tmax( unittest.TestCase ):
             import os, sys, time
             time.sleep(7)
             """ )
+        time.sleep(1)
 
-        platname = self.run_that_tmin_tmax_work_with_execute_analyze_tests( '' )
-        if platname in util.nonqueued_platform_names:
-            self.run_that_tmin_tmax_work_with_execute_analyze_tests( '--batch' )
+        for batch in [False,True]:
 
-    def run_that_tmin_tmax_work_with_execute_analyze_tests(self, opt):
-        ""
-        util.remove_results()
-        if os.path.exists( 'timings' ):
-            os.remove( 'timings' )
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' tests' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+            if os.path.exists( 'timings' ):
+                os.remove( 'timings' )
 
-        tdir = os.path.abspath( util.results_dir() )
-        platname = util.platform_name(out)
+            vrun = util.runvvtest( 'tests', batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
+            tdir = vrun.resultsDir()
 
-        # create a timings file
-        util.run_cmd( util.resultspy + ' save', directory='tests' )
-        util.run_vvtest( '-i --save-results', directory=tdir )
-        resultsfname = glob.glob('results.*')[0]
-        ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
-        assert ok
+            # create a timings file
+            util.run_cmd( util.resultspy + ' save', directory='tests' )
+            util.runvvtest( '-i --save-results', chdir=tdir )
+            resultsfname = glob('results.*')[0]
+            ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
+            assert ok
 
-        # none of the execute/analyze tests should have been selected
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' --tmax 6 tests' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        L = util.testlist( out )
-        assert len(L) == 1
-        assert L[0][-1].endswith( os.sep+'AA' )
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt, directory=tdir )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+            # none of the execute/analyze tests should have been selected
+            vrun = util.runvvtest( '--tmax 6 tests', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+            assert vrun.getTestIds() == [ 'AA' ]
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R', directory=tdir )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        L = util.testlist( out )
-        assert len(L) == 1
-        assert L[0][-1] == 'AA'
+            vrun = util.runvvtest( batch=batch, chdir=tdir )
+            vrun.assertCounts( total=0 )
 
-        return platname
+            vrun = util.runvvtest( '-R', batch=batch, chdir=tdir )
+            vrun.assertCounts( total=1, npass=1 )
+            assert vrun.getTestIds() == [ 'AA' ]
 
     def test_using_tmin_tmax_wont_destroy_previous_results(self):
         """
@@ -232,36 +206,28 @@ class runtimes_and_tmin_tmax( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.run_using_tmin_tmax_wont_destroy_previous_results( '' )
-        self.run_using_tmin_tmax_wont_destroy_previous_results(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_using_tmin_tmax_wont_destroy_previous_results(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' tests' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( 'tests', batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
+            tdir = vrun.resultsDir()
 
-        tdir = os.path.abspath( util.results_dir() )
-        platname = util.platform_name(out)
+            vrun = util.runvvtest( '--tmin 3 tests', batch=batch )
+            vrun.assertCounts( total=0 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' --tmin 3 tests' )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+            # check that the test list in TestResults.* directory is intact
+            vrun = util.runvvtest( '-i', chdir=tdir )
+            vrun.assertCounts( total=6, npass=6 )
 
-        # check that the test list in TestResults.* directory is intact
-        out,np,nd,nf,nn = util.run_vvtest( '--plat '+platname+' -i', directory=tdir )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-R --tmin 3 tests', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+            assert vrun.getTestIds() == [ 'CC' ]
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R --tmin 3 tests' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        L = util.testlist( out )
-        assert len(L) == 1
-        assert L[0][-1].endswith( os.sep+'CC' )
-
-        # check that the test list in TestResults.* directory has old results
-        out,np,nd,nf,nn = util.run_vvtest( '--plat '+platname+' -i', directory=tdir )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+            # check that the test list in TestResults.* directory has old results
+            vrun = util.runvvtest( '-i', chdir=tdir )
+            vrun.assertCounts( total=6, npass=6 )
 
 
 ########################################################################

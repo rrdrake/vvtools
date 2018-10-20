@@ -36,29 +36,24 @@ class The_max_timeout_option( unittest.TestCase ):
             import script_util as vvt
             time.sleep(8)
             """ )
-
         time.sleep(1)
 
-        self.run_filter_out_tests_based_on_their_timeout( '' )
-        self.run_filter_out_tests_based_on_their_timeout(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_filter_out_tests_based_on_their_timeout(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -T 30' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-T 30', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' --max-timeout 6' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert util.numtimeout(out) == 1
+            util.remove_results()
 
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -T 30 --max-timeout 6' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert util.numtimeout(out) == 1
+            vrun = util.runvvtest( '--max-timeout 6', batch=batch )
+            vrun.assertCounts( total=2, npass=1, timeout=1 )
+
+            util.remove_results()
+
+            vrun = util.runvvtest( '-T 30 --max-timeout 6', batch=batch )
+            vrun.assertCounts( total=2, npass=1, timeout=1 )
 
 
 ########################################################################

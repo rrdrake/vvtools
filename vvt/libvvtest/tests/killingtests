@@ -47,12 +47,11 @@ class Timeout_when_baselining( unittest.TestCase ):
 
         os.environ['VVTEST_BASELINE_TIMEOUT'] = '3'
 
-        vrun = util.vvtestRunner()
-        assert vrun.num_pass == 0 and vrun.num_diff == 1
+        util.runvvtest().assertCounts( total=1, diff=1 )
 
         t0 = time.time()
 
-        vrun = util.vvtestRunner( '-b' )
+        vrun = util.runvvtest( '-b' )
 
         assert 'TIMED OUT' in vrun.out
         assert time.time() - t0 < 8
@@ -252,22 +251,17 @@ class integration_signalling_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.vvtestRunner( '-T 2' )
-        assert vrun.num_pass == 0
-        assert vrun.num_timeout == 1
+        vrun = util.runvvtest( '-T 2' )
+        vrun.assertCounts( total=1, timeout=1 )
 
         time.sleep(11)
 
-        t1 = os.path.join( vrun.testdir, 'script', 'touch1.txt' )
-        assert os.path.exists( t1 )
+        assert len( util.findfiles( 'touch1.txt', 'TestResults*' ) ) == 1
+        assert len( util.findfiles( 'touch2.txt', 'TestResults*' ) ) == 0
 
-        t2 = os.path.join( vrun.testdir, 'script', 'touch2.txt' )
-        assert not os.path.exists( t2 )
-
-        timeL = util.testtimes( vrun.out )
-        assert len( timeL ) == 1
-        xdir,t0,t1 = timeL[0]
-        assert t1-t0 < 5
+        ts = vrun.grepTestLines( 'script' )[0].split()[3]
+        tm = int( ts[:-1] )
+        assert tm < 5
 
 
 ############################################################################

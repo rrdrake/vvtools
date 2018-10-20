@@ -42,23 +42,16 @@ class Parse_Dependencies( unittest.TestCase ):
         nofltr = RuntimeConfig()
 
         tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
-
         assert len(tL) == 1
-        assert len( tL[0].getDependencies() ) == 1
-        name,wx = tL[0].getDependencies()[0]
-        assert name == 'testY'
-        assert wx == None
+        assert_dependencies( tL[0], 'testY' )
+        assert get_depencency_expr( tL[0], 'testY' ) == None
 
         tL = creator.createTestObjects( '.', 'testA.py.vvt', None, nofltr )
-
         assert len(tL) == 1
-        assert len( tL[0].getDependencies() ) == 2
-        nameL = []
-        for name,wx in tL[0].getDependencies():
-            nameL.append( name )
-            assert wx == None
-        nameL.sort()
-        assert nameL == [ 'testB', 'testC' ]
+
+        assert_dependencies( tL[0], 'testC', 'testB' )
+        assert get_depencency_expr( tL[0], 'testC' ) == None
+        assert get_depencency_expr( tL[0], 'testB' ) == None
 
     def test_result_attribute_with_dependency(self):
         ""
@@ -73,24 +66,22 @@ class Parse_Dependencies( unittest.TestCase ):
         nofltr = RuntimeConfig()
 
         tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
-
         assert len(tL) == 1
-        assert len( tL[0].getDependencies() ) == 2
-        nameL = []
-        for name,wx in tL[0].getDependencies():
-            nameL.append( name )
+
+        assert_dependencies( tL[0], 'testY', 'testZ' )
+
+        for wx in [ get_depencency_expr( tL[0], 'testY' ),
+                    get_depencency_expr( tL[0], 'testZ' ) ]:
             assert not wx.evaluate( lambda word: word == "pass" )
             assert not wx.evaluate( lambda word: word == "diff" )
             assert wx.evaluate( lambda word: word == "fail" )
-        nameL.sort()
-        assert nameL == [ 'testY', 'testZ' ]
 
         tL = creator.createTestObjects( '.', 'testA.py.vvt', None, nofltr )
-
         assert len(tL) == 1
-        assert len( tL[0].getDependencies() ) == 1
-        name,wx = tL[0].getDependencies()[0]
-        assert name == 'testB'
+
+        assert_dependencies( tL[0], 'testB' )
+
+        wx = get_depencency_expr( tL[0], 'testB' )
         assert not wx.evaluate( lambda word: word == "pass" )
         assert wx.evaluate( lambda word: word == "diff" )
         assert wx.evaluate( lambda word: word == "fail" )
@@ -105,17 +96,14 @@ class Parse_Dependencies( unittest.TestCase ):
         nofltr = RuntimeConfig()
 
         tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
-
         assert len(tL) == 1
-        assert len( tL[0].getDependencies() ) == 2
-        nameL = []
-        for name,wx in tL[0].getDependencies():
-            nameL.append( name )
+
+        assert_dependencies( tL[0], 'testY', 'testZ' )
+        for wx in [ get_depencency_expr( tL[0], 'testY' ),
+                    get_depencency_expr( tL[0], 'testZ' ) ]:
             assert wx.evaluate( lambda word: word == "pass" )
             assert wx.evaluate( lambda word: word == "diff" )
             assert wx.evaluate( lambda word: word == "fail" )
-        nameL.sort()
-        assert nameL == [ 'testY', 'testZ' ]
 
     def test_multiple_dependency_specifications(self):
         ""
@@ -129,24 +117,22 @@ class Parse_Dependencies( unittest.TestCase ):
         nofltr = RuntimeConfig()
 
         tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
-
         assert len(tL) == 1
-        assert len( tL[0].getDependencies() ) == 4
-        nameL = []
-        for name,wx in tL[0].getDependencies():
-            nameL.append( name )
-            if name == 'testY' or name == 'testZ':
-                assert not wx.evaluate( lambda word: word == "pass" )
-                assert not wx.evaluate( lambda word: word == "diff" )
-                assert wx.evaluate( lambda word: word == "fail" )
-            elif name == 'testB':
-                assert not wx.evaluate( lambda word: word == "pass" )
-                assert wx.evaluate( lambda word: word == "diff" )
-                assert wx.evaluate( lambda word: word == "fail" )
-            elif name == 'testW':
-                assert wx == None
-        nameL.sort()
-        assert nameL == [ 'testB', 'testW', 'testY', 'testZ' ]
+
+        assert_dependencies( tL[0], 'testB', 'testW', 'testY', 'testZ' )
+
+        wx = get_depencency_expr( tL[0], 'testB' )
+        assert not wx.evaluate( lambda word: word == "pass" )
+        assert wx.evaluate( lambda word: word == "diff" )
+        assert wx.evaluate( lambda word: word == "fail" )
+
+        for wx in [ get_depencency_expr( tL[0], 'testY' ),
+                    get_depencency_expr( tL[0], 'testZ' ) ]:
+            assert not wx.evaluate( lambda word: word == "pass" )
+            assert not wx.evaluate( lambda word: word == "diff" )
+            assert wx.evaluate( lambda word: word == "fail" )
+
+        assert get_depencency_expr( tL[0], 'testW' ) == None
 
     def test_using_filter_attributes(self):
         ""
@@ -159,11 +145,11 @@ class Parse_Dependencies( unittest.TestCase ):
         fltr = RuntimeConfig( platform_name='XBox' )
 
         tL = creator.createTestObjects( '.', 'testX.py.vvt', None, fltr )
-
         assert len(tL) == 1
-        assert len( tL[0].getDependencies() ) == 1
-        name,wx = tL[0].getDependencies()[0]
-        assert name == 'testY'
+
+        assert_dependencies( tL[0], 'testY' )
+
+        wx = get_depencency_expr( tL[0], 'testY' )
         assert not wx.evaluate( lambda word: word == "pass" )
         assert not wx.evaluate( lambda word: word == "diff" )
         assert wx.evaluate( lambda word: word == "fail" )
@@ -171,12 +157,35 @@ class Parse_Dependencies( unittest.TestCase ):
         fltr = RuntimeConfig( platform_name='PlayStation' )
 
         tL = creator.createTestObjects( '.', 'testX.py.vvt', None, fltr )
-
         assert len(tL) == 1
-        assert len( tL[0].getDependencies() ) == 1
-        name,wx = tL[0].getDependencies()[0]
-        assert name == 'testZ'
-        assert wx == None
+
+        assert_dependencies( tL[0], 'testZ' )
+
+        assert get_depencency_expr( tL[0], 'testZ' ) == None
+
+
+def assert_dependencies( tspec, *check_names ):
+    ""
+    depL = tspec.getDependencies()
+
+    nameL = []
+    for name,expr in depL:
+        nameL.append( name )
+    nameL.sort()
+
+    checkL = list( check_names )
+    checkL.sort()
+
+    assert nameL == checkL
+
+
+def get_depencency_expr( tspec, dep_name ):
+    ""
+    for name,expr in tspec.getDependencies():
+        if name == dep_name:
+            return expr
+
+    raise Exception( 'could not find dependency name: ' + dep_name )
 
 
 #######################################

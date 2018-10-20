@@ -37,10 +37,6 @@ class tdd_tests( unittest.TestCase ):
         ""
         util.setup_test()
 
-        # force the results files to be written locally for testing here;
-        # it is used in vvtest when handling the --save-results option
-        os.environ['TESTING_DIRECTORY'] = os.getcwd()
-
     def test_that_tests_marked_TDD_are_skipped_by_default(self):
         ""
         util.writefile( "testone.xml", """
@@ -65,82 +61,62 @@ class tdd_tests( unittest.TestCase ):
             import time
             time.sleep(1)
             """ )
+        time.sleep(1)
 
         # by default, tests with TDD in keywords should not run
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
-        platname = util.platform_name( out )
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=2, npass=2 )
+        assert vrun.getTestIds() == [ 'testthree', 'testtwo' ]
 
-        assert len( util.grep( out, 'testtwo' ) ) > 0
-        assert len( util.grep( out, 'testthree' ) ) > 0
-        assert len( util.grep( out, 'testone' ) ) == 0
-        assert len( util.grep( out, 'testfour' ) ) == 0
+        tdir = vrun.resultsDir()
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.grep( out, 'testtwo' ) ) > 0
-        assert len( util.grep( out, 'testthree' ) ) > 0
-        assert len( util.grep( out, 'testone' ) ) == 0
-        assert len( util.grep( out, 'testfour' ) ) == 0
+        vrun = util.runvvtest( '-i' )
+        vrun.assertCounts( total=2, npass=2 )
+        assert vrun.getTestIds() == [ 'testthree', 'testtwo' ]
 
-        cwd = os.getcwd()
-        os.chdir( tdir )
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.grep( out, 'testtwo' ) ) > 0
-        assert len( util.grep( out, 'testthree' ) ) > 0
-        assert len( util.grep( out, 'testone' ) ) == 0
-        assert len( util.grep( out, 'testfour' ) ) == 0
-        os.chdir( cwd )
+        vrun = util.runvvtest( '-i', chdir=tdir )
+        vrun.assertCounts( total=2, npass=2 )
+        assert vrun.getTestIds() == [ 'testthree', 'testtwo' ]
 
         util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest(
-            '--plat '+util.core_platform_name()+' --batch' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
 
-        os.chdir( tdir )
-        out,np,nd,nf,nn = util.run_vvtest( '-R' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.grep( out, 'testtwo' ) ) > 0
-        assert len( util.grep( out, 'testthree' ) ) > 0
-        assert len( util.grep( out, 'testone' ) ) == 0
-        assert len( util.grep( out, 'testfour' ) ) == 0
+        vrun = util.runvvtest( batch=True )
+        vrun.assertCounts( total=2, npass=2 )
+
+        vrun = util.runvvtest( '-R', chdir=tdir )
+        vrun.assertCounts( total=2, npass=2 )
+        assert vrun.getTestIds() == [ 'testthree', 'testtwo' ]
+
+        util.remove_results()
 
         # the --include-tdd option means run the tests with TDD
 
-        os.chdir( cwd )
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( '--include-tdd' )
-        tdir = os.path.abspath( util.results_dir() )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.grep( out, 'testtwo' ) ) > 0
-        assert len( util.grep( out, 'testthree' ) ) > 0
-        assert len( util.grep( out, 'testone' ) ) > 0
-        assert len( util.grep( out, 'testfour' ) ) > 0
+        vrun = util.runvvtest( '--include-tdd' )
+        vrun.assertCounts( total=4, npass=4 )
+        assert vrun.getTestIds() == [ 'testfour',
+                                      'testone',
+                                      'testthree',
+                                      'testtwo' ]
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.grep( out, 'testtwo' ) ) > 0
-        assert len( util.grep( out, 'testthree' ) ) > 0
-        assert len( util.grep( out, 'testone' ) ) > 0
-        assert len( util.grep( out, 'testfour' ) ) > 0
+        vrun = util.runvvtest( '-i' )
+        vrun.assertCounts( total=4, npass=4 )
+        assert vrun.getTestIds() == [ 'testfour',
+                                      'testone',
+                                      'testthree',
+                                      'testtwo' ]
 
-        os.chdir( tdir )
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.grep( out, 'testtwo' ) ) > 0
-        assert len( util.grep( out, 'testthree' ) ) > 0
-        assert len( util.grep( out, 'testone' ) ) > 0
-        assert len( util.grep( out, 'testfour' ) ) > 0
-        os.chdir( cwd )
+        vrun = util.runvvtest( '-i', chdir=tdir )
+        vrun.assertCounts( total=4, npass=4 )
+        assert vrun.getTestIds() == [ 'testfour',
+                                      'testone',
+                                      'testthree',
+                                      'testtwo' ]
 
         util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( '--plat '+util.core_platform_name() + \
-                                      ' --batch --include-tdd' )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+
+        vrun = util.runvvtest( '--include-tdd', batch=True )
+        vrun.assertCounts( total=4, npass=4 )
 
     def test_that_tests_marked_TDD_carry_the_mark_to_the_test_results_file(self):
         ""
@@ -166,25 +142,25 @@ class tdd_tests( unittest.TestCase ):
             import time
             time.sleep(1)
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( '--include-tdd' )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest( '--include-tdd' )
+        vrun.assertCounts( total=4, npass=4 )
 
         # bootstrap with runtimes files then save the test results
         ok,out = util.run_cmd( util.resultspy + ' save' )
         assert ok
-        util.run_vvtest( '-i --save-results' )
+        vrun = util.runvvtest( '-i --save-results' )
 
         resultsfname = glob.glob('results.*')[0]
         tr = results.TestResults( resultsfname )
 
-        assert len( util.filegrep( resultsfname, "testone.*TDD" ) ) == 1
-        assert len( util.filegrep( resultsfname, "testtwo.*pass" ) ) == 1
-        assert len( util.filegrep( resultsfname, "testtwo.*TDD" ) ) == 0
-        assert len( util.filegrep( resultsfname, "testthree.*pass" ) ) == 1
-        assert len( util.filegrep( resultsfname, "testthree.*TDD" ) ) == 0
-        assert len( util.filegrep( resultsfname, "testfour.*TDD" ) ) == 1
+        assert len( util.grepfiles( "testone*TDD",    resultsfname ) ) == 1
+        assert len( util.grepfiles( "testtwo*pass",   resultsfname ) ) == 1
+        assert len( util.grepfiles( "testtwo*TDD",    resultsfname ) ) == 0
+        assert len( util.grepfiles( "testthree*pass", resultsfname ) ) == 1
+        assert len( util.grepfiles( "testthree*TDD",  resultsfname ) ) == 0
+        assert len( util.grepfiles( "testfour*TDD",   resultsfname ) ) == 1
 
     def test_that_tests_marked_TDD_are_distinguished_in_reporting(self):
         ""
@@ -212,15 +188,15 @@ class tdd_tests( unittest.TestCase ):
             import time
             time.sleep(1)
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( '--include-tdd --config config' )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest( '--include-tdd --config config' )
+        vrun.assertCounts( total=4, npass=4 )
 
         # bootstrap with runtimes files then save the test results
         ok,out = util.run_cmd( util.resultspy + ' save' )
         assert ok
-        util.run_vvtest( '--config config -i --save-results' )
+        util.runvvtest( '--config config -i --save-results' )
 
         rf1 = glob.glob('results.*')[0]
         tr = results.TestResults( rf1 )

@@ -17,7 +17,6 @@ import unittest
 import testutils as util
 from testutils import print3
 
-
 import libvvtest.CommonSpec as CommonSpec
 import libvvtest.xmlwrapper as xmlwrapper
 import libvvtest.cshScriptWriter as cshScriptWriter
@@ -41,18 +40,8 @@ class writing_csh_scripts( unittest.TestCase ):
 
     def test_create_runscript_from_xml_specification(self):
         ""
-        fn = os.path.join( os.path.dirname(util.testsrcdir), 'exeDB.xml' )
-        xreader = xmlwrapper.XmlDocReader()
-        xdoc = xreader.readDoc( fn )
-
-        xdb = CommonSpec.CommonSpecDB()
-        CommonSpec.scanCommonSpecs( xdoc, xdb )
-
-        if not os.path.exists('tdir'):
-            os.mkdir( 'tdir' )
+        os.mkdir( 'tdir' )
         testdir = os.path.abspath( 'tdir' )
-
-        util.rmallfiles()
 
         util.writefile( 't1.xml', """
             <rtest name="atest">
@@ -60,6 +49,13 @@ class writing_csh_scripts( unittest.TestCase ):
             </rtest>
             """ )
         time.sleep(1)
+
+        fn = os.path.join( os.path.dirname(util.testsrcdir), 'exeDB.xml' )
+        xreader = xmlwrapper.XmlDocReader()
+        xdoc = xreader.readDoc( fn )
+
+        xdb = CommonSpec.CommonSpecDB()
+        CommonSpec.scanCommonSpecs( xdoc, xdb )
 
         tL = TestSpecCreator.createTestObjects( '.', 't1.xml', None, RuntimeConfig() )
         assert len(tL) == 1
@@ -71,11 +67,7 @@ class writing_csh_scripts( unittest.TestCase ):
                                      [], [], 'runscript' )
         time.sleep(1)
 
-        assert os.path.exists('runscript')
-        fp = open( 'runscript', 'r' )
-        for line in fp.readlines():
-            sys.stdout.write( line )
-        fp.close()
+        print3( util.readfile( 'runscript' ) )
 
 
 ########################################################################

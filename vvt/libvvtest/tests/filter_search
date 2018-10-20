@@ -40,36 +40,32 @@ class filter_and_search_searching( unittest.TestCase ):
             import os
             print ( "extrasolar ran" )
             """ )
+        time.sleep(1)
 
-        self.run_filter_tests_by_input_file_search( '' )
-        self.run_filter_tests_by_input_file_search(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_filter_tests_by_input_file_search(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' --search foo' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+            util.remove_results()
+            vrun = util.runvvtest( '--search foo', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' --search aliensrock' )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+            util.remove_results()
+            vrun = util.runvvtest( '--search aliensrock', batch=batch )
+            vrun.assertCounts( total=0 )
 
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' --search foo' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+            util.remove_results()
+            vrun = util.runvvtest( '--search foo', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R --search aliensrock' )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-R --search aliensrock', batch=batch )
+            vrun.assertCounts( total=0 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R --search foo' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-R --search foo', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
 
 ########################################################################

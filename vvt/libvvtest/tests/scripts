@@ -29,14 +29,12 @@ class script_tests( unittest.TestCase ):
             #!/bin/sh
             echo "hello from the hello test script"
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        tdir = util.results_dir()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist(out,'pass.*hello') ) == 1
-
-        assert len( util.filegrep( tdir+'/hello/execute.log',
-                              "hello from the hello test script" ) ) == 1
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
+        assert vrun.getTestIds() == [ 'hello' ]
+        assert vrun.countGrepLogs( 'hello from the hello test script' ) == 1
 
     def test_that_the_test_name_can_be_different_than_the_script_name(self):
         ""
@@ -45,29 +43,24 @@ class script_tests( unittest.TestCase ):
             #VVT: name=world
             echo "hello from the hello/world test script"
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        tdir = util.results_dir()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist(out,'pass.*hello') ) == 0
-        assert len( util.greptestlist(out,'pass.*world') ) == 1
-
-        assert len( util.filegrep( tdir+'/world/execute.log',
-                              "hello from the hello/world test script" ) ) == 1
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
+        assert vrun.getTestIds() == [ 'world' ]
+        assert vrun.countGrepLogs( 'hello from the hello/world test script' ) == 1
 
     def test_that_python_is_always_used_to_run_non_executable_scripts(self):
         ""
         util.writefile( 'hello.vvt',
             "#!/bin/sh\n" + \
             "print ( 'hello from the hello test script' )\n" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        tdir = util.results_dir()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist(out,'pass.*hello') ) == 1
-
-        assert len( util.filegrep( tdir+'/hello/execute.log',
-                              "hello from the hello test script" ) ) == 1
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
+        assert vrun.getTestIds() == [ 'hello' ]
+        assert vrun.countGrepLogs( 'hello from the hello test script' ) == 1
 
     def test_importing_the_helper_fragment(self):
         ""
@@ -92,28 +85,22 @@ class script_tests( unittest.TestCase ):
             print ( 'PROJECT = '+vvt.PROJECT )
             assert vvt.OPTIONS == ['dbg']
             """ )
-
         os.mkdir( 'bin' )
+        time.sleep(1)
 
-        self.importing_the_helper_fragment( '' )
-        self.importing_the_helper_fragment(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def importing_the_helper_fragment(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -j bin -o dbg' )
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist(out,'pass.*hello.py') ) == 1
+            vrun = util.runvvtest( '-j bin -o dbg', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+            assert vrun.getTestIds() == [ 'hello.py' ]
 
-        assert len( util.filegrep( tdir+'/hello.py/execute.log',
-                              "hello from the python test script" ) ) == 1
-        L = util.filegrep( tdir+'/hello.py/execute.log', "PROJECT =" )
-        assert len(L) == 1
-        assert L[0].split('=',1)[1].strip() == os.path.abspath('bin')
+            assert vrun.countGrepLogs( 'hello from the python test script' ) == 1
+
+            L = vrun.greplogs( 'PROJECT =' )
+            assert len(L) == 1
+            assert L[0].split('=',1)[1].strip() == os.path.abspath('bin')
 
     def test_a_python_test_that_exits_with_a_diff_a_pass_and_a_fail(self):
         ""
@@ -135,17 +122,14 @@ class script_tests( unittest.TestCase ):
                 raise Exception( "test failed" )
             myfunc()
             """ )
+        time.sleep(1)
 
-        self.a_python_test_that_exits_with_a_diff_a_pass_and_a_fail( '' )
-        self.a_python_test_that_exits_with_a_diff_a_pass_and_a_fail(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def a_python_test_that_exits_with_a_diff_a_pass_and_a_fail(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 1 and nd == 1 and nf == 1 and nn == 0
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=3, npass=1, diff=1, fail=1 )
 
     def test_multiple_tests_in_one_script_file(self):
         ""
@@ -156,26 +140,19 @@ class script_tests( unittest.TestCase ):
             import vvtest_util as vvt
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
+        time.sleep(1)
 
-        self.multiple_tests_in_one_script_file( '' )
-        self.multiple_tests_in_one_script_file(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def multiple_tests_in_one_script_file(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        tdir = util.results_dir()
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist(out,'pass.*multi') ) == 2
-        assert len( util.greptestlist(out,'pass.*multi2') ) == 1
+            assert vrun.getTestIds() == [ 'multi', 'multi2' ]
 
-        assert len( util.filegrep( tdir+'/multi/execute.log',
-                              "hello from the multi test" ) ) == 1
-        assert len( util.filegrep( tdir+'/multi2/execute.log',
-                              "hello from the multi2 test" ) ) == 1
+            assert vrun.countGrepLogs( 'hello from the multi test' ) == 1
+            assert vrun.countGrepLogs( 'hello from the multi2 test' ) == 1
 
     def test_header_specification_comment_variations(self):
         ""
@@ -219,35 +196,26 @@ class script_tests( unittest.TestCase ):
             import vvtest_util as vvt
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        tdir = util.results_dir()
-        assert np == 7 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist(out,'pass.*tst1') ) == 0
-        assert len( util.greptestlist(out,'pass.*test1') ) == 1
-        assert len( util.greptestlist(out,'pass.*tst2') ) == 0
-        assert len( util.greptestlist(out,'pass.*test2') ) == 1
-        assert len( util.greptestlist(out,'pass.*tst3') ) == 1
-        assert len( util.greptestlist(out,'pass.*test3') ) == 0
-        assert len( util.greptestlist(out,'pass.*test4a') ) == 1
-        assert len( util.greptestlist(out,'pass.*test4b') ) == 1
-        assert len( util.greptestlist(out,'pass.*test5a') ) == 1
-        assert len( util.greptestlist(out,'pass.*test5b') ) == 1
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=7, npass=7 )
 
-        assert len( util.filegrep( tdir+'/test1/execute.log',
-                              "hello from the test1 test" ) ) == 1
-        assert len( util.filegrep( tdir+'/test2/execute.log',
-                              "hello from the test2 test" ) ) == 1
-        assert len( util.filegrep( tdir+'/tst3/execute.log',
-                              "hello from the tst3 test" ) ) == 1
-        assert len( util.filegrep( tdir+'/test4a/execute.log',
-                              "hello from the test4a test" ) ) == 1
-        assert len( util.filegrep( tdir+'/test4b/execute.log',
-                              "hello from the test4b test" ) ) == 1
-        assert len( util.filegrep( tdir+'/test5a/execute.log',
-                              "hello from the test5a test" ) ) == 1
-        assert len( util.filegrep( tdir+'/test5b/execute.log',
-                              "hello from the test5b test" ) ) == 1
+        assert vrun.getTestIds() == [ 'test1',
+                                      'test2',
+                                      'test4a',
+                                      'test4b',
+                                      'test5a',
+                                      'test5b',
+                                      'tst3' ]
+
+        assert vrun.countGrepLogs( 'hello from the test1 test' ) == 1
+        assert vrun.countGrepLogs( 'hello from the test2 test' ) == 1
+        assert vrun.countGrepLogs( 'hello from the tst3 test' ) == 1
+        assert vrun.countGrepLogs( 'hello from the test4a test' ) == 1
+        assert vrun.countGrepLogs( 'hello from the test4b test' ) == 1
+        assert vrun.countGrepLogs( 'hello from the test5a test' ) == 1
+        assert vrun.countGrepLogs( 'hello from the test5b test' ) == 1
 
     def test_incorrect_specification_syntax(self):
         ""
@@ -305,20 +273,21 @@ class script_tests( unittest.TestCase ):
             import vvtest_util as vvt
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        tdir = util.results_dir()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
 
-        assert len( util.grep( out, 'skipping .*tst1.vvt'  ) ) == 1
-        assert len( util.grep( out, 'skipping .*tst2.vvt'  ) ) == 1
-        assert len( util.grep( out, 'skipping .*tst2b.vvt' ) ) == 1
-        assert len( util.grep( out, 'skipping .*tst2c.vvt' ) ) == 1
-        assert os.path.exists( os.path.join( tdir, 'tst3', 'execute.log' ) )
-        assert len( util.grep( out, 'skipping .*tst4.vvt' ) ) == 1
-        assert len( util.grep( out, 'skipping .*tst5.vvt' ) ) == 1
-        assert len( util.grep( out, 'skipping .*tst6.vvt' ) ) == 1
-        assert len( util.grep( out, 'skipping .*tst7.vvt' ) ) == 1
+        assert len( vrun.grep( 'skipping .*tst1.vvt'  ) ) == 1
+        assert len( vrun.grep( 'skipping .*tst2.vvt'  ) ) == 1
+        assert len( vrun.grep( 'skipping .*tst2b.vvt'  ) ) == 1
+        assert len( vrun.grep( 'skipping .*tst2c.vvt'  ) ) == 1
+        assert len( vrun.grep( 'skipping .*tst4.vvt'  ) ) == 1
+        assert len( vrun.grep( 'skipping .*tst5.vvt'  ) ) == 1
+        assert len( vrun.grep( 'skipping .*tst6.vvt'  ) ) == 1
+        assert len( vrun.grep( 'skipping .*tst7.vvt'  ) ) == 1
+
+        assert vrun.countGrepLogs( 'hello from the tst3 test' ) == 1
 
     def test_using_the_have_diff_utility(self):
         ""
@@ -357,33 +326,33 @@ class script_tests( unittest.TestCase ):
             source ./vvtest_util.sh
             exit_diff
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 4 and nf == 0 and nn == 0
-        platname = util.platform_name( out )
-        tdir = util.results_dir()
-        assert len( util.filegrep( tdir+'/pydiff/execute.log', 'exiting diff' ) ) == 1
-        assert len( util.filegrep( tdir+'/shdiff/execute.log', 'exiting diff' ) ) == 1
-        assert len( util.filegrep( tdir+'/pypass/execute.log', 'exiting diff' ) ) == 0
-        assert len( util.filegrep( tdir+'/shpass/execute.log', 'exiting diff' ) ) == 0
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=6, npass=2, diff=4 )
 
-        if platname in util.nonqueued_platform_names:
-            util.remove_results()
+        assert vrun.countGrepLogs( 'exiting diff', 'pydiff$' ) == 1
+        assert vrun.countGrepLogs( 'exiting diff', 'shdiff$' ) == 1
+        assert vrun.countGrepLogs( 'exiting diff', 'pypass' ) == 0
+        assert vrun.countGrepLogs( 'exiting diff', 'shpass' ) == 0
 
-            out,np,nd,nf,nn = util.run_vvtest( '--batch' )
-            assert np == 2 and nd == 4 and nf == 0 and nn == 0
-            assert len( util.filegrep( tdir+'/pydiff/execute.log', 'exiting diff' ) ) == 1
-            assert len( util.filegrep( tdir+'/shdiff/execute.log', 'exiting diff' ) ) == 1
-            assert len( util.filegrep( tdir+'/pypass/execute.log', 'exiting diff' ) ) == 0
-            assert len( util.filegrep( tdir+'/shpass/execute.log', 'exiting diff' ) ) == 0
+        util.remove_results()
 
-        os.chdir( tdir )
-        out,np,nd,nf,nn = util.run_vvtest( '-R' )
-        assert np == 2 and nd == 4 and nf == 0 and nn == 0
-        assert len( util.filegrep( 'pydiff/execute.log', 'exiting diff' ) ) == 1
-        assert len( util.filegrep( 'shdiff/execute.log', 'exiting diff' ) ) == 1
-        assert len( util.filegrep( 'pypass/execute.log', 'exiting diff' ) ) == 0
-        assert len( util.filegrep( 'shpass/execute.log', 'exiting diff' ) ) == 0
+        vrun = util.runvvtest( batch=True )
+        vrun.assertCounts( total=6, npass=2, diff=4 )
+
+        assert vrun.countGrepLogs( 'exiting diff', 'pydiff$' ) == 1
+        assert vrun.countGrepLogs( 'exiting diff', 'shdiff$' ) == 1
+        assert vrun.countGrepLogs( 'exiting diff', 'pypass' ) == 0
+        assert vrun.countGrepLogs( 'exiting diff', 'shpass' ) == 0
+
+        vrun = util.runvvtest( '-R', chdir=vrun.resultsDir() )
+        vrun.assertCounts( total=6, npass=2, diff=4 )
+
+        assert vrun.countGrepLogs( 'exiting diff', 'pydiff$' ) == 1
+        assert vrun.countGrepLogs( 'exiting diff', 'shdiff$' ) == 1
+        assert vrun.countGrepLogs( 'exiting diff', 'pypass' ) == 0
+        assert vrun.countGrepLogs( 'exiting diff', 'shpass' ) == 0
 
     def test_the_sedfile_utility(self):
         ""
@@ -406,23 +375,23 @@ class script_tests( unittest.TestCase ):
             source ./vvtest_util.sh
             sedfile changeme.txt "s/quick/speedy/"
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        platname = util.platform_name( out )
-        tdir = util.results_dir()
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=2, npass=2 )
 
-        assert len( util.filegrep( 'changeme.txt', 'quick brown' ) ) == 1
-        assert len( util.filegrep( 'changeme.txt', 'lazy brown' ) ) == 0
-        assert len( util.filegrep( 'changeme.txt', 'fox jumps' ) ) == 1
-        assert len( util.filegrep( 'changeme.txt', 'fox steps' ) ) == 0
-        assert len( util.filegrep( 'changeme.txt', 'speedy brown' ) ) == 0
+        assert util.readfile( 'changeme.txt' ).strip() == \
+            "the quick brown fox jumps\nover the lazy dog"
+
+        tdir = vrun.resultsDir()
 
         assert not os.path.islink( tdir+'/pytest/changeme.txt' )
-        assert len( util.filegrep( tdir+'/pytest/changeme.txt', 'lazy brown' ) ) == 1
-        assert len( util.filegrep( tdir+'/pytest/changeme.txt', 'fox steps' ) ) == 1
+        assert util.readfile( tdir+'/pytest/changeme.txt' ).strip() == \
+            "the lazy brown fox steps\nover the lazy dog"
+
         assert not os.path.islink( tdir+'/shtest/changeme.txt' )
-        assert len( util.filegrep( tdir+'/shtest/changeme.txt', 'speedy brown' ) ) == 1
+        assert util.readfile( tdir+'/shtest/changeme.txt' ).strip() == \
+            "the speedy brown fox jumps\nover the lazy dog"
 
     def test_the_unixdiff_utility(self):
         ""
@@ -473,16 +442,15 @@ class script_tests( unittest.TestCase ):
             unixdiff baseline.txt genfile.txt
             if_diff_exit_diff
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 2 and nf == 0 and nn == 0
-        platname = util.platform_name( out )
-        tdir = util.results_dir()
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=4, npass=2, diff=2 )
 
-        assert len( util.filegrep( tdir+'/pypass/execute.log', 'files are diff' ) ) == 0
-        assert len( util.filegrep( tdir+'/pydiff/execute.log', 'files are diff' ) ) == 1
-        assert len( util.filegrep( tdir+'/shpass/execute.log', 'files are diff' ) ) == 0
-        assert len( util.filegrep( tdir+'/shdiff/execute.log', 'files are diff' ) ) == 1
+        assert vrun.countGrepLogs( 'files are diff', 'pypass' ) == 0
+        assert vrun.countGrepLogs( 'files are diff', 'pydiff' ) == 1
+        assert vrun.countGrepLogs( 'files are diff', 'shpass' ) == 0
+        assert vrun.countGrepLogs( 'files are diff', 'shdiff' ) == 1
 
     def test_the_nlinesdiff_utility(self):
         ""
@@ -526,20 +494,15 @@ class script_tests( unittest.TestCase ):
             nlinesdiff genfile.txt 2
             if_diff_exit_diff
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 2 and nf == 0 and nn == 0
-        platname = util.platform_name( out )
-        tdir = util.results_dir()
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=4, npass=2, diff=2 )
 
-        assert len( util.filegrep( tdir+'/pypass/execute.log',
-                              'number of lines exceeded' ) ) == 0
-        assert len( util.filegrep( tdir+'/pydiff/execute.log',
-                              'number of lines exceeded' ) ) == 1
-        assert len( util.filegrep( tdir+'/shpass/execute.log',
-                              'number of lines exceeded' ) ) == 0
-        assert len( util.filegrep( tdir+'/shdiff/execute.log',
-                              'number of lines exceeded' ) ) == 1
+        assert vrun.countGrepLogs( 'number of lines exceeded', 'pypass' ) == 0
+        assert vrun.countGrepLogs( 'number of lines exceeded', 'pydiff' ) == 1
+        assert vrun.countGrepLogs( 'number of lines exceeded', 'shpass' ) == 0
+        assert vrun.countGrepLogs( 'number of lines exceeded', 'shdiff' ) == 1
 
     def test_copy_and_link_files_specification(self):
         ""
@@ -577,19 +540,14 @@ class script_tests( unittest.TestCase ):
             assert filecmp.cmp( 'file2.txt', 'lfile2', shallow=False )
             assert filecmp.cmp( 'file3.txt', 'cfile3', shallow=False )
             """ )
+        time.sleep(1)
 
-        self.copy_and_link_files_specification( '' )
-        self.copy_and_link_files_specification(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def copy_and_link_files_specification(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
 
     def test_copy_and_link_files_with_attribute_specifications(self):
         ""
@@ -640,25 +598,23 @@ class script_tests( unittest.TestCase ):
             assert os.path.exists( 'cfile5' )
             assert not os.path.islink( 'cfile5' )
             """ )
+        time.sleep(1)
 
-        self.copy_and_link_files_with_attribute_specifications(
-            '--plat '+util.core_platform_name() )
-        self.copy_and_link_files_with_attribute_specifications(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def copy_and_link_files_with_attribute_specifications(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        util.remove_results()
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -o dbg' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        dbgdir = util.results_dir()
-        assert os.path.exists( dbgdir+'/another/file3.txt' )
-        assert not os.path.islink( dbgdir+'/another/file3.txt' )
+            util.remove_results()
+
+            vrun = util.runvvtest( '-o dbg', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
+
+            fL = glob.glob( 'TestResults*/another/file3.txt' )
+            assert len(fL) == 1
+            assert not os.path.islink( fL[0] )
 
     def test_using_the_vvtest_system_utility_functions(self):
         ""
@@ -715,78 +671,55 @@ class script_tests( unittest.TestCase ):
                 echo "option expr false"
             fi
             """ )
+        time.sleep(1)
 
-        self.using_the_vvtest_system_utility_functions(
-            '--plat '+util.core_platform_name() )
-        self.using_the_vvtest_system_utility_functions(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def using_the_vvtest_system_utility_functions(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
 
-        assert len( util.filegrep( tdir+'/pytest.A=1/execute.log',
-                              'with A=1 param expr true' ) ) == 1
-        assert len( util.filegrep( tdir+'/pytest.A=3/execute.log',
-                              'with A=3 param expr false' ) ) == 1
-        assert len( util.filegrep( tdir+'/pytest.A=5/execute.log',
-                              'with A=5 param expr true' ) ) == 1
-        assert len( util.filegrep( tdir+'/shtest.B=1/execute.log',
-                              'with B=1 param expr true' ) ) == 1
-        assert len( util.filegrep( tdir+'/shtest.B=3/execute.log',
-                              'with B=3 param expr false' ) ) == 1
-        assert len( util.filegrep( tdir+'/shtest.B=5/execute.log',
-                              'with B=5 param expr true' ) ) == 1
+            assert vrun.countGrepLogs( 'with A=1 param expr true',
+                                       'pytest.A=1' ) == 1
+            assert vrun.countGrepLogs( 'with A=3 param expr false',
+                                       'pytest.A=3' ) == 1
+            assert vrun.countGrepLogs( 'with A=5 param expr true',
+                                       'pytest.A=5' ) == 1
+            assert vrun.countGrepLogs( 'with B=1 param expr true',
+                                       'shtest.B=1' ) == 1
+            assert vrun.countGrepLogs( 'with B=3 param expr false',
+                                       'shtest.B=3' ) == 1
+            assert vrun.countGrepLogs( 'with B=5 param expr true',
+                                       'shtest.B=5' ) == 1
 
-        assert len( util.filegrep( tdir+'/pytest.A=3/execute.log',
-                              'plat expr true' ) ) == 1
-        assert len( util.filegrep( tdir+'/pytest.A=3/execute.log',
-                              'plat expr2 false' ) ) == 1
-        assert len( util.filegrep( tdir+'/shtest.B=5/execute.log',
-                              'plat expr true' ) ) == 1
-        assert len( util.filegrep( tdir+'/shtest.B=5/execute.log',
-                              'plat expr2 false' ) ) == 1
+            assert vrun.countGrepLogs( 'plat expr true', 'pytest.A=3' ) == 1
+            assert vrun.countGrepLogs( 'plat expr2 false', 'pytest.A=3' ) == 1
+            assert vrun.countGrepLogs( 'plat expr true', 'shtest.B=5' ) == 1
+            assert vrun.countGrepLogs( 'plat expr2 false', 'shtest.B=5' ) == 1
 
-        assert len( util.filegrep( tdir+'/pytest.A=1/execute.log',
-                              'option expr false' ) ) == 1
-        assert len( util.filegrep( tdir+'/shtest.B=1/execute.log',
-                              'option expr false' ) ) == 1
+            assert vrun.countGrepLogs( 'option expr false', 'pytest.A=1' ) == 1
+            assert vrun.countGrepLogs( 'option expr false', 'shtest.B=1' ) == 1
 
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -o dbg' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
-        assert len( util.filegrep( tdir+'/pytest.A=1/execute.log',
-                              'option expr true' ) ) == 1
-        assert len( util.filegrep( tdir+'/shtest.B=1/execute.log',
-                              'option expr true' ) ) == 1
+            util.remove_results()
 
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -o dbg+intel' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
-        assert len( util.filegrep( tdir+'/pytest.A=1/execute.log',
-                              'option expr false' ) ) == 1
-        assert len( util.filegrep( tdir+'/shtest.B=1/execute.log',
-                              'option expr false' ) ) == 1
+            vrun = util.runvvtest( '-o dbg', batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
+
+            assert vrun.countGrepLogs( 'option expr true', 'pytest.A=1' ) == 1
+            assert vrun.countGrepLogs( 'option expr true', 'shtest.B=1' ) == 1
+
+            util.remove_results()
+
+            vrun = util.runvvtest( '-o dbg+intel', batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
+
+            assert vrun.countGrepLogs( 'option expr false', 'pytest.A=1' ) == 1
+            assert vrun.countGrepLogs( 'option expr false', 'shtest.B=1' ) == 1
 
     def test_using_the_vvtest_system_utilities_in_an_analyze_test(self):
         ""
-        util.writescript( "null.vvt", """
-            #!/bin/sh
-            echo null
-            """ )
-
-        out,np,nd,nf,nn = util.run_vvtest( '-o dbg' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        platname = util.platform_name( out )
-        tdir = util.results_dir()
-        util.remove_results()
-        os.remove( 'null.vvt' )
+        platname = util.core_platform_name()
 
         util.writescript( 'pytest.vvt', """
             #!/usr/bin/env python
@@ -852,30 +785,22 @@ class script_tests( unittest.TestCase ):
                 fi
             fi
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( '-o dbg' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-o dbg' )
+        vrun.assertCounts( total=6, npass=6 )
 
-        for f in glob.glob( tdir+'/*=*/execute.log' ):
-            assert len( util.filegrep( f, 'analyze' ) ) == 0
+        assert vrun.countGrepLogs( 'analyze', '*=*' ) == 0
 
-        assert len( util.filegrep( tdir+'/pytest/execute.log',
-                              'analyze param expr true' ) ) == 1
-        assert len( util.filegrep( tdir+'/pytest/execute.log',
-                              'analyze plat expr true' ) ) == 1
-        assert len( util.filegrep( tdir+'/pytest/execute.log',
-                              'analyze plat expr2 false' ) ) == 1
-        assert len( util.filegrep( tdir+'/pytest/execute.log',
-                              'analyze option expr true' ) ) == 1
+        assert vrun.countGrepLogs( 'analyze param expr true', 'pytest' ) == 1
+        assert vrun.countGrepLogs( 'analyze plat expr true', 'pytest' ) == 1
+        assert vrun.countGrepLogs( 'analyze plat expr2 false', 'pytest' ) == 1
+        assert vrun.countGrepLogs( 'analyze option expr true', 'pytest' ) == 1
 
-        assert len( util.filegrep( tdir+'/shtest/execute.log',
-                              'analyze param expr false' ) ) == 1
-        assert len( util.filegrep( tdir+'/shtest/execute.log',
-                              'analyze plat expr true' ) ) == 1
-        assert len( util.filegrep( tdir+'/shtest/execute.log',
-                              'analyze plat expr2 false' ) ) == 1
-        assert len( util.filegrep( tdir+'/shtest/execute.log',
-                              'analyze option expr true' ) ) == 1
+        assert vrun.countGrepLogs( 'analyze param expr false', 'shtest' ) == 1
+        assert vrun.countGrepLogs( 'analyze plat expr true', 'shtest' ) == 1
+        assert vrun.countGrepLogs( 'analyze plat expr2 false', 'shtest' ) == 1
+        assert vrun.countGrepLogs( 'analyze option expr true', 'shtest' ) == 1
 
     def test_the_runcmd_script_util(self):
         ""
@@ -952,40 +877,39 @@ class script_tests( unittest.TestCase ):
             vvt.runcmd( './helloworld', redirect='prog.out' )
             vvt.runcmd( './hellomars', redirect='prog.out', append=True )
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 7 and nd == 0 and nf == 1 and nn == 0
-        tdir = util.results_dir()
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=8, npass=7, fail=1 )
 
-        assert len( util.filegrep( tdir+'/py1/execute.log',
-                              'vvtest_util.py' ) ) >= 1
-        assert len( util.greptestlist( out, 'pass.*py2' ) ) == 1
-        assert len( util.filegrep( tdir+'/py2/execute.log',
-                              'failprogram' ) ) > 0
-        assert len( util.greptestlist( out, 'pass.*py3' ) ) == 0
-        assert len( util.filegrep( tdir+'/py3/execute.log',
-                              'command failed.*failprogram' ) ) > 0
-        assert len( util.filegrep( tdir+'/py4/execute.log',
-                              'found .*vvtest_util.py' ) ) == 1
-        assert len( util.greptestlist( out, 'pass.*py5' ) ) == 1
-        assert len( util.filegrep( tdir+'/py5/execute.log',
-                              'helloworld.*progargs' ) ) == 0
-        assert len( util.filegrep( tdir+'/py6/execute.log',
-                              'hello world' ) ) == 0
-        assert len( util.filegrep( tdir+'/py6/prog.out',
-                              'hello world' ) ) == 1
-        assert len( util.filegrep( tdir+'/py7/execute.log',
-                              'hello world' ) ) == 0
-        assert len( util.filegrep( tdir+'/py7/execute.log',
-                              'hello mars' ) ) == 0
-        assert len( util.filegrep( tdir+'/py7/prog.out',
-                              'hello world' ) ) == 0
-        assert len( util.filegrep( tdir+'/py7/prog.out',
-                              'hello mars' ) ) == 1
-        assert len( util.filegrep( tdir+'/py8/prog.out',
-                              'hello world' ) ) == 1
-        assert len( util.filegrep( tdir+'/py8/prog.out',
-                              'hello mars' ) ) == 1
+        assert vrun.countGrepLogs( 'vvtest_util.py', 'py1' ) > 0
+
+        assert vrun.countTestLines( 'pass.*py2' ) == 1
+        assert vrun.countGrepLogs( 'failprogram', 'py2' ) > 0
+
+        assert vrun.countTestLines( 'pass.*py3' ) == 0
+        assert vrun.countGrepLogs( 'command failed*failprogram', 'py3' ) > 0
+
+        assert vrun.countGrepLogs( 'found *vvtest_util.py', 'py4' ) == 1
+
+        assert vrun.countTestLines( 'pass.*py5' ) == 1
+        assert vrun.countGrepLogs( 'helloworld*progargs', 'py5' ) == 0
+
+        assert vrun.countGrepLogs( 'hello world', 'py6' ) == 0
+        assert len( util.grepfiles( 'hello world',
+                                    'TestResults*/py6/prog.out' ) ) == 1
+
+        assert vrun.countGrepLogs( 'hello world', 'py7' ) == 0
+        assert vrun.countGrepLogs( 'hello mars', 'py7' ) == 0
+        assert len( util.grepfiles( 'hello world',
+                                    'TestResults*/py7/prog.out' ) ) == 0
+        assert len( util.grepfiles( 'hello mars',
+                                    'TestResults*/py7/prog.out' ) ) == 1
+
+        assert len( util.grepfiles( 'hello world',
+                                    'TestResults*/py8/prog.out' ) ) == 1
+        assert len( util.grepfiles( 'hello mars',
+                                    'TestResults*/py8/prog.out' ) ) == 1
 
     def test_permissions_helpers_in_script_util(self):
         ""
@@ -1003,13 +927,12 @@ class script_tests( unittest.TestCase ):
             assert get_permissions( 'script', 'execute' )
             runcmd( './script' )
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
 
-        assert len( util.filegrep( tdir+'/py1/execute.log',
-                              'script got executed' ) ) == 1
+        assert vrun.countGrepLogs( 'script got executed', 'py1' ) == 1
 
     def test_utilities_catfile_grepfile_prependPATH_which(self):
         ""
@@ -1035,17 +958,14 @@ class script_tests( unittest.TestCase ):
             prependPATH( os.path.join( SRCDIR, 'subdir' ) )
             print3( 'which =', which( 'myscript' ) )
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
 
-        assert len( util.filegrep( tdir+'/py1/execute.log',
-                              'quick brown fox' ) ) == 1
-        assert len( util.filegrep( tdir+'/py1/execute.log',
-                              'lazy dog' ) ) == 1
-        assert len( util.filegrep( tdir+'/py1/execute.log',
-                              'which = '+os.getcwd()+'/subdir/myscript' ) ) == 1
+        assert vrun.countGrepLogs( 'quick brown fox', 'py1' ) == 1
+        assert vrun.countGrepLogs( 'lazy dog', 'py1' ) == 1
+        assert vrun.countGrepLogs( 'which = /*/subdir/myscript', 'py1' ) == 1
 
     def test_the_user_termination_function(self):
         ""
@@ -1079,27 +999,19 @@ class script_tests( unittest.TestCase ):
             if_diff_exit_diff()
             print3( 'should not be here' )
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 1 and nf == 1 and nn == 0
-        tdir = util.results_dir()
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=3, npass=1, diff=1, fail=1 )
 
-        assert len( util.filegrep( tdir+'/py1/execute.log',
-                              'fake exception' ) ) == 0
-        assert len( util.filegrep( tdir+'/py1/execute.log',
-                              'lastcall called' ) ) == 1
-        assert len( util.filegrep( tdir+'/py2/execute.log',
-                              'fake exception' ) ) > 0
-        assert len( util.filegrep( tdir+'/py2/execute.log',
-                              'lastcall called' ) ) == 0
-        assert len( util.filegrep( tdir+'/py2/execute.log',
-                              'should not be here' ) ) == 0
-        assert len( util.filegrep( tdir+'/py3/execute.log',
-                              'exiting diff' ) ) == 1
-        assert len( util.filegrep( tdir+'/py3/execute.log',
-                              'lastcall called' ) ) == 0
-        assert len( util.filegrep( tdir+'/py3/execute.log',
-                              'should not be here' ) ) == 0
+        assert vrun.countGrepLogs( 'fake exception', 'py1' ) == 0
+        assert vrun.countGrepLogs( 'lastcall called', 'py1' ) == 1
+        assert vrun.countGrepLogs( 'fake exception', 'py2' ) > 0
+        assert vrun.countGrepLogs( 'lastcall called', 'py2' ) == 0
+        assert vrun.countGrepLogs( 'should not be here', 'py2' ) == 0
+        assert vrun.countGrepLogs( 'exiting diff', 'py3' ) == 1
+        assert vrun.countGrepLogs( 'lastcall called', 'py3' ) == 0
+        assert vrun.countGrepLogs( 'should not be here', 'py3' ) == 0
 
     def test_the_python_trace_utility(self):
         ""
@@ -1124,21 +1036,21 @@ class script_tests( unittest.TestCase ):
             ivar = 4
             myfunc( ivar )
             """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
 
-        xlog = tdir+'/py1/execute.log'
-        assert len( util.filegrep( xlog, 'myfunc[(] *ivar *[)].*py1.vvt:15' ) ) == 1
-        assert len( util.filegrep( xlog,
-            'def myfunc[(] ivar=5 [)]:.*[(]ivar=4[)].*py1.vvt:4' ) ) == 1
-        assert len( util.filegrep( xlog,
-            'def otherfunc[(] [*]args [)]:.*args=.*8.*py1.vvt:7' ) ) == 1
-        assert len( util.filegrep( xlog, "catfile[(] 'file1.txt' [)]" ) ) == 1
-        # this one tries to catch a function name that is internal to python,
-        # which should be filtered out
-        assert len( util.filegrep( xlog, "__contains__" ) ) == 0
+        xlog = glob.glob( 'TestResults*/py1/execute.log' )[0]
+
+        assert len( util.grepfiles(
+            'myfunc( *ivar *)*py1.vvt:15', xlog ) ) == 1
+        assert len( util.grepfiles(
+            'def myfunc( ivar=5 ):*(ivar=4)*py1.vvt:4', xlog ) ) == 1
+        assert len( util.grepfiles(
+            'def otherfunc( [*]args ):*args=*8*py1.vvt:7', xlog ) ) == 1
+        assert len( util.grepfiles( "catfile( 'file1.txt' )", xlog ) ) == 1
+        assert len( util.grepfiles( "__contains__", xlog ) ) == 0
 
 
 ########################################################################

@@ -11,6 +11,7 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
+import glob
 import unittest
 
 import testutils as util
@@ -27,61 +28,51 @@ class restart_tests( unittest.TestCase ):
         util.writefile( "param.xml", """
             <rtest name="param">
               <parameterize hello="world mars"/>
-              <execute> <![CDATA[
+              <execute>
                 sleep 1
-                echo "parm=$hello"
-              ]]>
               </execute>
             </rtest>""" )
-
         util.writefile( "FailTest.xml", """
             <rtest name="FailTest">
-              <execute> <![CDATA[
+              <execute>
                 sleep 1
-                echo "Exiting with failure status"
                 exit 1
-              ]]>
               </execute>
             </rtest>""")
-
         util.writefile( "DiffTest.xml", """
             <rtest name="DiffTest">
-              <execute> <![CDATA[
+              <execute>
                 sleep 1
-                echo "Exiting with diff status"
                 set have_diff = yes
-              ]]>
               </execute>
             </rtest>""")
+        time.sleep(1)
 
         # run the test set but provide a false interruption
         util.interrupt_vvtest_run( '-n 2', count=1 )
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np+nd+nf+nn == 4
-        assert np < 2 or nd < 1 or nf < 1
+        vrun = util.runvvtest( '-i' )
+        cntD = util.parse_vvtest_counts( vrun.out )
+        assert cntD['total'] == 4 and cntD['notrun'] > 0
 
         # restart with no keywords
-        out,np,nd,nf,nn = util.run_vvtest( '-n 2' )
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np == 2 and nd == 1 and nf == 1 and nn == 0
+        util.runvvtest( '-n 2' )
+        util.runvvtest( '-i' ).assertCounts( total=4, npass=2, diff=1, fail=1 )
 
         # restart using results keyword
         util.interrupt_vvtest_run( '-n 2 -w', count=1 )
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np+nd+nf+nn == 4
-        assert np < 2 or nd < 1 or nf < 1
-        out,np,nd,nf,nn = util.run_vvtest( '-n 2 -k notrun/notdone' )
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np+nd+nf+nn == 4
+        vrun = util.runvvtest( '-i' )
+        cntD = util.parse_vvtest_counts( vrun.out )
+        assert cntD['total'] == 4 and cntD['notrun'] > 0
+
+        util.runvvtest( '-n 2 -k notrun/notdone' )
+        util.runvvtest( '-i' ).assertCounts( total=4, npass=2, diff=1, fail=1 )
 
         # none should restart now
-        out,np,nd,nf,nn = util.run_vvtest( '-n 2' )
-        assert np+nd+nf+nn == 0
+        util.runvvtest( '-n 2' ).assertCounts( total=0 )
 
-        # all of them should run again (the -F has been replaced by -R but use it
-        # here to test it still works, can be removed in the future [May 2016])
-        out,np,nd,nf,nn = util.run_vvtest( '-n 2 -F' )
-        assert np+nd+nf+nn == 4
+        # all of them should run again
+        vrun = util.runvvtest( '-n 2 -R' )
+        vrun.assertCounts( total=4, npass=2, diff=1, fail=1 )
 
     def test_prerun_file_cleanout(self):
         ""
@@ -96,77 +87,70 @@ class restart_tests( unittest.TestCase ):
               ]]>
               </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        self.prerun_file_cleanout( '' )
-        self.prerun_file_cleanout(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def prerun_file_cleanout(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
-        assert os.path.exists( tdir+'/clean/generated_file.txt' )
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
 
-        # run again should remove the generated file
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 0
+            assert len( glob.glob( 'TestResults*/clean/generated_file.txt' ) ) == 1
 
-        # running again with -m option should fail
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R -m' )
-        assert np == 0 and nd == 0 and nf == 1 and nn == 0
-        assert len( util.filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 1
+            # the generated file should be removed prior to running the script
+            vrun = util.runvvtest( '-R', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+            assert vrun.countGrepLogs( 'existing*generated' ) == 0
+
+            # with -m option should fail because of "noclobber" in script
+            vrun = util.runvvtest( '-R -m', batch=batch )
+            vrun.assertCounts( total=1, fail=1 )
+            assert vrun.countGrepLogs( 'existing*generated' ) == 1
 
     def test_run_then_fix_a_test_then_restart(self):
         ""
-        self.run_then_fix_a_test_then_restart( '' )
-        self.run_then_fix_a_test_then_restart(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_then_fix_a_test_then_restart(self, opt):
-        ""
-        util.writefile( 'atest.xml', """
-            <rtest name="atest">
-              <parameterize timestep="1 2"/>
-              <execute>
-                if ( "$timestep" == 2 ) then
-                  echo "fake failure"
-                  exit 1
-                else
-                  touch atest.$timestep
-                endif
-              </execute>
-              <analyze>
-                 ls ../atest.timestep=1/atest.1 || exit 1
-                 ls ../atest.timestep=2/atest.2 || exit 1
-              </analyze>
-            </rtest>""" )
+            util.writefile( 'atest.xml', """
+                <rtest name="atest">
+                  <parameterize timestep="1 2"/>
+                  <execute>
+                    if ( "$timestep" == 2 ) then
+                      echo "fake failure"
+                      exit 1
+                    else
+                      touch atest.$timestep
+                    endif
+                  </execute>
+                  <analyze>
+                     ls ../atest.timestep=1/atest.1 || exit 1
+                     ls ../atest.timestep=2/atest.2 || exit 1
+                  </analyze>
+                </rtest>""" )
+            time.sleep(1)
 
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 1 and nd == 0 and nf == 1 and nn == 1
-        tdir = os.path.abspath( util.results_dir() )
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=3, npass=1, fail=1, notrun=1 )
 
-        # "fix" the test and restart
-        util.writefile( 'atest.xml', """
-            <rtest name="atest">
-              <parameterize timestep="1 2"/>
-              <execute>
-                touch atest.$timestep
-              </execute>
-              <analyze>
-                 ls ../atest.timestep=1/atest.1 || exit 1
-                 ls ../atest.timestep=2/atest.2 || exit 1
-              </analyze>
-            </rtest>""" )
+            # "fix" the test and restart
+            util.writefile( 'atest.xml', """
+                <rtest name="atest">
+                  <parameterize timestep="1 2"/>
+                  <execute>
+                    touch atest.$timestep
+                  </execute>
+                  <analyze>
+                     ls ../atest.timestep=1/atest.1 || exit 1
+                     ls ../atest.timestep=2/atest.2 || exit 1
+                  </analyze>
+                </rtest>""" )
+            time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -k fail/notrun' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-k fail/notrun', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
     def test_restarting_script_tests(self):
         ""
@@ -190,32 +174,33 @@ class restart_tests( unittest.TestCase ):
             vvt.set_have_diff()
             vvt.if_diff_exit_diff()
             """[1:] )
+        time.sleep(1)
 
         # run the test set but provide a false interruption
         util.interrupt_vvtest_run( '-n 2', count=1 )
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np < 2 or nd < 1 or nf < 1
+        vrun = util.runvvtest( '-i' )
+        cntD = util.parse_vvtest_counts( vrun.out )
+        assert cntD['total'] == 4 and cntD['notrun'] > 0
 
         # restart with no keywords
-        out,np,nd,nf,nn = util.run_vvtest( '-n 2' )
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np == 2 and nd == 1 and nf == 1 and nn == 0
+        util.runvvtest( '-n 2' )
+        util.runvvtest( '-i' ).assertCounts( total=4, npass=2, diff=1, fail=1 )
 
         # restart using results keyword
         util.interrupt_vvtest_run( '-n 2 -w', count=1 )
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np < 2 or nd < 1 or nf < 1
-        out,np,nd,nf,nn = util.run_vvtest( '-n 2 -k notrun/notdone' )
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np+nd+nf+nn == 4
+        vrun = util.runvvtest( '-i' )
+        cntD = util.parse_vvtest_counts( vrun.out )
+        assert cntD['total'] == 4 and cntD['notrun'] > 0
+
+        util.runvvtest( '-n 2 -k notrun/notdone' )
+        util.runvvtest( '-i' ).assertCounts( total=4, npass=2, diff=1, fail=1 )
 
         # none should restart now
-        out,np,nd,nf,nn = util.run_vvtest( '-n 2' )
-        assert np+nd+nf+nn == 0
+        util.runvvtest( '-n 2' ).assertCounts( total=0 )
 
         # all of them should run again
-        out,np,nd,nf,nn = util.run_vvtest( '-n 2 -R' )
-        assert np+nd+nf+nn == 4
+        vrun = util.runvvtest( '-n 2 -R' )
+        vrun.assertCounts( total=4, npass=2, diff=1, fail=1 )
 
     def test_prerun_file_cleanout_with_a_script_test(self):
         ""
@@ -229,30 +214,26 @@ class restart_tests( unittest.TestCase ):
             fp.write( 'gen file contents' )
             fp.close()
             """ )
+        time.sleep(1)
 
-        self.prerun_file_cleanout_with_a_script_test( '' )
-        self.prerun_file_cleanout_with_a_script_test(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def prerun_file_cleanout_with_a_script_test(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
-        platname = util.platform_name( out )
-        assert os.path.exists( tdir+'/clean/generated_file.txt' )
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
 
-        # run again should remove the generated file
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 0
+            assert len( glob.glob( 'TestResults*/clean/generated_file.txt' ) ) == 1
 
-        # running again with -m option should fail
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R -m' )
-        assert np == 0 and nd == 0 and nf == 1 and nn == 0
-        assert len( util.filegrep( tdir+'/clean/execute.log', 'existing.*generated' ) ) == 1
+            # the generated file should be removed prior to running the script
+            vrun = util.runvvtest( '-R', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+            assert vrun.countGrepLogs( 'existing*generated' ) == 0
+
+            # with -m option should fail because of "noclobber" in script
+            vrun = util.runvvtest( '-R -m', batch=batch )
+            vrun.assertCounts( total=1, fail=1 )
+            assert vrun.countGrepLogs( 'existing*generated' ) == 1
 
     def test_prerun_file_cleanout_when_test_contains_a_soft_linked_directory(self):
         ""
@@ -266,29 +247,28 @@ class restart_tests( unittest.TestCase ):
         util.writefile( 'subdir/afile.txt', """
             contents of file
             """ )
+        time.sleep(1)
 
-        self.prerun_file_cleanout_when_test_contains_a_soft_linked_directory( '' )
-        self.prerun_file_cleanout_when_test_contains_a_soft_linked_directory(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def prerun_file_cleanout_when_test_contains_a_soft_linked_directory(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
-        assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
 
-        # run again exercises the pre-clean logic
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
+            fL = glob.glob( 'TestResults*/softdir/subdir/afile.txt' )
+            assert len(fL) == 1
+            afile = fL[0]
 
-        # now with post-clean (soft links are not cleaned)
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R -C' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert os.path.exists( tdir+'/softdir/subdir/afile.txt' )
+            # run again exercises the pre-clean logic
+            vrun = util.runvvtest( '-R', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+            assert os.path.exists( afile )
+
+            # now with post-clean (soft links are not cleaned)
+            vrun = util.runvvtest( '-R -C', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+            assert os.path.exists( afile )
 
 
 ########################################################################

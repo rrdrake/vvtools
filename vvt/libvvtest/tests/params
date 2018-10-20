@@ -30,34 +30,25 @@ class parameter_tests( unittest.TestCase ):
               <parameterize np="1 4 8"/>
               <execute> echo "execute basic2 np = $np" </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        self.nominal_parameterize_usage( '' )
-        self.nominal_parameterize_usage(
-                '--plat '+util.core_platform_name()+' --batch --qsub-length 0' )
+        for batch in [False,True]:
 
-    def nominal_parameterize_usage(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -p np<8 -P np=1 -N 10' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( "-p 'np<8' -P 'np=1'", batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+            assert vrun.countGrepLogs( 'execute basic2' ) == 1
+            assert vrun.countGrepLogs( 'execute basic2 np = 4' ) == 1
 
-        platname = util.platform_name( out )
-        print3( "Extracted platname =", platname )
-        tdir = util.results_dir()
+            vrun = util.runvvtest( "-p 'np<=8'", batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
-        L = util.filegrep( tdir + '/basic.np=4/execute.log', 'execute basic2' )
-        print3( "execute", L )
-        assert len(L) == 1 and L[0].strip() == 'execute basic2 np = 4'
+            vrun = util.runvvtest( "-i", batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -p np<=8 -N 10' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-        out,np,nd,nf,nn = util.run_vvtest( '--plat '+platname+' -i' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-
-        out,np,nd,nf,nn = util.run_vvtest( '--plat '+platname+' -i -p np=4' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( "-i -p 'np=4'", batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
 
     def test_multiple_parameterize(self):
         ""
@@ -67,36 +58,34 @@ class parameter_tests( unittest.TestCase ):
               <parameterize dt="0.1 0.01"/>
               <execute> echo "execute basic np = $np dt = $dt" </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        self.multiple_parameterize( '' )
-        self.multiple_parameterize(
-            '--plat '+util.core_platform_name()+' --batch --qsub-length 0' )
+        for batch in [False,True]:
 
-    def multiple_parameterize(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -N 10' )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=4, npass=4 )
 
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
+            lines = util.grepfiles( 'execute basic',
+                                'TestResults*/basic.dt=0.01.np=4/execute.log' )
+            assert len(lines) == 1 and 'np = 4 dt = 0.01' in lines[0]
 
-        L = util.filegrep( tdir+'/basic.dt=0.01.np=4/execute.log', 'execute basic' )
-        print3( "execute", L )
-        assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.01'
+            util.remove_results()
 
-        util.remove_results()
+            vrun = util.runvvtest( "-p 'np=4'", batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -p np=4 -N 10' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = util.filegrep( tdir + '/basic.dt=0.01.np=4/execute.log', 'execute basic' )
-        assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.01'
-        L = util.filegrep( tdir + '/basic.dt=0.1.np=4/execute.log', 'execute basic' )
-        assert len(L) == 1 and L[0].strip() == 'execute basic np = 4 dt = 0.1'
+            lines = util.grepfiles( 'execute basic',
+                                'TestResults*/basic.dt=0.01.np=4/execute.log' )
+            assert len(lines) == 1 and 'np = 4 dt = 0.01' in lines[0]
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -N 10' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+            lines = util.grepfiles( 'execute basic',
+                                'TestResults*/basic.dt=0.1.np=4/execute.log' )
+            assert len(lines) == 1 and 'np = 4 dt = 0.1' in lines[0]
+
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
     def test_an_empty_parameterize(self):
         ""
@@ -106,16 +95,13 @@ class parameter_tests( unittest.TestCase ):
               <parameterize/>
               <execute> echo "execute basic3 np = $np" </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
 
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
-
-        L = util.filegrep( tdir + '/basic/execute.log', 'execute basic3 np = 0' )
-        print3( "execute", L )
-        assert len(L) == 1 and L[0].strip() == 'execute basic3 np = 0'
+        assert len( util.findfiles( 'execute.log', 'TestResults*' ) ) == 1
+        assert vrun.countGrepLogs( 'execute basic3 np = 0' ) == 1
 
         util.remove_results()
 
@@ -125,13 +111,13 @@ class parameter_tests( unittest.TestCase ):
             <parameterize testname="basic"/>
             <execute> echo "execute basic3 np = $np" </execute>
           </rtest>""")
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( '-k foobar' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-k foobar' )
+        vrun.assertCounts( total=1, npass=1 )
 
-        L = util.filegrep( tdir + '/basic/execute.log', 'execute basic3 np = 0' )
-        print3( "execute", L )
-        assert len(L) == 1 and L[0].strip() == 'execute basic3 np = 0'
+        assert len( util.findfiles( 'execute.log', 'TestResults*' ) ) == 1
+        assert vrun.countGrepLogs( 'execute basic3 np = 0' ) == 1
 
     def test_filtering_out_by_parameter_on_a_subsequent_run(self):
         ""
@@ -141,18 +127,16 @@ class parameter_tests( unittest.TestCase ):
               <parameterize BB="foo bar"/>
               <execute> echo "params AA=$AA BB=$BB" </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+        util.runvvtest().assertCounts( total=4, npass=4 )
 
-        tdir = util.results_dir()
+        vrun = util.runvvtest( '-R -p AA=2' )
+        vrun.assertCounts( total=2, npass=2 )
 
-        out,np,nd,nf,nn = util.run_vvtest( '-R -p AA=2' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-
-        os.chdir( tdir+'/params.AA=2.BB=bar' )
-        out,np,nd,nf,nn = util.run_vvtest( '-R' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        cd = glob.glob( 'TestResults*/params.AA=2.BB=bar' )[0]
+        vrun = util.runvvtest( '-R', chdir=cd )
+        vrun.assertCounts( total=1, npass=1 )
 
     def test_that_an_analyze_section_will_have_the_parameters_available(self):
         ""
@@ -166,34 +150,28 @@ class parameter_tests( unittest.TestCase ):
                 echo "access PARAM_dt = $PARAM_dt"
               </analyze>
             </rtest> """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( '-N 10' )
-        assert np == 5 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=5, npass=5 )
+        tdir = vrun.resultsDir()
 
-        tdir = util.results_dir()
+        lines = vrun.greplogs( 'access PARAM_np' )
+        assert len(lines) == 1
+        assert lines[0].split('=')[1].split() == ['1','4']
+        lines = vrun.greplogs( 'access PARAM_dt' )
+        assert len(lines) == 1
+        assert lines[0].split('=')[1].split() == ['0.1','0.01']
 
-        L = util.filegrep( tdir + '/basic/execute.log', 'access PARAM_np' )
-        assert len(L) == 1
-        pL = L[0].split( '=', 1 )[1].strip().split()
-        assert pL == ['1','4']
-        L = util.filegrep( tdir + '/basic/execute.log', 'access PARAM_dt' )
-        assert len(L) == 1
-        pL = L[0].split( '=', 1 )[1].strip().split()
-        assert pL == ['0.1','0.01']
+        vrun = util.runvvtest( '-R', chdir=tdir+'/basic' )
+        vrun.assertCounts( total=1, npass=1 )
 
-        cwd = os.getcwd()
-        os.chdir( tdir+'/basic' )
-        out,np,nd,nf,nn = util.run_vvtest( '-R -N 10' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        L = util.filegrep( 'execute.log', 'access PARAM_np' )
-        assert len(L) == 1
-        pL = L[0].split( '=', 1 )[1].strip().split()
-        assert pL == ['1','4']
-        L = util.filegrep( 'execute.log', 'access PARAM_dt' )
-        assert len(L) == 1
-        pL = L[0].split( '=', 1 )[1].strip().split()
-        assert pL == ['0.1','0.01']
-        os.chdir( cwd )
+        lines = vrun.greplogs( 'access PARAM_np' )
+        assert len(lines) == 1
+        assert lines[0].split('=')[1].split() == ['1','4']
+        lines = vrun.greplogs( 'access PARAM_dt' )
+        assert len(lines) == 1
+        assert lines[0].split('=')[1].split() == ['0.1','0.01']
 
         util.rmallfiles()
 
@@ -205,21 +183,22 @@ class parameter_tests( unittest.TestCase ):
                 echo "access PARAM_dt_np = $PARAM_dt_np"
               </analyze>
             </rtest> """ )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( '-N 10' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        L = util.filegrep( tdir+'/zip/execute.log', 'access PARAM_dt_np' )
-        assert len(L) == 1
-        pL = L[0].split( '=', 1 )[1].strip().split()
-        assert pL == ['0.1/1','0.01/4']
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=3, npass=3 )
+        tdir = vrun.resultsDir()
 
-        os.chdir( tdir+'/zip' )
-        out,np,nd,nf,nn = util.run_vvtest( '-R -N 10' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        L = util.filegrep( 'execute.log', 'access PARAM_dt_np' )
-        assert len(L) == 1
-        pL = L[0].split( '=', 1 )[1].strip().split()
-        assert pL == ['0.1/1','0.01/4']
+        lines = vrun.greplogs( 'access PARAM_dt_np' )
+        assert len(lines) == 1
+        assert lines[0].split('=')[1].split() == ['0.1/1','0.01/4']
+
+        vrun = util.runvvtest( '-R', chdir=tdir+'/zip' )
+        vrun.assertCounts( total=1, npass=1 )
+
+        lines = vrun.greplogs( 'access PARAM_dt_np' )
+        assert len(lines) == 1
+        assert lines[0].split('=')[1].split() == ['0.1/1','0.01/4']
 
     def test_complex_command_line_parameter_expression_with_rerun(self):
         ""
@@ -231,29 +210,22 @@ class parameter_tests( unittest.TestCase ):
                 echo "access PARAM_isize = $PARAM_isize"
               </analyze>
             </rtest> """)
+        time.sleep(1)
 
-        self.complex_command_line_parameter_expression_with_rerun( '' )
-        self.complex_command_line_parameter_expression_with_rerun(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def complex_command_line_parameter_expression_with_rerun(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt.split()+['-p','isize<=2 or not isize'] )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
+            vrun = util.runvvtest( "-p 'isize<=2 or not isize'", batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
 
-        assert     os.path.exists( tdir+'/basic.isize=1' )
-        assert     os.path.exists( tdir+'/basic.isize=2' )
-        assert not os.path.exists( tdir+'/basic.isize=4' )
-        assert     os.path.exists( tdir+'/basic' )
+            assert len( glob.glob( 'TestResults*/basic.isize=*' ) ) == 2
+            fL = glob.glob( 'TestResults*/basic' )
+            assert len( fL ) == 1
+            basic_dir = fL[0]
 
-        cwd = os.getcwd()
-        os.chdir( tdir+'/basic' )
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        os.chdir( cwd )
+            vrun = util.runvvtest( "-R", batch=batch, chdir=basic_dir )
+            vrun.assertCounts( total=1, npass=1 )
 
     def test_that_an_analyze_sees_restricted_parameters(self):
         ""
@@ -265,40 +237,30 @@ class parameter_tests( unittest.TestCase ):
                 echo "access PARAM_isize = $PARAM_isize"
               </analyze>
             </rtest> """ )
+        time.sleep(1)
 
-        self.that_an_analyze_sees_restricted_parameters( '' )
-        self.that_an_analyze_sees_restricted_parameters(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def that_an_analyze_sees_restricted_parameters(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt.split()+['-p','isize<=2 or not isize'] )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( "-p 'isize<=2 or not isize'", batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
+            tdir = vrun.resultsDir()
 
-        assert os.path.exists( tdir+'/basic' )
-        L = util.filegrep( tdir+'/basic/execute.log', "access PARAM_isize" )
-        assert len(L) == 1
-        s = L[0]
-        ps = L[0].split('=',1)[1]
-        pL = ps.strip().split()
-        assert pL == ['1', '2']
+            lines = util.grepfiles( 'access PARAM_isize',
+                                    tdir+'/basic/execute.log' )
+            assert len(lines) == 1
+            pL = lines[0].split('=',1)[1].strip().split()
+            assert pL == ['1', '2']
 
-        cwd = os.getcwd()
-        os.chdir( tdir+'/basic' )
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( "-R", batch=batch, chdir=tdir+'/basic' )
+            vrun.assertCounts( total=1, npass=1 )
 
-        L = util.filegrep( 'execute.log', "access PARAM_isize" )
-        assert len(L) == 1
-        s = L[0]
-        ps = L[0].split('=',1)[1]
-        pL = ps.strip().split()
-        assert pL == ['1', '2']
-        os.chdir( cwd )
+            lines = util.grepfiles( 'access PARAM_isize',
+                                    tdir+'/basic/execute.log' )
+            assert len(lines) == 1
+            pL = lines[0].split('=',1)[1].strip().split()
+            assert pL == ['1', '2']
 
     def test_using_parameterize_with_script_test(self):
         ""
@@ -328,47 +290,43 @@ class parameter_tests( unittest.TestCase ):
             import os
             print ( "hello from "+os.path.basename(os.getcwd()) )
             """ )
+        time.sleep(1)
 
-        self.using_parameterize_with_script_test( '' )
-        self.using_parameterize_with_script_test(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def using_parameterize_with_script_test(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=12, npass=12 )
 
-        assert np == 12 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist(out,'pass.*.animal=dog') ) == 1
-        assert len( util.greptestlist(out,'pass.*.animal=cat') ) == 1
-        assert len( util.greptestlist(out,'pass.*.A=dog.V=carrot') ) == 1
-        assert len( util.greptestlist(out,'pass.*.A=cat.V=carrot') ) == 1
-        assert len( util.greptestlist(out,'pass.*.A=dog.V=celery') ) == 1
-        assert len( util.greptestlist(out,'pass.*.A=cat.V=celery') ) == 1
-        assert len( util.greptestlist(out,'pass.*.B=dog.X=carrot') ) == 1
-        assert len( util.greptestlist(out,'pass.*.B=cat.X=celery') ) == 1
-        assert len( util.greptestlist(out,'pass.*.B=cat.X=carrot') ) == 0
-        assert len( util.greptestlist(out,'pass.*.B=dog.X=celery') ) == 0
-        assert len( util.greptestlist(out,'pass.*.C=1.Y=2.Z=3') ) == 1
-        assert len( util.greptestlist(out,'pass.*.C=4.Y=5.Z=6') ) == 1
-        assert len( util.greptestlist(out,'pass.*.C=7.Y=8.Z=9') ) == 1
-        assert len( util.greptestlist(out,'pass.*.C=10.Y=11.Z=12') ) == 1
+            def assert_grep( regex, count ):
+                assert vrun.countTestLines( regex ) == count
 
-        assert len( util.filegrep( tdir+'/params1.animal=dog/execute.log',
-                              "hello from params1.animal=dog" ) ) == 1
-        assert len( util.filegrep( tdir+'/params1.animal=cat/execute.log',
-                              "hello from params1.animal=cat" ) ) == 1
+            assert_grep( 'pass.*.animal=dog', 1 )
+            assert_grep( 'pass.*.animal=cat', 1 )
+            assert_grep( 'pass.*.A=dog.V=carrot', 1 )
+            assert_grep( 'pass.*.A=cat.V=carrot', 1 )
+            assert_grep( 'pass.*.A=dog.V=celery', 1 )
+            assert_grep( 'pass.*.A=cat.V=celery', 1 )
+            assert_grep( 'pass.*.B=dog.X=carrot', 1 )
+            assert_grep( 'pass.*.B=cat.X=celery', 1 )
+            assert_grep( 'pass.*.B=cat.X=carrot', 0 )
+            assert_grep( 'pass.*.B=dog.X=celery', 0 )
+            assert_grep( 'pass.*.C=1.Y=2.Z=3', 1 )
+            assert_grep( 'pass.*.C=4.Y=5.Z=6', 1 )
+            assert_grep( 'pass.*.C=7.Y=8.Z=9', 1 )
+            assert_grep( 'pass.*.C=10.Y=11.Z=12', 1 )
 
-        plat = '--plat '+platname
-        out,np,nd,nf,nn = util.run_vvtest( plat+' -ik animal' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        out,np,nd,nf,nn = util.run_vvtest( plat+' -ik dog' )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
-        out,np,nd,nf,nn = util.run_vvtest( plat+' -ik Z' )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+            sL = util.grepfiles( 'hello from params1.animal=dog',
+                                 'TestResults*/params1.animal=dog/execute.log' )
+            assert len( sL ) == 1
+            sL = util.grepfiles( 'hello from params1.animal=cat',
+                                 'TestResults*/params1.animal=cat/execute.log' )
+            assert len( sL ) == 1
+
+            util.runvvtest( '-ik animal' ).assertCounts( total=2, npass=2 )
+            util.runvvtest( '-ik dog' ).assertCounts( total=0 )
+            util.runvvtest( '-ik Z' ).assertCounts( total=4, npass=4 )
 
 
 #####################################################################

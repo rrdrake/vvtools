@@ -54,70 +54,57 @@ class filter_and_keywords( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        self.run_filter_by_testname_and_keyword_simultaneously( '' )
-        self.run_filter_by_testname_and_keyword_simultaneously(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_filter_by_testname_and_keyword_simultaneously(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 2 and nd == 0 and nf == 2 and nn == 0
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=4, npass=2, fail=2 )
 
-        assert len( util.greptestlist(out,'pass.*atest\.nx=1') ) == 1
-        assert len( util.greptestlist(out,'pass.*btest\.nx=1') ) == 1
-        assert len( util.greptestlist(out,'fail.*atest\.nx=4') ) == 1
-        assert len( util.greptestlist(out,'fail.*btest\.nx=4') ) == 1
+            assert vrun.countTestLines( 'pass.*atest\.nx=1') == 1
+            assert vrun.countTestLines( 'pass.*btest\.nx=1') == 1
+            assert vrun.countTestLines( 'fail.*atest\.nx=4') == 1
+            assert vrun.countTestLines( 'fail.*btest\.nx=4') == 1
 
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -k pass/fail' )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( '-k pass/fail', batch=batch )
+            vrun.assertCounts( total=0 )
 
-        assert len( util.greptestlist(out,'pass.*atest\.nx=1') ) == 0
-        assert len( util.greptestlist(out,'pass.*btest\.nx=1') ) == 0
-        assert len( util.greptestlist(out,'fail.*atest\.nx=4') ) == 0
-        assert len( util.greptestlist(out,'fail.*btest\.nx=4') ) == 0
+            util.remove_results()
 
-        util.remove_results()
+            vrun = util.runvvtest( '-k atest/notrun', batch=batch )
+            vrun.assertCounts( total=4, npass=2, fail=2 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -k atest/notrun' )
-        assert np == 2 and nd == 0 and nf == 2 and nn == 0
-        platname = util.platform_name( out )
+            assert vrun.countTestLines( 'pass.*atest\.nx=1') == 1
+            assert vrun.countTestLines( 'pass.*btest\.nx=1') == 1
+            assert vrun.countTestLines( 'fail.*atest\.nx=4') == 1
+            assert vrun.countTestLines( 'fail.*btest\.nx=4') == 1
 
-        assert len( util.greptestlist(out,'pass.*atest\.nx=1') ) == 1
-        assert len( util.greptestlist(out,'pass.*btest\.nx=1') ) == 1
-        assert len( util.greptestlist(out,'fail.*atest\.nx=4') ) == 1
-        assert len( util.greptestlist(out,'fail.*btest\.nx=4') ) == 1
+            vrun = util.runvvtest( '-k atest/fail', batch=batch )
+            vrun.assertCounts( total=3, npass=1, fail=2 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -k atest/fail' )
-        assert np == 1 and nd == 0 and nf == 2 and nn == 0
+            assert vrun.countTestLines( 'atest.*pass.*\.nx=1') == 1
+            assert vrun.countTestLines( 'atest.*fail.*\.nx=4') == 1
+            assert vrun.countTestLines( 'btest.*pass.*\.nx=') == 0
+            assert vrun.countTestLines( 'btest.*fail.*\.nx=4') == 1
 
-        assert len( util.greptestlist( out, 'atest.*pass.*\.nx=1' ) ) == 1
-        assert len( util.greptestlist( out, 'atest.*fail.*\.nx=4' ) ) == 1
-        assert len( util.greptestlist( out, 'btest.*pass.*\.nx='  ) ) == 0
-        assert len( util.greptestlist( out, 'btest.*fail.*\.nx=4' ) ) == 1
+            vrun = util.runvvtest( '-k btest -K fail', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -k btest -K fail' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+            assert vrun.countTestLines( 'atest.*pass.*\.nx=1') == 0
+            assert vrun.countTestLines( 'atest.*fail.*\.nx=4') == 0
+            assert vrun.countTestLines( 'btest.*pass.*\.nx=') == 1
+            assert vrun.countTestLines( 'btest.*fail.*\.nx=4') == 0
 
-        assert len( util.greptestlist( out, 'atest.*pass.*\.nx=1' ) ) == 0
-        assert len( util.greptestlist( out, 'atest.*fail.*\.nx=4' ) ) == 0
-        assert len( util.greptestlist( out, 'btest.*pass.*\.nx='  ) ) == 1
-        assert len( util.greptestlist( out, 'btest.*fail.*\.nx=4' ) ) == 0
+            vrun = util.runvvtest( '-k atest/fail', batch=batch,
+                                    chdir=vrun.resultsDir() )
+            vrun.assertCounts( total=3, npass=1, fail=2 )
 
-        tdir = util.results_dir()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -k atest/fail',
-                                           directory=tdir )
-        assert np == 1 and nd == 0 and nf == 2 and nn == 0
-
-        assert len( util.greptestlist( out, 'atest.*pass.*\.nx=1' ) ) == 1
-        assert len( util.greptestlist( out, 'atest.*fail.*\.nx=4' ) ) == 1
-        assert len( util.greptestlist( out, 'btest.*pass.*\.nx='  ) ) == 0
-        assert len( util.greptestlist( out, 'btest.*fail.*\.nx=4' ) ) == 1
+            assert vrun.countTestLines( 'atest.*pass.*\.nx=1') == 1
+            assert vrun.countTestLines( 'atest.*fail.*\.nx=4') == 1
+            assert vrun.countTestLines( 'btest.*pass.*\.nx=') == 0
+            assert vrun.countTestLines( 'btest.*fail.*\.nx=4') == 1
 
     def test_xml_test_filter_by_keyword_expression(self):
         """
@@ -128,30 +115,26 @@ class filter_and_keywords( unittest.TestCase ):
               <keywords> earth mars </keywords>
               <execute> echo "solar ran" </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        self.run_xml_test_filter_by_keyword_expression( '' )
-        self.run_xml_test_filter_by_keyword_expression(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_xml_test_filter_by_keyword_expression(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -k earth' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( '-k earth', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -K earth' )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-w -K earth', batch=batch )
+            vrun.assertCounts( total=0 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -k earth -K mars' )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-w -k earth -K mars', batch=batch )
+            vrun.assertCounts( total=0 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -k earth/mars' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-w -k earth/mars', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -k venus/mars' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-w -k venus/mars', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
 
     def test_special_characters_in_keyword_handling(self):
         ""
@@ -163,51 +146,25 @@ class filter_and_keywords( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( '-k blah-1' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        rdir = util.results_dir()
-        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
+        self.run_with_keyword_and_check( 'blah-1' )
+        self.run_with_keyword_and_check( 'foo.2' )
+        self.run_with_keyword_and_check( 'bar+3' )
+        self.run_with_keyword_and_check( 'baz=4' )
+        self.run_with_keyword_and_check( 'mars#5' )
+        self.run_with_keyword_and_check( 'sun%6' )
+        self.run_with_keyword_and_check( 'pluto^7' )
+        self.run_with_keyword_and_check( 'venus:8' )
+        self.run_with_keyword_and_check( 'jupiter~9' )
+        self.run_with_keyword_and_check( 'jupiter@0' )
 
-        out,np,nd,nf,nn = util.run_vvtest( '-w -k foo.2' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
-
-        out,np,nd,nf,nn = util.run_vvtest( '-w -k bar+3' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
-
-        out,np,nd,nf,nn = util.run_vvtest( '-w -k baz=4' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
-
-        out,np,nd,nf,nn = util.run_vvtest( '-w -k mars#5' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
-
-        out,np,nd,nf,nn = util.run_vvtest( '-w -k sun%6' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
-
-        out,np,nd,nf,nn = util.run_vvtest( '-w -k pluto^7' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
-
-        out,np,nd,nf,nn = util.run_vvtest( '-w -k venus:8' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
-
-        out,np,nd,nf,nn = util.run_vvtest( '-w -k jupiter~9' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
-
-        out,np,nd,nf,nn = util.run_vvtest( '-w -k jupiter@0' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.filegrep( rdir+'/extra/execute.log', 'extra ran' ) ) == 1
+    def run_with_keyword_and_check(self, keyword):
+        ""
+        vrun = util.runvvtest( '-w -k '+keyword )
+        vrun.assertCounts( total=1, npass=1 )
+        assert vrun.countGrepLogs( 'extra ran' ) == 1
 
     def test_script_test_filter_by_keyword_expression(self):
-        """
-        script test, filter tests out by command line keyword expression
-        """
+        ""
         util.writescript( 'solar.vvt', """
             #!/usr/bin/env python
             #VVT: keywords : earth mars
@@ -215,29 +172,24 @@ class filter_and_keywords( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.run_script_test_filter_by_keyword_expression( '' )
-        self.run_script_test_filter_by_keyword_expression(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_script_test_filter_by_keyword_expression(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -k earth' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( '-k earth', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -K earth' )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-w -K earth', batch=batch )
+            vrun.assertCounts( total=0 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -k earth -K mars' )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-w -k earth -K mars', batch=batch )
+            vrun.assertCounts( total=0 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -k earth/mars' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-w -k earth/mars', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -w -k venus/mars' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-w -k venus/mars', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
 
     def test_script_test_filter_by_testname_and_keyword_simultaneously(self):
         ""
@@ -255,28 +207,24 @@ class filter_and_keywords( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.run_script_test_filter_by_testname_and_keyword_simultaneously( '' )
-        self.run_script_test_filter_by_testname_and_keyword_simultaneously(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_script_test_filter_by_testname_and_keyword_simultaneously(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 2 and nd == 0 and nf == 1 and nn == 0
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=3, npass=2, fail=1 )
 
-        assert len( util.greptestlist(out,'pass.*atest') ) == 1
-        assert len( util.greptestlist(out,'fail.*btest') ) == 1
-        assert len( util.greptestlist(out,'pass.*ctest') ) == 1
+            assert vrun.countTestLines( 'pass.*atest') == 1
+            assert vrun.countTestLines( 'fail.*btest') == 1
+            assert vrun.countTestLines( 'pass.*ctest') == 1
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -k atest/fail' )
-        assert np == 1 and nd == 0 and nf == 1 and nn == 0
+            vrun = util.runvvtest( '-k atest/fail', batch=batch )
+            vrun.assertCounts( total=2, npass=1, fail=1 )
 
-        assert len( util.greptestlist(out,'pass.*atest') ) == 1
-        assert len( util.greptestlist(out,'fail.*btest') ) == 1
-        assert len( util.greptestlist(out,'pass.*ctest') ) == 0
+            assert vrun.countTestLines( 'pass.*atest') == 1
+            assert vrun.countTestLines( 'fail.*btest') == 1
+            assert vrun.countTestLines( 'pass.*ctest') == 0
+
 
 ########################################################################
 

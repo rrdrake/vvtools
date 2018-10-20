@@ -140,85 +140,63 @@ class expression_tests( unittest.TestCase ):
     def test_expression_errors(self):
         ""
         ex = FilterExpressions.WordExpression(None)
-        try: ex.append("aword","xor")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError, ex.append, "aword","xor" )
 
-        try: ex = FilterExpressions.WordExpression("aword1) word2")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "aword1) word2" )
 
-        try: ex = FilterExpressions.WordExpression("word1 not word2")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "word1 not word2" )
 
-        try: ex = FilterExpressions.WordExpression("word1 word2")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "word1 word2" )
 
-        try: ex = FilterExpressions.WordExpression("word1 and")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "word1 and" )
 
-        try: ex = FilterExpressions.WordExpression("word1 or")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "word1 or" )
 
-        try: ex = FilterExpressions.WordExpression("(word or)")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "(word or)" )
 
-        try: ex = FilterExpressions.WordExpression("(word and)")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "(word and)" )
 
-        try: ex = FilterExpressions.WordExpression("word and ()")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "word and ()" )
 
-        try: ex = FilterExpressions.WordExpression("()")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError, FilterExpressions.WordExpression, "()" )
 
-        try: ex = FilterExpressions.WordExpression("word1 and and word2")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "word1 and and word2" )
 
-        try: ex = FilterExpressions.WordExpression("word1 and or word2")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "word1 and or word2" )
 
-        try: ex = FilterExpressions.WordExpression("word1 or and word2")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "word1 or and word2" )
 
-        try: ex = FilterExpressions.WordExpression("word1 or not or word2")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "word1 or not or word2" )
 
-        try: ex = FilterExpressions.WordExpression("word1 and not and word2")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "word1 and not and word2" )
 
-        try: ex = FilterExpressions.WordExpression("and word1")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "and word1" )
 
-        try: ex = FilterExpressions.WordExpression("or word1")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "or word1" )
 
-        try: ex = FilterExpressions.WordExpression("word1 word2")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "word1 word2" )
 
-        try: ex = FilterExpressions.WordExpression("word and")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "word and" )
 
-        try: ex = FilterExpressions.WordExpression("word or")
-        except ValueError: print3( str( sys.exc_info()[1] ) )
-        else: raise Exception("expected a ValueError")
+        self.assertRaises( ValueError,
+            FilterExpressions.WordExpression, "word or" )
 
     def test_using_parens_int_expressions(self):
         ""

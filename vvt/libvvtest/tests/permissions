@@ -45,11 +45,6 @@ class integration_tests( unittest.TestCase ):
         ""
         util.setup_test()
 
-        # for batch tests
-        os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-        os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-        os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
-
     def test_turning_off_group_and_world_permissions(self):
         ""
         util.writefile( "one/cat.xml", """
@@ -64,23 +59,19 @@ class integration_tests( unittest.TestCase ):
             <rtest name="circle">
               <execute> sleep 3 </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        self.turning_off_group_and_world_permissions( '' )
-        self.turning_off_group_and_world_permissions(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def turning_off_group_and_world_permissions(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' --perms g=,o=' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( '--perms g=,o=', batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
 
-        for p in list_all_paths( tdir ):
-            assert has_no_group_permissions(p)
-            assert has_no_world_permissions(p)
+            pL = list_all_paths( os.path.abspath( vrun.resultsDir() ) )
+            for p in pL:
+                assert has_no_group_permissions(p)
+                assert has_no_world_permissions(p)
 
     def test_turn_on_group_and_world_permissions(self):
         ""
@@ -96,33 +87,31 @@ class integration_tests( unittest.TestCase ):
             <rtest name="circle">
               <execute> sleep 3 </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        self.turn_on_group_and_world_permissions( '' )
-        self.turn_on_group_and_world_permissions(
-            '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def turn_on_group_and_world_permissions(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' --perms g=rws,o=rwx' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( '--perms g=rws,o=rwx', batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
 
-        for d in list_all_directories( tdir ):
-            assert has_group_sticky(d)
-            assert has_group_execute(d)
-            assert has_world_execute(d)
+            tdir = os.path.abspath( vrun.resultsDir() )
 
-        # spot check a file that should have execute set
-        f = os.path.join( tdir, 'one', 'dog', 'runscript' )
-        assert has_group_execute(f) and has_world_execute(f)
+            dL = list_all_directories( tdir )
+            for d in dL:
+                assert has_group_sticky(d)
+                assert has_group_execute(d)
+                assert has_world_execute(d)
 
-        for p in list_all_paths( tdir ):
-            assert has_group_read(p) and has_group_write(p)
-            if has_owner_execute(p):
-                assert has_group_execute(p) and has_world_execute(p)
+            # spot check a file that should have execute set
+            f = os.path.join( tdir, 'one', 'dog', 'runscript' )
+            assert has_group_execute(f) and has_world_execute(f)
+
+            for p in list_all_paths( tdir ):
+                assert has_group_read(p) and has_group_write(p)
+                if has_owner_execute(p):
+                    assert has_group_execute(p) and has_world_execute(p)
 
 
 ############################################################################

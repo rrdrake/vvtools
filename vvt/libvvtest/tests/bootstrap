@@ -31,9 +31,20 @@ class Testing_boostrap_file( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        ok,out = util.run_cmd( util.vvtest )
-        assert ok
-        assert util.numpass( out ) == 1
+        vrun = util.runvvtest()
+        vrun.assertCounts( npass=1 )
+
+    def run_soft_linked_vvtest_and_expect_one_test_pass(self, args=''):
+        ""
+        cmd = os.path.abspath( 'vvtest' )
+        cmd += ' --plat ' + util.core_platform_name()
+        if args:
+            cmd += ' ' + args
+
+        x,out = util.runcmd( cmd )
+        assert x == 0
+        counts = util.parse_vvtest_counts( out )
+        assert counts['npass'] == 1
 
     def test_using_a_softlink_to_vvtest(self):
         ""
@@ -44,9 +55,7 @@ class Testing_boostrap_file( unittest.TestCase ):
         os.symlink( util.vvtest, 'vvtest' )
         time.sleep(1)
 
-        ok,out = util.run_cmd( os.path.abspath( 'vvtest' ) )
-        assert ok
-        assert util.numpass( out ) == 1
+        self.run_soft_linked_vvtest_and_expect_one_test_pass()
 
     def test_with_a_bootstrap_file(self):
         ""
@@ -61,14 +70,10 @@ class Testing_boostrap_file( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        ok,out = util.run_cmd( os.path.abspath( 'vvtest' ) )
-        assert ok
-        assert util.numpass( out ) == 1
+        self.run_soft_linked_vvtest_and_expect_one_test_pass()
 
-        fL = glob.glob( 'TestResults*/hello.py*/execute.log' )
-        assert len(fL) == 1
-        L = util.filegrep( fL[0], 'var=special value' )
-        assert len(L) == 1
+        assert len( util.grepfiles( 'var=special value',
+                    'TestResults*/hello.py*/execute.log' ) ) == 1
 
     def test_a_bootstrap_file_setting_the_config_dir(self):
         ""
@@ -92,14 +97,10 @@ class Testing_boostrap_file( unittest.TestCase ):
 
         time.sleep(1)
 
-        ok,out = util.run_cmd( os.path.abspath( 'vvtest' ) )
-        assert ok
-        assert util.numpass( out ) == 1
+        self.run_soft_linked_vvtest_and_expect_one_test_pass()
 
-        fL = glob.glob( 'TestResults*/hello.py*/execute.log' )
-        assert len(fL) == 1
-        L = util.filegrep( fL[0], 'my special function called' )
-        assert len(L) == 1
+        assert len( util.grepfiles( 'my special function called',
+                    'TestResults*/hello.py*/execute.log' ) ) == 1
 
     def test_a_bootstrap_config_dir_is_overridden_with_command_line(self):
         ""
@@ -129,18 +130,13 @@ class Testing_boostrap_file( unittest.TestCase ):
 
         time.sleep(1)
 
-        cmd = os.path.abspath( 'vvtest' )
-        cmd += ' --config '+os.path.abspath('cmdconfig')
-        ok,out = util.run_cmd( cmd )
-        assert ok
-        assert util.numpass( out ) == 1
+        optcfg = '--config ' + os.path.abspath('cmdconfig')
+        self.run_soft_linked_vvtest_and_expect_one_test_pass( optcfg )
 
-        fL = glob.glob( 'TestResults*/hello.py*/execute.log' )
-        assert len(fL) == 1
-        L = util.filegrep( fL[0], 'my special function called' )
-        assert len(L) == 0
-        L = util.filegrep( fL[0], 'command config function called' )
-        assert len(L) == 1
+        assert len( util.grepfiles( 'my special function called',
+                    'TestResults*/hello.py*/execute.log' ) ) == 0
+        assert len( util.grepfiles( 'command config function called',
+                    'TestResults*/hello.py*/execute.log' ) ) == 1
 
 
 ############################################################################

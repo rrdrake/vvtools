@@ -35,7 +35,6 @@ class TestSpec_to_and_from_string( unittest.TestCase ):
 
         sid = tio.test_to_string( ts )
         assert '\n' not in sid
-        #print3( "test string id", sid )
         ts2 = tio.string_to_test(sid)
 
         assert_TestSpec_same_as_fake( ts2 )
@@ -225,7 +224,7 @@ class TempFile_utility_class( unittest.TestCase ):
         time.sleep(1)
 
         assert not os.path.exists( fname )
-        assert len( util.filegrep( 'fname.txt', 'hello world' ) ) == 1
+        assert len( util.grepfiles( 'hello world', 'fname.txt' ) ) == 1
 
     def test_create_then_overwrite_a_file(self):
         ""
@@ -247,8 +246,8 @@ class TempFile_utility_class( unittest.TestCase ):
         time.sleep(1)
 
         assert not os.path.exists( fname )
-        assert len( util.filegrep( 'fname.txt', 'hello world' ) ) == 0
-        assert len( util.filegrep( 'fname.txt', 'goodbye mars' ) ) == 1
+        assert len( util.grepfiles( 'hello world', 'fname.txt' ) ) == 0
+        assert len( util.grepfiles( 'goodbye mars', 'fname.txt' ) ) == 1
 
         fmode = stat.S_IMODE( os.stat('fname.txt')[stat.ST_MODE] )
         assert ( fmode & stat.S_IRGRP ) != 0
@@ -286,8 +285,8 @@ class inlining_includes( unittest.TestCase ):
         os.mkdir( 'rundir' )
         time.sleep(1)
 
-        assert len( util.filegrep( 'tests.out', 'Include' ) ) == 1
-        assert len( util.filegrep( 'tests.out', 'Attrs' ) ) == 1
+        assert len( util.grepfiles( 'Include', 'tests.out' ) ) == 1
+        assert len( util.grepfiles( 'Attrs', 'tests.out' ) ) == 1
 
         rootdir = os.getcwd()
         tfile = os.path.abspath( 'tests.out' )
@@ -295,8 +294,8 @@ class inlining_includes( unittest.TestCase ):
         os.chdir( 'rundir' )
         tio.inline_include_files( tfile )
 
-        assert len( util.filegrep( '../tests.out', 'Include' ) ) == 0
-        assert len( util.filegrep( '../tests.out', 'Attrs' ) ) == 1
+        assert len( util.grepfiles( 'Include', '../tests.out' ) ) == 0
+        assert len( util.grepfiles( 'Attrs', '../tests.out' ) ) == 1
 
         tlr = tio.TestListReader( tfile )
         tlr.read()

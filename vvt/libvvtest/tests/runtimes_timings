@@ -11,7 +11,7 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
-import glob
+from glob import glob
 import unittest
 
 import testutils as util
@@ -51,11 +51,11 @@ class runtimes_and_timings( unittest.TestCase ):
             </rtest>""")
         time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest('tests')
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        platname = util.core_platform_name()
+        tests = os.path.abspath( 'tests' )
 
-        tdir = os.path.join( os.getcwd(), util.results_dir() )
-        platname = util.platform_name(out)
+        vrun = util.runvvtest( tests )
+        vrun.assertCounts( total=3, npass=3 )
 
         # create a test source tree runtimes file but without any test results
         tr = results.TestResults()
@@ -63,23 +63,26 @@ class runtimes_and_timings( unittest.TestCase ):
 
         # even though a rootrel directory could be determined, no runtime is available
         tst = TestSpecCreator.createTestObjects(
-            os.getcwd()+'/tests', 'dir1/one.xml', None, RuntimeConfig() )[0]
+                    tests, 'dir1/one.xml', None, RuntimeConfig() )[0]
         cache = results.LookupCache( platname, 'cplr' )
         tm,tv = cache.getRunTime( tst )
         assert tm == None
 
-        # re-save the testing results (this time the test rootrel can be determined)
-        # and create a multiplatform results file
-        os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
+        # re-save the testing results (this time the test rootrel can be
+        # determined) and create a multiplatform results file
         os.mkdir('testing')
-        util.run_vvtest( '-i --save-results' )
-        resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
+        time.sleep(1)
+        os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
+        util.runvvtest( '-i --save-results' )
+
+        resultsfname = os.path.abspath( glob('testing/results.*')[0] )
         plat,cplr = get_platform_compiler( resultsfname )
         ok,out = util.run_cmd( util.resultspy + ' merge '+resultsfname,
                                directory='testing' )
         assert ok
 
-        # leave the source tree runtimes file empty and use the multiplatform results
+        # leave the source tree runtimes file empty and use the
+        # multiplatform results
         cache = results.LookupCache( plat, cplr, os.path.abspath('testing') )
         tm,tv = cache.getRunTime( tst )
         assert tm != None and tm > 0 and tm < 10
@@ -123,27 +126,19 @@ class runtimes_and_timings( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        # run first to get the timings
-        out,np,nd,nf,nn = util.run_vvtest( 'tests' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+        tests = os.path.abspath( 'tests' )
 
-        tdir = os.path.abspath( util.results_dir() )
-        platname = util.platform_name(out)
+        # run first to get the timings
+        vrun = util.runvvtest( tests )
+        vrun.assertCounts( total=6, npass=6 )
 
         # run again one at a time and check the execution order
-        out,np,nd,nf,nn = util.run_vvtest( '-n 1 -R tests' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-n 1 -R '+tests )
+        vrun.assertCounts( total=6, npass=6 )
 
-        L = util.grep( out, 'Starting: ' )
-        assert len(L) == 6
-        assert L[0].split()[1].endswith( os.sep+'CC' )
-        assert L[1].split()[1].endswith( os.sep+'BB.planet=venus' )
-        assert L[2].split()[1].endswith( os.sep+'AA' )
-        assert L[3].split()[1].endswith( os.sep+'BB.planet=mars' )
-        assert L[4].split()[1].endswith( os.sep+'BB.planet=mercury' )
-        assert L[5].split()[1].endswith( os.sep+'BB' )
-
-
+        assert vrun.startedTestIds() == [ 'CC', 'BB.planet=venus',
+                                          'AA', 'BB.planet=mars',
+                                          'BB.planet=mercury', 'BB' ]
 
     def test_using_timings_file_with_tmin_max(self):
         """
@@ -164,41 +159,33 @@ class runtimes_and_timings( unittest.TestCase ):
             import os, sys, time
             time.sleep(7)
             """ )
+        time.sleep(1)
 
-        platname = self.run_using_timings_file_with_tmin_max( '' )
-        if platname in util.nonqueued_platform_names:
-            self.run_using_timings_file_with_tmin_max( '--batch' )
+        for batch in [False,True]:
 
-    def run_using_timings_file_with_tmin_max(self, opt):
-        ""
-        util.remove_results()
-        if os.path.exists( 'timings' ):
-            os.remove( 'timings' )
+            util.remove_results()
 
-        # without a runtimes available, all tests should run
-        out,np,nd,nf,nn = util.run_vvtest( opt+' --tmax 6 tests' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+            if os.path.exists( 'timings' ):
+                os.remove( 'timings' )
 
-        tdir = os.path.abspath( util.results_dir() )
-        platname = util.platform_name(out)
+            # without a runtimes available, all tests should run
+            vrun = util.runvvtest( '--tmax 6 tests', batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
 
-        # create a timings file
-        util.run_cmd( util.resultspy + ' save', directory='tests' )
-        util.run_vvtest( '-i --save-results', directory=tdir )
-        resultsfname = glob.glob('results.*')[0]
-        ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
-        assert ok
+            tdir = vrun.resultsDir()
 
-        # select tests based on the timings file
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' --tmax 6 tests' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = util.testlist( out )
-        assert len(L) == 2
-        assert L[0][0] == 'AA'
-        assert L[1][0] == 'BB'
+            # create a timings file
+            util.run_cmd( util.resultspy + ' save', directory='tests' )
+            util.runvvtest( '-i --save-results', chdir=tdir )
+            resultsfname = glob('results.*')[0]
+            ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
+            assert ok
 
-        return platname
+            # select tests based on the timings file
+            util.remove_results()
+            vrun = util.runvvtest( '--tmax 6 tests', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
+            assert vrun.getTestIds() == ['AA','BB']
 
 
 ########################################################################

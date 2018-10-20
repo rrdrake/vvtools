@@ -46,10 +46,8 @@ class ScriptReader_file_reads( unittest.TestCase ):
 
         rdr = ScriptReader( 'script.vvt' )
 
-        specL = rdr.getSpecList()
-        assert len( specL ) == 1
-        assert specL[0].keyword == 'keyname'
-        assert specL[0].value == 'value1 value2'
+        assert_speclist( rdr.getSpecList(),
+                         ('keyname', 'value1 value2' ) )
 
     def test_directives_can_have_spaces_before_and_after_VVT(self):
         ""
@@ -66,15 +64,13 @@ class ScriptReader_file_reads( unittest.TestCase ):
 
         rdr = ScriptReader( 'script.vvt' )
 
-        specL = rdr.getSpecList()
-        assert len( specL ) == 6
-
-        assert specL[0].keyword == 'keyname1' and specL[0].value == 'value1'
-        assert specL[1].keyword == 'keyname2' and specL[1].value == 'value2'
-        assert specL[2].keyword == 'keyname3' and specL[2].value == 'value3'
-        assert specL[3].keyword == 'keyname4' and specL[3].value == 'value4'
-        assert specL[4].keyword == 'keyname5' and specL[4].value == 'value5'
-        assert specL[5].keyword == 'keyname6' and specL[5].value == 'value6'
+        assert_speclist( rdr.getSpecList(),
+                         ('keyname1', 'value1' ),
+                         ('keyname2', 'value2' ),
+                         ('keyname3', 'value3' ),
+                         ('keyname4', 'value4' ),
+                         ('keyname5', 'value5' ),
+                         ('keyname6', 'value6' ) )
 
 
 class ScriptReader_include_directives( unittest.TestCase ):
@@ -95,9 +91,7 @@ class ScriptReader_include_directives( unittest.TestCase ):
 
         rdr = ScriptReader( 'script.vvt' )
 
-        specL = rdr.getSpecList()
-        assert len( specL ) == 1
-        assert specL[0].keyword == 'keyname' and specL[0].value == 'value'
+        assert_speclist( rdr.getSpecList(), ('keyname', 'value' ) )
 
     def test_insert_file_contained_in_parent_directory(self):
         ""
@@ -121,12 +115,11 @@ class ScriptReader_include_directives( unittest.TestCase ):
         os.chdir( 'rundir' )
         rdr = ScriptReader( vvtfile )
 
-        specL = rdr.getSpecList()
-        assert len( specL ) == 4
-        assert specL[0].keyword == 'perl' and specL[0].value == 'is old school'
-        assert specL[1].keyword == 'whatever key' and specL[1].value == 'whatever value'
-        assert specL[2].keyword == 'foo' and specL[2].value == 'bar'
-        assert specL[3].keyword == 'python' and specL[3].value == 'rocks'
+        assert_speclist( rdr.getSpecList(),
+                         ('perl', 'is old school' ),
+                         ('whatever key', 'whatever value' ),
+                         ('foo', 'bar' ),
+                         ('python', 'rocks' ) )
 
     def test_insert_nested_files(self):
         ""
@@ -149,11 +142,10 @@ class ScriptReader_include_directives( unittest.TestCase ):
         os.chdir( 'rundir' )
         rdr = ScriptReader( '../subdir/script.vvt' )
 
-        specL = rdr.getSpecList()
-        assert len( specL ) == 3
-        assert specL[0].keyword == 'foo' and specL[0].value == 'bar'
-        assert specL[1].keyword == 'planets' and specL[1].value == 'earth mars others'
-        assert specL[2].keyword == 'python' and specL[2].value == 'rocks'
+        assert_speclist( rdr.getSpecList(),
+                         ('foo', 'bar' ),
+                         ('planets', 'earth mars others' ),
+                         ('python', 'rocks' ) )
 
     def test_insert_abspath_file(self):
         ""
@@ -170,10 +162,9 @@ class ScriptReader_include_directives( unittest.TestCase ):
 
         rdr = ScriptReader( 'script.vvt' )
 
-        specL = rdr.getSpecList()
-        assert len( specL ) == 2
-        assert specL[0].keyword == 'perl' and specL[0].value == 'old'
-        assert specL[1].keyword == 'python' and specL[1].value == 'rocks'
+        assert_speclist( rdr.getSpecList(),
+                         ('perl', 'old' ),
+                         ('python', 'rocks' ) )
 
     def test_run_vvtest_on_a_test_file_with_an_insert_directive(self):
         ""
@@ -202,8 +193,8 @@ class ScriptReader_include_directives( unittest.TestCase ):
 
         time.sleep(1)
 
-        vrun = util.vvtestRunner( '--plat '+util.core_platform_name() )
-        assert vrun.num_pass == 2
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=2, npass=2 )
 
 
 class parsing_errors( unittest.TestCase ):
@@ -275,6 +266,15 @@ class parsing_errors( unittest.TestCase ):
         else:
             raise Exception( 'expected an exception' )
 
+
+def assert_speclist( speclist, *key_value_pairs ):
+    ""
+    assert len( speclist ) == len( key_value_pairs )
+    for i in range(len(speclist)):
+        spec = speclist[i]
+        key,val = key_value_pairs[i]
+        assert spec.keyword == key
+        assert spec.value == val
 
 
 # USE CASES:

@@ -20,6 +20,7 @@ import pipes
 import getopt
 import random
 import string
+import glob
 import unittest
 
 # this file is expected to be imported from a script that was run
@@ -434,14 +435,19 @@ def shell_escape( cmd ):
     return ' '.join( [ pipes.quote(s) for s in cmd ] )
 
 
-def run_command_then_terminate_it( command,
-                                   signum=signal.SIGTERM,
-                                   seconds_before_signaling=4,
-                                   logfilename='run.log' ):
+def launch_vvtest_then_terminate_it( *cmd_args, **options ):
     ""
+    signum = options.pop( 'signum', signal.SIGTERM )
+    seconds_before_signaling = options.pop( 'seconds_before_signaling',4 )
+    logfilename = options.pop( 'logfilename', 'run.log' )
+    batch = options.pop( 'batch', False )
+
+    cmd = vvtest_command_line( *cmd_args, batch=batch )
+
     fp = open( logfilename, 'w' )
     try:
-        pop = subprocess.Popen( command, shell=True,
+        print3( cmd )
+        pop = subprocess.Popen( cmd, shell=True,
                     stdout=fp.fileno(), stderr=fp.fileno(),
                     preexec_fn=lambda:os.setpgid(os.getpid(),os.getpid()) )
 
@@ -454,8 +460,10 @@ def run_command_then_terminate_it( command,
     finally:
         fp.close()
 
+        return readfile( logfilename )
 
-def interrupt_vvtest_run( vvtest_args, count=None, signum=None, qid=None ):
+
+def interrupt_test_hook( batch=False, count=None, signum=None, qid=None ):
     ""
     valL = []
     if count != None:
@@ -465,30 +473,33 @@ def interrupt_vvtest_run( vvtest_args, count=None, signum=None, qid=None ):
     if qid != None:
         valL.append( "qid="+str(qid) )
 
-    spec = "run:" + ','.join( valL )
+    if batch:
+        spec = "batch:" + ','.join( valL )
+    else:
+        spec = "run:" + ','.join( valL )
 
-    os.environ['VVTEST_UNIT_TEST_SPEC'] = spec
-    try:
-        xok,out = run_cmd( vvtest + ' ' + vvtest_args )
-    finally:
-        del os.environ['VVTEST_UNIT_TEST_SPEC']
+    return spec
 
-    return xok, out
+
+def interrupt_vvtest_run( vvtest_args, count=None, signum=None, qid=None ):
+    ""
+    spec = interrupt_test_hook( count=count, signum=signum, qid=qid )
+    return run_vvtest_with_hook( vvtest_args, spec )
 
 
 def interrupt_vvtest_batch( vvtest_args, count=None, signum=None ):
     ""
-    valL = []
-    if count != None:
-        valL.append( "count="+str(count) )
-    if signum != None:
-        valL.append( "signum="+signum )
+    spec = interrupt_test_hook( batch=True, count=count, signum=signum )
+    return run_vvtest_with_hook( vvtest_args, spec, batch=True )
 
-    spec = "batch:" + ','.join( valL )
 
-    os.environ['VVTEST_UNIT_TEST_SPEC'] = spec
+def run_vvtest_with_hook( vvtest_args, envspec, batch=False ):
+    ""
+    cmd = vvtest_command_line( vvtest_args, batch=batch )
+
+    os.environ['VVTEST_UNIT_TEST_SPEC'] = envspec
     try:
-        xok,out = run_cmd( vvtest + ' ' + vvtest_args )
+        xok,out = run_cmd( cmd )
     finally:
         del os.environ['VVTEST_UNIT_TEST_SPEC']
 
@@ -560,16 +571,46 @@ def readfile( filename ):
     return buf
 
 
-def filegrep(fname, pat):
-    L = []
-    fp = open(fname,"r")
-    repat = re.compile(pat)
-    for line in fp.readlines():
-        line = line.rstrip()
-        if repat.search(line):
-            L.append(line)
-    fp.close()
-    return L
+def adjust_shell_pattern_to_work_with_fnmatch( pattern ):
+    """
+    slight modification to the ends of the pattern in order to use
+    fnmatch to simulate basic shell style matching
+    """
+    if pattern.startswith('^'):
+        pattern = pattern[1:]
+    else:
+        pattern = '*'+pattern
+
+    if pattern.endswith('$'):
+        pattern = pattern[:-1]
+    else:
+        pattern += '*'
+
+    return pattern
+
+
+def grepfiles( pattern, *paths ):
+    ""
+    pattern = adjust_shell_pattern_to_work_with_fnmatch( pattern )
+
+    matchlines = []
+
+    for path in paths:
+
+        for gp in glob.glob( path ):
+
+            fp = open( gp, "r" )
+
+            try:
+                for line in fp:
+                    line = line.rstrip( os.linesep )
+                    if fnmatch.fnmatch( line, pattern ):
+                        matchlines.append( line )
+
+            finally:
+                fp.close()
+
+    return matchlines
 
 
 def grep(out, pat):
@@ -582,91 +623,24 @@ def grep(out, pat):
     return L
 
 
-class vvtestRunner:
-    """
-    This runs a vvtest command line then captures the results as data
-    members of this class.  They are
+def findfiles( pattern, topdir, *topdirs ):
+    ""
+    fS = set()
 
-        out          : the stdout from running vvtest
-        num_pass
-        num_fail
-        num_diff
-        num_notrun
-        num_timeout
-        testdir      : such as TestResults.Linux
-        platname     : such as Linux
-    """
+    dL = []
+    for top in [topdir]+list(topdirs):
+        dL.extend( glob.glob( top ) )
 
-    def __init__(self, *args, **kwargs):
-        ""
-        cmd = vvtest
-        for arg in args:
-            cmd += ' '+arg
+    for top in dL:
+        for dirpath,dirnames,filenames in os.walk( top ):
+            for f in filenames:
+                if fnmatch.fnmatch( f, pattern ):
+                    fS.add( os.path.join( dirpath, f ) )
 
-        self.run( cmd, **kwargs )
+    fL = list( fS )
+    fL.sort()
 
-    def run(self, cmd, **kwargs):
-        ""
-        self.out = ''
-        self.num_total = 0
-        self.num_pass = 0
-        self.num_fail = 0
-        self.num_diff = 0
-        self.num_notrun = 0
-        self.num_timeout = 0
-        self.testdir = ''
-        self.platname = ''
-
-        ignore = kwargs.get( 'ignore_errors', False )
-
-        if 'directory' in kwargs:
-            curdir = os.getcwd()
-            os.chdir( kwargs['directory'] )
-
-        try:
-            ok,out = run_cmd( cmd )
-
-            if not ok and not ignore:
-                print3( out )
-                raise Exception( 'vvtest command failed: '+cmd )
-
-            self.out         = out
-            self.num_total   = numtotal( out )
-            self.num_pass    = numpass( out )
-            self.num_fail    = numfail( out )
-            self.num_diff    = numdiff( out )
-            self.num_notrun  = numnotrun( out )
-            self.num_timeout = numtimeout( out )
-            self.testdir     = get_results_dir( out )
-            self.platname    = platform_name( out )
-
-        finally:
-            if 'directory' in kwargs:
-                os.chdir( curdir )
-
-
-def run_vvtest( args='', ignore_errors=0, directory=None ):
-    """
-    Runs vvtest with the given argument string and returns
-      ( command output, num pass, num diff, num fail, num notrun )
-    The 'args' can be either a string or a list.
-    If the exit status is not zero, an assertion is raised.
-    """
-    if directory:
-        curdir = os.getcwd()
-        os.chdir( directory )
-    if type(args) == type(''):
-        cmd = vvtest + ' ' + args
-        x,out = run_cmd( cmd )
-    else:
-        cmd = ' '.join( [vvtest]+args )
-        x,out = run_cmd( [vvtest]+args )
-    if directory:
-        os.chdir( curdir )
-    if not x and not ignore_errors:
-        print3( out )
-        raise Exception( "vvtest command failed: " + cmd )
-    return out,numpass(out),numdiff(out),numfail(out),numnotrun(out)
+    return fL
 
 
 class VvtestCommandRunner:
@@ -686,8 +660,24 @@ class VvtestCommandRunner:
         if not quiet:
             print3( out )
 
+        self.x = x
         self.out = out
         self.cntD = parse_vvtest_counts( out )
+        self.testdates = None
+
+        self.plat = get_platform_name( out )
+
+        self.rdir = get_results_dir( out )
+        if self.rdir:
+            if not os.path.isabs( self.rdir ):
+                if chdir:
+                    self.rdir = os.path.abspath( os.path.join( chdir, self.rdir ) )
+                else:
+                    self.rdir = os.path.abspath( self.rdir )
+        elif chdir:
+            self.rdir = os.path.abspath( chdir )
+        else:
+            self.rdir = os.getcwd()
 
         assert ignore_exit or x == 0, \
             'vvtest command returned nonzero exit status: '+str(x)
@@ -712,7 +702,11 @@ class VvtestCommandRunner:
 
     def resultsDir(self):
         ""
-        return get_results_dir( self.out )
+        return self.rdir
+
+    def platformName(self):
+        ""
+        return self.plat
 
     def grepTestLines(self, regex):
         ""
@@ -729,6 +723,63 @@ class VvtestCommandRunner:
         ""
         return len( self.grepTestLines( regex ) )
 
+    def grep(self, regex):
+        ""
+        return grep( self.out, regex )
+
+    def countGrepLines(self, regex):
+        ""
+        return len( self.grep( regex ) )
+
+    def greplogs(self, shell_pattern, testid_pattern=None):
+        ""
+        xL = findfiles( 'execute.log', self.rdir )
+        if testid_pattern != None:
+            xL = filter_logfile_list_by_testid( xL, testid_pattern )
+        return grepfiles( shell_pattern, *xL )
+
+    def countGrepLogs(self, shell_pattern, testid_pattern=None):
+        ""
+        return len( self.greplogs( shell_pattern, testid_pattern ) )
+
+    def getTestIds(self):
+        ""
+        return parse_test_ids( self.out, self.resultsDir() )
+
+    def startedTestIds(self):
+        ""
+        return parse_started_tests( self.out, self.resultsDir() )
+
+    def startDate(self, testpath):
+        ""
+        if self.testdates == None:
+            self.parseTestDates()
+
+        return self.testdates[ testpath ][0]
+
+    def endDate(self, testpath):
+        ""
+        if self.testdates == None:
+            self.parseTestDates()
+
+        return self.testdates[ testpath ][1]
+
+    def parseTestDates(self):
+        ""
+        tdir = os.path.basename( self.resultsDir() )
+
+        self.testdates = {}
+        for xpath,start,end in testtimes( self.out ):
+
+            # do not include the test results directory name
+            pL = xpath.split( tdir+os.sep, 1 )
+            if len(pL) == 2:
+                xdir = pL[1]
+            else:
+                xdir = xpath
+
+            self.testdates[ xdir ] = ( start, end )
+
 
 def runvvtest( *cmd_args, **options ):
     """
@@ -736,6 +787,7 @@ def runvvtest( *cmd_args, **options ):
               quiet=True (default=False)
               ignore_exit=True (default=False)
               chdir=some/path (default=None)
+              addplatform=True
     """
     cmd = vvtest_command_line( *cmd_args, **options )
     vrun = VvtestCommandRunner( cmd )
@@ -746,10 +798,15 @@ def runvvtest( *cmd_args, **options ):
 def vvtest_command_line( *cmd_args, **options ):
     """
     Options:  batch=True (default=False)
+              addplatform=True
     """
-    argL = shlex.split( ' '.join( cmd_args ) )
+    argstr = ' '.join( cmd_args )
+    argL = shlex.split( argstr )
 
-    cmdL = [ sys.executable, vvtest, '--plat', core_platform_name() ]
+    cmdL = [ sys.executable, vvtest ]
+
+    if options.get( 'addplatform', True ) and '--plat' not in argL:
+        cmdL.extend( [ '--plat', core_platform_name() ] )
 
     if options.get( 'batch', False ):
 
@@ -765,9 +822,9 @@ def vvtest_command_line( *cmd_args, **options ):
         if '-n' not in argL:
             cmdL.extend( [ '-n', '8' ] )
 
-    cmdL.extend( argL )
-
     cmd = ' '.join( cmdL )
+    if argstr:
+        cmd += ' ' + argstr
 
     return cmd
 
@@ -803,20 +860,76 @@ def parse_vvtest_counts( out ):
     return cntD
 
 
+def parse_test_ids( vvtest_output, results_dir ):
+    ""
+    tdir = os.path.basename( results_dir )
 
-def platform_name( test_out ):
-    """
-    After running the 'run_vvtest' command, give the output (the first return
-    argument) to this function and it will return the platform name.  It
-    throws an exception if the platform name cannot be determined.
-    """
+    tlist = []
+    for line in testlines( vvtest_output ):
+        s = line.strip().split()[-1]
+        d1 = first_path_segment( s )+os.sep
+        if d1.startswith( 'TestResults.' ):
+            tid = s.split(d1)[1]
+        else:
+            tid = s
+        tlist.append( tid )
+
+    return tlist
+
+
+def first_path_segment( path ):
+    ""
+    if os.path.isabs( path ):
+        return os.sep
+    else:
+        p = path
+        while True:
+            d,b = os.path.split( p )
+            if d and d != '.':
+                p = d
+            else:
+                return b
+
+
+def parse_started_tests( vvtest_output, results_dir ):
+    ""
+    tdir = os.path.basename( results_dir )
+
+    startlist = []
+    for line in vvtest_output.splitlines():
+        if line.startswith( 'Starting: ' ):
+            s = line.split( 'Starting: ' )[1].strip()
+            if s.startswith( tdir+os.sep ):
+                startlist.append( s.split( tdir+os.sep )[1] )
+
+    return startlist
+
+
+def filter_logfile_list_by_testid( logfiles, testid_pattern ):
+    ""
+    pat = adjust_shell_pattern_to_work_with_fnmatch( testid_pattern )
+
+    newL = []
+
+    for pn in logfiles:
+        d,b = os.path.split( pn )
+        assert b == 'execute.log'
+        if fnmatch.fnmatch( os.path.basename( d ), pat ):
+            newL.append( pn )
+
+    return newL
+
+
+def get_platform_name( vvtest_output ):
+    ""
     platname = None
-    for line in test_out.split( os.linesep ):
+
+    for line in vvtest_output.splitlines():
         line = line.strip()
         if line.startswith( 'Test directory:' ):
-            L = line.split()
-            if len(L) >= 3:
-                L2 = L[2].split('.')
+            L1 = line.split( 'Test directory:', 1 )
+            if len(L1) == 2:
+                L2 = os.path.basename( L1[1].strip() ).split('.')
                 if len(L2) >= 2:
                     platname = L2[1]
 

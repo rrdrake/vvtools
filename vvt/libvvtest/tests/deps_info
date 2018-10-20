@@ -47,13 +47,11 @@ class dependency_information( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.vvtestRunner( '-N 4' )
-        assert vrun.num_pass == 2
+        util.runvvtest().assertCounts( total=2, npass=2 )
 
         util.remove_results()
-        cmd = '--plat '+util.core_platform_name()+' --batch'
-        vrun = util.vvtestRunner( cmd )
-        assert vrun.num_pass == 2
+
+        util.runvvtest( batch=True ).assertCounts( total=2, npass=2 )
 
     def test_deps_work_with_bash(self):
         ""
@@ -71,13 +69,11 @@ class dependency_information( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.vvtestRunner( '-N 4' )
-        assert vrun.num_pass == 2
+        util.runvvtest().assertCounts( total=2, npass=2 )
 
         util.remove_results()
-        cmd = '--plat '+util.core_platform_name()+' --batch'
-        vrun = util.vvtestRunner( cmd )
-        assert vrun.num_pass == 2
+
+        util.runvvtest( batch=True ).assertCounts( total=2, npass=2 )
 
     def test_multiple_depdirs(self):
         ""
@@ -116,13 +112,11 @@ class dependency_information( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.vvtestRunner( '-N 4' )
-        assert vrun.num_pass == 3
+        util.runvvtest().assertCounts( total=3, npass=3 )
 
         util.remove_results()
-        cmd = '--plat '+util.core_platform_name()+' --batch'
-        vrun = util.vvtestRunner( cmd )
-        assert vrun.num_pass == 3
+
+        util.runvvtest( batch=True ).assertCounts( total=3, npass=3 )
 
     def test_multiple_dep_matches(self):
         ""
@@ -156,13 +150,11 @@ class dependency_information( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.vvtestRunner( '-N 4' )
-        assert vrun.num_pass == 3
+        util.runvvtest().assertCounts( total=3, npass=3 )
 
         util.remove_results()
-        cmd = '--plat '+util.core_platform_name()+' --batch'
-        vrun = util.vvtestRunner( cmd )
-        assert vrun.num_pass == 3
+
+        util.runvvtest( batch=True ).assertCounts( total=3, npass=3 )
 
     def test_depdirs_in_subdirs(self):
         ""
@@ -194,25 +186,19 @@ class dependency_information( unittest.TestCase ):
         os.mkdir( 'rdir2' )
         time.sleep(1)
 
-        opt = '--plat '+util.core_platform_name() + ' '
+        vrun = util.runvvtest( '../tsrc', chdir='rdir1' )
+        vrun.assertCounts( total=3, npass=3 )
 
-        vrun = util.vvtestRunner( opt+'-N 4 ../tsrc', directory='rdir1' )
-        assert vrun.num_pass == 3
+        tdir = os.path.basename( vrun.resultsDir() )
 
-        tdir = vrun.testdir
+        vrun = util.runvvtest( '../tsrc', chdir='rdir2', batch=True )
+        vrun.assertCounts( total=3, npass=3 )
 
-        cmd = opt+' --batch ../tsrc'
-        vrun = util.vvtestRunner( cmd, directory='rdir2' )
-        assert vrun.num_pass == 3
-        testrootdir2 = os.path.join( 'rdir2', vrun.testdir )
+        vrun = util.runvvtest( '-R', chdir='rdir2/'+tdir )
+        vrun.assertCounts( total=3, npass=3 )
 
-        vrun = util.vvtestRunner( opt+'-R -N 4', directory='rdir2/'+tdir )
-        assert vrun.num_pass == 3
-        testrootdir1 = vrun.testdir
-
-        cmd = opt+' -R --batch'
-        vrun = util.vvtestRunner( cmd, directory='rdir1/'+tdir )
-        assert vrun.num_pass == 3
+        vrun = util.runvvtest( '-R', chdir='rdir1/'+tdir, batch=True )
+        vrun.assertCounts( total=3, npass=3 )
 
     def test_depdirs_in_subdirs_of_a_subdir(self):
         ""
@@ -242,10 +228,7 @@ class dependency_information( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        opt = '--plat '+util.core_platform_name() + ' '
-
-        vrun = util.vvtestRunner( opt+'-N 4 tsrc' )
-        assert vrun.num_pass == 3
+        util.runvvtest( 'tsrc' ).assertCounts( total=3, npass=3 )
 
     def test_analyze_only_restart(self):
         ""
@@ -274,22 +257,16 @@ class dependency_information( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        opt = '--plat '+util.core_platform_name()
+        for batch in [False,True]:
 
-        self.analyze_only_restart( opt+' -N 4 ' )
-        self.analyze_only_restart( opt+' --batch ' )
+            util.remove_results()
 
-    def analyze_only_restart(self, opt):
-        ""
-        util.remove_results()
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
 
-        vrun = util.vvtestRunner( opt )
-        assert vrun.num_total == 3
-        assert vrun.num_pass == 3
-
-        vrun = util.vvtestRunner( opt+'-R -k testX', directory=vrun.testdir )
-        assert vrun.num_total == 1
-        assert vrun.num_pass == 1
+            vrun = util.runvvtest( '-R -k testX', chdir=vrun.resultsDir(),
+                                                  batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
 
     def test_restart_dependent_and_one_dependency(self):
         ""
@@ -332,47 +309,37 @@ class dependency_information( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        opt = '--plat '+util.core_platform_name()
+        for batch in [False,True]:
 
-        self.restart_dependent_and_one_dependency( opt+' -N 4 ' )
-        self.restart_dependent_and_one_dependency( opt+' --batch ' )
+            util.writescript( 'sub1/testY.vvt', """
+                #!/usr/bin/env python
+                import os, time
+                import script_util as su
+                time.sleep(3)
+                fp = open( 'Y.out', 'w' )
+                fp.write( 'testY does not say the right thing'+os.linesep )
+                fp.close()
+                su.exit_diff()
+                """ )
+            util.remove_results()
+            time.sleep(1)
 
-    def restart_dependent_and_one_dependency(self, opt):
-        ""
-        util.writescript( 'sub1/testY.vvt', """
-            #!/usr/bin/env python
-            import os, time
-            import script_util as su
-            time.sleep(3)
-            fp = open( 'Y.out', 'w' )
-            fp.write( 'testY does not say the right thing'+os.linesep )
-            fp.close()
-            su.exit_diff()
-            """ )
-        util.remove_results()
-        time.sleep(1)
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=3, npass=1, diff=1, fail=1 )
 
-        vrun = util.vvtestRunner( opt )
-        assert vrun.num_total == 3
-        assert vrun.num_pass == 1
-        assert vrun.num_diff == 1
-        assert vrun.num_fail == 1
-        assert vrun.num_notrun == 0
+            # "fix" the test
+            util.writescript( 'sub1/testY.vvt', """
+                #!/usr/bin/env python
+                import os, time
+                fp = open( 'Y.out', 'w' )
+                fp.write( 'testY says hello'+os.linesep )
+                fp.close()
+                """ )
+            time.sleep(1)
 
-        # "fix" the test
-        util.writescript( 'sub1/testY.vvt', """
-            #!/usr/bin/env python
-            import os, time
-            fp = open( 'Y.out', 'w' )
-            fp.write( 'testY says hello'+os.linesep )
-            fp.close()
-            """ )
-        time.sleep(1)
-
-        vrun = util.vvtestRunner( opt+'-R -k fail/diff',
-                                  directory=vrun.testdir )
-        assert vrun.num_total == 2
-        assert vrun.num_pass == 2
+            vrun = util.runvvtest( '-R -k fail/diff', batch=batch,
+                                                      chdir=vrun.resultsDir() )
+            vrun.assertCounts( total=2, npass=2 )
 
     def test_depdirs_are_available_when_rerunning_an_analyze(self):
         ""
@@ -394,18 +361,13 @@ class dependency_information( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.vvtestRunner()
-        assert vrun.num_total == 3 and vrun.num_pass == 2 and vrun.num_fail == 1
-        time.sleep(1)
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=3, npass=2, fail=1 )
+        assert vrun.countGrepLogs( 'always fail', 'testA' ) > 0
 
-        tdir = vrun.testdir
-        lines = util.filegrep( tdir+'/testA/execute.log', 'always fail' )
-        assert len( lines ) > 0
-
-        vrun = util.vvtestRunner( '-k fail' )
-        assert vrun.num_total == 1 and vrun.num_fail == 1
-        lines = util.filegrep( tdir+'/testA/execute.log', 'always fail' )
-        assert len( lines ) > 0
+        vrun = util.runvvtest( '-k fail' )
+        vrun.assertCounts( total=1, fail=1 )
+        assert vrun.countGrepLogs( 'always fail', 'testA' ) > 0
 
     def test_depdirs_are_available_when_rerunning_a_test_with_a_dependency(self):
         ""
@@ -424,18 +386,17 @@ class dependency_information( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.vvtestRunner()
-        assert vrun.num_total == 2 and vrun.num_pass == 1 and vrun.num_fail == 1
-        time.sleep(1)
+        for batch in [False,True]:
 
-        tdir = vrun.testdir
-        lines = util.filegrep( tdir+'/testX/execute.log', 'always fail' )
-        assert len( lines ) > 0
+            util.remove_results()
 
-        vrun = util.vvtestRunner( '-k fail' )
-        assert vrun.num_total == 1 and vrun.num_fail == 1
-        lines = util.filegrep( tdir+'/testX/execute.log', 'always fail' )
-        assert len( lines ) > 0
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=2, npass=1, fail=1 )
+            assert vrun.countGrepLogs( 'always fail', 'testX' ) > 0
+
+            vrun = util.runvvtest( '-k fail', batch=batch )
+            vrun.assertCounts( total=1, fail=1 )
+            assert vrun.countGrepLogs( 'always fail', 'testX' ) > 0
 
 
 

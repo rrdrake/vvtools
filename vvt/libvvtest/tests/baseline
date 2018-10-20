@@ -58,13 +58,15 @@ class baseline_tests( unittest.TestCase ):
         util.writefile( "bline2.txt", "" )
         util.writefile( "blinetwo.txt", "" )
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 1 and nf == 0 and nn == 0
+        time.sleep(1)
+
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=3, npass=2, diff=1 )
 
         # run baseline and rerun tests
-        out,np,nd,nf,nn = util.run_vvtest( '-b' )
-        out,np,nd,nf,nn = util.run_vvtest( '-R' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        util.runvvtest( '-b' )
+        vrun = util.runvvtest( '-R' )
+        vrun.assertCounts( total=3, npass=3 )
 
     def test_filtering_rebaseline_by_testname(self):
         ""
@@ -90,16 +92,18 @@ class baseline_tests( unittest.TestCase ):
               <baseline testname="multi" file="output.txt" destination="base1.txt"/>
             </rtest>""" )
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 0 and nd == 2 and nf == 0 and nn == 0
+        time.sleep(1)
+
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=2, diff=2 )
 
         # run baseline and rerun tests
-        out,np,nd,nf,nn = util.run_vvtest( '-b' )
-        out,np,nd,nf,nn = util.run_vvtest( '-R' )
-        assert np == 1 and nd == 1 and nf == 0 and nn == 0
+        util.runvvtest( '-b' )
+        vrun = util.runvvtest( '-R' )
+        vrun.assertCounts( total=2, npass=1, diff=1 )
 
-        assert len( util.greptestlist( out, 'pass.*/multi$' ) ) == 1
-        assert len( util.greptestlist( out, 'diff.*/multi2$' ) ) == 1
+        assert vrun.countTestLines( 'pass.*/multi$' ) == 1
+        assert vrun.countTestLines( 'diff.*/multi2$' ) == 1
 
     def test_script_format_rebaseline_with_just_copy_files(self):
         ""
@@ -129,13 +133,15 @@ class baseline_tests( unittest.TestCase ):
         util.writefile( "bline2.txt", "b" )
         util.writefile( "blinetwo.txt", "c" )
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 1 and nf == 0 and nn == 0
+        time.sleep(1)
+
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=3, npass=2, diff=1 )
 
         # run baseline and rerun tests
-        out,np,nd,nf,nn = util.run_vvtest( '-b' )
-        out,np,nd,nf,nn = util.run_vvtest( '-R' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        util.runvvtest( '-b' )
+        vrun = util.runvvtest( '-R' )
+        vrun.assertCounts( total=3, npass=3 )
 
     def test_script_format_rebaseline_with_external_script(self):
         ""
@@ -164,13 +170,16 @@ class baseline_tests( unittest.TestCase ):
         util.writefile( "bline2.txt", "b" )
         util.writefile( "blinetwo.txt", "c" )
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 0 and nd == 1 and nf == 0 and nn == 0
+        time.sleep(1)
+
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=1, diff=1 )
 
         # run baseline and rerun tests
-        out,np,nd,nf,nn = util.run_vvtest( '-b' )
-        out,np,nd,nf,nn = util.run_vvtest( '-R' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-b' )
+        assert vrun.countGrepLines( 'FAILED' ) == 0
+        vrun = util.runvvtest( '-R' )
+        vrun.assertCounts( total=1, npass=1 )
 
     def test_script_format_rebaseline_using_option(self):
         ""
@@ -201,13 +210,15 @@ class baseline_tests( unittest.TestCase ):
         util.writefile( "bline2.txt", "b" )
         util.writefile( "blinetwo.txt", "c" )
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 0 and nd == 1 and nf == 0 and nn == 0
+        time.sleep(1)
+
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=1, diff=1 )
 
         # run baseline and rerun tests
-        out,np,nd,nf,nn = util.run_vvtest( '-b' )
-        out,np,nd,nf,nn = util.run_vvtest( '-R' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        util.runvvtest( '-b' )
+        vrun = util.runvvtest( '-R' )
+        vrun.assertCounts( total=1, npass=1 )
 
     def test_xml_format_rebaseline_with_script_fragment_and_file_list(self):
         ""
@@ -236,13 +247,15 @@ class baseline_tests( unittest.TestCase ):
         util.writefile( "bline2.txt", "" )
         util.writefile( "blinetwo.txt", "" )
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 0 and nd == 1 and nf == 0 and nn == 0
+        time.sleep(1)
+
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=1, diff=1 )
 
         # run baseline and rerun tests
-        out,np,nd,nf,nn = util.run_vvtest( '-b' )
-        out,np,nd,nf,nn = util.run_vvtest( '-R' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        util.runvvtest( '-b' )
+        vrun = util.runvvtest( '-R' )
+        vrun.assertCounts( total=1, npass=1 )
 
     def test_variable_expansion_in_baseline_file_list(self):
         ""
@@ -273,13 +286,15 @@ class baseline_tests( unittest.TestCase ):
         util.writefile( "bline_base.txt", "" )
         util.writefile( "pybase_base.txt", "" )
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 0 and nd == 2 and nf == 0 and nn == 0
+        time.sleep(1)
+
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=2, diff=2 )
 
         # run baseline and rerun tests
-        out,np,nd,nf,nn = util.run_vvtest( '-b' )
-        out,np,nd,nf,nn = util.run_vvtest( '-R' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        util.runvvtest( '-b' )
+        vrun = util.runvvtest( '-R' )
+        vrun.assertCounts( total=2, npass=2 )
 
     def test_filter_rebaseline_by_parameter_value(self):
         ""
@@ -313,29 +328,29 @@ class baseline_tests( unittest.TestCase ):
         util.writefile( "bline_base.txt", "" )
         util.writefile( "pybase_base.txt", "" )
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 0 and nd == 4 and nf == 0 and nn == 0
-        tdir = util.results_dir()
+        time.sleep(1)
+
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=4, diff=4 )
 
         # run baseline; only the foo=1 tests should rebaseline
-        out,np,nd,nf,nn = util.run_vvtest( '-b' )
-        assert len( util.grep( out, 'baselining pybase.foo=1' ) ) == 1
-        assert len( util.grep( out, 'baselining bline.foo=1' ) ) == 1
-        assert len( util.grep( out, 'baselining bline.foo=2' ) ) == 0
-        assert len( util.grep( out, 'baselining pybase.foo=2' ) ) == 0
-        assert len( util.filegrep( tdir+'/bline.foo=1/baseline.log',
-                              'bline.txt .*/bline_base.txt' ) ) == 1
-        assert len( util.filegrep( tdir+'/pybase.foo=1/baseline.log',
-                              'pybase.txt .*/pybase_base.txt' ) ) == 1
+        vrun = util.runvvtest( '-b' )
+        assert vrun.countGrepLines( 'baselining pybase.foo=1' ) == 1
+        assert vrun.countGrepLines( 'baselining bline.foo=1' ) == 1
+        assert vrun.countGrepLines( 'baselining bline.foo=2' ) == 0
+        assert vrun.countGrepLines( 'baselining pybase.foo=2' ) == 0
+
+        assert len( util.grepfiles( 'bline.txt */bline_base.txt',
+                    'TestResults.*/bline.foo=1/baseline.log' ) ) == 1
+        assert len( util.grepfiles( 'pybase.txt */pybase_base.txt',
+                    'TestResults.*/pybase.foo=1/baseline.log' ) ) == 1
 
         # on rerun, all should pass
-        out,np,nd,nf,nn = util.run_vvtest( '-R' )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-R' )
+        vrun.assertCounts( total=4, npass=4 )
 
     def test_specifying_baseline_for_analyze_only(self):
-        """
-        specify baseline for analyze only
-        """
+        ""
         util.writescript( "control.vvt", """
             #!/usr/bin/env python
             #VVT: parameterize : foo = 1 2
@@ -368,15 +383,16 @@ class baseline_tests( unittest.TestCase ):
                 vvt.print3( 'executing this test' )
             """ )
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( '-b -k pass' )
-        assert len( util.grep( out, 'baselining control[.]foo=1' ) ) == 1
-        assert len( util.grep( out, 'baselining control[.]foo=2' ) ) == 1
-        assert len( util.grep( out, 'baselining control[.]' ) ) == 3
-        assert len( util.grep( out, 'baselining pybase[.]' ) ) == 1
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=6, npass=6 )
+
+        vrun = util.runvvtest( '-b -k pass' )
+        assert vrun.countGrepLines( 'baselining control[.]foo=1' ) == 1
+        assert vrun.countGrepLines( 'baselining control[.]foo=2' ) == 1
+        assert vrun.countGrepLines( 'baselining control[.]' ) == 3
+        assert vrun.countGrepLines( 'baselining pybase[.]' ) == 1
 
 
 #####################################################################

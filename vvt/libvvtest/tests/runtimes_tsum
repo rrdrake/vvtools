@@ -53,30 +53,20 @@ class runtimes_and_tsum( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.run_filter_tests_by_sum_of_runtimes( '' )
-        self.run_filter_tests_by_sum_of_runtimes(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_filter_tests_by_sum_of_runtimes(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' --tsum 7 tests' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '--tsum 7 tests', batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
 
-        tdir = os.path.abspath( util.results_dir() )
-        platname = util.platform_name(out)
+            vrun = util.runvvtest( '-R --tsum 7 tests', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
+            assert vrun.getTestIds() == [ 'AA', 'CC' ]
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R --tsum 7 tests' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = util.testlist( out )
-        assert len(L) == 2
-        assert L[0][-1].endswith( os.sep+'AA' )
-        assert L[1][-1].endswith( os.sep+'CC' )
-
-        # check that the full list is still intact
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R tests' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+            # check that the full list is still intact
+            vrun = util.runvvtest( '-R tests', batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
 
     def test_using_tsum_will_run_parameterize_analyze_tests(self):
         ""
@@ -108,32 +98,22 @@ class runtimes_and_tsum( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.run_using_tsum_will_run_parameterize_analyze_tests( '' )
-        self.run_using_tsum_will_run_parameterize_analyze_tests(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_using_tsum_will_run_parameterize_analyze_tests(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' --tsum 10 tests' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '--tsum 10 tests', batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
 
-        tdir = os.path.abspath( util.results_dir() )
-        platname = util.platform_name(out)
+            vrun = util.runvvtest( '-R --tsum 10 tests', batch=batch )
+            vrun.assertCounts( total=4, npass=4 )
+            assert vrun.getTestIds() == [ 'BB', 'BB.planet=mars',
+                                          'BB.planet=mercury',
+                                          'BB.planet=venus' ]
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R --tsum 10 tests' )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
-        L = util.testlist( out )
-        assert len(L) == 4
-        assert L[0][-1].endswith( os.sep+'BB' )
-        assert L[1][-1].endswith( os.sep+'BB.planet=mars' )
-        assert L[2][-1].endswith( os.sep+'BB.planet=mercury' )
-        assert L[3][-1].endswith( os.sep+'BB.planet=venus' )
-
-        # check that the full list is still intact
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R tests' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+            # check that the full list is still intact
+            vrun = util.runvvtest( '-R tests', batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
 
     def test_tsum_option_will_use_timings_file(self):
         ""
@@ -165,43 +145,33 @@ class runtimes_and_tsum( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        platname = self.run_tsum_option_will_use_timings_file( '' )
-        if platname in util.nonqueued_platform_names:
-            self.run_tsum_option_will_use_timings_file( '--batch' )
+        for batch in [False,True]:
 
-    def run_tsum_option_will_use_timings_file(self, opt):
-        ""
-        util.remove_results()
-        if os.path.exists( 'timings' ):
-            os.remove( 'timings' )
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' tests' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
+            if os.path.exists( 'timings' ):
+                os.remove( 'timings' )
 
-        tdir = os.path.abspath( util.results_dir() )
-        platname = util.platform_name(out)
+            vrun = util.runvvtest( 'tests', batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
+            tdir = vrun.resultsDir()
 
-        # create a timings file
-        util.run_cmd( util.resultspy + ' save', directory='tests' )
-        util.run_vvtest( '-i --save-results', directory=tdir )
-        resultsfname = glob.glob('results.*')[0]
-        ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
-        assert ok
+            # create a timings file
+            util.run_cmd( util.resultspy + ' save', directory='tests' )
+            util.runvvtest( '-i --save-results', chdir=tdir )
+            resultsfname = glob.glob('results.*')[0]
+            ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
+            assert ok
 
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' --tsum 6 tests' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = util.testlist( out )
-        assert len(L) == 2
-        assert L[0][-1].endswith( os.sep+'AA' )
-        assert L[1][-1].endswith( os.sep+'CC' )
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R', directory=tdir )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = util.testlist( out )
-        assert len(L) == 2
-        assert L[0][-1] == 'AA'
-        assert L[1][-1] == 'CC'
+            vrun = util.runvvtest( '--tsum 6 tests', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
+            assert vrun.getTestIds() == [ 'AA', 'CC' ]
+
+            vrun = util.runvvtest( '-R', chdir=tdir, batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
+            assert vrun.getTestIds() == [ 'AA', 'CC' ]
 
 
 ########################################################################

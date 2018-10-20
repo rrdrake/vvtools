@@ -9,6 +9,28 @@ import signal
 import time
 
 
+def construct_unit_testing_hook( hooktype, job_qid=None ):
+    """
+    Examples of environ variable VVTEST_UNIT_TEST_SPEC:
+
+        run:count=2,signum=SIGTERM
+        batch:count=1
+        run:count=2,signum=SIGTERM|batch:count=1
+    """
+    envspec = os.environ.get( 'VVTEST_UNIT_TEST_SPEC', '' )
+    specL = envspec.strip().split('|')
+
+    for spec in [ sp.strip() for sp in specL ]:
+
+        if hooktype == 'run' and spec.startswith('run:'):
+            return UnitTestingRunHook( spec[4:], job_qid )
+
+        elif hooktype == 'batch' and spec.startswith('batch:'):
+            return UnitTestingBatchHook( spec[6:] )
+
+    return UnitTestingEmptyHook()
+
+
 class UnitTestingRunHook:
 
     def __init__(self, spec, job_qid):
@@ -77,25 +99,3 @@ class UnitTestingBatchHook:
 class UnitTestingEmptyHook:
     def check(self, *args):
         pass
-
-
-def construct_unit_testing_hook( hooktype, job_qid=None ):
-    """
-    Examples of environ variable VVTEST_UNIT_TEST_SPEC:
-
-        run:count=2,signum=SIGTERM
-        batch:count=1
-        run:count=2,signum=SIGTERM|batch:count=1
-    """
-    envspec = os.environ.get( 'VVTEST_UNIT_TEST_SPEC', '' )
-    specL = envspec.strip().split('|')
-
-    for spec in [ sp.strip() for sp in specL ]:
-
-        if hooktype == 'run' and spec.startswith('run:'):
-            return UnitTestingRunHook( spec[4:], job_qid )
-
-        elif hooktype == 'batch' and spec.startswith('batch:'):
-            return UnitTestingBatchHook( spec[6:] )
-
-    return UnitTestingEmptyHook()

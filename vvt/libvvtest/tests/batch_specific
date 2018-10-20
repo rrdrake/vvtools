@@ -49,36 +49,31 @@ class inlining_results_file_includes( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        platname = util.core_platform_name()
+        opts = '--qsub-limit 1 --force'
 
-        opts = '--batch --plat '+platname+' --qsub-limit 1 --force'
-
-        util.interrupt_vvtest_batch( opts, count=1, signum='SIGTERM' )
+        util.interrupt_vvtest_batch( '--qsub-limit 1',
+                                     count=1, signum='SIGTERM' )
         time.sleep(1)
 
         # exactly one of the three tests should have completed
-        fL = glob.glob( 'TestResults*/lazy*/touch*.txt' )
-        assert len(fL) == 1
+        assert len( util.findfiles( 'touch*.txt', 'TestResults*' ) ) == 1
 
-        util.interrupt_vvtest_batch( opts, count=1, signum='SIGTERM' )
+        util.interrupt_vvtest_batch( '--qsub-limit 1 --force',
+                                     count=1, signum='SIGTERM' )
         time.sleep(1)
 
         # exactly one more of the three tests should have completed
-        fL = glob.glob( 'TestResults*/lazy*/touch*.txt' )
-        assert len(fL) == 2
+        assert len( util.findfiles( 'touch*.txt', 'TestResults*' ) ) == 2
 
-        vrun = util.vvtestRunner( opts )
+        vrun = util.runvvtest( '--force', batch=True )
         time.sleep(1)
 
         # only the last of the three tests should have been run
-        assert vrun.num_total == 1 and vrun.num_pass == 1
-        fL = glob.glob( 'TestResults*/lazy*/touch*.txt' )
-        assert len(fL) == 3
+        vrun.assertCounts( total=1, npass=1 )
+        assert len( glob.glob( 'TestResults*/lazy*/touch*.txt' ) ) == 3
 
         # all three tests should show as completed
-        xok,out = util.run_cmd( util.vvtest+' --plat '+platname+' -i' )
-        ntot,np = util.numtotal(out), util.numpass(out)
-        assert ntot == 3 and np == 3
+        util.runvvtest( '-i' ).assertCounts( total=3, npass=3 )
 
     def test_failed_batch_job_issues_warning_about_not_finishing(self):
         ""
@@ -107,15 +102,15 @@ class inlining_results_file_includes( unittest.TestCase ):
         # these four tests are run in two batch
         # batch zero will be ok, while batch one will crash
         # this should cause batch one to show "did not seem to finish"
-        opts = '--plat '+util.core_platform_name() + \
-               ' --batch --qsub-limit 1 --qsub-length 40'
+
+        opts = '--batch --qsub-limit 1 --qsub-length 40'
         xok,out = util.interrupt_vvtest_run( opts, count=1, qid=1 )
 
         L = util.grep( out, 'did not seem to finish:' )
         assert len(L) == 1
-        L2 = L[0].split(':')[-1].split()
-        L2 = [ int(s) for s in L2 ]
-        assert L2 == [1]
+        L2 = L[0].split(':')[-1].split()  # qid list as strings
+        L2 = [ int(s) for s in L2 ]  # make integer qids
+        assert len(L2) == 1 and L2[0] == 1
 
         assert len( util.greptestlist( out, 'sleeper[1-4]' ) ) == 4
         assert len( util.greptestlist( out, 'sleeper[1-4] .*pass' ) ) == 3

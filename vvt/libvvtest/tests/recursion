@@ -43,21 +43,14 @@ class tests_that_run_vvtest( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.a_test_that_runs_vvtest( '--plat '+plat )
-        self.a_test_that_runs_vvtest( '--plat '+plat+' --batch' )
+        for batch in [False,True]:
 
-    def a_test_that_runs_vvtest(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
 
-        tdir = util.results_dir()
-        bdir = os.path.basename( tdir )
-
-        fL = glob.glob( tdir+'/outside.py/'+bdir+'/inside.py/hello.txt' )
-        assert len(fL) == 1
+            assert len( util.findfiles( 'hello.txt', vrun.resultsDir() ) ) == 1
 
 
 ########################################################################

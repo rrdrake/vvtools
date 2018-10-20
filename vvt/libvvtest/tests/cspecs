@@ -32,140 +32,136 @@ class csh_common_specifications( unittest.TestCase ):
         ""
         util.writefile( 'db1.xml', """
             <exeDB>
-              <clear>
-            unsetenv VARNAME1
-            unsetenv VARNAME2
-              </clear>
+                <clear>
+                    unsetenv VARNAME1
+                    unsetenv VARNAME2
+                </clear>
             </exeDB>""" )
-
-        xdoc = xreader.readDoc('db1.xml')
-        db = CommonSpec.CommonSpecDB()
-        CommonSpec.scanCommonSpecs( xdoc, db )
-        print3( db.getClear() )
-        assert db.getClear() != None
-        testNonEmptyLines( db.getClear(), ['unsetenv VARNAME1',
-                                           'unsetenv VARNAME2'] )
-
         util.writefile( 'db2.xml', """
             <exeDB>
-              <clear>unsetenv VARNAME3</clear>
+                <clear>unsetenv VARNAME3</clear>
             </exeDB>""" )
-
-        xdoc = xreader.readDoc('db2.xml')
-        CommonSpec.scanCommonSpecs( xdoc, db )
-        print3( db.getClear() )
-        assert db.getClear() != None
-        testNonEmptyLines( db.getClear(), ['unsetenv VARNAME1',
-                                           'unsetenv VARNAME2',
-                                           'unsetenv VARNAME3'] )
-
         util.writefile( 'db3.xml', """
             <exeDB>
-              <clear>unsetenv VARNAME1</clear>
-              <clear>unsetenv VARNAME2</clear>
+                <clear>unsetenv VARNAME1</clear>
+                <clear>unsetenv VARNAME2</clear>
             </exeDB>""" )
+        time.sleep(1)
 
-        xdoc = xreader.readDoc('db3.xml')
-        db = CommonSpec.CommonSpecDB()
-        try: CommonSpec.scanCommonSpecs( xdoc, db )
-        except CommonSpec.CommonSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a CommonSpec.CommonSpecError error" )
+        db = create_and_load_CommonSpecDB( 'db1.xml' )
+
+        clr = db.getClear()
+        print3( clr )
+        assert_same_lines( clr, ['unsetenv VARNAME1',
+                                 'unsetenv VARNAME2'] )
+
+        create_and_load_CommonSpecDB( 'db2.xml', db )
+
+        clr = db.getClear()
+        print3( clr )
+        assert_same_lines( clr, ['unsetenv VARNAME1',
+                                 'unsetenv VARNAME2',
+                                 'unsetenv VARNAME3'] )
+
+        self.assertRaises( CommonSpec.CommonSpecError,
+                           create_and_load_CommonSpecDB, 'db3.xml' )
 
     def test_defining_blocks(self):
         ""
         util.writefile( 'db4.xml', """
             <exeDB>
-              <define>
-                <default> # the script</default>
-              </define>
+                <define>
+                    <default> # the script</default>
+                </define>
             </exeDB>""" )
+        util.writefile( 'db5.xml', """
+            <exeDB>
+                <define>
+                    <default> # default </default>
+                    <Linux> # Linux </Linux>
+                </define>
+            </exeDB>""" )
+        util.writefile( 'db6.xml', """
+            <exeDB>
+                <define></define>
+            </exeDB>""" )
+        time.sleep(1)
 
-        xdoc = xreader.readDoc('db4.xml')
-        db = CommonSpec.CommonSpecDB()
-        CommonSpec.scanCommonSpecs( xdoc, db )
-        assert len( db.getDefines() ) == 1
-        cs = db.getDefines()[0]
+        db = create_and_load_CommonSpecDB( 'db4.xml' )
+
+        defs = db.getDefines()
+        assert len( defs ) == 1
+        cs = defs[0]
         print3( cs )
-        testNonEmptyLines( cs.getDefine('anything'), ['# the script'] )
+        assert_same_lines( cs.getDefine('anything'), ['# the script'] )
         assert cs.getVariable('anything') == None
         assert cs.getContent('anything') == None
 
-        util.writefile( 'db5.xml', """
-            <exeDB>
-              <define>
-                <default> # default </default>
-                <Linux> # Linux </Linux>
-              </define>
-            </exeDB>""" )
+        db = create_and_load_CommonSpecDB( 'db5.xml' )
 
-        xdoc = xreader.readDoc('db5.xml')
-        db = CommonSpec.CommonSpecDB()
-        CommonSpec.scanCommonSpecs( xdoc, db )
-        assert len( db.getDefines() ) == 1
-        cs = db.getDefines()[0]
+        defs = db.getDefines()
+        assert len( defs ) == 1
+        cs = defs[0]
         print3( cs )
-        testNonEmptyLines( cs.getDefine('something'), ['# default'] )
-        testNonEmptyLines( cs.getDefine('Linux'), ['# Linux'] )
+        assert_same_lines( cs.getDefine('something'), ['# default'] )
+        assert_same_lines( cs.getDefine('Linux'), ['# Linux'] )
         assert cs.getVariable('anything') == None
         assert cs.getContent('anything') == None
         assert cs.getVariable('Linux') == None
         assert cs.getContent('Linux') == None
 
-        util.writefile( 'db6.xml', """
-            <exeDB>
-              <define></define>
-            </exeDB>""" )
-
-        xdoc = xreader.readDoc('db6.xml')
-        db = CommonSpec.CommonSpecDB()
-        try: CommonSpec.scanCommonSpecs( xdoc, db )
-        except CommonSpec.CommonSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a CommonSpec.CommonSpecError error" )
+        self.assertRaises( CommonSpec.CommonSpecError,
+                           create_and_load_CommonSpecDB, 'db6.xml' )
 
     def test_executable_blocks_with_no_name(self):
         ""
         util.writefile( 'db7.xml', """
             <exeDB>
-              <executable>
-              </executable>
+                <executable>
+                </executable>
             </exeDB>""" )
-
-        xdoc = xreader.readDoc('db7.xml')
-        db = CommonSpec.CommonSpecDB()
-        try: CommonSpec.scanCommonSpecs( xdoc, db )
-        except CommonSpec.CommonSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a CommonSpec.CommonSpecError error" )
-
         util.writefile( 'db8.xml', """
             <exeDB>
-              <executable variable="VARNAME">
-              </executable>
+                <executable variable="VARNAME">
+                </executable>
             </exeDB>""" )
+        util.writefile( 'db9.xml', """
+            <exeDB>
+                <executable variable="VARNAME">
+                    <default>
+                        <location> set VARNAME = val1 </location>
+                    </default>
+                    <Linux>
+                        <location> set VARNAME = val2 </location>
+                    </Linux>
+                </executable>
+            </exeDB>""" )
+        util.writefile( 'db10.xml', """
+            <exeDB>
+                <executable variable="VARNAME">
+                    <default>
+                        <location search="path1 path2" flags="-h"/>
+                    </default>
+                    <Linux>
+                        <location search="path3 path4" flags="-H"/>
+                    </Linux>
+                </executable>
+            </exeDB>""" )
+        time.sleep(1)
 
-        xdoc = xreader.readDoc('db8.xml')
-        db = CommonSpec.CommonSpecDB()
-        CommonSpec.scanCommonSpecs( xdoc, db )
+        self.assertRaises( CommonSpec.CommonSpecError,
+                           create_and_load_CommonSpecDB, 'db7.xml' )
+
+        db = create_and_load_CommonSpecDB( 'db8.xml' )
+
         csL = db.getVariables()
         assert len(csL) == 1
         print3( csL[0] )
         assert csL[0].getVariable('any')[0] == "VARNAME"
         assert csL[0].getVariable('any')[1].strip() == ""
 
-        util.writefile( 'db9.xml', """
-            <exeDB>
-              <executable variable="VARNAME">
-                <default>
-                  <location> set VARNAME = val1 </location>
-                </default>
-                <Linux>
-                  <location> set VARNAME = val2 </location>
-                </Linux>
-              </executable>
-            </exeDB>""" )
+        db = create_and_load_CommonSpecDB( 'db9.xml' )
 
-        xdoc = xreader.readDoc('db9.xml')
-        db = CommonSpec.CommonSpecDB()
-        CommonSpec.scanCommonSpecs( xdoc, db )
         csL = db.getVariables()
         assert len(csL) == 1
         print3( csL[0].getVariable('other') )
@@ -173,27 +169,14 @@ class csh_common_specifications( unittest.TestCase ):
         fragL = csL[0].getVariable('other')[1]
         assert len(fragL) == 1
         frag = fragL[0]
-        testNonEmptyLines( frag, ['set VARNAME = val1'] )
+        assert_same_lines( frag, ['set VARNAME = val1'] )
         fragL = csL[0].getVariable('Linux')[1]
         assert len(fragL) == 1
         frag = fragL[0]
-        testNonEmptyLines( frag, ['set VARNAME = val2'] )
+        assert_same_lines( frag, ['set VARNAME = val2'] )
 
-        util.writefile( 'db10.xml', """
-            <exeDB>
-              <executable variable="VARNAME">
-                <default>
-                  <location search="path1 path2" flags="-h"/>
-                </default>
-                <Linux>
-                  <location search="path3 path4" flags="-H"/>
-                </Linux>
-              </executable>
-            </exeDB>""" )
+        db = create_and_load_CommonSpecDB( 'db10.xml' )
 
-        xdoc = xreader.readDoc('db10.xml')
-        db = CommonSpec.CommonSpecDB()
-        CommonSpec.scanCommonSpecs( xdoc, db )
         csL = db.getVariables()
         assert len(csL) == 1
         print3( csL[0].getVariable('other') )
@@ -214,21 +197,20 @@ class csh_common_specifications( unittest.TestCase ):
         ""
         util.writefile( 'db11.xml', """
             <exeDB>
-              <executable name="runme">
-                <default>
-                  <location>
-                    set RUNME = runme
-                  </location>
-                  <script>
-                    $RUNME $(CONTENT)
-                  </script>
-                </default>
-              </executable>
+                <executable name="runme">
+                    <default>
+                        <location>
+                            set RUNME = runme
+                        </location>
+                        <script>
+                            $RUNME $(CONTENT)
+                        </script>
+                    </default>
+                </executable>
             </exeDB>""" )
 
-        xdoc = xreader.readDoc('db11.xml')
-        db = CommonSpec.CommonSpecDB()
-        CommonSpec.scanCommonSpecs( xdoc, db )
+        db = create_and_load_CommonSpecDB( 'db11.xml' )
+
         csL = db.getVariables()
         assert len(csL) == 1
         print3( csL[0].getVariable('any') )
@@ -236,10 +218,10 @@ class csh_common_specifications( unittest.TestCase ):
         locL = csL[0].getVariable('any')[1]
         assert len(locL) == 1
         frag = locL[0]
-        testNonEmptyLines( locL[0], ['set RUNME = runme'] )
+        assert_same_lines( locL[0], ['set RUNME = runme'] )
         cont = csL[0].getContent('any')
         print3( cont )
-        testNonEmptyLines( cont, ['$RUNME $(CONTENT)'] )
+        assert_same_lines( cont, ['$RUNME $(CONTENT)'] )
 
         cs = db.findContent('runme')
         print3( cs )
@@ -247,9 +229,9 @@ class csh_common_specifications( unittest.TestCase ):
         locL = cs.getVariable('any')[1]
         assert len(locL) == 1
         frag = locL[0]
-        testNonEmptyLines( locL[0], ['set RUNME = runme'] )
+        assert_same_lines( locL[0], ['set RUNME = runme'] )
         cont = cs.getContent('any')
-        testNonEmptyLines( cont, ['$RUNME $(CONTENT)'] )
+        assert_same_lines( cont, ['$RUNME $(CONTENT)'] )
 
         assert db.findContent('other') == None
 
@@ -257,50 +239,51 @@ class csh_common_specifications( unittest.TestCase ):
         ""
         util.writefile( "cat.xml", """
             <rtest name="cat">
-              <execute>
-                echo "kitten output $have_diff"
-              </execute>
+                <execute>
+                    echo "kitten output $have_diff"
+                </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
 
-        assert len( util.filegrep( os.path.join(tdir,'cat','execute.log'),
-                              'kitten output no' ) ) == 1
+        assert len( util.grepfiles( 'kitten output no',
+                    'TestResults.*/cat/execute.log' ) ) == 1
 
         util.writefile( "cat.xml", """
             <rtest name="cat">
-              <link_files> file.txt </link_files>
-              <execute name="nlinesdiff"> file.txt 3 </execute>
-              <execute>
-                echo "kitten output $have_diff"
-              </execute>
+                <link_files> file.txt </link_files>
+                <execute name="nlinesdiff"> file.txt 3 </execute>
+                <execute>
+                    echo "kitten output $have_diff"
+                </execute>
             </rtest>""" )
         util.writefile( "dog.xml", """
             <rtest name="dog">
-              <link_files> file.txt </link_files>
-              <execute name="nlinesdiff"> file.txt 1 </execute>
-              <execute>
-                echo "doggy output $have_diff"
-              </execute>
+                <link_files> file.txt </link_files>
+                <execute name="nlinesdiff"> file.txt 1 </execute>
+                <execute>
+                    echo "doggy output $have_diff"
+                </execute>
             </rtest>""" )
         util.writefile( "file.txt", """
             line one
             line two
             third line
             """.strip() )
+        time.sleep(1)
 
         util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 1 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
-        assert len( util.filegrep( os.path.join(tdir,'cat','execute.log'),
-                              'kitten output no' ) ) == 1
-        assert len( util.filegrep( os.path.join(tdir,'dog','execute.log'),
-                              'doggy output yes' ) ) == 1
-        assert len( util.filegrep( os.path.join(tdir,'dog','execute.log'),
-                              'greater than allowed' ) ) == 1
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=2, npass=1, diff=1 )
+
+        assert len( util.grepfiles( 'kitten output no',
+                    'TestResults.*/cat/execute.log' ) ) == 1
+        assert len( util.grepfiles( 'doggy output yes',
+                    'TestResults.*/dog/execute.log' ) ) == 1
+        assert len( util.grepfiles( 'greater than allowed',
+                    'TestResults.*/dog/execute.log' ) ) == 1
 
         # now write a local config file exeDB.xml and change nlinesdiff fragment
         util.writefile( "config/exeDB.xml", """
@@ -334,48 +317,64 @@ class csh_common_specifications( unittest.TestCase ):
             """ )
 
         util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( '--config config' )
-        assert np == 1 and nd == 1 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
-        assert len( util.filegrep( os.path.join(tdir,'cat','execute.log'),
-                              'kitten output no' ) ) == 1
-        assert len( util.filegrep( os.path.join(tdir,'dog','execute.log'),
-                              'doggy output yes' ) ) == 1
-        assert len( util.filegrep( os.path.join(tdir,'dog','execute.log'),
-                              'GREATER than is allowed' ) ) == 1
+        vrun = util.runvvtest( '--config config' )
+        vrun.assertCounts( total=2, npass=1, diff=1 )
+
+        assert len( util.grepfiles( 'kitten output no',
+                    'TestResults.*/cat/execute.log' ) ) == 1
+        assert len( util.grepfiles( 'doggy output yes',
+                    'TestResults.*/dog/execute.log' ) ) == 1
+        assert len( util.grepfiles( 'GREATER than is allowed',
+                    'TestResults.*/dog/execute.log' ) ) == 1
 
         # put a new fragment into a local config file exeDB.xml
         util.writefile( "config/exeDB.xml", """
             <exeDB>
-              <executable name="andie">
-                <default>
-                  <script> <![CDATA[
-                    echo "andie $(CONTENT) EOM"
-                  ]]> </script>
-                </default>
-              </executable>
+                <executable name="andie">
+                    <default>
+                        <script> <![CDATA[
+                            echo "andie $(CONTENT) EOM"
+                        ]]> </script>
+                    </default>
+                </executable>
             </exeDB>
             """ )
         util.writefile( "cat.xml", """
             <rtest name="cat">
-              <link_files> file.txt </link_files>
-              <execute name="andie"> is my kitty </execute>
-              <execute>
-                echo "kitten output $have_diff"
-              </execute>
+                <link_files> file.txt </link_files>
+                <execute name="andie"> is my kitty </execute>
+                <execute>
+                    echo "kitten output $have_diff"
+                </execute>
             </rtest>""" )
+        time.sleep(1)
 
         util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( '--config config' )
-        tdir = os.path.abspath( util.results_dir() )
-        assert np == 1 and nd == 1 and nf == 0 and nn == 0
-        assert len( util.filegrep( os.path.join(tdir,'cat','execute.log'),
-                              'andie is my kitty EOM' ) ) == 1
+        vrun = util.runvvtest( '--config config' )
+        vrun.assertCounts( total=2, npass=1, diff=1 )
+
+        assert len( util.grepfiles( 'andie is my kitty EOM',
+                    'TestResults.*/cat/execute.log' ) ) == 1
 
 
 ########################################################################
 
-def testNonEmptyLines( script, line_list ):
+def create_and_load_CommonSpecDB( filename, db=None ):
+    ""
+    xdoc = xreader.readDoc( filename )
+
+    if db == None:
+        db = CommonSpec.CommonSpecDB()
+
+    CommonSpec.scanCommonSpecs( xdoc, db )
+
+    return db
+
+
+def assert_same_lines( script, line_list ):
+    ""
+    assert script != None
+
     i = 0
     for line in script.split( "\n" ):
         line = line.strip()

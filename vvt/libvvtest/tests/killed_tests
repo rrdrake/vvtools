@@ -13,7 +13,7 @@ import os
 import time
 import unittest
 import signal
-import subprocess
+import glob
 
 import testutils as util
 from testutils import print3
@@ -32,20 +32,20 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        util.run_command_then_terminate_it( util.vvtest, signum=signal.SIGINT )
-        time.sleep(1)
+        for batch in [False,True]:
 
-        out = util.readfile( 'run.log' )
-        print3( out )
+            util.remove_results()
 
-        np,nd = util.numpass(out), util.numdiff(out)
-        nf,nn = util.numfail(out), util.numnotrun(out)
-        assert np == 0 and nd == 0 and nf == 0 and nn == 1
+            out = util.launch_vvtest_then_terminate_it( batch=batch,
+                                                        signum=signal.SIGINT )
+            print3( out )
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nn == 0
+            counts = util.parse_vvtest_counts( out )
+            assert counts['total'] == 1 and counts['notrun'] == 1
 
-        assert len( util.grep( out, 'rror.*another process' ) ) == 0
+            vrun = util.runvvtest()
+            vrun.assertCounts( total=1, npass=1 )
+            assert vrun.countGrepLines( 'rror.*another process' ) == 0
 
     def test_vvtest_fails_to_run_if_a_previous_run_was_killed(self):
         ""
@@ -54,22 +54,20 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
                 <execute> sleep 10 </execute>
             </rtest>""" )
         time.sleep(1)
-        
-        util.run_command_then_terminate_it( util.vvtest )
-        time.sleep(1)
 
-        out = util.readfile( 'run.log' )
-        print3( out )
+        for batch in [False,True]:
 
-        np,nd = util.numpass(out), util.numdiff(out)
-        nf,nn = util.numfail(out), util.numnotrun(out)
-        assert np == 0 and nd == 0 and nf == 0 and nn == 1
+            util.remove_results()
 
-        xok,out = util.run_cmd( util.vvtest )
+            out = util.launch_vvtest_then_terminate_it( batch=batch )
+            print3( out )
 
-        assert not xok
-        assert len( util.grep( out, 'rror.*another process' ) ) == 1
-        assert util.numpass(out) == 0
+            counts = util.parse_vvtest_counts( out )
+            assert counts['total'] == 1 and counts['notrun'] == 1
+
+            vrun = util.runvvtest( ignore_exit=True )
+            assert vrun.x > 0
+            assert vrun.countGrepLines( 'rror.*another process' ) == 1
 
     def test_running_vvtest_after_killed_but_in_TestResults_directory(self):
         ""
@@ -78,23 +76,18 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
                 <execute> sleep 10 </execute>
             </rtest>""" )
         time.sleep(1)
-        
-        util.run_command_then_terminate_it( util.vvtest )
-        time.sleep(1)
-        tdir = util.results_dir()
 
-        out = util.readfile( 'run.log' )
+        out = util.launch_vvtest_then_terminate_it()
         print3( out )
 
-        np,nd = util.numpass(out), util.numdiff(out)
-        nf,nn = util.numfail(out), util.numnotrun(out)
-        assert np == 0 and nd == 0 and nf == 0 and nn == 1
+        tdir = glob.glob( 'TestResults*' )[0]
 
-        xok,out = util.run_cmd( util.vvtest, directory=tdir )
+        counts = util.parse_vvtest_counts( out )
+        assert counts['total'] == 1 and counts['notrun'] == 1
 
-        assert not xok
-        assert len( util.grep( out, 'rror.*another process' ) ) == 1
-        assert util.numpass(out) == 0
+        vrun = util.runvvtest( ignore_exit=True, chdir=tdir )
+        assert vrun.x > 0
+        assert vrun.countGrepLines( 'rror.*another process' ) == 1
 
     def test_forcing_vvtest_to_run_after_previous_was_killed(self):
         ""
@@ -108,39 +101,28 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
                 <timeout value="20"/>
                 <execute> sleep 5 </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        # using SIGTERM prevents the "finished" mark from getting placed
-        util.interrupt_vvtest_run( '-n 1', count=1, signum='SIGTERM' )
+        for batch in [False,True]:
 
-        # this one should fail
-        xok,out = util.run_cmd( util.vvtest + ' -R' )
-        assert not xok
-        assert len( util.grep( out, 'rror.*another process' ) ) == 1
+            util.remove_results()
 
-        # this one should be forced to run
-        xok,out = util.run_cmd( util.vvtest + ' -R --force' )
-        assert xok
-        assert len( util.grep( out, 'rror.*another process' ) ) == 0
+            # using SIGTERM prevents the "finished" mark from getting placed
+            spec = util.interrupt_test_hook( batch=batch, count=1,
+                                             signum='SIGTERM' )
+            util.run_vvtest_with_hook( '--qsub-limit 1 -n 1', spec, batch=batch )
 
-        util.remove_results()
+            # this one should fail
+            vrun = util.runvvtest( ignore_exit=True, batch=batch )
+            assert vrun.x > 0
+            assert vrun.countGrepLines( 'rror.*another process' ) == 1
 
-        opts = '--plat '+util.core_platform_name() + \
-               ' --batch --qsub-limit 1 --qsub-length 1'
-        util.interrupt_vvtest_batch( opts, count=1, signum='SIGTERM' )
+            # this one should be forced to run
+            vrun = util.runvvtest( '--force', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+            assert vrun.countGrepLines( 'rror.*another process' ) == 0
 
-        platname = util.core_platform_name()
-
-        # this one should fail
-        xok,out = util.run_cmd( util.vvtest + ' --plat '+platname + \
-                                    ' --batch -R' )
-        assert not xok
-        assert len( util.grep( out, 'rror.*another process' ) ) == 1
-
-        # this one should be forced to run
-        xok,out = util.run_cmd( util.vvtest + ' --plat '+platname + \
-                                    ' --batch -R --force' )
-        assert xok
-        assert len( util.grep( out, 'rror.*another process' ) ) == 0
+            util.runvvtest( '-i' ).assertCounts( total=2, npass=2 )
 
 
 ########################################################################

@@ -30,20 +30,17 @@ class execute_tests( unittest.TestCase ):
             <rtest name="null">
             </rtest>""" )
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        tL = util.testlist(out)
-        assert len(tL) == 1
-        p = tL[0][-1]
-        assert os.path.exists(p)
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
+        tL = vrun.grepTestLines( '.*' )
+        assert len(tL) == 1 and os.path.exists( tL[0].split()[-1] )
 
     def test_simple_script_test_file(self):
         ""
         util.writefile( 'helloworld.xml', """
             <rtest name="helloworld">
-              <execute> <![CDATA[
-            ${XMLDIR}/helloworld.csh
-            ]]>
+              <execute>
+                <![CDATA[ ${XMLDIR}/helloworld.csh ]]>
               </execute>
             </rtest>""" )
 
@@ -51,14 +48,11 @@ class execute_tests( unittest.TestCase ):
             #!/bin/csh -f
             echo "hello world"
             exit 0""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        tL = util.testlist(out)
-        assert len(tL) == 1
-        p = tL[0][-1]
-        assert os.path.exists(p)
-        assert len( util.filegrep( p+'/execute.log', "^hello world$" ) ) == 1
+        util.runvvtest().assertCounts( total=1, npass=1 )
+        sL = util.grepfiles( 'hello world', 'TestResults*/helloworld/execute.log' )
+        assert len( sL ) == 1
 
     def test_file_link_and_copy_globbing(self):
         ""
@@ -76,16 +70,15 @@ class execute_tests( unittest.TestCase ):
             <rtest name="glob">
               <link_files> glob?.txt </link_files>
               <copy_files> Aglob.* </copy_files>
-              <execute> <![CDATA[
+              <execute>
                 cat glob1.txt || exit 1
                 cat glob2.txt || exit 1
                 cat Aglob.txt || exit 1
-              ]]> 
               </execute>
             </rtest>""")
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        util.runvvtest().assertCounts( total=1, npass=1 )
 
     def test_link_and_copy_files_that_do_not_exist(self):
         ""
@@ -125,26 +118,24 @@ class execute_tests( unittest.TestCase ):
                     end
                 </execute>
             </rtest>""")
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 0 and nd == 0 and nf == 4 and nn == 0
-        fL = glob.glob( 'TestResults.*/*/execute.log' )
-        assert len(fL) == 4
-        for f in fL:
-            assert len( util.filegrep( f, "lsfile " ) ) == 0
+        util.runvvtest().assertCounts( total=4, fail=4 )
+
+        sL = util.grepfiles( 'lsfile ', 'TestResults.*/*/execute.log' )
+        assert len( sL ) == 0
 
         # now make it exist and run through to see if the tests work
 
         util.writefile( "file.txt", """
             this is file.txt
             """)
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( '-R' )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
-        fL = glob.glob( 'TestResults.*/*/execute.log' )
-        assert len(fL) == 4
-        for f in fL:
-            assert len( util.filegrep( f, "lsfile file.txt" ) ) == 1
+        util.runvvtest( '-R' ).assertCounts( total=4, npass=4 )
+
+        sL = util.grepfiles( 'lsfile file.txt', 'TestResults.*/*/execute.log' )
+        assert len( sL ) == 4
 
     def test_link_and_copy_files_that_refer_to_parent_directory(self):
         ""
@@ -158,70 +149,64 @@ class execute_tests( unittest.TestCase ):
                     end
                 </execute>
             </rtest>""")
-        util.writefile( "file.txt", """the text file""" )
-        util.writefile( "files/gfile1.txt", """G text file 1""" )
-        util.writefile( "files/gfileA.txt", """G text file A""" )
+        util.writefile( "file.txt", "the text file" )
+        util.writefile( "files/gfile1.txt", "G text file 1" )
+        util.writefile( "files/gfileA.txt", "G text file A" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( 'subdir' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        pL = glob.glob( 'TestResults.*' )
-        assert len(pL) == 1
-        f = os.path.join( pL[0], 'links', 'execute.log' )
-        assert len( util.filegrep( f, "lsfile file.txt" ) ) == 1
-        assert len( util.filegrep( f, "lsfile gfile1.txt" ) ) == 1
-        assert len( util.filegrep( f, "lsfile gfileA.txt" ) ) == 1
-        assert os.path.islink( os.path.join( pL[0], 'links', 'file.txt' ) )
-        assert not os.path.islink( os.path.join( pL[0], 'links', 'gfile1.txt' ) )
-        assert not os.path.islink( os.path.join( pL[0], 'links', 'gfileA.txt' ) )
+        vrun = util.runvvtest( 'subdir' )
+        vrun.assertCounts( total=1, npass=1 )
+
+        assert vrun.countGrepLogs( 'lsfile file.txt' ) == 1
+        assert vrun.countGrepLogs( 'lsfile gfile1.txt' ) == 1
+        assert vrun.countGrepLogs( 'lsfile gfileA.txt' ) == 1
+
+        fL = util.findfiles( 'file.txt', 'TestResults*' )
+        assert len(fL) == 1 and os.path.islink( fL[0] )
+        fL = util.findfiles( 'gfile1.txt', 'TestResults*' )
+        assert len(fL) == 1 and not os.path.islink( fL[0] )
+        fL = util.findfiles( 'gfileA.txt', 'TestResults*' )
+        assert len(fL) == 1 and not os.path.islink( fL[0] )
 
     def test_different_test_exit_statuses(self):
         ""
         util.writefile( "PassTest.xml", """
             <rtest name="PassTest">
-              <execute> <![CDATA[
-            sleep 1
-            echo "Exiting with pass status"
-            ]]>
+              <execute>
+                sleep 1
+                echo "Exiting with pass status"
               </execute>
             </rtest>""")
-
         util.writefile( "FailTest.xml", """
             <rtest name="FailTest">
-              <execute> <![CDATA[
-            sleep 1
-            echo "Exiting with failure status"
-            exit 1
-            ]]>
+              <execute>
+                sleep 1
+                echo "Exiting with failure status"
+                exit 1
               </execute>
             </rtest>""")
-
         util.writefile( "DiffTest.xml", """
             <rtest name="DiffTest">
-              <execute> <![CDATA[
-            sleep 1
-            echo "Exiting with diff status"
-            set have_diff = yes
-            ]]>
+              <execute>
+                sleep 1
+                echo "Exiting with diff status"
+                set have_diff = yes
               </execute>
             </rtest>""")
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 1 and nf == 1 and nn == 0
+        util.runvvtest().assertCounts( total=3, npass=1, diff=1, fail=1 )
 
         # use -L option (and wipe)
 
-        out,np,nd,nf,nn = util.run_vvtest( "-w -L -n 1" )
-        assert np == 1 and nd == 1 and nf == 1 and nn == 0
-        L = re.findall( "Starting test:", out )
-        assert len(L) == 3, "three tests should have run; got "+str(len(L))
+        vrun = util.runvvtest( '-w -L -n 1' )
+        vrun.assertCounts( total=3, npass=1, diff=1, fail=1 )
+        assert vrun.countGrepLines( 'Exiting with ' ) == 3
 
         # check running within the test results directory
 
-        tdir = util.results_dir()
-        os.chdir(tdir+"/PassTest")
-
-        out,np,nd,nf,nn = util.run_vvtest( "-R" )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        os.chdir( vrun.resultsDir()+'/PassTest' )
+        util.runvvtest( '-R' ).assertCounts( total=1, npass=1 )
 
     def test_the_XMLDIR_variable(self):
         ""
@@ -230,90 +215,87 @@ class execute_tests( unittest.TestCase ):
         util.writefile( "xdir.xml", """
             <rtest name="xdir">
               <execute> <![CDATA[
-            set echo
-            cd $XMLDIR || exit 1
-            set xdir = `pwd`
-            cd """+cwd+""" || exit 1
-            set cdir = `pwd`
-            if ( $xdir != $cdir ) then
-              echo "*** XMLDIR not equal to """+cwd+""""
-              exit 1
-            endif
-            ]]>
+                set echo
+                cd $XMLDIR || exit 1
+                set xdir = `pwd`
+                cd """+cwd+""" || exit 1
+                set cdir = `pwd`
+                if ( $xdir != $cdir ) then
+                  echo "*** XMLDIR not equal to """+cwd+""""
+                  exit 1
+                endif
+                ]]>
               </execute>
             </rtest>""")
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-        tdir = util.results_dir()
-        util.remove_results()
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
 
         # check using the -M option
 
+        util.remove_results()
+
         os.mkdir( 'mir' )
-        out,np,nd,nf,nn = util.run_vvtest( "-M "+cwd+"/mir" )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        time.sleep(1)
+
+        util.runvvtest( '-M '+cwd+'/mir' ).assertCounts( total=1, npass=1 )
 
         # cd into a test and run it
 
-        os.chdir( tdir + '/xdir' )
-        out,np,nd,nf,nn = util.run_vvtest( "-R" )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        os.chdir( vrun.resultsDir()+'/xdir' )
+        util.runvvtest( '-R' ).assertCounts( total=1, npass=1 )
 
     def test_generate_options_g_and_G(self):
         ""
         util.writefile( 'helloworld.xml', """
             <rtest name="helloworld">
-              <execute> <![CDATA[
-            ${XMLDIR}/helloworld.csh
-            ]]>
+              <execute>
+                ${XMLDIR}/helloworld.csh
               </execute>
             </rtest>""" )
-
         util.writescript( 'helloworld.csh', """
             #!/bin/csh -f
             echo "hello world"
             exit 0""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( "-gG" )
-        tdir = util.results_dir()
-        os.chdir(tdir+'/helloworld')
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        tL = util.testlist(out)
-        assert len(tL) == 1
-        assert len( util.filegrep( 'execute.log', "^hello world$" ) ) == 1
+        vrun = util.runvvtest( '-gG' )
+        vrun.assertCounts( total=1, notrun=1 )
+
+        os.chdir( vrun.resultsDir()+'/helloworld' )
+        util.runvvtest().assertCounts( total=1, npass=1 )
+
+        assert len( util.grepfiles( 'hello world', 'execute.log' ) ) == 1
 
     def test_forcing_parameterize_values_on_command_line(self):
         ""
         util.writefile( "param.xml", """
             <rtest name="param">
               <parameterize hello="world mars"/>
-              <execute> <![CDATA[
-            sleep 1
-            echo "parm=$hello"
-            ]]>
+              <execute>
+                sleep 1
+                echo "parm=$hello"
               </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        util.runvvtest().assertCounts( total=2, npass=2 )
 
         # force a parameter to take on a user defined value
 
-        out,np,nd,nf,nn = util.run_vvtest( "-S hello=jupiter" )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        util.runvvtest( '-S hello=jupiter' ).assertCounts( total=1, npass=1 )
 
-        out,np,nd,nf,nn = util.run_vvtest( "-i" )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tL = util.testlist(out)
-        nj = 0 ; nm = 0 ; nw = 0
-        for line in tL:
-          if line[-1].find( "hello=jupiter" ) >= 0: nj = nj + 1
-          if line[-1].find( "hello=mars" ) >= 0: nm = nm + 1
-          if line[-1].find( "hello=world" ) >= 0: nw = nw + 1
-        assert nj == 1 and nm == 1 and nw == 1
+        vrun = util.runvvtest( '-i' )
+        vrun.assertCounts( total=3, npass=3 )
+
+        assert vrun.countTestLines( 'hello=jupiter' ) == 1
+        assert vrun.countTestLines( 'hello=mars' ) == 1
+        assert vrun.countTestLines( 'hello=world' ) == 1
+
+        assert vrun.countGrepLogs( 'parm=jupiter' ) == 1
+        assert vrun.countGrepLogs( 'parm=mars' ) == 1
+        assert vrun.countGrepLogs( 'parm=world' ) == 1
 
     def test_that_the_test_specification_file_is_automatically_soft_linked(self):
         ""
@@ -324,7 +306,6 @@ class execute_tests( unittest.TestCase ):
                 ls -l $NAME.xml || exit 1
               </execute>
             </rtest>""" )
-
         util.writefile( "auto2.xml", """
             <rtest name="auto2">
               <link> $NAME.xml </link>
@@ -333,13 +314,12 @@ class execute_tests( unittest.TestCase ):
                 ls -l $NAME.xml || exit 1
               </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        fL = glob.glob( 'TestResults.*/auto1/auto1.xml' )
-        assert len(fL) == 1
-        fL = glob.glob( 'TestResults.*/auto2/auto2.xml' )
-        assert len(fL) == 1
+        util.runvvtest().assertCounts( total=2, npass=2 )
+
+        assert len( glob.glob( 'TestResults.*/auto1/auto1.xml' ) ) == 1
+        assert len( glob.glob( 'TestResults.*/auto2/auto2.xml' ) ) == 1
 
     def test_filtering_execute_blocks_by_test_name(self):
         ""
@@ -350,17 +330,18 @@ class execute_tests( unittest.TestCase ):
                 <execute testname="multi2"> echo "multi2 only" </execute>
                 <execute testname="multi or multi2"> echo "both tests" </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        fL = glob.glob( 'TestResults.*/multi/execute.log' )
-        assert len(fL) == 1
-        assert len( util.filegrep( fL[0], 'multi only' ) ) >= 1
-        assert len( util.filegrep( fL[0], 'both tests' ) ) >= 1
-        fL = glob.glob( 'TestResults.*/multi2/execute.log' )
-        assert len(fL) == 1
-        assert len( util.filegrep( fL[0], 'multi2 only' ) ) >= 1
-        assert len( util.filegrep( fL[0], 'both tests' ) ) >= 1
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=2, npass=2 )
+
+        xpat = 'TestResults.*/multi/execute.log'
+        assert len( util.grepfiles( 'multi only', xpat ) ) == 1
+        assert len( util.grepfiles( 'both tests', xpat ) ) == 1
+
+        xpat = 'TestResults.*/multi2/execute.log'
+        assert len( util.grepfiles( 'multi2 only', xpat ) ) == 1
+        assert len( util.grepfiles( 'both tests', xpat ) ) == 1
 
     def test_using_NOT_in_the_test_name_filter(self):
         ""
@@ -371,17 +352,18 @@ class execute_tests( unittest.TestCase ):
                 <execute testname="not multi"> echo "multi2 only" </execute>
                 <execute testname="multi or multi2"> echo "both tests" </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        fL = glob.glob( 'TestResults.*/multi/execute.log' )
-        assert len(fL) == 1
-        assert len( util.filegrep( fL[0], 'multi only' ) ) >= 1
-        assert len( util.filegrep( fL[0], 'both tests' ) ) >= 1
-        fL = glob.glob( 'TestResults.*/multi2/execute.log' )
-        assert len(fL) == 1
-        assert len( util.filegrep( fL[0], 'multi2 only' ) ) >= 1
-        assert len( util.filegrep( fL[0], 'both tests' ) ) >= 1
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=2, npass=2 )
+
+        xpat = 'TestResults.*/multi/execute.log'
+        assert len( util.grepfiles( 'multi only', xpat ) ) == 1
+        assert len( util.grepfiles( 'both tests', xpat ) ) == 1
+
+        xpat = 'TestResults.*/multi2/execute.log'
+        assert len( util.grepfiles( 'multi2 only', xpat ) ) == 1
+        assert len( util.grepfiles( 'both tests', xpat ) ) == 1
 
     def test_behavior_when_two_tests_have_the_same_filename_path(self):
         ""
@@ -394,32 +376,33 @@ class execute_tests( unittest.TestCase ):
             <rtest name="dup">
                 <execute> echo "test bdir" </execute>
             </rtest>""" )
+        time.sleep(1)
 
         # the bdir test should be selected because it is scanned first
-        out,np,nd,nf,nn = util.run_vvtest( 'bdir adir' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
-        xf = os.path.join( tdir, 'subdir', 'dup', 'execute.log' )
-        assert len( util.filegrep( xf, 'test bdir' ) ) == 1
-        assert len( util.filegrep( xf, 'test adir' ) ) == 0
+        vrun = util.runvvtest( 'bdir adir' )
+        vrun.assertCounts( total=1, npass=1 )
 
-        fl = os.readlink( os.path.join( tdir, 'subdir', 'dup', 'dup.xml' ) )
-        s = 'bdir/subdir/dup.xml'
-        assert fl[-len(s):] == s
+        assert vrun.countGrepLogs( 'test bdir' ) == 1
+        assert vrun.countGrepLogs( 'test adir' ) == 0
+
+        fL = util.findfiles( 'dup.xml', 'TestResults.*' )
+        assert len( fL ) == 1
+        fn = os.readlink( fL[0] )
+        assert os.path.samefile( fn, 'bdir/subdir/dup.xml' )
 
         util.remove_results()
 
         # now the adir test should be selected
-        out,np,nd,nf,nn = util.run_vvtest( 'adir bdir' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
-        xf = os.path.join( tdir, 'subdir', 'dup', 'execute.log' )
-        assert len( util.filegrep( xf, 'test adir' ) ) == 1
-        assert len( util.filegrep( xf, 'test bdir' ) ) == 0
+        vrun = util.runvvtest( 'adir bdir' )
+        vrun.assertCounts( total=1, npass=1 )
 
-        fl = os.readlink( os.path.join( tdir, 'subdir', 'dup', 'dup.xml' ) )
-        s = 'adir/subdir/dup.xml'
-        assert fl[-len(s):] == s
+        assert vrun.countGrepLogs( 'test bdir' ) == 0
+        assert vrun.countGrepLogs( 'test adir' ) == 1
+
+        fL = util.findfiles( 'dup.xml', 'TestResults.*' )
+        assert len( fL ) == 1
+        fn = os.readlink( fL[0] )
+        assert os.path.samefile( fn, 'adir/subdir/dup.xml' )
 
 
 ############################################################################

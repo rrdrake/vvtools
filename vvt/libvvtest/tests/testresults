@@ -37,57 +37,34 @@ class test_results_tests( unittest.TestCase ):
         ""
         util.setup_test()
 
-        # force the results files to be written locally for testing here;
-        # it is used in vvtest when handling the --save-results option
-        os.environ['TESTING_DIRECTORY'] = os.getcwd()
-
     def test_make_and_parse_test_attributes(self):
         ""
         aD = { 'xdate':int(time.time()),
                'xtime':23, 'state':'done', 'result':'pass' }
         s = results.make_attr_string( aD )
-        print3( s )
         D2 = results.read_attrs( s.split() )
         assert aD == D2, str(aD) + ' != ' + str(D2)
 
         aD = { 'xdate':int(time.time()), 'state':'notdone' }
         s = results.make_attr_string( aD )
-        print3( s )
         D2 = results.read_attrs( s.split() )
         assert aD == D2, str(aD) + ' != ' + str(D2)
 
         aD = { 'state':'notrun' }
         s = results.make_attr_string( aD )
-        print3( s )
         D2 = results.read_attrs( s.split() )
         assert aD == D2, str(aD) + ' != ' + str(D2)
 
     def test_nominal_uses_of_TestResults_class(self):
         ""
-        util.writefile( "one/cat.xml", """
-            <rtest name="cat">
-              <execute>
-            sleep 1
-              </execute>
-            </rtest>""" )
-        util.writefile( "one/dog.xml", """
-            <rtest name="dog">
-              <execute>
-            sleep 2
-              </execute>
-            </rtest>""" )
-        util.writefile( "two/circle.xml", """
-            <rtest name="circle">
-              <execute>
-            sleep 3
-              </execute>
-            </rtest>""" )
+        write_tests_cat_dog_circle()
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=3, npass=3 )
+        tdir = vrun.resultsDir()
 
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
         resultsfname = glob.glob('results.*')[0]
 
         # without a runtimes file, no tests should have been added (because the
@@ -101,11 +78,9 @@ class test_results_tests( unittest.TestCase ):
         tr.writeResults( resultsfname+'.cmp', platname, cplrname, mach, tdir )
         assert filecmp.cmp( resultsfname, resultsfname+'.cmp' )
 
-        # now bootstrap a runtimes file, to enable root relative path determination
-        ok,out = util.run_cmd( util.resultspy + ' save' )
-        assert ok
-        # rerun vvtest with to save the test results
-        util.run_vvtest( '-i --save-results' )
+        # create runtimes file to enable root relative path determination
+        create_and_save_runtimes()
+
         tr = results.TestResults( resultsfname )
         assert tr.testdir() == tdir
         assert len( tr.dirList() ) == 2
@@ -126,7 +101,7 @@ class test_results_tests( unittest.TestCase ):
         assert ok
         ok,out = util.run_cmd( util.resultspy + ' save', directory='two' )
         assert ok
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
         # this time the tests should have different root-relative paths
         tr = results.TestResults( resultsfname )
         assert tr.dirList() == ['one','two']
@@ -150,12 +125,12 @@ class test_results_tests( unittest.TestCase ):
         ok,out = util.run_cmd( util.resultspy + ' save ' + os.path.abspath( resultsfname ),
                           directory='two' )
         assert ok
-        assert len( util.filegrep( 'one/'+timesfname, 'cat.*pass' ) ) == 1
-        assert len( util.filegrep( 'one/'+timesfname, 'dog.*pass' ) ) == 1
-        assert len( util.filegrep( 'two/'+timesfname, 'circle.*pass' ) ) == 1
-        assert len( util.filegrep( 'one/'+timesfname, 'circle.*pass' ) ) == 0
-        assert len( util.filegrep( 'two/'+timesfname, 'cat.*pass' ) ) == 0
-        assert len( util.filegrep( 'two/'+timesfname, 'dog.*pass' ) ) == 0
+        assert len( util.grepfiles( 'cat*pass',    'one/'+timesfname ) ) == 1
+        assert len( util.grepfiles( 'dog*pass',    'one/'+timesfname ) ) == 1
+        assert len( util.grepfiles( 'circle*pass', 'two/'+timesfname ) ) == 1
+        assert len( util.grepfiles( 'circle*pass', 'one/'+timesfname ) ) == 0
+        assert len( util.grepfiles( 'cat*pass',    'two/'+timesfname ) ) == 0
+        assert len( util.grepfiles( 'dog*pass',    'two/'+timesfname ) ) == 0
 
     def test_save_results_with_multiple_parameterize(self):
         ""
@@ -167,24 +142,21 @@ class test_results_tests( unittest.TestCase ):
                 echo "xcat direction $direction side $side"
               </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=4, npass=4 )
 
-        # bootstrap with runtimes files then save the test results
-        ok,out = util.run_cmd( util.resultspy + ' save' )
-        assert ok
-        util.run_vvtest( '-i --save-results' )
+        create_and_save_runtimes()
 
         resultsfname = glob.glob('results.*')[0]
         tr = results.TestResults( resultsfname )
 
-        assert len( util.filegrep( resultsfname, "cat" ) ) == 4
-        assert len( util.filegrep( resultsfname, "cat.direction=front.side=left" ) ) == 1
-        assert len( util.filegrep( resultsfname, "cat.direction=front.side=right" ) ) == 1
-        assert len( util.filegrep( resultsfname, "cat.direction=rear.side=left" ) ) == 1
-        assert len( util.filegrep( resultsfname, "cat.direction=rear.side=right" ) ) == 1
+        assert len( util.grepfiles( "cat", resultsfname ) ) == 4
+        assert len( util.grepfiles( "cat.direction=front.side=left", resultsfname ) ) == 1
+        assert len( util.grepfiles( "cat.direction=front.side=right", resultsfname ) ) == 1
+        assert len( util.grepfiles( "cat.direction=rear.side=left", resultsfname ) ) == 1
+        assert len( util.grepfiles( "cat.direction=rear.side=right", resultsfname ) ) == 1
 
     def test_save_results_with_multiple_parameterize_and_an_analyze(self):
         ""
@@ -200,24 +172,21 @@ class test_results_tests( unittest.TestCase ):
                 echo "analyze side $PARAM_side"
               </analyze>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 5 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=5, npass=5 )
 
-        # bootstrap with runtimes files then save the test results
-        ok,out = util.run_cmd( util.resultspy + ' save' )
-        assert ok
-        util.run_vvtest( '-i --save-results' )
+        create_and_save_runtimes()
 
         resultsfname = glob.glob('results.*')[0]
         tr = results.TestResults( resultsfname )
 
-        assert len( util.filegrep( resultsfname, "cat" ) ) == 5
-        assert len( util.filegrep( resultsfname, "cat.direction=front.side=left" ) ) == 1
-        assert len( util.filegrep( resultsfname, "cat.direction=front.side=right" ) ) == 1
-        assert len( util.filegrep( resultsfname, "cat.direction=rear.side=left" ) ) == 1
-        assert len( util.filegrep( resultsfname, "cat.direction=rear.side=right" ) ) == 1
+        assert len( util.grepfiles( "cat", resultsfname ) ) == 5
+        assert len( util.grepfiles( "cat.direction=front.side=left", resultsfname ) ) == 1
+        assert len( util.grepfiles( "cat.direction=front.side=right", resultsfname ) ) == 1
+        assert len( util.grepfiles( "cat.direction=rear.side=left", resultsfname ) ) == 1
+        assert len( util.grepfiles( "cat.direction=rear.side=right", resultsfname ) ) == 1
 
     def test_save_results_with_zipped_parameterize(self):
         ""
@@ -229,22 +198,19 @@ class test_results_tests( unittest.TestCase ):
                 echo "xcat direction $direction side $side"
               </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=2, npass=2 )
 
-        # bootstrap with runtimes files then save the test results
-        ok,out = util.run_cmd( util.resultspy + ' save' )
-        assert ok
-        util.run_vvtest( '-i --save-results' )
+        create_and_save_runtimes()
 
         resultsfname = glob.glob('results.*')[0]
         tr = results.TestResults( resultsfname )
 
-        assert len( util.filegrep( resultsfname, "cat" ) ) == 2
-        assert len( util.filegrep( resultsfname, "cat.direction=front.side=left" ) ) == 1
-        assert len( util.filegrep( resultsfname, "cat.direction=rear.side=right" ) ) == 1
+        assert len( util.grepfiles( "cat", resultsfname ) ) == 2
+        assert len( util.grepfiles( "cat.direction=front.side=left", resultsfname ) ) == 1
+        assert len( util.grepfiles( "cat.direction=rear.side=right", resultsfname ) ) == 1
 
     def test_save_results_with_zipped_parameterize_and_an_analyze(self):
         ""
@@ -259,54 +225,35 @@ class test_results_tests( unittest.TestCase ):
                 echo "analyze direction plus side $PARAM_direction_side"
               </analyze>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=3, npass=3 )
 
-        # bootstrap with runtimes files then save the test results
-        ok,out = util.run_cmd( util.resultspy + ' save' )
-        assert ok
-        util.run_vvtest( '-i --save-results' )
+        create_and_save_runtimes()
 
         resultsfname = glob.glob('results.*')[0]
         tr = results.TestResults( resultsfname )
 
-        assert len( util.filegrep( resultsfname, "cat" ) ) == 3
-        assert len( util.filegrep( resultsfname, "cat.direction=front.side=left" ) ) == 1
-        assert len( util.filegrep( resultsfname, "cat.direction=rear.side=right" ) ) == 1
+        assert len( util.grepfiles( "cat", resultsfname ) ) == 3
+        assert len( util.grepfiles( "cat.direction=front.side=left", resultsfname ) ) == 1
+        assert len( util.grepfiles( "cat.direction=rear.side=right", resultsfname ) ) == 1
 
     def test_nominal_use_of_MultiResults_class(self):
         ""
-        util.writefile( "one/cat.xml", """
-            <rtest name="cat">
-              <execute>
-            sleep 1
-              </execute>
-            </rtest>""" )
-        util.writefile( "one/dog.xml", """
-            <rtest name="dog">
-              <execute>
-            sleep 2
-              </execute>
-            </rtest>""" )
-        util.writefile( "two/circle.xml", """
-            <rtest name="circle">
-              <execute>
-            sleep 3
-              </execute>
-            </rtest>""" )
+        write_tests_cat_dog_circle()
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=3, npass=3 )
+        tdir = vrun.resultsDir()
 
         # bootstrap with runtimes files then save the test results
         ok,out = util.run_cmd( util.resultspy + ' save', directory='one' )
         assert ok
         ok,out = util.run_cmd( util.resultspy + ' save', directory='two' )
         assert ok
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
 
         resultsfname = glob.glob('results.*')[0]
         tr = results.TestResults( resultsfname )
@@ -318,9 +265,9 @@ class test_results_tests( unittest.TestCase ):
         assert os.path.exists(multifname)
         mr = results.MultiResults()
         mr.readFile( multifname )
-        assert len( util.filegrep( multifname, 'cat.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
-        assert len( util.filegrep( multifname, 'dog.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
-        assert len( util.filegrep( multifname, 'circle.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
+        assert len( util.grepfiles( 'cat*'+platname+'*'+cplrname+'*pass', multifname ) ) == 1
+        assert len( util.grepfiles( 'dog*'+platname+'*'+cplrname+'*pass', multifname ) ) == 1
+        assert len( util.grepfiles( 'circle*'+platname+'*'+cplrname+'*pass', multifname ) ) == 1
 
         # create a second results file with a different platform/compiler name
         tr = results.TestResults( resultsfname )
@@ -331,12 +278,12 @@ class test_results_tests( unittest.TestCase ):
         # merge a second platform/compiler file into first
         ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname2 )
         assert ok
-        assert len( util.filegrep( multifname, 'cat.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
-        assert len( util.filegrep( multifname, 'dog.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
-        assert len( util.filegrep( multifname, 'circle.*'+platname+'.*'+cplrname+'.*pass' ) ) == 1
-        assert len( util.filegrep( multifname, 'cat.*Plat2'+'.*Cplr2'+'.*pass' ) ) == 1
-        assert len( util.filegrep( multifname, 'dog.*Plat2'+'.*Cplr2'+'.*pass' ) ) == 1
-        assert len( util.filegrep( multifname, 'circle.*Plat2'+'.*Cplr2'+'.*pass' ) ) == 1
+        assert len( util.grepfiles( 'cat*'+platname+'*'+cplrname+'*pass', multifname ) ) == 1
+        assert len( util.grepfiles( 'dog*'+platname+'*'+cplrname+'*pass', multifname ) ) == 1
+        assert len( util.grepfiles( 'circle*'+platname+'*'+cplrname+'*pass', multifname ) ) == 1
+        assert len( util.grepfiles( 'cat*Plat2'+'*Cplr2'+'*pass', multifname ) ) == 1
+        assert len( util.grepfiles( 'dog*Plat2'+'*Cplr2'+'*pass', multifname ) ) == 1
+        assert len( util.grepfiles( 'circle*Plat2'+'*Cplr2'+'*pass', multifname ) ) == 1
 
         # spot check the run time of the 'dog' test
         mr = results.MultiResults()
@@ -349,14 +296,16 @@ class test_results_tests( unittest.TestCase ):
         util.writefile( "one/dog.xml", """
             <rtest name="dog">
               <execute>
-            sleep 4
+                sleep 4
               </execute>
             </rtest>""" )
-        out,np,nd,nf,nn = util.run_vvtest( '-w' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        time.sleep(1)
+
+        vrun = util.runvvtest( '-w' )
+        vrun.assertCounts( total=3, npass=3 )
 
         # merge over the top of the multi platform file
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
         ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
         assert ok
         # now check the 'dog' test time
@@ -373,26 +322,16 @@ class test_results_tests( unittest.TestCase ):
 
     def test_merging_multiplatform_files_by_test_date_and_globbing(self):
         ""
-        util.writefile( "one/cat.xml", """
-            <rtest name="cat">
-              <execute>
-            sleep 1
-              </execute>
-            </rtest>""" )
-        util.writefile( "one/dog.xml", """
-            <rtest name="dog">
-              <execute>
-            sleep 1
-              </execute>
-            </rtest>""" )
+        write_test_cat()
+        write_test_dog()
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=2, npass=2 )
 
         # create a multiplatform timings file
         util.run_cmd( util.resultspy + ' save' )
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
         resultsfname = glob.glob('results.*')[0]
         ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
         assert ok
@@ -408,18 +347,19 @@ class test_results_tests( unittest.TestCase ):
         util.writefile( "one/cat.xml", """
             <rtest name="cat">
               <execute>
-            sleep 1
-            set have_diff = 1
+                sleep 1
+                set have_diff = 1
               </execute>
             </rtest>""" )
         # also remove the dog test
         os.remove( "one/dog.xml" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest('-w')
-        assert np == 0 and nd == 1 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-w' )
+        vrun.assertCounts( total=1, diff=1 )
 
         # save a second results file
-        util.run_vvtest( '-i --save-results --results-tag diffs' )
+        util.runvvtest( '-i --save-results --results-tag diffs' )
         results2fname = None
         for f in glob.glob('results.*'):
           if f != resultsfname:
@@ -505,35 +445,19 @@ class test_results_tests( unittest.TestCase ):
 
     def test_merging_a_multiplatform_file_into_another_multiplatform_file(self):
         ""
-        util.writefile( "tsrc/one/cat.xml", """
-            <rtest name="cat">
-              <execute>
-            sleep 1
-              </execute>
-            </rtest>""" )
-        util.writefile( "tsrc/one/dog.xml", """
-            <rtest name="dog">
-              <execute>
-            sleep 2
-              </execute>
-            </rtest>""" )
-        util.writefile( "tsrc/two/circle.xml", """
-            <rtest name="circle">
-              <execute>
-            sleep 3
-              </execute>
-            </rtest>""" )
+        write_tests_cat_dog_circle( in_subdir='tsrc' )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( 'tsrc' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest( 'tsrc' )
+        vrun.assertCounts( total=3, npass=3 )
+        tdir = vrun.resultsDir()
 
         util.run_cmd( util.resultspy + ' save', directory='tsrc' )
 
         os.mkdir( 'testing' )
         os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
 
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
         resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
 
         # create initial multiplat file
@@ -569,34 +493,18 @@ class test_results_tests( unittest.TestCase ):
 
     def test_creating_source_tree_runtimes_files(self):
         ""
-        util.writefile( "tsrc/one/cat.xml", """
-            <rtest name="cat">
-              <execute>
-            sleep 1
-              </execute>
-            </rtest>""" )
-        util.writefile( "tsrc/one/dog.xml", """
-            <rtest name="dog">
-              <execute>
-            sleep 2
-              </execute>
-            </rtest>""" )
-        util.writefile( "tsrc/two/circle.xml", """
-            <rtest name="circle">
-              <execute>
-            sleep 3
-              </execute>
-            </rtest>""" )
+        write_tests_cat_dog_circle( in_subdir='tsrc' )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( 'tsrc' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=3, npass=3 )
+        tdir = vrun.resultsDir()
         util.run_cmd( util.resultspy + ' save', directory='tsrc' )  # bootstrap runtimes
 
         os.mkdir( 'testing' )
         os.environ['TESTING_DIRECTORY'] = os.path.join( os.getcwd(), 'testing' )
 
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
         resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
 
         # use the results.py script to save the results to the runtimes file
@@ -616,12 +524,14 @@ class test_results_tests( unittest.TestCase ):
         util.writefile( "tsrc/one/cat.xml", """
             <rtest name="cat">
               <execute>
-            sleep 4
+                sleep 4
               </execute>
             </rtest>""" )
-        out,np,nd,nf,nn = util.run_vvtest( '-w -k cat tsrc' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        util.run_vvtest( '-i --save-results --results-tag 2nd' )
+        time.sleep(1)
+
+        vrun = util.runvvtest( '-w -k cat tsrc' )
+        vrun.assertCounts( total=1, npass=1 )
+        util.runvvtest( '-i --save-results --results-tag 2nd' )
 
         rfn2 = os.path.abspath( glob.glob( 'testing/results.*.2nd' )[0] )
 
@@ -646,12 +556,14 @@ class test_results_tests( unittest.TestCase ):
         util.writefile( "tsrc/two/circle.xml", """
             <rtest name="circle">
               <execute>
-            sleep 1
+                sleep 1
               </execute>
             </rtest>""" )
-        out,np,nd,nf,nn = util.run_vvtest( '-w tsrc' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        util.run_vvtest( '-i --save-results --results-tag 3rd' )
+        time.sleep(1)
+
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=3, npass=3 )
+        util.runvvtest( '-i --save-results --results-tag 3rd' )
         rfn3 = os.path.abspath( glob.glob( 'testing/results.*.3rd' )[0] )
         # force the results to be a different platform/compiler
         tr = results.TestResults( rfn3 )
@@ -677,26 +589,16 @@ class test_results_tests( unittest.TestCase ):
 
     def test_merging_using_the_default_merge_method(self):
         ""
-        util.writefile( "one/cat.xml", """
-            <rtest name="cat">
-              <execute>
-            sleep 3
-              </execute>
-            </rtest>""" )
-        util.writefile( "one/dog.xml", """
-            <rtest name="dog">
-              <execute>
-            sleep 1
-              </execute>
-            </rtest>""" )
+        write_test_cat( sleep_time=3 )
+        write_test_dog( sleep_time=1 )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=2, npass=2 )
         util.run_cmd( util.resultspy + ' save' )  # bootstrap runtimes
 
         # create a multiplatform timings file
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
         resultsfname = os.path.abspath( glob.glob('results.*')[0] )
         ok,out = util.run_cmd( util.resultspy + ' merge '+resultsfname )
         assert ok
@@ -709,18 +611,14 @@ class test_results_tests( unittest.TestCase ):
         time.sleep(1)  # force a gap between vvtest invocations
 
         # make the test run faster
-        util.writefile( "one/cat.xml", """
-            <rtest name="cat">
-              <execute>
-            sleep 1
-              </execute>
-            </rtest>""" )
+        write_test_cat( sleep_time=1 )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest('-w')
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-w' )
+        vrun.assertCounts( total=2, npass=2 )
 
         # save a second results file
-        util.run_vvtest( '-i --save-results --results-tag faster' )
+        util.runvvtest( '-i --save-results --results-tag faster' )
         results2fname = None
         for f in glob.glob('results.*'):
             f = os.path.abspath(f)
@@ -747,18 +645,14 @@ class test_results_tests( unittest.TestCase ):
         assert dogD.get('xtime','') == olddogD.get('xtime','no')
 
         # make a test run slower
-        util.writefile( "one/dog.xml", """
-            <rtest name="dog">
-              <execute>
-            sleep 3
-              </execute>
-            </rtest>""" )
+        write_test_dog( sleep_time=3 )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest('-w')
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-w' )
+        vrun.assertCounts( total=2, npass=2 )
 
         # save a third results file
-        util.run_vvtest( '-i --save-results --results-tag slower' )
+        util.runvvtest( '-i --save-results --results-tag slower' )
         results3fname = None
         for f in glob.glob('results.*slower*'):
             f = os.path.abspath(f)
@@ -790,26 +684,16 @@ class test_results_tests( unittest.TestCase ):
 
     def test_merging_using_more_than_one_g_option(self):
         ""
-        util.writefile( "one/cat.xml", """
-            <rtest name="cat">
-              <execute>
-            sleep 3
-              </execute>
-            </rtest>""" )
-        util.writefile( "one/dog.xml", """
-            <rtest name="dog">
-              <execute>
-            sleep 1
-              </execute>
-            </rtest>""" )
+        write_test_cat( sleep_time=3 )
+        write_test_dog( sleep_time=1 )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=2, npass=2 )
         util.run_cmd( util.resultspy + ' save' )  # bootstrap runtimes
 
         # create a multiplatform timings file
-        util.run_vvtest( '-i --save-results --results-tag first' )
+        util.runvvtest( '-i --save-results --results-tag first' )
         resultsfname = os.path.abspath( glob.glob('results.*')[0] )
 
         # get the platform name & compiler
@@ -820,36 +704,28 @@ class test_results_tests( unittest.TestCase ):
         time.sleep(1)  # force a gap between vvtest invocations
 
         # make the test run faster
-        util.writefile( "one/cat.xml", """
-            <rtest name="cat">
-              <execute>
-            sleep 1
-              </execute>
-            </rtest>""" )
+        write_test_cat( sleep_time=1 )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest('-w')
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-w' )
+        vrun.assertCounts( total=2, npass=2 )
 
         # save a second results file
-        util.run_vvtest( '-i --save-results --results-tag second' )
+        util.runvvtest( '-i --save-results --results-tag second' )
         results2fname = os.path.abspath( glob.glob('results.*.second')[0] )
         assert results2fname != resultsfname
 
         time.sleep(1)  # force a gap between vvtest invocations
 
         # make the test run slower
-        util.writefile( "one/cat.xml", """
-            <rtest name="cat">
-              <execute>
-            sleep 6
-              </execute>
-            </rtest>""" )
+        write_test_cat( sleep_time=6 )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest('-w')
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-w' )
+        vrun.assertCounts( total=2, npass=2 )
 
         # save a second results file
-        util.run_vvtest( '-i --save-results --results-tag third' )
+        util.runvvtest( '-i --save-results --results-tag third' )
         results3fname = os.path.abspath( glob.glob('results.*.third')[0] )
         assert results3fname != resultsfname and results3fname != results2fname
 
@@ -884,28 +760,11 @@ class test_results_tests( unittest.TestCase ):
 
     def test_source_tree_runtimes_files_within_subdirectories(self):
         ""
-        util.writefile( "tsrc/one/cat.xml", """
-            <rtest name="cat">
-              <execute>
-            sleep 1
-              </execute>
-            </rtest>""" )
-        util.writefile( "tsrc/one/dog.xml", """
-            <rtest name="dog">
-              <execute>
-            sleep 2
-              </execute>
-            </rtest>""" )
-        util.writefile( "tsrc/two/circle.xml", """
-            <rtest name="circle">
-              <execute>
-            sleep 3
-              </execute>
-            </rtest>""" )
+        write_tests_cat_dog_circle( in_subdir='tsrc' )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( 'tsrc' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest( 'tsrc' )
+        vrun.assertCounts( total=3, npass=3 )
 
         os.mkdir( 'testing' )
         os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
@@ -914,7 +773,7 @@ class test_results_tests( unittest.TestCase ):
         util.run_cmd( util.resultspy + ' save', directory='tsrc' )
 
         # save the results
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
         resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
 
         # create a runtimes file in a subdirectory
@@ -933,14 +792,15 @@ class test_results_tests( unittest.TestCase ):
         util.writefile( "tsrc/one/ferret.xml", """
             <rtest name="ferret">
               <execute>
-            sleep 1
+                sleep 1
               </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( '-w tsrc' )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-w tsrc' )
+        vrun.assertCounts( total=4, npass=4 )
 
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
         ok,out = util.run_cmd( util.resultspy + ' save ' + resultsfname, directory='tsrc' )
         assert ok
 
@@ -955,28 +815,11 @@ class test_results_tests( unittest.TestCase ):
 
     def test_saving_source_tree_runtimes_files_without_merging(self):
         ""
-        util.writefile( "tsrc/one/cat.xml", """
-            <rtest name="cat">
-              <execute>
-            sleep 1
-              </execute>
-            </rtest>""" )
-        util.writefile( "tsrc/one/dog.xml", """
-            <rtest name="dog">
-              <execute>
-            sleep 2
-              </execute>
-            </rtest>""" )
-        util.writefile( "tsrc/two/circle.xml", """
-            <rtest name="circle">
-              <execute>
-            sleep 3
-              </execute>
-            </rtest>""" )
+        write_tests_cat_dog_circle( in_subdir='tsrc' )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( 'tsrc' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest( 'tsrc' )
+        vrun.assertCounts( total=3, npass=3 )
 
         os.mkdir( 'testing' )
         os.environ['TESTING_DIRECTORY'] = os.path.join( os.getcwd(), 'testing' )
@@ -985,7 +828,7 @@ class test_results_tests( unittest.TestCase ):
         util.run_cmd( util.resultspy + ' save', directory='tsrc' )
 
         # save the results
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
         resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
 
         resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
@@ -1002,10 +845,10 @@ class test_results_tests( unittest.TestCase ):
         # remove a test
         os.remove( 'tsrc/one/dog.xml' )
 
-        out,np,nd,nf,nn = util.run_vvtest( '-w tsrc' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-w tsrc' )
+        vrun.assertCounts( total=2, npass=2 )
 
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
         ok,out = util.run_cmd( util.resultspy+' save -w '+resultsfname, directory='tsrc' )
         assert ok
 
@@ -1014,38 +857,22 @@ class test_results_tests( unittest.TestCase ):
         assert tr.dirList() == ['tsrc/one','tsrc/two']
         assert tr.testList('tsrc/one') == ['cat']
         assert tr.testList('tsrc/two') == ['circle']
-        assert len( util.filegrep( 'tsrc/'+timesfname, 'dog' ) ) == 0
+        assert len( util.grepfiles( 'dog', 'tsrc/'+timesfname ) ) == 0
 
     def test_listing_of_results_files(self):
         ""
-        util.writefile( "tsrc/one/cat.xml", """
-            <rtest name="cat">
-              <execute>
-            sleep 1
-              </execute>
-            </rtest>""" )
-        util.writefile( "tsrc/one/dog.xml", """
-            <rtest name="dog">
-              <execute>
-            sleep 2
-              </execute>
-            </rtest>""" )
-        util.writefile( "tsrc/two/circle.xml", """
-            <rtest name="circle">
-              <execute>
-            sleep 3
-              </execute>
-            </rtest>""" )
+        write_tests_cat_dog_circle( in_subdir='tsrc' )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( 'tsrc' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest( 'tsrc' )
+        vrun.assertCounts( total=3, npass=3 )
+        tdir = vrun.resultsDir()
         util.run_cmd( util.resultspy + ' save', directory='tsrc' )  # bootstrap runtimes
 
         os.mkdir( 'testing' )
         os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
 
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
         resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
 
         # create a duplicate results file with known platform/compiler names
@@ -1120,6 +947,7 @@ class test_results_tests( unittest.TestCase ):
         util.writefile( 'foo.dat', """
             foo contents
             """ )
+        time.sleep(1)
 
         optD = { '-g':['file*.txt','fo*.*'] }
         fL = ['bar.txt']
@@ -1262,15 +1090,15 @@ class test_results_tests( unittest.TestCase ):
             <rtest name="ferret">
               <execute> exit 1 </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( '--config config' )
-        assert np == 1 and nd == 1 and nf == 1 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest( '--config config' )
+        vrun.assertCounts( total=3, npass=1, diff=1, fail=1 )
 
         # bootstrap with runtimes files then save the test results
         ok,out = util.run_cmd( util.resultspy + ' save', directory='one' )
         assert ok
-        util.run_vvtest( '--config config -i --save-results' )
+        util.runvvtest( '--config config -i --save-results' )
 
         rf1 = glob.glob('results.*')[0]
         tr = results.TestResults( rf1 )
@@ -1304,15 +1132,15 @@ class test_results_tests( unittest.TestCase ):
             <rtest name="ferret">
               <execute> exit 1 </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 1 and nf == 1 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=3, npass=1, diff=1, fail=1 )
 
         # bootstrap with runtimes files then save the test results
         ok,out = util.run_cmd( util.resultspy + ' save', directory='one' )
         assert ok
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
 
         rf = glob.glob('results.*')[0]
 
@@ -1348,6 +1176,7 @@ class test_results_tests( unittest.TestCase ):
             <rtest name="circle">
               <execute> sleep 3 </execute>
             </rtest>""" )
+        time.sleep(1)
 
         util.interrupt_vvtest_run( '--save-results', count=2 )
         tdir = os.path.abspath( util.results_dir() )
@@ -1380,17 +1209,17 @@ class test_results_tests( unittest.TestCase ):
             <rtest name="circle">
               <execute> sleep 3 </execute>
             </rtest>""" )
+        time.sleep(1)
 
         olddate = time.time() - 2*24*60*60
-        out,np,nd,nf,nn = util.run_vvtest(
+        vrun = util.runvvtest(
             '--save-results --results-date ' + str(olddate) )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun.assertCounts( total=3, npass=3 )
 
         rfile1 = glob.glob('results.*')[0]
 
-        out,np,nd,nf,nn = util.run_vvtest( '-w --save-results' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-w --save-results' )
+        vrun.assertCounts( total=3, npass=3 )
         L = glob.glob('results.*')
         assert len(L) == 2
         L.sort()
@@ -1399,9 +1228,9 @@ class test_results_tests( unittest.TestCase ):
         rfile2 = L[1]
         print3( 'results files:', rfile1, rfile2 )
 
-        out,np,nd,nf,nn = util.run_vvtest(
+        vrun = util.runvvtest(
             '-w --save-results --results-date 2016_07_15' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        vrun.assertCounts( total=3, npass=3 )
         L = glob.glob('results.*')
         assert len(L) == 3
         L.sort()
@@ -1425,15 +1254,15 @@ class test_results_tests( unittest.TestCase ):
               <timeout value="10"/>
               <execute> sleep 1 </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( 'subdir' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest( 'subdir' )
+        vrun.assertCounts( total=2, npass=2 )
 
         # bootstrap with runtimes files then save the test results
         ok,out = util.run_cmd( util.resultspy + ' save', directory='subdir' )
         assert ok
-        util.run_vvtest( '-i --save-results' )
+        util.runvvtest( '-i --save-results' )
 
         # compute a new result date to be yesterday's date
         rf1 = glob.glob('results.*')[0]
@@ -1460,8 +1289,8 @@ class test_results_tests( unittest.TestCase ):
 
         # rerun the tests
         time.sleep(1)
-        out,np,nd,nf,nn = util.run_vvtest( '-w --save-results subdir' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-w --save-results subdir' )
+        vrun.assertCounts( total=2, npass=2 )
 
         ok,out = util.run_cmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
         assert ok
@@ -1474,9 +1303,10 @@ class test_results_tests( unittest.TestCase ):
               <timeout value="5"/>
               <execute> sleep 10 </execute>
             </rtest>""" )
-        
-        out,np,nd,nf,nn = util.run_vvtest( '-w --save-results subdir' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        time.sleep(1)
+
+        vrun = util.runvvtest( '-w --save-results subdir' )
+        vrun.assertCounts( total=2, npass=1, timeout=1 )
 
         # the timed out test should not be reported
         ok,out = util.run_cmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
@@ -1489,14 +1319,73 @@ class test_results_tests( unittest.TestCase ):
         os.rename( rf1, rf2 )
 
         # rerun one more time, in which the test will timeout again
-        out,np,nd,nf,nn = util.run_vvtest( '-w --save-results subdir' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-w --save-results subdir' )
+        vrun.assertCounts( total=2, npass=1, timeout=1 )
 
         # the timed out test should now be reported
         ok,out = util.run_cmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
         assert ok
         assert len( util.grep( out, 'test1' ) ) == 1
         assert len( util.grep( out, 'test2' ) ) == 0
+
+
+############################################################################
+
+def write_tests_cat_dog_circle( in_subdir=None ):
+    ""
+    cwd = os.getcwd()
+
+    if in_subdir:
+        if not os.path.exists( in_subdir ):
+            os.mkdir( in_subdir )
+            time.sleep(1)
+
+        os.chdir( in_subdir )
+
+    try:
+        write_test_cat()
+        write_test_dog()
+        write_test_circle()
+
+    finally:
+        if in_subdir:
+            os.chdir( cwd )
+
+def write_test_cat( sleep_time=1 ):
+    ""
+    util.writefile( "one/cat.xml", """
+        <rtest name="cat">
+          <execute>
+            sleep """+str(sleep_time)+"""
+          </execute>
+        </rtest>""" )
+
+def write_test_dog( sleep_time=2 ):
+    ""
+    util.writefile( "one/dog.xml", """
+        <rtest name="dog">
+          <execute>
+            sleep """+str(sleep_time)+"""
+          </execute>
+        </rtest>""" )
+
+def write_test_circle():
+    ""
+    util.writefile( "two/circle.xml", """
+        <rtest name="circle">
+          <execute>
+            sleep 3
+          </execute>
+        </rtest>""" )
+
+
+def create_and_save_runtimes():
+    ""
+    ok,out = util.run_cmd( util.resultspy + ' save' )
+    assert ok
+
+    # run vvtest to save the test results in TESTING_DIRECTORY
+    util.runvvtest( '-i --save-results' )
 
 
 ############################################################################

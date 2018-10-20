@@ -64,78 +64,56 @@ class filter_and_num_processors( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        self.run_filter_out_tests_exceeding_max_num_procs( '' )
-        self.run_filter_out_tests_exceeding_max_num_procs(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_filter_out_tests_exceeding_max_num_procs(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=16, npass=16 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 16 and nd == 0 and nf == 0 and nn == 0
-        platname = util.platform_name( out )
-        tdir = util.results_dir()
+            util.remove_results()
+            vrun = util.runvvtest( '-n 1', batch=batch )
+            vrun.assertCounts( total=16, npass=16 )
 
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -n 1' )
-        assert np == 16 and nd == 0 and nf == 0 and nn == 0
+            util.remove_results()
+            vrun = util.runvvtest( '-N 2', batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
 
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -N 2' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-        assert len( glob.glob( tdir+'/atest*/execute.log' ) ) == 1
-        assert len( glob.glob( tdir+'/xtest*/execute.log' ) ) == 1
-        assert len( glob.glob( tdir+'/btest*/execute.log' ) ) == 2
-        assert len( glob.glob( tdir+'/ctest*/execute.log' ) ) == 0
-        assert len( glob.glob( tdir+'/ytest*/execute.log' ) ) == 2
-        assert len( glob.glob( tdir+'/ztest*/execute.log' ) ) == 0
+            assert len( glob.glob( 'TestResults*/atest*/execute.log' ) ) == 1
+            assert len( glob.glob( 'TestResults*/xtest*/execute.log' ) ) == 1
+            assert len( glob.glob( 'TestResults*/btest*/execute.log' ) ) == 2
+            assert len( glob.glob( 'TestResults*/ctest*/execute.log' ) ) == 0
+            assert len( glob.glob( 'TestResults*/ytest*/execute.log' ) ) == 2
+            assert len( glob.glob( 'TestResults*/ztest*/execute.log' ) ) == 0
 
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -n 1 -N 2' )
-        assert np == 6 and nd == 0 and nf == 0 and nn == 0
-        assert len( glob.glob( tdir+'/atest*/execute.log' ) ) == 1
-        assert len( glob.glob( tdir+'/xtest*/execute.log' ) ) == 1
-        assert len( glob.glob( tdir+'/btest*/execute.log' ) ) == 2
-        assert len( glob.glob( tdir+'/ctest*/execute.log' ) ) == 0
-        assert len( glob.glob( tdir+'/ytest*/execute.log' ) ) == 2
-        assert len( glob.glob( tdir+'/ztest*/execute.log' ) ) == 0
+            util.remove_results()
+            vrun = util.runvvtest( '-n 1 -N 2', batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
 
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -N 4' )
-        assert np == 16 and nd == 0 and nf == 0 and nn == 0
+            assert len( glob.glob( 'TestResults*/atest*/execute.log' ) ) == 1
+            assert len( glob.glob( 'TestResults*/xtest*/execute.log' ) ) == 1
+            assert len( glob.glob( 'TestResults*/btest*/execute.log' ) ) == 2
+            assert len( glob.glob( 'TestResults*/ctest*/execute.log' ) ) == 0
+            assert len( glob.glob( 'TestResults*/ytest*/execute.log' ) ) == 2
+            assert len( glob.glob( 'TestResults*/ztest*/execute.log' ) ) == 0
 
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt.split()+['-p', 'np<=2 or not np'] )
-        assert np == 12 and nd == 0 and nf == 0 and nn == 0
-        assert len( glob.glob( tdir+'/atest*/execute.log' ) ) == 1
-        assert len( glob.glob( tdir+'/xtest*/execute.log' ) ) == 1
-        assert len( glob.glob( tdir+'/btest*/execute.log' ) ) == 2
-        assert len( glob.glob( tdir+'/ctest*/execute.log' ) ) == 3
-        assert len( glob.glob( tdir+'/ytest*/execute.log' ) ) == 2
-        assert len( glob.glob( tdir+'/ztest*/execute.log' ) ) == 3
+            util.remove_results()
+            vrun = util.runvvtest( '-N 4', batch=batch )
+            vrun.assertCounts( total=16, npass=16 )
+
+            util.remove_results()
+            vrun = util.runvvtest( '-p "np<=2 or not np"', batch=batch )
+            vrun.assertCounts( total=12, npass=12 )
+
+            assert len( glob.glob( 'TestResults*/atest*/execute.log' ) ) == 1
+            assert len( glob.glob( 'TestResults*/xtest*/execute.log' ) ) == 1
+            assert len( glob.glob( 'TestResults*/btest*/execute.log' ) ) == 2
+            assert len( glob.glob( 'TestResults*/ctest*/execute.log' ) ) == 3
+            assert len( glob.glob( 'TestResults*/ytest*/execute.log' ) ) == 2
+            assert len( glob.glob( 'TestResults*/ztest*/execute.log' ) ) == 3
 
     def test_batch_should_not_prune_based_on_max_procs(self):
         ""
-        platname = util.core_platform_name()
-
-        # determine the max num procs for this platform
-        util.writescript( "null.vvt", """
-            #!/bin/sh
-            echo "null"
-            """ )
-        time.sleep(1)
-
-        out,np,nd,nf,nn = util.run_vvtest( '--plat '+platname )
-        tdir = util.results_dir()
-        os.remove( 'null.vvt' )
-        L = util.grep( out, 'max procs' )
-        assert len(L) == 1
-        maxprocs = L[0].split( 'max procs', 1 )[1].strip().lstrip('=').strip()
-        maxprocs = int( maxprocs )
-        assert maxprocs > 0
-
-        util.remove_results()
+        maxprocs = 4
 
         util.writescript( 'atest.vvt', """
             #!/usr/bin/env python
@@ -163,14 +141,13 @@ class filter_and_num_processors( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        cmd = '-N '+str(maxprocs+1)+' --batch --plat '+platname
-        out,np,nd,nf,nn = util.run_vvtest( cmd )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-N '+str(maxprocs+1), batch=True )
+        vrun.assertCounts( total=3, npass=3 )
 
-        assert os.path.exists( tdir+'/atest.np=1/execute.log' )
-        assert os.path.exists( tdir+'/btest.np='+str(maxprocs)+'/execute.log' )
-        assert os.path.exists( tdir+'/ctest.np='+str(maxprocs+1)+'/execute.log' )
-        assert len( glob.glob( tdir+'/dtest.*/execute.log' ) ) == 0
+        assert len( glob.glob( 'TestResults*/atest.np=1/execute.log' ) ) == 1
+        assert len( glob.glob( 'TestResults*/btest.np='+str(maxprocs)+'/execute.log' ) ) == 1
+        assert len( glob.glob( 'TestResults*/ctest.np='+str(maxprocs+1)+'/execute.log' ) ) == 1
+        assert len( glob.glob( 'TestResults*/dtest.*/execute.log' ) ) == 0
 
     def test_filter_out_tests_exceeding_max_procs_command_line_switch(self):
         ""
@@ -193,48 +170,42 @@ class filter_and_num_processors( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        self.run_filter_out_tests_exceeding_max_procs_command_line_switch( '' )
-        self.run_filter_out_tests_exceeding_max_procs_command_line_switch(
-                '--plat '+util.core_platform_name()+' --batch' )
+        for batch in [False,True]:
 
-    def run_filter_out_tests_exceeding_max_procs_command_line_switch(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 7 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=7, npass=7 )
 
-        platname = util.platform_name( out )
-        tdir = util.results_dir()
+            # first check that -N 2 does not remove tests if they are already there
+            vrun = util.runvvtest( '-R -N 2', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
 
-        # first check that -N 2 does not remove tests if they are already there
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R -N 2' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = util.testlist( out )
-        assert len(L) == 2
-        assert L[0][-1].endswith( os.sep+'btest.np=1' )
-        assert L[1][-1].endswith( os.sep+'btest.np=2' )
+            assert vrun.countTestLines( 'btest.np=1' ) == 1
+            assert vrun.countTestLines( 'btest.np=2' ) == 1
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R' )
-        assert np == 7 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-R', batch=batch )
+            vrun.assertCounts( total=7, npass=7 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R', directory=tdir )
-        assert np == 7 and nd == 0 and nf == 0 and nn == 0
+            vrun = util.runvvtest( '-R', batch=batch,
+                                         chdir=vrun.resultsDir() )
+            vrun.assertCounts( total=7, npass=7 )
 
-        util.remove_results()
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -N 2' )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = util.testlist( out )
-        assert len(L) == 2
-        assert L[0][-1].endswith( os.sep+'btest.np=1' )
-        assert L[1][-1].endswith( os.sep+'btest.np=2' )
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R', directory=tdir )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        L = util.testlist( out )
-        assert len(L) == 2
-        assert L[0][-1] == 'btest.np=1'
-        assert L[1][-1] == 'btest.np=2'
+            vrun = util.runvvtest( '-N 2', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
+
+            assert vrun.countTestLines( 'btest.np=1' ) == 1
+            assert vrun.countTestLines( 'btest.np=2' ) == 1
+
+            vrun = util.runvvtest( '-R', batch=batch,
+                                         chdir=vrun.resultsDir() )
+            vrun.assertCounts( total=2, npass=2 )
+
+            assert vrun.countTestLines( 'btest.np=1' ) == 1
+            assert vrun.countTestLines( 'btest.np=2' ) == 1
+
 
 ########################################################################
 

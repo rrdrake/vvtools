@@ -45,39 +45,21 @@ class parameterize_analyze_dependency_handling( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        self.run_analyze_tests_dont_wait_until_end_to_run( '' )
-        self.run_analyze_tests_dont_wait_until_end_to_run(
-                '--plat '+util.core_platform_name()+' --batch --qsub-limit 5' )
+        for batch in [False,True]:
 
-    def run_analyze_tests_dont_wait_until_end_to_run(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -n 4 --sort x' )
-        assert np == 4 and nd == 0 and nf == 0 and nn == 0
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
+            vrun = util.runvvtest( batch=batch )
 
-        tL = util.testtimes( out )
-        assert len(tL) == 4
-        assert tL[0][0] == tdir+'/test1'
-        assert tL[1][0] == tdir+'/test1.timestep=1'
-        assert tL[2][0] == tdir+'/test1.timestep=2'
-        assert tL[3][0] == tdir+'/test2'
-        assert tL[0][1] >= tL[1][2] and tL[0][1] >= tL[2][2]
-        assert tL[0][1] < tL[3][2]
+            vrun.assertCounts( total=4, npass=4 )
+
+            assert vrun.startDate('test1') >= vrun.endDate('test1.timestep=1')
+            assert vrun.startDate('test1') >= vrun.endDate('test1.timestep=2')
+            assert vrun.startDate('test1') <  vrun.endDate('test2')
 
     def test_analyze_tests_dont_run_child_failed_previously(self):
         ""
-        self.run_analyze_tests_dont_run_child_failed_previously( '' )
-        self.run_analyze_tests_dont_run_child_failed_previously(
-                '--plat '+util.core_platform_name()+' --batch' )
-
-    def run_analyze_tests_dont_run_child_failed_previously(self, opt):
-        ""
-        util.remove_results()
-
-        util.writefile( 'atest.xml', """
+        fail_test_xml = """
             <rtest name="atest">
               <parameterize timestep="1 2"/>
               <execute>
@@ -92,25 +74,8 @@ class parameterize_analyze_dependency_handling( unittest.TestCase ):
                  ls ../atest.timestep=1/afile.1 || exit 1
                  ls ../atest.timestep=2/afile.2 || exit 1
               </analyze>
-            </rtest>""" )
-        time.sleep(1)
-
-        # the analyze should not run because a child fails
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 1 and nd == 0 and nf == 1 and nn == 1
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
-
-        # the analyze should not run here
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
-
-        # double check the state
-        out,np,nd,nf,nn = util.run_vvtest( "--plat "+platname+" -i" )
-        assert np == 1 and nd == 0 and nf == 1 and nn == 1
-
-        # "fix" the failure
-        util.writefile( 'atest.xml', """
+            </rtest>"""
+        fixed_test_xml = """
             <rtest name="atest">
               <parameterize timestep="1 2"/>
               <execute>
@@ -120,33 +85,46 @@ class parameterize_analyze_dependency_handling( unittest.TestCase ):
                  ls ../atest.timestep=1/afile.1 || exit 1
                  ls ../atest.timestep=2/afile.2 || exit 1
               </analyze>
-            </rtest>""" )
+            </rtest>"""
         time.sleep(1)
 
-        # rerun the failure
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -k fail' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+        for batch in [False,True]:
 
-        # now the analyze should run
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( "--plat "+platname+" -i" )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+            util.writefile( 'atest.xml', fail_test_xml )
+            time.sleep(1)
 
+            # the analyze should not run because a child fails
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=3, npass=1, fail=1, notrun=1 )
+
+            # the analyze should not run here
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=0 )
+
+            # double check the state
+            vrun = util.runvvtest( '-i', batch=batch )
+            vrun.assertCounts( total=3, npass=1, fail=1, notrun=1 )
+
+            # "fix" the failure
+            util.writefile( 'atest.xml', fixed_test_xml )
+            time.sleep(1)
+
+            # rerun the failure
+            vrun = util.runvvtest( '-k fail', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+
+            # now the analyze should run
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+
+            vrun = util.runvvtest( '-i', batch=batch )
+            vrun.assertCounts( total=3, npass=3, fail=0, notrun=0 )
 
     def test_rerun_with_analyze_deps(self):
         ""
-        self.run_rerun_with_analyze_deps( '' )
-        self.run_rerun_with_analyze_deps(
-                '--plat '+util.core_platform_name() + \
-                ' --batch --qsub-length 1 --qsub-limit 5' )
-
-    def run_rerun_with_analyze_deps(self, opt):
-        ""
-        util.remove_results()
-
-        util.writefile( 'atest.xml', """
+        fail_xml_test = """
             <rtest name="atest">
               <parameterize timestep="1 2"/>
               <execute>
@@ -157,17 +135,8 @@ class parameterize_analyze_dependency_handling( unittest.TestCase ):
                  ls ../atest.timestep=1/bfile.1 || exit 1
                  ls ../atest.timestep=2/bfile.2 || exit 1
               </analyze>
-            </rtest>""" )
-        time.sleep(1)
-        
-        # the analyze should fail
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -n 3' )
-        assert np == 2 and nd == 0 and nf == 1 and nn == 0
-        tdir = util.results_dir()
-        platname = util.platform_name( out )
-
-        # "fix" the execute
-        util.writefile( 'atest.xml', """
+            </rtest>"""
+        fixed_xml_test = """
             <rtest name="atest">
               <parameterize timestep="1 2"/>
               <execute>
@@ -178,13 +147,28 @@ class parameterize_analyze_dependency_handling( unittest.TestCase ):
                  ls ../atest.timestep=1/bfile.1 || exit 1
                  ls ../atest.timestep=2/bfile.2 || exit 1
               </analyze>
-            </rtest>""" )
+            </rtest>"""
         time.sleep(1)
-        
-        # the analyze test should NOT run at the same time as the children
-        # (if it does in this case, then the analyze test will show a fail)
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R -n 3' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
+
+        for batch in [False,True]:
+
+            util.remove_results()
+
+            util.writefile( 'atest.xml', fail_xml_test )
+            time.sleep(1)
+            
+            # the analyze should fail
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=3, npass=2, fail=1 )
+
+            # "fix" the execute
+            util.writefile( 'atest.xml', fixed_xml_test )
+            time.sleep(1)
+            
+            # the analyze test should NOT run at the same time as the children
+            # (if it does in this case, then the analyze test will show a fail)
+            vrun = util.runvvtest( '-R', batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
 
     def test_analyze_waits_for_deps_with_limited_num_procs(self):
         """
@@ -207,8 +191,8 @@ class parameterize_analyze_dependency_handling( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( '-n 1' )
-        assert np == 5 and nd == 0 and nf == 0 and nn == 0
+        vrun = util.runvvtest( '-n 1' )
+        vrun.assertCounts( total=5, npass=5 )
 
     def test_failed_analyze_deps_are_still_listed_with_info_option(self):
         """
@@ -234,12 +218,12 @@ class parameterize_analyze_dependency_handling( unittest.TestCase ):
         time.sleep(1)
 
         # the analyze should be run here
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 1 and nd == 0 and nf == 1 and nn == 1
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=3, npass=1, fail=1, notrun=1 )
 
         # the analyze should show up in the listing here
-        out,np,nd,nf,nn = util.run_vvtest( '-i -k notrun/pass' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 1
+        vrun = util.runvvtest( '-i -k notrun/pass' )
+        vrun.assertCounts( total=2, npass=1, notrun=1 )
 
 
 ########################################################################

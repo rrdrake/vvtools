@@ -34,93 +34,70 @@ class filter_and_parameters( unittest.TestCase ):
                 unset echo
               </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        self.run_filter_tests_by_parameter_names_and_values( '' )
-        self.run_filter_tests_by_parameter_names_and_values(
-                '--plat '+util.core_platform_name()+' --batch' )
+        platname = util.core_platform_name()
 
-    def run_filter_tests_by_parameter_names_and_values(self, opt):
+        for batch in [False,True]:
+
+            util.remove_results()
+
+            vrun = util.runvvtest( '-N 10', batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
+
+            vrun = util.runvvtest( '-i', batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
+
+            util.remove_results()
+
+            vrun = util.runvvtest( '-p np=1 -N 10', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+
+            vrun = util.runvvtest( '-R', batch=batch,
+                                         chdir=vrun.resultsDir() )
+            vrun.assertCounts( total=1, npass=1 )
+
+            util.remove_results()
+
+            vrun = util.runvvtest( "-p 'np<=3' -N 10", batch=batch )
+            self.assert_atest_results( vrun, 2, 1, 1, 0 )
+
+            util.remove_results()
+
+            vrun = util.runvvtest( "-p 'np!=3' -N 10", batch=batch )
+            self.assert_atest_results( vrun, 2, 1, 0, 1 )
+
+            util.remove_results()
+
+            vrun = util.runvvtest( "-p 'np>=3' -N 10", batch=batch )
+            self.assert_atest_results( vrun, 2, 0, 1, 1 )
+
+            util.remove_results()
+
+            vrun = util.runvvtest( "-p 'np>3' -N 10", batch=batch )
+            self.assert_atest_results( vrun, 1, 0, 0, 1 )
+
+            util.remove_results()
+
+            vrun = util.runvvtest( "-p 'np<3' -N 10", batch=batch )
+            self.assert_atest_results( vrun, 1, 1, 0, 0 )
+
+            util.remove_results()
+
+            vrun = util.runvvtest( "-p 'np=1/np=3' -N 10", batch=batch )
+            self.assert_atest_results( vrun, 2, 1, 1, 0 )
+
+            util.remove_results()
+
+            vrun = util.runvvtest( "-p 'np>1' -p 'np<6' -N 10", batch=batch )
+            self.assert_atest_results( vrun, 1, 0, 1, 0 )
+
+    def assert_atest_results(self, vrun, npass, numnp1, numnp3, numnp6):
         ""
-        util.remove_results()
-
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -N 10' )
-        testdir = util.results_dir()
-        platname = util.platform_name( out )
-
-        out,np,nd,nf,nn = util.run_vvtest( '--plat '+platname+' -i' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-
-        util.remove_results()
-
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -p np=1 -N 10' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-        savedir = os.getcwd()
-
-        os.chdir( testdir ) ; print3( "cd", testdir )
-
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -R' )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-
-        os.chdir( savedir ) ; print3( "cd .." )
-
-        os.system( "ls -l" )
-        util.remove_results()
-        os.system( "ls -ltr" )
-
-        out,np,nd,nf,nn = util.run_vvtest( opt+" -p np<=3 -N 10" )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist(out,'pass.*np=1') ) == 1
-        assert len( util.greptestlist(out,'pass.*np=3') ) == 1
-        assert len( util.greptestlist(out,'pass.*np=6') ) == 0
-
-        util.remove_results()
-
-        out,np,nd,nf,nn = util.run_vvtest( opt+" -p np!=3 -N 10" )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist(out,'pass.*np=1') ) == 1
-        assert len( util.greptestlist(out,'pass.*np=3') ) == 0
-        assert len( util.greptestlist(out,'pass.*np=6') ) == 1
-
-        util.remove_results()
-
-        out,np,nd,nf,nn = util.run_vvtest( opt+" -p np>=3 -N 10" )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist(out,'pass.*np=1') ) == 0
-        assert len( util.greptestlist(out,'pass.*np=3') ) == 1
-        assert len( util.greptestlist(out,'pass.*np=6') ) == 1
-
-        util.remove_results()
-
-        out,np,nd,nf,nn = util.run_vvtest( opt+" -p np>3 -N 10" )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist(out,'pass.*np=1') ) == 0
-        assert len( util.greptestlist(out,'pass.*np=3') ) == 0
-        assert len( util.greptestlist(out,'pass.*np=6') ) == 1
-
-        util.remove_results()
-
-        out,np,nd,nf,nn = util.run_vvtest( opt+" -p np<3 -N 10" )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist(out,'pass.*np=1') ) == 1
-        assert len( util.greptestlist(out,'pass.*np=3') ) == 0
-        assert len( util.greptestlist(out,'pass.*np=6') ) == 0
-
-        util.remove_results()
-
-        out,np,nd,nf,nn = util.run_vvtest( opt+" -p np=1/np=3 -N 10" )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist(out,'pass.*np=1') ) == 1
-        assert len( util.greptestlist(out,'pass.*np=3') ) == 1
-        assert len( util.greptestlist(out,'pass.*np=6') ) == 0
-
-        util.remove_results()
-
-        out,np,nd,nf,nn = util.run_vvtest( opt+" -p np>1 -p np<6 -N 10" )
-        assert np == 1 and nd == 0 and nf == 0 and nn == 0
-        assert len( util.greptestlist(out,'pass.*np=1') ) == 0
-        assert len( util.greptestlist(out,'pass.*np=3') ) == 1
-        assert len( util.greptestlist(out,'pass.*np=6') ) == 0
+        vrun.assertCounts( total=npass, npass=npass )
+        assert vrun.countTestLines( 'pass.*np=1' ) == numnp1
+        assert vrun.countTestLines( 'pass.*np=3' ) == numnp3
+        assert vrun.countTestLines( 'pass.*np=6' ) == numnp6
 
 
 ########################################################################

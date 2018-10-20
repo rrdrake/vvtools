@@ -51,27 +51,20 @@ class Timeout_script_specs( unittest.TestCase ):
             echo "sleep3 is sleeping 10 seconds"
             sleep 10
             """ )
-
         time.sleep(1)
 
-        self.run_different_timeout_values( '--plat '+platname )
-        self.run_different_timeout_values( '--plat '+platname+' --batch' )
+        for batch in [False,True]:
 
-    def run_different_timeout_values(self, opt):
-        ""
-        util.remove_results()
+            util.remove_results()
 
-        out,np,nd,nf,nn = util.run_vvtest( opt )
-        assert np == 2 and nd == 0 and nf == 0 and nn == 0
-        assert util.numtimeout(out) == 1
+            vrun = util.runvvtest( batch=batch )
+            vrun.assertCounts( total=3, npass=2, timeout=1 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -wT 1.5' )
-        assert np == 0 and nd == 0 and nf == 0 and nn == 0
-        assert util.numtimeout(out) == 3
+            vrun = util.runvvtest( '-wT 1.5', batch=batch )
+            vrun.assertCounts( total=3, timeout=3 )
 
-        out,np,nd,nf,nn = util.run_vvtest( opt+' -wT 20' )
-        assert np == 3 and nd == 0 and nf == 0 and nn == 0
-        assert util.numtimeout(out) == 0
+            vrun = util.runvvtest( '-wT 20', batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
 
 
 ########################################################################

@@ -27,61 +27,50 @@ class info_tests( unittest.TestCase ):
         util.writefile( "param.xml", """
             <rtest name="param">
               <parameterize hello="world mars"/>
-              <execute> <![CDATA[
-            sleep 1
-            echo "parm=$hello"
-            ]]>
+              <execute>
+                sleep 1
+                echo "parm=$hello"
               </execute>
             </rtest>""" )
-
         util.writefile( "FailTest.xml", """
             <rtest name="FailTest">
-              <execute> <![CDATA[
-            sleep 1
-            echo "Exiting with failure status"
-            exit 1
-            ]]>
+              <execute>
+                sleep 1
+                echo "Exiting with failure status"
+                exit 1
               </execute>
             </rtest>""")
-
         util.writefile( "DiffTest.xml", """
             <rtest name="DiffTest">
-              <execute> <![CDATA[
-            sleep 1
-            echo "Exiting with diff status"
-            set have_diff = yes
-            ]]>
+              <execute>
+                sleep 1
+                echo "Exiting with diff status"
+                set have_diff = yes
               </execute>
             </rtest>""")
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 1 and nf == 1 and nn == 0
-        assert len( util.testlist(out) ) == 4, "expected 4 tests to have run"
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np == 2 and nd == 1 and nf == 1 and nn == 0
-        assert len( util.testlist(out) ) == 4, "expected 4 tests to have run"
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=4, npass=2, diff=1, fail=1 )
+        tdir = vrun.resultsDir()
+
+        vrun = util.runvvtest( '-i' )
+        vrun.assertCounts( total=4, npass=2, diff=1, fail=1 )
 
         # cd into the run directory and check the -i output
-        saved = os.getcwd()
-        os.chdir( util.results_dir() )
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np == 2 and nd == 1 and nf == 1 and nn == 0
-        assert len( util.testlist(out) ) == 4, "expected 4 tests to have run"
-        os.chdir(saved)
+        vrun = util.runvvtest( '-i', chdir=tdir )
+        vrun.assertCounts( total=4, npass=2, diff=1, fail=1 )
 
         util.remove_results()
 
         # again but with a build option
 
-        out,np,nd,nf,nn = util.run_vvtest( '-o dbg' )
-        assert np == 2 and nd == 1 and nf == 1 and nn == 0
-        assert len( util.testlist(out) ) == 4, "expected 4 tests to have run"
+        vrun = util.runvvtest( '-o dbg' )
+        vrun.assertCounts( total=4, npass=2, diff=1, fail=1 )
+        tdir = vrun.resultsDir()
 
-        os.chdir( util.results_dir() )
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np == 2 and nd == 1 and nf == 1 and nn == 0
-        assert len( util.testlist(out) ) == 4, "expected 4 tests to have run"
-        os.chdir(saved)
+        vrun = util.runvvtest( '-i', chdir=tdir )
+        vrun.assertCounts( total=4, npass=2, diff=1, fail=1 )
 
         util.remove_results()
 
@@ -90,90 +79,60 @@ class info_tests( unittest.TestCase ):
                 <keywords> hello world </keywords>
               </rtest>
             """ )
-
         util.writefile( 'sdir/skeys.xml', """
               <rtest name="skeys">
                 <keywords> mars jupiter fast </keywords>
               </rtest>
             """ )
+        time.sleep(1)
 
-        rootd = os.getcwd()
+        vrun = util.runvvtest( '--keys' )
+        assert_keywords( vrun, ['fast', 'hello', 'jupiter', 'mars', 'world'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '--keys' )
-        L = extract_keywords(out)
-        print3( "keywords", L )
-        assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
+        vrun = util.runvvtest( '--files' )
+        assert_files( vrun, [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml',
+                              'param.xml', 'sdir/skeys.xml' ] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '--files' )
-        L = extract_files(out, rootd)
-        print3( "files", L )
-        assert L == [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml', \
-                      'param.xml', 'sdir/skeys.xml']
+        vrun = util.runvvtest( '-k fast --files' )
+        assert_files( vrun, [ 'sdir/skeys.xml'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '-k fast --files' )
-        L = extract_files(out, rootd)
-        print3( "files", L )
-        assert L == [ 'sdir/skeys.xml']
+        vrun = util.runvvtest( '-K fast -K medium -K long --files' )
+        assert_files( vrun, [ 'DiffTest.xml', 'FailTest.xml',
+                              'keys.xml', 'param.xml'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '-K fast -K medium -K long --files' )
-        L = extract_files(out, rootd)
-        print3( "files", L )
-        assert L == [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml', 'param.xml']
+        vrun = util.runvvtest()
+        tdir = vrun.resultsDir()
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        out,np,nd,nf,nn = util.run_vvtest( '-R --keys' )
-        L = extract_keywords(out)
-        print3( "keywords", L )
-        assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
+        vrun = util.runvvtest( '-R --keys' )
+        assert_keywords( vrun, ['fast', 'hello', 'jupiter', 'mars', 'world'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i --keys' )
-        L = extract_keywords(out)
-        print3( "keywords", L )
-        assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
+        vrun = util.runvvtest( '-i --keys' )
+        assert_keywords( vrun, ['fast', 'hello', 'jupiter', 'mars', 'world'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i --files' )
-        L = extract_files(out, rootd)
-        print3( "files", L )
-        assert L == [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml', \
-                      'param.xml', 'sdir/skeys.xml']
+        vrun = util.runvvtest( '-i --files' )
+        assert_files( vrun, [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml',
+                              'param.xml', 'sdir/skeys.xml'] )
 
-        os.chdir( util.results_dir() )
+        vrun = util.runvvtest( '-R --keys', chdir=tdir )
+        assert_keywords( vrun, ['fast', 'hello', 'jupiter', 'mars', 'world'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '-R --keys' )
-        L = extract_keywords(out)
-        print3( "keywords", L )
-        assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
+        vrun = util.runvvtest( '-i --keys', chdir=tdir )
+        assert_keywords( vrun, ['fast', 'hello', 'jupiter', 'mars', 'world'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i --keys' )
-        L = extract_keywords(out)
-        print3( "keywords", L )
-        assert L == ['fast', 'hello', 'jupiter', 'mars', 'world']
+        vrun = util.runvvtest( '-i --files', chdir=tdir )
+        assert_files( vrun, [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml',
+                              'param.xml', 'sdir/skeys.xml'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i --files' )
-        L = extract_files(out, rootd)
-        print3( "files", L )
-        assert L == [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml', \
-                      'param.xml', 'sdir/skeys.xml']
+        util.runvvtest( '-i', chdir=tdir+'/sdir' ).assertCounts( total=1 )
 
-        os.chdir( 'sdir' )
+        vrun = util.runvvtest( '-R --keys', chdir=tdir+'/sdir' )
+        assert_keywords( vrun, ['fast', 'jupiter', 'mars'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i' )
-        assert np+nd+nf == 1
+        vrun = util.runvvtest( '-i --keys', chdir=tdir+'/sdir' )
+        assert_keywords( vrun, ['fast', 'jupiter', 'mars'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '-R --keys' )
-        L = extract_keywords(out)
-        print3( "keywords", L )
-        assert L == ['fast', 'jupiter', 'mars']
-
-        out,np,nd,nf,nn = util.run_vvtest( '-i --keys' )
-        L = extract_keywords(out)
-        print3( "keywords", L )
-        assert L == ['fast', 'jupiter', 'mars']
-
-        out,np,nd,nf,nn = util.run_vvtest( '-i --files' )
-        L = extract_files(out, rootd)
-        print3( "files", L )
-        assert L == ['sdir/skeys.xml']
+        vrun = util.runvvtest( '-i --files', chdir=tdir+'/sdir' )
+        assert_files( vrun, [ 'sdir/skeys.xml'] )
 
     def test_sorting_the_test_listing(self):
         ""
@@ -203,42 +162,36 @@ class info_tests( unittest.TestCase ):
                 sleep 20
               </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest( '-T 10 -n 1' )
-        assert np == 1 and nd == 1 and nf == 1 and nn == 0
-        tdir = os.path.abspath( util.results_dir() )
+        vrun = util.runvvtest( '-T 10 -n 1' )
+        vrun.assertCounts( total=4, npass=1, diff=1, fail=1, timeout=1 )
 
-        L = util.greptestlist( out, 'TestResults' )
-        assert len(L) == 4
-        assert [ s.split()[0] for s in L ] == ['ardvark','marmot','otter','zebra']
+        finL = vrun.grep( 'Finished: ' )
+        assert len(finL) == 4
+        xorder = [ line.split()[1] for line in finL ]
+        for nam in ['ardvark','marmot','otter','zebra']:
+            assert nam in xorder
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i', directory=tdir )
-        L = util.testlines( out )
-        assert [ s.split()[0] for s in L ] == ['ardvark','marmot','otter','zebra']
+        tdir = vrun.resultsDir()
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i --sort nx', directory=tdir )
-        L = util.testlines( out )
-        assert [ s.split()[0] for s in L ] == ['ardvark','marmot','otter','zebra']
+        vrun = util.runvvtest( '-i', chdir=tdir )
+        assert test_names( vrun ) == ['ardvark','marmot','otter','zebra']
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i --sort x', directory=tdir )
-        L = util.testlines( out )
-        assert [ s.split()[0] for s in L ] == ['marmot','zebra','ardvark','otter']
+        vrun = util.runvvtest( '-i --sort nx', chdir=tdir )
+        assert test_names( vrun ) == ['ardvark','marmot','otter','zebra']
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i --sort t', directory=tdir )
-        L = util.testlines( out )
-        assert [ s.split()[0] for s in L ] == ['zebra','marmot','ardvark','otter']
+        vrun = util.runvvtest( '-i --sort x', chdir=tdir )
+        assert test_names( vrun ) == ['marmot','zebra','ardvark','otter']
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i --sort sr', directory=tdir )
-        L = util.testlines( out )
-        assert [ s.split()[0] for s in L ] == ['otter','ardvark','zebra','marmot']
+        vrun = util.runvvtest( '-i --sort t', chdir=tdir )
+        assert test_names( vrun ) == ['zebra','marmot','ardvark','otter']
 
-        out,np,nd,nf,nn = util.run_vvtest( '-i --sort d', directory=tdir )
-        L = util.testlines( out )
-        # just make sure the dates are sorted in ascending order
-        L2 = [ line.split()[4]+' '+line.split()[5] for line in L ]
-        L3 = [] + L2
-        L3.sort()
-        assert L2 == L3
+        vrun = util.runvvtest( '-i --sort sr', chdir=tdir )
+        assert test_names( vrun ) == ['otter','ardvark','zebra','marmot']
+
+        vrun = util.runvvtest( '-i --sort d', chdir=tdir )
+        assert test_names( vrun ) == xorder
 
     def test_using_the_files_option_with_a_multi_test_xml_file(self):
         ""
@@ -249,28 +202,19 @@ class info_tests( unittest.TestCase ):
               <keywords testname="horse"> patchwork </keywords>
               <execute> echo "hello world" </execute>
             </rtest>""" )
+        time.sleep(1)
 
-        cwd = os.getcwd()
+        vrun = util.runvvtest( '--files' )
+        assert_files( vrun, [ 'multi.xml'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '--files' )
-        L = extract_files( out, cwd )
-        print3( "files", L )
-        assert len(L) == 1
+        vrun = util.runvvtest( '--files -k stripes' )
+        assert_files( vrun, [ 'multi.xml'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '--files -k stripes' )
-        L = extract_files( out, cwd )
-        print3( "files", L )
-        assert len(L) == 1
+        vrun = util.runvvtest( '--files -k patchwork' )
+        assert_files( vrun, [ 'multi.xml'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '--files -k patchwork' )
-        L = extract_files( out, cwd )
-        print3( "files", L )
-        assert len(L) == 1
-
-        out,np,nd,nf,nn = util.run_vvtest( '--files -k stripes -k patchwork' )
-        L = extract_files( out, cwd )
-        print3( "files", L )
-        assert len(L) == 0
+        vrun = util.runvvtest( '--files -k stripes -k patchwork' )
+        assert_files( vrun, [] )
 
     def test_using_the_files_option_with_a_multi_test_script_file(self):
         ""
@@ -282,45 +226,23 @@ class info_tests( unittest.TestCase ):
             #VVT: keywords (testname=horse) : patchwork
             echo "hello world"
             """ )
+        time.sleep(1)
 
-        cwd = os.getcwd()
+        vrun = util.runvvtest( '--files' )
+        assert_files( vrun, [ 'multi.vvt'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '--files' )
-        L = extract_files( out, cwd )
-        print3( "files", L )
-        assert len(L) == 1
+        vrun = util.runvvtest( '--files -k stripes' )
+        assert_files( vrun, [ 'multi.vvt'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '--files -k stripes' )
-        L = extract_files( out, cwd )
-        print3( "files", L )
-        assert len(L) == 1
+        vrun = util.runvvtest( '--files -k patchwork' )
+        assert_files( vrun, [ 'multi.vvt'] )
 
-        out,np,nd,nf,nn = util.run_vvtest( '--files -k patchwork' )
-        L = extract_files( out, cwd )
-        print3( "files", L )
-        assert len(L) == 1
-
-        out,np,nd,nf,nn = util.run_vvtest( '--files -k stripes -k patchwork' )
-        L = extract_files( out, cwd )
-        print3( "files", L )
-        assert len(L) == 0
+        vrun = util.runvvtest( '--files -k stripes -k patchwork' )
+        assert_files( vrun, [] )
 
     def test_using_files_option_should_apply_max_processors_filtering(self):
         ""
-        util.writescript( "null.vvt", """
-            #!/bin/sh
-            echo "null"
-            """ )
-        out,np,nd,nf,nn = util.run_vvtest()
-        platname = util.platform_name( out )
-        tdir = util.results_dir()
-        os.remove( 'null.vvt' )
-        L = util.grep( out, 'max procs' )
-        assert len(L) == 1
-        maxprocs = L[0].split( 'max procs', 1 )[1].strip().lstrip('=').strip()
-        maxprocs = int( maxprocs )
-        assert maxprocs > 0
-        util.remove_results()
+        maxprocs = 4
 
         util.writescript( 'atest.vvt', """
             #!/usr/bin/env python
@@ -347,61 +269,70 @@ class info_tests( unittest.TestCase ):
             print ( 'executing test, np='+str(vvt.np) )
             """ )
 
-        rootd = os.getcwd()
-
-        out,np,nd,nf,nn = util.run_vvtest( '--files' )
-        L = extract_files( out, rootd )
-        print3( "files", L )
-        assert L == [ 'atest.vvt', 'btest.vvt']
+        vrun = util.runvvtest( '-N '+str(maxprocs)+' --files' )
+        assert_files( vrun, [ 'atest.vvt', 'btest.vvt' ] )
 
     def test_producing_a_JUnit_results_file(self):
         ""
         util.writefile( "subdir/param.xml", """
             <rtest name="param">
               <parameterize hello="world mars"/>
-              <execute> <![CDATA[
-            sleep 1
-            echo "parm=$hello"
-            ]]>
+              <execute>
+                sleep 1
+                echo "parm=$hello"
               </execute>
             </rtest>""" )
-
         util.writefile( "FailTest.xml", """
             <rtest name="FailTest">
-              <execute> <![CDATA[
-            sleep 1
-            echo "Exiting with failure status"
-            exit 1
-            ]]>
+              <execute>
+                sleep 1
+                echo "Exiting with failure status"
+                exit 1
               </execute>
             </rtest>""")
-
         util.writefile( "DiffTest.xml", """
             <rtest name="DiffTest">
               <parameterize np="1 2"/>
-              <execute> <![CDATA[
-            sleep 1
-            echo "Exiting with diff status"
-            set have_diff = yes
-            ]]>
+              <execute>
+                sleep 1
+                echo "Exiting with diff status"
+                set have_diff = yes
               </execute>
             </rtest>""")
+        time.sleep(1)
 
-        out,np,nd,nf,nn = util.run_vvtest()
-        assert np == 2 and nd == 2 and nf == 1 and nn == 0
-        assert len( util.testlist(out) ) == 5, "expected 5 tests to have run"
+        vrun = util.runvvtest()
+        vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
 
-        # cd into the run directory and produce the JUnit XML file
-        saved = os.getcwd()
-        os.chdir( util.results_dir() )
-        util.run_vvtest( '-i --junit=../ju.xml' )
-        os.chdir(saved)
-        assert len( util.filegrep( 'ju.xml', '<testcase ' ) ) == 5
+        vrun = util.runvvtest( '-i --junit=../ju.xml', chdir=vrun.resultsDir() )
+
+        assert len( util.grepfiles( '<testcase ', 'ju.xml' ) ) == 5
 
 
 ############################################################################
 
+def assert_keywords( vrun, keywordlist ):
+    ""
+    kL = extract_keywords( vrun.out )
+    assert kL == keywordlist
+
+
+def assert_files( vrun, relative_filenames ):
+    ""
+    fL = extract_files( vrun.out, os.getcwd() )
+    assert fL == relative_filenames
+
+
+def test_names( vrun ):
+    ""
+    nameL = []
+    for line in util.testlines( vrun.out ):
+        nameL.append( line.split()[0] )
+    return nameL
+
+
 def extract_keywords( out ):
+    ""
     start = False
     kL = []
     for line in out.split( '\n' ):
@@ -416,7 +347,9 @@ def extract_keywords( out ):
     L.sort()
     return L
 
+
 def extract_files( out, rootd ):
+    ""
     D = {}
     for line in out.split( '\n' ):
       line = line.strip()
