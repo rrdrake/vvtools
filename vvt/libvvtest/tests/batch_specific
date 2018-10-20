@@ -106,14 +106,14 @@ class inlining_results_file_includes( unittest.TestCase ):
         opts = '--batch --qsub-limit 1 --qsub-length 40'
         x,out = util.interrupt_vvtest_run( opts, count=1, qid=1 )
 
-        L = util.grep( out, 'did not seem to finish:' )
+        L = util.greplines( 'did not seem to finish:', out )
         assert len(L) == 1
         L2 = L[0].split(':')[-1].split()  # qid list as strings
         L2 = [ int(s) for s in L2 ]  # make integer qids
         assert len(L2) == 1 and L2[0] == 1
 
-        assert len( util.greptestlist( out, 'sleeper[1-4]' ) ) == 4
-        assert len( util.greptestlist( out, 'sleeper[1-4] .*pass' ) ) == 3
+        assert len( util.greptestlist( 'sleeper[1-4]', out ) ) == 4
+        assert len( util.greptestlist( 'sleeper[1-4] *pass', out ) ) == 3
 
 
 ########################################################################

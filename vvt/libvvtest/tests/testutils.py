@@ -546,9 +546,9 @@ def adjust_shell_pattern_to_work_with_fnmatch( pattern ):
     return pattern
 
 
-def grepfiles( pattern, *paths ):
+def grepfiles( shell_pattern, *paths ):
     ""
-    pattern = adjust_shell_pattern_to_work_with_fnmatch( pattern )
+    pattern = adjust_shell_pattern_to_work_with_fnmatch( shell_pattern )
 
     matchlines = []
 
@@ -570,14 +570,17 @@ def grepfiles( pattern, *paths ):
     return matchlines
 
 
-def grep(out, pat):
-    L = []
-    repat = re.compile(pat)
-    for line in out.split( os.linesep ):
-        line = line.rstrip()
-        if repat.search(line):
-            L.append(line)
-    return L
+def greplines( shell_pattern, string_output ):
+    ""
+    pattern = adjust_shell_pattern_to_work_with_fnmatch( shell_pattern )
+
+    matchlines = []
+
+    for line in string_output.splitlines():
+        if fnmatch.fnmatch( line, pattern ):
+            matchlines.append( line )
+
+    return matchlines
 
 
 def globfile( shell_pattern ):
@@ -672,28 +675,21 @@ class VvtestCommandRunner:
         ""
         return self.plat
 
-    def grepTestLines(self, regex):
+    def grepTestLines(self, shell_pattern):
         ""
-        repat = re.compile( regex )
-        matchL = []
+        return greptestlist( shell_pattern, self.out )
 
-        for line in testlines( self.out ):
-            if repat.search( line ):
-                matchL.append( line )
-
-        return matchL
-
-    def countTestLines(self, regex):
+    def countTestLines(self, shell_pattern):
         ""
-        return len( self.grepTestLines( regex ) )
+        return len( self.grepTestLines( shell_pattern ) )
 
-    def grep(self, regex):
+    def grepLines(self, shell_pattern):
         ""
-        return grep( self.out, regex )
+        return greplines( shell_pattern, self.out )
 
-    def countGrepLines(self, regex):
+    def countLines(self, shell_pattern):
         ""
-        return len( self.grep( regex ) )
+        return len( self.grepLines( shell_pattern ) )
 
     def greplogs(self, shell_pattern, testid_pattern=None):
         ""
@@ -824,6 +820,15 @@ def parse_vvtest_counts( out ):
     return cntD
 
 
+# these have to be modified if/when the output format changes in vvtest
+def check_pass(L): return len(L) >= 5 and L[2] == 'pass'
+def check_fail(L): return len(L) >= 5 and L[2][:4] == 'fail'
+def check_diff(L): return len(L) >= 5 and L[2] == 'diff'
+def check_notrun(L): return len(L) >= 3 and L[1] == 'NotRun'
+def check_timeout(L): return len(L) >= 5 and L[1] == 'TimeOut'
+def check_notdone(L): return len(L) >= 3 and L[1] == 'Running'
+
+
 def parse_test_ids( vvtest_output, results_dir ):
     ""
     tdir = os.path.basename( results_dir )
@@ -924,151 +929,28 @@ def get_results_dir( out ):
     return tdir
 
 
-# these have to be modified if/when the output format changes in vvtest
-def check_pass(L): return len(L) >= 5 and L[2] == 'pass'
-def check_fail(L): return len(L) >= 5 and L[2][:4] == 'fail'
-def check_diff(L): return len(L) >= 5 and L[2] == 'diff'
-def check_notrun(L): return len(L) >= 3 and L[1] == 'NotRun'
-def check_timeout(L): return len(L) >= 5 and L[1] == 'TimeOut'
-def check_notdone(L): return len(L) >= 3 and L[1] == 'Running'
-
-def numtotal(out):
+def greptestlist( shell_pattern, vvtest_output ):
     ""
-    cnt = 0
-    mark = 0
-    for line in out.split( os.linesep ):
-        if mark:
-            if line[:10] == "==========":
-                mark = 0
-            else:
-                L = line.split()
-                if len(L) > 2:
-                    cnt += 1
-        elif line[:10] == "==========":
-            mark = 1
-            cnt = 0  # reset count so only the last cluster is considered
+    pattern = adjust_shell_pattern_to_work_with_fnmatch( shell_pattern )
 
-    return cnt
+    matchlines = []
+    for line in testlines( vvtest_output ):
+        if fnmatch.fnmatch( line, pattern ):
+            matchlines.append( line )
 
-def numpass(out):
-    cnt = 0
-    mark = 0
-    for line in out.split( os.linesep ):
-        if mark:
-            if line[:10] == "==========":
-                mark = 0
-            else:
-                L = line.split()
-                if check_pass(L):
-                    cnt = cnt + 1
-        elif line[:10] == "==========":
-            mark = 1
-            cnt = 0  # reset count so only the last cluster is considered
-    return cnt
+    return matchlines
 
-def numfail(out):
-    cnt = 0
-    mark = 0
-    for line in out.split( os.linesep ):
-        if mark:
-            if line[:10] == "==========":
-                mark = 0
-            else:
-                L = line.split()
-                if check_fail(L):
-                    cnt = cnt + 1
-        elif line[:10] == "==========":
-            mark = 1
-            cnt = 0  # reset count so only the last cluster is considered
-    return cnt
 
-def numdiff(out):
-    cnt = 0
-    mark = 0
-    for line in out.split( os.linesep ):
-        if mark:
-            if line[:10] == "==========":
-                mark = 0
-            else:
-                L = line.split()
-                if check_diff(L):
-                    cnt = cnt + 1
-        elif line[:10] == "==========":
-            mark = 1
-            cnt = 0  # reset count so only the last cluster is considered
-    return cnt
-
-def numnotrun(out):
-    cnt = 0
-    mark = 0
-    for line in out.split( os.linesep ):
-        if mark:
-            if line[:10] == "==========":
-                mark = 0
-            else:
-                L = line.split()
-                if check_notrun(L):
-                    cnt = cnt + 1
-        elif line[:10] == "==========":
-            mark = 1
-            cnt = 0  # reset count so only the last cluster is considered
-    return cnt
-
-def numtimeout(out):
-    cnt = 0
-    mark = 0
-    for line in out.split( os.linesep ):
-        if mark:
-            if line[:10] == "==========":
-                mark = 0
-            else:
-                L = line.split()
-                if check_timeout(L):
-                    cnt = cnt + 1
-        elif line[:10] == "==========":
-            mark = 1
-            cnt = 0  # reset count so only the last cluster is considered
-    return cnt
-
-def testlist(out):
-    L = []
-    mark = 0
-    for line in out.split( os.linesep ):
-        if mark:
-            if line[:10] == "==========":
-                mark = 0
-            else:
-                L.append( line.split() )
-        elif line[:10] == "==========":
-            mark = 1
-            L = []  # reset list so only last cluster is considered
-    return L
-
-def greptestlist(out, pat):
-    repat = re.compile(pat)
-    L = []
-    mark = 0
-    for line in out.split( os.linesep ):
-        if mark:
-            if line[:10] == "==========":
-                mark = 0
-            elif repat.search( line.rstrip() ):
-                L.append( line.rstrip() )
-        elif line[:10] == "==========":
-            mark = 1
-            L = []  # reset list so only last cluster is considered
-    return L
-
-def testlines(out):
+def testlines( vvtest_output ):
     ""
     lineL = []
     mark = False
-    for line in out.split( os.linesep ):
+    for line in vvtest_output.splitlines():
         if mark:
             if line.startswith( "==========" ):
                 mark = False
             else:
-                lineL.append( line.rstrip() )
+                lineL.append( line )
 
         elif line.startswith( "==========" ):
             mark = True

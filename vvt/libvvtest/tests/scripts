@@ -277,14 +277,14 @@ class script_tests( unittest.TestCase ):
         vrun = util.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
 
-        assert len( vrun.grep( 'skipping .*tst1.vvt'  ) ) == 1
-        assert len( vrun.grep( 'skipping .*tst2.vvt'  ) ) == 1
-        assert len( vrun.grep( 'skipping .*tst2b.vvt'  ) ) == 1
-        assert len( vrun.grep( 'skipping .*tst2c.vvt'  ) ) == 1
-        assert len( vrun.grep( 'skipping .*tst4.vvt'  ) ) == 1
-        assert len( vrun.grep( 'skipping .*tst5.vvt'  ) ) == 1
-        assert len( vrun.grep( 'skipping .*tst6.vvt'  ) ) == 1
-        assert len( vrun.grep( 'skipping .*tst7.vvt'  ) ) == 1
+        assert len( vrun.grepLines( 'skipping *tst1.vvt'  ) ) == 1
+        assert len( vrun.grepLines( 'skipping *tst2.vvt'  ) ) == 1
+        assert len( vrun.grepLines( 'skipping *tst2b.vvt'  ) ) == 1
+        assert len( vrun.grepLines( 'skipping *tst2c.vvt'  ) ) == 1
+        assert len( vrun.grepLines( 'skipping *tst4.vvt'  ) ) == 1
+        assert len( vrun.grepLines( 'skipping *tst5.vvt'  ) ) == 1
+        assert len( vrun.grepLines( 'skipping *tst6.vvt'  ) ) == 1
+        assert len( vrun.grepLines( 'skipping *tst7.vvt'  ) ) == 1
 
         assert vrun.countGrepLogs( 'hello from the tst3 test' ) == 1
 
@@ -882,15 +882,15 @@ class script_tests( unittest.TestCase ):
 
         assert vrun.countGrepLogs( 'vvtest_util.py', 'py1' ) > 0
 
-        assert vrun.countTestLines( 'pass.*py2' ) == 1
+        assert vrun.countTestLines( 'pass*py2' ) == 1
         assert vrun.countGrepLogs( 'failprogram', 'py2' ) > 0
 
-        assert vrun.countTestLines( 'pass.*py3' ) == 0
+        assert vrun.countTestLines( 'pass*py3' ) == 0
         assert vrun.countGrepLogs( 'command failed*failprogram', 'py3' ) > 0
 
         assert vrun.countGrepLogs( 'found *vvtest_util.py', 'py4' ) == 1
 
-        assert vrun.countTestLines( 'pass.*py5' ) == 1
+        assert vrun.countTestLines( 'pass*py5' ) == 1
         assert vrun.countGrepLogs( 'helloworld*progargs', 'py5' ) == 0
 
         assert vrun.countGrepLogs( 'hello world', 'py6' ) == 0

@@ -101,8 +101,8 @@ class baseline_tests( unittest.TestCase ):
         vrun = util.runvvtest( '-R' )
         vrun.assertCounts( total=2, npass=1, diff=1 )
 
-        assert vrun.countTestLines( 'pass.*/multi$' ) == 1
-        assert vrun.countTestLines( 'diff.*/multi2$' ) == 1
+        assert vrun.countTestLines( 'pass*/multi$' ) == 1
+        assert vrun.countTestLines( 'diff*/multi2$' ) == 1
 
     def test_script_format_rebaseline_with_just_copy_files(self):
         ""
@@ -176,7 +176,7 @@ class baseline_tests( unittest.TestCase ):
 
         # run baseline and rerun tests
         vrun = util.runvvtest( '-b' )
-        assert vrun.countGrepLines( 'FAILED' ) == 0
+        assert vrun.countLines( 'FAILED' ) == 0
         vrun = util.runvvtest( '-R' )
         vrun.assertCounts( total=1, npass=1 )
 
@@ -334,10 +334,10 @@ class baseline_tests( unittest.TestCase ):
 
         # run baseline; only the foo=1 tests should rebaseline
         vrun = util.runvvtest( '-b' )
-        assert vrun.countGrepLines( 'baselining pybase.foo=1' ) == 1
-        assert vrun.countGrepLines( 'baselining bline.foo=1' ) == 1
-        assert vrun.countGrepLines( 'baselining bline.foo=2' ) == 0
-        assert vrun.countGrepLines( 'baselining pybase.foo=2' ) == 0
+        assert vrun.countLines( 'baselining pybase.foo=1' ) == 1
+        assert vrun.countLines( 'baselining bline.foo=1' ) == 1
+        assert vrun.countLines( 'baselining bline.foo=2' ) == 0
+        assert vrun.countLines( 'baselining pybase.foo=2' ) == 0
 
         assert len( util.grepfiles( 'bline.txt */bline_base.txt',
                     'TestResults.*/bline.foo=1/baseline.log' ) ) == 1
@@ -388,10 +388,10 @@ class baseline_tests( unittest.TestCase ):
         vrun.assertCounts( total=6, npass=6 )
 
         vrun = util.runvvtest( '-b -k pass' )
-        assert vrun.countGrepLines( 'baselining control[.]foo=1' ) == 1
-        assert vrun.countGrepLines( 'baselining control[.]foo=2' ) == 1
-        assert vrun.countGrepLines( 'baselining control[.]' ) == 3
-        assert vrun.countGrepLines( 'baselining pybase[.]' ) == 1
+        assert vrun.countLines( 'baselining control.foo=1' ) == 1
+        assert vrun.countLines( 'baselining control.foo=2' ) == 1
+        assert vrun.countLines( 'baselining control.' ) == 3
+        assert vrun.countLines( 'baselining pybase.' ) == 1
 
 
 #####################################################################

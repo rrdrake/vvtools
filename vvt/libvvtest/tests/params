@@ -297,23 +297,23 @@ class parameter_tests( unittest.TestCase ):
             vrun = util.runvvtest( batch=batch )
             vrun.assertCounts( total=12, npass=12 )
 
-            def assert_grep( regex, count ):
-                assert vrun.countTestLines( regex ) == count
+            def assert_grep( pattern, count ):
+                assert vrun.countTestLines( pattern ) == count
 
-            assert_grep( 'pass.*.animal=dog', 1 )
-            assert_grep( 'pass.*.animal=cat', 1 )
-            assert_grep( 'pass.*.A=dog.V=carrot', 1 )
-            assert_grep( 'pass.*.A=cat.V=carrot', 1 )
-            assert_grep( 'pass.*.A=dog.V=celery', 1 )
-            assert_grep( 'pass.*.A=cat.V=celery', 1 )
-            assert_grep( 'pass.*.B=dog.X=carrot', 1 )
-            assert_grep( 'pass.*.B=cat.X=celery', 1 )
-            assert_grep( 'pass.*.B=cat.X=carrot', 0 )
-            assert_grep( 'pass.*.B=dog.X=celery', 0 )
-            assert_grep( 'pass.*.C=1.Y=2.Z=3', 1 )
-            assert_grep( 'pass.*.C=4.Y=5.Z=6', 1 )
-            assert_grep( 'pass.*.C=7.Y=8.Z=9', 1 )
-            assert_grep( 'pass.*.C=10.Y=11.Z=12', 1 )
+            assert_grep( 'pass*.animal=dog', 1 )
+            assert_grep( 'pass*.animal=cat', 1 )
+            assert_grep( 'pass*.A=dog.V=carrot', 1 )
+            assert_grep( 'pass*.A=cat.V=carrot', 1 )
+            assert_grep( 'pass*.A=dog.V=celery', 1 )
+            assert_grep( 'pass*.A=cat.V=celery', 1 )
+            assert_grep( 'pass*.B=dog.X=carrot', 1 )
+            assert_grep( 'pass*.B=cat.X=celery', 1 )
+            assert_grep( 'pass*.B=cat.X=carrot', 0 )
+            assert_grep( 'pass*.B=dog.X=celery', 0 )
+            assert_grep( 'pass*.C=1.Y=2.Z=3', 1 )
+            assert_grep( 'pass*.C=4.Y=5.Z=6', 1 )
+            assert_grep( 'pass*.C=7.Y=8.Z=9', 1 )
+            assert_grep( 'pass*.C=10.Y=11.Z=12', 1 )
 
             sL = util.grepfiles( 'hello from params1.animal=dog',
                                  'TestResults*/params1.animal=dog/execute.log' )

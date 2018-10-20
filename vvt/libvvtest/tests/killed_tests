@@ -45,7 +45,7 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
 
             vrun = util.runvvtest()
             vrun.assertCounts( total=1, npass=1 )
-            assert vrun.countGrepLines( 'rror.*another process' ) == 0
+            assert vrun.countLines( 'rror*another process' ) == 0
 
     def test_vvtest_fails_to_run_if_a_previous_run_was_killed(self):
         ""
@@ -67,7 +67,7 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
 
             vrun = util.runvvtest( raise_on_error=False )
             assert vrun.x > 0
-            assert vrun.countGrepLines( 'rror.*another process' ) == 1
+            assert vrun.countLines( 'rror*another process' ) == 1
 
     def test_running_vvtest_after_killed_but_in_TestResults_directory(self):
         ""
@@ -87,7 +87,7 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
 
         vrun = util.runvvtest( raise_on_error=False, chdir=tdir )
         assert vrun.x > 0
-        assert vrun.countGrepLines( 'rror.*another process' ) == 1
+        assert vrun.countLines( 'rror*another process' ) == 1
 
     def test_forcing_vvtest_to_run_after_previous_was_killed(self):
         ""
@@ -115,12 +115,12 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
             # this one should fail
             vrun = util.runvvtest( raise_on_error=False, batch=batch )
             assert vrun.x > 0
-            assert vrun.countGrepLines( 'rror.*another process' ) == 1
+            assert vrun.countLines( 'rror*another process' ) == 1
 
             # this one should be forced to run
             vrun = util.runvvtest( '--force', batch=batch )
             vrun.assertCounts( total=1, npass=1 )
-            assert vrun.countGrepLines( 'rror.*another process' ) == 0
+            assert vrun.countLines( 'rror*another process' ) == 0
 
             util.runvvtest( '-i' ).assertCounts( total=2, npass=2 )
 

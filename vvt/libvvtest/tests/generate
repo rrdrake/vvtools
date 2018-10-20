@@ -136,7 +136,7 @@ class generate_tests( unittest.TestCase ):
 
         # try out the -S option with -g
         vrun = util.runvvtest( '-gS hello=jupiter subdir' )
-        assert vrun.countTestLines( 'boom[.]hello=jupiter' ) == 1
+        assert vrun.countTestLines( 'boom.hello=jupiter' ) == 1
 
     def test_that_TestResults_and_Build_directories_are_excluded_from_scans(self):
         ""
@@ -255,11 +255,11 @@ class generate_tests( unittest.TestCase ):
 
         vrun = util.runvvtest()
         vrun.assertCounts( total=5, npass=5 )
-        assert vrun.countTestLines( 'multi[.]paramA=one' ) == 1
-        assert vrun.countTestLines( 'multi[.]paramA=two' ) == 1
-        assert vrun.countTestLines( 'multi_2nd[.]paramA=three' ) == 1
-        assert vrun.countTestLines( 'multi_2nd[.]paramA=four' ) == 1
-        assert vrun.countTestLines( 'multi_2nd[.]paramA=five' ) == 1
+        assert vrun.countTestLines( 'multi.paramA=one' ) == 1
+        assert vrun.countTestLines( 'multi.paramA=two' ) == 1
+        assert vrun.countTestLines( 'multi_2nd.paramA=three' ) == 1
+        assert vrun.countTestLines( 'multi_2nd.paramA=four' ) == 1
+        assert vrun.countTestLines( 'multi_2nd.paramA=five' ) == 1
         assert vrun.countGrepLogs( 'test name multiXXX' ) == 2
         assert vrun.countGrepLogs( 'test name multi_2ndXXX' ) == 3
 
@@ -274,21 +274,21 @@ class generate_tests( unittest.TestCase ):
 
         vrun = util.runvvtest( '-w' )
         vrun.assertCounts( total=5, npass=5 )
-        assert vrun.countTestLines( 'multi[.]paramA=one' ) == 1
-        assert vrun.countTestLines( 'multi[.]paramA=two' ) == 1
-        assert vrun.countTestLines( 'multi_2nd[.]paramB=three' ) == 1
-        assert vrun.countTestLines( 'multi_2nd[.]paramB=four' ) == 1
-        assert vrun.countTestLines( 'multi_2nd[.]paramB=five' ) == 1
+        assert vrun.countTestLines( 'multi.paramA=one' ) == 1
+        assert vrun.countTestLines( 'multi.paramA=two' ) == 1
+        assert vrun.countTestLines( 'multi_2nd.paramB=three' ) == 1
+        assert vrun.countTestLines( 'multi_2nd.paramB=four' ) == 1
+        assert vrun.countTestLines( 'multi_2nd.paramB=five' ) == 1
         assert vrun.countGrepLogs( 'test name multiXXX' ) == 2
         assert vrun.countGrepLogs( 'test name multi_2ndXXX' ) == 3
 
         vrun = util.runvvtest( '-w -p paramB' )
         vrun.assertCounts( total=3, npass=3 )
-        assert vrun.countTestLines( 'multi[.]paramA=one' ) == 0
-        assert vrun.countTestLines( 'multi[.]paramA=two' ) == 0
-        assert vrun.countTestLines( 'multi_2nd[.]paramB=three' ) == 1
-        assert vrun.countTestLines( 'multi_2nd[.]paramB=four' ) == 1
-        assert vrun.countTestLines( 'multi_2nd[.]paramB=five' ) == 1
+        assert vrun.countTestLines( 'multi.paramA=one' ) == 0
+        assert vrun.countTestLines( 'multi.paramA=two' ) == 0
+        assert vrun.countTestLines( 'multi_2nd.paramB=three' ) == 1
+        assert vrun.countTestLines( 'multi_2nd.paramB=four' ) == 1
+        assert vrun.countTestLines( 'multi_2nd.paramB=five' ) == 1
         assert vrun.countGrepLogs( 'test name multiXXX' ) == 0
         assert vrun.countGrepLogs( 'test name multi_2ndXXX' ) == 3
 

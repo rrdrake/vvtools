@@ -853,10 +853,10 @@ class test_results_tests( unittest.TestCase ):
         x,out = util.runcmd( util.resultspy + ' list -p '+resultsfname1 )
         assert out.strip() == 'Plat1/Cplr1'
         x,out = util.runcmd( util.resultspy + ' list '+resultsfname1 )
-        assert len( util.grep( out, 'Plat1/Cplr1' ) ) == 0
-        assert len( util.grep( out, 'tsrc/two/circle' ) ) == 1
-        assert len( util.grep( out, 'tsrc/one/dog' ) ) == 1
-        assert len( util.grep( out, 'tsrc/one/cat' ) ) == 1
+        assert len( util.greplines( 'Plat1/Cplr1', out ) ) == 0
+        assert len( util.greplines( 'tsrc/two/circle', out ) ) == 1
+        assert len( util.greplines( 'tsrc/one/dog', out ) ) == 1
+        assert len( util.greplines( 'tsrc/one/cat', out ) ) == 1
 
         # create multiplat file with two platform/compiler combos
         util.runcmd( util.resultspy + ' merge -x ' + \
@@ -868,11 +868,11 @@ class test_results_tests( unittest.TestCase ):
         assert out.split() == ['Plat1/Cplr1','Plat2/Cplr2']
         
         x,out = util.runcmd( util.resultspy + ' list testing/'+multifname )
-        assert len( util.grep( out, 'Plat1/Cplr1' ) ) == 3
-        assert len( util.grep( out, 'Plat2/Cplr2' ) ) == 3
-        assert len( util.grep( out, 'tsrc/two/circle' ) ) == 2
-        assert len( util.grep( out, 'tsrc/one/dog' ) ) == 2
-        assert len( util.grep( out, 'tsrc/one/cat' ) ) == 2
+        assert len( util.greplines( 'Plat1/Cplr1', out ) ) == 3
+        assert len( util.greplines( 'Plat2/Cplr2', out ) ) == 3
+        assert len( util.greplines( 'tsrc/two/circle', out ) ) == 2
+        assert len( util.greplines( 'tsrc/one/dog', out ) ) == 2
+        assert len( util.greplines( 'tsrc/one/cat', out ) ) == 2
 
         # save a copy the multiplat file
         shutil.copy( 'testing/'+multifname, 'testing/save' )
@@ -880,11 +880,11 @@ class test_results_tests( unittest.TestCase ):
         # remove Plat1/Cplr1 from the multiplat file
         util.runcmd( util.resultspy + ' clean -p Plat1/Cplr1 testing/'+multifname )
         x,out = util.runcmd( util.resultspy + ' list testing/'+multifname )
-        assert len( util.grep( out, 'Plat1/Cplr1' ) ) == 0
-        assert len( util.grep( out, 'Plat2/Cplr2' ) ) == 3
-        assert len( util.grep( out, 'tsrc/two/circle' ) ) == 1
-        assert len( util.grep( out, 'tsrc/one/dog' ) ) == 1
-        assert len( util.grep( out, 'tsrc/one/cat' ) ) == 1
+        assert len( util.greplines( 'Plat1/Cplr1', out ) ) == 0
+        assert len( util.greplines( 'Plat2/Cplr2', out ) ) == 3
+        assert len( util.greplines( 'tsrc/two/circle', out ) ) == 1
+        assert len( util.greplines( 'tsrc/one/dog', out ) ) == 1
+        assert len( util.greplines( 'tsrc/one/cat', out ) ) == 1
 
     def test_the_process_files_function(self):
         ""
@@ -1068,12 +1068,12 @@ class test_results_tests( unittest.TestCase ):
 
         x,out = util.runcmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
 
-        assert len( util.grep( out, 'Fake.gcc' ) ) == 3
-        assert len( util.grep( out, 'pass=1 ' ) ) == 2
-        assert len( util.grep( out, 'diff=1 ' ) ) == 2
-        assert len( util.grep( out, 'fail=1 ' ) ) == 2
-        assert len( util.grep( out, 'one/dog' ) ) == 1
-        assert len( util.grep( out, 'one/ferret' ) ) == 1
+        assert len( util.greplines( 'Fake.gcc', out ) ) == 3
+        assert len( util.greplines( 'pass=1 ', out ) ) == 2
+        assert len( util.greplines( 'diff=1 ', out ) ) == 2
+        assert len( util.greplines( 'fail=1 ', out ) ) == 2
+        assert len( util.greplines( 'one/dog', out ) ) == 1
+        assert len( util.greplines( 'one/ferret', out ) ) == 1
 
     def test_the_report_subcommand_with_G_option(self):
         ""
@@ -1102,19 +1102,19 @@ class test_results_tests( unittest.TestCase ):
 
         x,out = util.runcmd( util.resultspy + ' report -G ' + rf )
 
-        assert len( util.grep( out, 'pass=1 ' ) ) == 1
-        assert len( util.grep( out, 'diff=1 ' ) ) == 1
-        assert len( util.grep( out, 'fail=1 ' ) ) == 1
-        assert len( util.grep( out, 'one/dog' ) ) == 0
-        assert len( util.grep( out, 'one/ferret' ) ) == 0
+        assert len( util.greplines( 'pass=1 ', out ) ) == 1
+        assert len( util.greplines( 'diff=1 ', out ) ) == 1
+        assert len( util.greplines( 'fail=1 ', out ) ) == 1
+        assert len( util.greplines( 'one/dog', out ) ) == 0
+        assert len( util.greplines( 'one/ferret', out ) ) == 0
 
         x,out = util.runcmd( util.resultspy + ' report -g ' + rf )
 
-        assert len( util.grep( out, 'pass=1 ' ) ) == 1
-        assert len( util.grep( out, 'diff=1 ' ) ) == 1
-        assert len( util.grep( out, 'fail=1 ' ) ) == 1
-        assert len( util.grep( out, 'one/dog' ) ) == 1
-        assert len( util.grep( out, 'one/ferret' ) ) == 1
+        assert len( util.greplines( 'pass=1 ', out ) ) == 1
+        assert len( util.greplines( 'diff=1 ', out ) ) == 1
+        assert len( util.greplines( 'fail=1 ', out ) ) == 1
+        assert len( util.greplines( 'one/dog', out ) ) == 1
+        assert len( util.greplines( 'one/ferret', out ) ) == 1
 
     def test_the_in_progress_results_file(self):
         ""
@@ -1142,7 +1142,7 @@ class test_results_tests( unittest.TestCase ):
         tr = results.TestResults( resultsfname )
         assert tr.inProgress()
 
-        for line in util.grep( out, ' [.]' ):
+        for line in util.greplines( ' .', out ):
             if line.strip().startswith('.'):
                 s = line.split('pass')[0].strip()
                 assert s[-1] == 's'
@@ -1245,8 +1245,8 @@ class test_results_tests( unittest.TestCase ):
         vrun.assertCounts( total=2, npass=2 )
 
         x,out = util.runcmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
-        assert len( util.grep( out, 'test1' ) ) == 0
-        assert len( util.grep( out, 'test2' ) ) == 0
+        assert len( util.greplines( 'test1', out ) ) == 0
+        assert len( util.greplines( 'test2', out ) ) == 0
 
         # now make a test timeout
         util.writefile( "subdir/test1.xml", """
@@ -1261,8 +1261,8 @@ class test_results_tests( unittest.TestCase ):
 
         # the timed out test should not be reported
         x,out = util.runcmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
-        assert len( util.grep( out, 'test1' ) ) == 0
-        assert len( util.grep( out, 'test2' ) ) == 0
+        assert len( util.greplines( 'test1', out ) ) == 0
+        assert len( util.greplines( 'test2', out ) ) == 0
 
         # rename the results with the timed out test to yesterday's date
         os.remove( rf2 )
@@ -1274,8 +1274,8 @@ class test_results_tests( unittest.TestCase ):
 
         # the timed out test should now be reported
         x,out = util.runcmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
-        assert len( util.grep( out, 'test1' ) ) == 1
-        assert len( util.grep( out, 'test2' ) ) == 0
+        assert len( util.greplines( 'test1', out ) ) == 1
+        assert len( util.greplines( 'test2', out ) ) == 0
 
 
 ############################################################################
