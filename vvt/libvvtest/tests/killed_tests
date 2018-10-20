@@ -65,7 +65,7 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
             counts = util.parse_vvtest_counts( out )
             assert counts['total'] == 1 and counts['notrun'] == 1
 
-            vrun = util.runvvtest( ignore_exit=True )
+            vrun = util.runvvtest( raise_on_error=False )
             assert vrun.x > 0
             assert vrun.countGrepLines( 'rror.*another process' ) == 1
 
@@ -85,7 +85,7 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
         counts = util.parse_vvtest_counts( out )
         assert counts['total'] == 1 and counts['notrun'] == 1
 
-        vrun = util.runvvtest( ignore_exit=True, chdir=tdir )
+        vrun = util.runvvtest( raise_on_error=False, chdir=tdir )
         assert vrun.x > 0
         assert vrun.countGrepLines( 'rror.*another process' ) == 1
 
@@ -113,7 +113,7 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
             util.run_vvtest_with_hook( '--qsub-limit 1 -n 1', spec, batch=batch )
 
             # this one should fail
-            vrun = util.runvvtest( ignore_exit=True, batch=batch )
+            vrun = util.runvvtest( raise_on_error=False, batch=batch )
             assert vrun.x > 0
             assert vrun.countGrepLines( 'rror.*another process' ) == 1
 

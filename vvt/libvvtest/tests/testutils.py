@@ -608,9 +608,9 @@ class VvtestCommandRunner:
 
     def run(self, **options):
         ""
-        quiet       = options.get( 'quiet',       False )
-        ignore_exit = options.get( 'ignore_exit', False )
-        chdir       = options.get( 'chdir',       None )
+        quiet          = options.get( 'quiet',          False )
+        raise_on_error = options.get( 'raise_on_error', True )
+        chdir          = options.get( 'chdir',          None )
 
         x,out = runcmd( self.cmd, chdir=chdir, raise_on_error=False )
 
@@ -636,7 +636,7 @@ class VvtestCommandRunner:
         else:
             self.rdir = os.getcwd()
 
-        assert ignore_exit or x == 0, \
+        assert x == 0 or not raise_on_error, \
             'vvtest command returned nonzero exit status: '+str(x)
 
     def assertCounts(self, total=None, finish=None,
@@ -742,7 +742,7 @@ def runvvtest( *cmd_args, **options ):
     """
     Options:  batch=True (default=False)
               quiet=True (default=False)
-              ignore_exit=True (default=False)
+              raise_on_error=False (default=True)
               chdir=some/path (default=None)
               addplatform=True
     """
