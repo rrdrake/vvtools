@@ -254,55 +254,7 @@ def writescript( fname, content ):
     except Exception: pass
 
 
-def run_cmd( cmd, directory=None ):
-    """
-    this function is deprecated (in favor of runcmd)
-    """
-    dstr = ''
-    if directory:
-        dstr = ' cd '+directory+' &&'
-
-    if type(cmd) == type(''):
-        print3( 'RUN:'+dstr, cmd )
-        cmdL = shlex.split(cmd)
-    else:
-        print3( 'RUN:'+dstr, ' '.join( cmd ) )
-        cmdL = cmd
-
-    saved = None
-    if directory:
-        saved = os.getcwd()
-        os.chdir( directory )
-
-    pread, pwrite = os.pipe()
-    pid = os.fork()
-    if pid == 0:
-        os.close(pread)  # child does not read from parent
-        os.dup2(pwrite, sys.stdout.fileno())
-        os.dup2(pwrite, sys.stderr.fileno())
-        os.execvpe( cmdL[0], cmdL, os.environ )
-    os.close(pwrite)   # parent does not write to child
-    out = ''
-    while 1:
-        buf = os.read(pread, 1024)
-        if len(buf) == 0: break;
-        if sys.version_info[0] < 3:
-            out = out + buf
-        else:
-            out = out + buf.decode()
-    os.close(pread)  # free up file descriptor
-    pid,x = os.waitpid(pid,0)
-    print3( out )
-
-    if saved:
-        os.chdir( saved )
-
-    if os.WIFEXITED(x) and os.WEXITSTATUS(x) == 0:
-        return True, out
-    return False, out
-
-
-def runcmd( cmd, chdir=None ):
+def runcmd( cmd, chdir=None, raise_on_error=True, print_output=True ):
     ""
     dstr = ''
     if chdir:
@@ -329,6 +281,11 @@ def runcmd( cmd, chdir=None ):
     finally:
         if chdir:
             os.chdir( cwd )
+
+    if print_output:
+        print3( out )
+
+    assert x == 0 or not raise_on_error, 'runcmd failed: exit='+str(x)
 
     return x,out
 
@@ -499,11 +456,11 @@ def run_vvtest_with_hook( vvtest_args, envspec, batch=False ):
 
     os.environ['VVTEST_UNIT_TEST_SPEC'] = envspec
     try:
-        xok,out = run_cmd( cmd )
+        x,out = runcmd( cmd, raise_on_error=False )
     finally:
         del os.environ['VVTEST_UNIT_TEST_SPEC']
 
-    return xok, out
+    return x, out
 
 
 def rmallfiles( not_these=None ):
@@ -655,7 +612,7 @@ class VvtestCommandRunner:
         ignore_exit = options.get( 'ignore_exit', False )
         chdir       = options.get( 'chdir',       None )
 
-        x,out = runcmd( self.cmd, chdir=chdir )
+        x,out = runcmd( self.cmd, chdir=chdir, raise_on_error=False )
 
         if not quiet:
             print3( out )

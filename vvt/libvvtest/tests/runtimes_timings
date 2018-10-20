@@ -77,9 +77,7 @@ class runtimes_and_timings( unittest.TestCase ):
 
         resultsfname = os.path.abspath( glob('testing/results.*')[0] )
         plat,cplr = get_platform_compiler( resultsfname )
-        ok,out = util.run_cmd( util.resultspy + ' merge '+resultsfname,
-                               directory='testing' )
-        assert ok
+        util.runcmd( util.resultspy + ' merge '+resultsfname, chdir='testing' )
 
         # leave the source tree runtimes file empty and use the
         # multiplatform results
@@ -175,11 +173,10 @@ class runtimes_and_timings( unittest.TestCase ):
             tdir = vrun.resultsDir()
 
             # create a timings file
-            util.run_cmd( util.resultspy + ' save', directory='tests' )
+            util.runcmd( util.resultspy + ' save', chdir='tests' )
             util.runvvtest( '-i --save-results', chdir=tdir )
             resultsfname = glob('results.*')[0]
-            ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
-            assert ok
+            util.runcmd( util.resultspy + ' merge -x '+resultsfname )
 
             # select tests based on the timings file
             util.remove_results()

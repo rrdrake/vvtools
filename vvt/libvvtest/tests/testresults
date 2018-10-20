@@ -97,10 +97,8 @@ class test_results_tests( unittest.TestCase ):
 
         # write root runtimes files in the subdirectories then save results again
         os.remove( timesfname )
-        ok,out = util.run_cmd( util.resultspy + ' save', directory='one' )
-        assert ok
-        ok,out = util.run_cmd( util.resultspy + ' save', directory='two' )
-        assert ok
+        util.runcmd( util.resultspy + ' save', chdir='one' )
+        util.runcmd( util.resultspy + ' save', chdir='two' )
         util.runvvtest( '-i --save-results' )
         # this time the tests should have different root-relative paths
         tr = results.TestResults( resultsfname )
@@ -119,12 +117,10 @@ class test_results_tests( unittest.TestCase ):
 
         # saving runtimes again to the subdirectories should populate the
         # runtimes but only include tests at or below the root
-        ok,out = util.run_cmd( util.resultspy + ' save ' + os.path.abspath( resultsfname ),
-                          directory='one' )
-        assert ok
-        ok,out = util.run_cmd( util.resultspy + ' save ' + os.path.abspath( resultsfname ),
-                          directory='two' )
-        assert ok
+        util.runcmd( util.resultspy + ' save ' + os.path.abspath( resultsfname ),
+                     chdir='one' )
+        util.runcmd( util.resultspy + ' save ' + os.path.abspath( resultsfname ),
+                     chdir='two' )
         assert len( util.grepfiles( 'cat*pass',    'one/'+timesfname ) ) == 1
         assert len( util.grepfiles( 'dog*pass',    'one/'+timesfname ) ) == 1
         assert len( util.grepfiles( 'circle*pass', 'two/'+timesfname ) ) == 1
@@ -249,18 +245,15 @@ class test_results_tests( unittest.TestCase ):
         tdir = vrun.resultsDir()
 
         # bootstrap with runtimes files then save the test results
-        ok,out = util.run_cmd( util.resultspy + ' save', directory='one' )
-        assert ok
-        ok,out = util.run_cmd( util.resultspy + ' save', directory='two' )
-        assert ok
+        util.runcmd( util.resultspy + ' save', chdir='one' )
+        util.runcmd( util.resultspy + ' save', chdir='two' )
         util.runvvtest( '-i --save-results' )
 
         resultsfname = glob.glob('results.*')[0]
         tr = results.TestResults( resultsfname )
         platname,cplrname = tr.platform(), tr.compiler()
 
-        ok,out = util.run_cmd( util.resultspy + ' merge ' + resultsfname )
-        assert ok
+        util.runcmd( util.resultspy + ' merge ' + resultsfname )
 
         assert os.path.exists(multifname)
         mr = results.MultiResults()
@@ -276,8 +269,7 @@ class test_results_tests( unittest.TestCase ):
         tr.writeResults( resultsfname2, 'Plat2', 'Cplr2', mach, tdir )
 
         # merge a second platform/compiler file into first
-        ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname2 )
-        assert ok
+        util.runcmd( util.resultspy + ' merge -x '+resultsfname2 )
         assert len( util.grepfiles( 'cat*'+platname+'*'+cplrname+'*pass', multifname ) ) == 1
         assert len( util.grepfiles( 'dog*'+platname+'*'+cplrname+'*pass', multifname ) ) == 1
         assert len( util.grepfiles( 'circle*'+platname+'*'+cplrname+'*pass', multifname ) ) == 1
@@ -306,8 +298,7 @@ class test_results_tests( unittest.TestCase ):
 
         # merge over the top of the multi platform file
         util.runvvtest( '-i --save-results' )
-        ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
-        assert ok
+        util.runcmd( util.resultspy + ' merge -x '+resultsfname )
         # now check the 'dog' test time
         mr = results.MultiResults()
         mr.readFile( multifname )
@@ -330,11 +321,10 @@ class test_results_tests( unittest.TestCase ):
         vrun.assertCounts( total=2, npass=2 )
 
         # create a multiplatform timings file
-        util.run_cmd( util.resultspy + ' save' )
+        util.runcmd( util.resultspy + ' save' )
         util.runvvtest( '-i --save-results' )
         resultsfname = glob.glob('results.*')[0]
-        ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
-        assert ok
+        util.runcmd( util.resultspy + ' merge -x '+resultsfname )
 
         # get the platform name & compiler
         tr = results.TestResults( resultsfname )
@@ -368,8 +358,7 @@ class test_results_tests( unittest.TestCase ):
         assert results2fname and resultsfname != results2fname
 
         # merge the second results file into the timings file
-        ok,out = util.run_cmd( util.resultspy + ' merge -x '+results2fname )
-        assert ok
+        util.runcmd( util.resultspy + ' merge -x '+results2fname )
 
         # check that the timings file contains the new test results
         mr = results.MultiResults()
@@ -379,8 +368,7 @@ class test_results_tests( unittest.TestCase ):
         assert catD.get('result','') == 'diff'
 
         # merge the first results file into the timings file
-        ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
-        assert ok
+        util.runcmd( util.resultspy + ' merge -x '+resultsfname )
 
         # check that the timings file does NOT contain the first test results
         mr = results.MultiResults()
@@ -389,8 +377,7 @@ class test_results_tests( unittest.TestCase ):
         assert catD.get('result','') == 'diff'
 
         # now force a merge from the first results file
-        ok,out = util.run_cmd( util.resultspy + ' merge -w '+resultsfname )
-        assert ok
+        util.runcmd( util.resultspy + ' merge -w '+resultsfname )
 
         # check that the timings file DOES contain the first test results
         mr = results.MultiResults()
@@ -408,8 +395,7 @@ class test_results_tests( unittest.TestCase ):
 
         # create the timings file with the newest results
         os.remove( multifname )
-        ok,out = util.run_cmd( util.resultspy + ' merge -x '+results2fname )
-        assert ok
+        util.runcmd( util.resultspy + ' merge -x '+results2fname )
 
         # the timings file should contain the new results and not contain the dog test
         mr = results.MultiResults()
@@ -420,8 +406,7 @@ class test_results_tests( unittest.TestCase ):
         assert len(dogD) == 0
 
         # merge again with -d but should still just pick up latest results
-        ok,out = util.run_cmd( util.resultspy + ' merge -d 2 -g results.*' )
-        assert ok
+        util.runcmd( util.resultspy + ' merge -d 2 -g results.*' )
 
         # the timings file should still contain only the latest results
         mr = results.MultiResults()
@@ -432,8 +417,7 @@ class test_results_tests( unittest.TestCase ):
         assert len(dogD) == 0
 
         # now merge from 6 days ago to catch the old results file
-        ok,out =util.run_cmd( util.resultspy + ' merge -d 7 -g results.*' )
-        assert ok
+        util.runcmd( util.resultspy + ' merge -d 7 -g results.*' )
 
         # should be the latest cat results but the old dog test should appear
         mr = results.MultiResults()
@@ -452,7 +436,7 @@ class test_results_tests( unittest.TestCase ):
         vrun.assertCounts( total=3, npass=3 )
         tdir = vrun.resultsDir()
 
-        util.run_cmd( util.resultspy + ' save', directory='tsrc' )
+        util.runcmd( util.resultspy + ' save', chdir='tsrc' )
 
         os.mkdir( 'testing' )
         os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
@@ -461,9 +445,8 @@ class test_results_tests( unittest.TestCase ):
         resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
 
         # create initial multiplat file
-        ok,out = util.run_cmd( util.resultspy + ' merge -x '+ resultsfname,
-                          directory='testing' )
-        assert ok
+        util.runcmd( util.resultspy + ' merge -x '+ resultsfname,
+                     chdir='testing' )
         assert os.path.exists( os.path.join( 'testing', multifname ) )
 
         # create a second results file with a different platform/compiler name
@@ -473,13 +456,11 @@ class test_results_tests( unittest.TestCase ):
         tr.writeResults( resultsfname2, 'Plat2', 'Cplr2', mach, tdir )
 
         # create second multiplat file
-        ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname2 )
-        assert ok
+        util.runcmd( util.resultspy + ' merge -x '+resultsfname2 )
 
         # merge second multiplat into first multiplat
-        ok,out = util.run_cmd( util.resultspy + ' merge -x '+ os.path.abspath(multifname),
-                          directory='testing' )
-        assert ok
+        util.runcmd( util.resultspy + ' merge -x '+ os.path.abspath(multifname),
+                     chdir='testing' )
 
         # now check the combined multiplat file
         mr = results.MultiResults()
@@ -499,7 +480,8 @@ class test_results_tests( unittest.TestCase ):
         vrun = util.runvvtest()
         vrun.assertCounts( total=3, npass=3 )
         tdir = vrun.resultsDir()
-        util.run_cmd( util.resultspy + ' save', directory='tsrc' )  # bootstrap runtimes
+        # bootstrap runtimes
+        util.runcmd( util.resultspy + ' save', chdir='tsrc' )
 
         os.mkdir( 'testing' )
         os.environ['TESTING_DIRECTORY'] = os.path.join( os.getcwd(), 'testing' )
@@ -508,8 +490,7 @@ class test_results_tests( unittest.TestCase ):
         resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
 
         # use the results.py script to save the results to the runtimes file
-        ok,out = util.run_cmd( util.resultspy + ' save ' + resultsfname, directory='tsrc' )
-        assert ok
+        util.runcmd( util.resultspy + ' save ' + resultsfname, chdir='tsrc' )
 
         tr = results.TestResults( 'tsrc/'+timesfname )
         assert tr.dirList() == ['tsrc/one','tsrc/two']
@@ -541,9 +522,8 @@ class test_results_tests( unittest.TestCase ):
         assert cat_t1 < cat_t2
 
         # merge two results files into the runtimes file
-        ok,out = util.run_cmd( util.resultspy + ' save ' + rfn2 + ' ' + resultsfname,
-                          directory='tsrc' )
-        assert ok
+        util.runcmd( util.resultspy + ' save ' + rfn2 + ' ' + resultsfname,
+                     chdir='tsrc' )
 
         tr = results.TestResults( 'tsrc/'+timesfname )
         assert tr.dirList() == ['tsrc/one','tsrc/two']
@@ -569,8 +549,7 @@ class test_results_tests( unittest.TestCase ):
         tr = results.TestResults( rfn3 )
         mach = os.uname()[1]
         tr.writeResults( rfn3, 'Plat2', 'Cplr2', mach, tdir )
-        ok,out = util.run_cmd( util.resultspy + ' merge '+rfn3, directory='testing' )
-        assert ok
+        util.runcmd( util.resultspy + ' merge '+rfn3, chdir='testing' )
 
         # save off the circle runtime from first execution
         tr = results.TestResults( 'tsrc/'+timesfname )
@@ -578,8 +557,7 @@ class test_results_tests( unittest.TestCase ):
 
         # update the test src runtimes file to include the multiplat contents
         mf = os.path.abspath( 'testing/'+multifname )
-        ok,out = util.run_cmd( util.resultspy + ' save '+mf, directory='tsrc' )
-        assert ok
+        util.runcmd( util.resultspy + ' save '+mf, chdir='tsrc' )
 
         tr = results.TestResults( 'tsrc/'+timesfname )
         circ2 = tr.testAttrs( 'tsrc/two', 'circle' )['xtime']
@@ -595,13 +573,12 @@ class test_results_tests( unittest.TestCase ):
 
         vrun = util.runvvtest()
         vrun.assertCounts( total=2, npass=2 )
-        util.run_cmd( util.resultspy + ' save' )  # bootstrap runtimes
+        util.runcmd( util.resultspy + ' save' )  # bootstrap runtimes
 
         # create a multiplatform timings file
         util.runvvtest( '-i --save-results' )
         resultsfname = os.path.abspath( glob.glob('results.*')[0] )
-        ok,out = util.run_cmd( util.resultspy + ' merge '+resultsfname )
-        assert ok
+        util.runcmd( util.resultspy + ' merge '+resultsfname )
 
         # get the platform name & compiler
         tr = results.TestResults( resultsfname )
@@ -634,8 +611,7 @@ class test_results_tests( unittest.TestCase ):
         olddogD = mr.testAttrs( root+'/one', 'dog', platcplr )
 
         # merge the second results file into the timings file
-        ok,out = util.run_cmd( util.resultspy + ' merge '+results2fname )
-        assert ok
+        util.runcmd( util.resultspy + ' merge '+results2fname )
 
         # check that the timings file contains the old test results
         mr = results.MultiResults( multifname )
@@ -662,8 +638,7 @@ class test_results_tests( unittest.TestCase ):
         assert results3fname and results2fname != results3fname
 
         # merge the third results file into the timings file
-        ok,out = util.run_cmd( util.resultspy + ' merge '+results3fname )
-        assert ok
+        util.runcmd( util.resultspy + ' merge '+results3fname )
 
         # check that the timings file contains new test results for the slower test
         mr = results.MultiResults( multifname )
@@ -673,8 +648,7 @@ class test_results_tests( unittest.TestCase ):
         assert newdogD.get('xtime','') > dogD.get('xtime','no')
 
         # check that including all the results files does not change anything
-        ok,out = util.run_cmd( util.resultspy + ' merge -d 6 -g results.*' )
-        assert ok
+        util.runcmd( util.resultspy + ' merge -d 6 -g results.*' )
 
         mr = results.MultiResults( multifname )
         cD = mr.testAttrs( root+'/one', 'cat', platcplr )
@@ -690,7 +664,7 @@ class test_results_tests( unittest.TestCase ):
 
         vrun = util.runvvtest()
         vrun.assertCounts( total=2, npass=2 )
-        util.run_cmd( util.resultspy + ' save' )  # bootstrap runtimes
+        util.runcmd( util.resultspy + ' save' )  # bootstrap runtimes
 
         # create a multiplatform timings file
         util.runvvtest( '-i --save-results --results-tag first' )
@@ -730,9 +704,8 @@ class test_results_tests( unittest.TestCase ):
         assert results3fname != resultsfname and results3fname != results2fname
 
         # merge the first and second results files
-        ok,out = util.run_cmd( util.resultspy + ' merge' + \
+        util.runcmd( util.resultspy + ' merge' + \
                           ' -g results.*.first -g results.*.second' )
-        assert ok
 
         # check that the timings file took the max
         mr = results.MultiResults( multifname )
@@ -742,18 +715,16 @@ class test_results_tests( unittest.TestCase ):
 
         # again but merge the second two results files
         os.remove( multifname )
-        ok,out = util.run_cmd( util.resultspy + ' merge' + \
+        util.runcmd( util.resultspy + ' merge' + \
                           ' -g results.*.third -g results.*.second' )
-        assert ok
         mr = results.MultiResults( multifname )
         catD = mr.testAttrs( root+'/one', 'cat', platcplr )
         assert abs( catD.get('xtime') - 6 ) < 2
 
         # now merge by order on the command line
         os.remove( multifname )
-        ok,out = util.run_cmd( util.resultspy + ' merge -w' + \
+        util.runcmd( util.resultspy + ' merge -w' + \
                           ' -g results.*.third -g results.*.first' )
-        assert ok
         mr = results.MultiResults( multifname )
         catD = mr.testAttrs( root+'/one', 'cat', platcplr )
         assert catD.get('xtime') < 6
@@ -770,16 +741,14 @@ class test_results_tests( unittest.TestCase ):
         os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
 
         # write a (blank) runtimes file into test source to bootstrap
-        util.run_cmd( util.resultspy + ' save', directory='tsrc' )
+        util.runcmd( util.resultspy + ' save', chdir='tsrc' )
 
         # save the results
         util.runvvtest( '-i --save-results' )
         resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
 
         # create a runtimes file in a subdirectory
-        ok,out = util.run_cmd( util.resultspy + ' save ' + resultsfname,
-                          directory='tsrc/one' )
-        assert ok
+        util.runcmd( util.resultspy + ' save ' + resultsfname, chdir='tsrc/one' )
 
         tr = results.TestResults( 'tsrc/'+timesfname )
         assert len(tr.dirList()) == 0
@@ -801,8 +770,7 @@ class test_results_tests( unittest.TestCase ):
         vrun.assertCounts( total=4, npass=4 )
 
         util.runvvtest( '-i --save-results' )
-        ok,out = util.run_cmd( util.resultspy + ' save ' + resultsfname, directory='tsrc' )
-        assert ok
+        util.runcmd( util.resultspy + ' save ' + resultsfname, chdir='tsrc' )
 
         tr = results.TestResults( 'tsrc/'+timesfname )
         assert tr.dirList() == ['tsrc/one','tsrc/two']
@@ -825,7 +793,7 @@ class test_results_tests( unittest.TestCase ):
         os.environ['TESTING_DIRECTORY'] = os.path.join( os.getcwd(), 'testing' )
 
         # write a (blank) runtimes file into test source to bootstrap
-        util.run_cmd( util.resultspy + ' save', directory='tsrc' )
+        util.runcmd( util.resultspy + ' save', chdir='tsrc' )
 
         # save the results
         util.runvvtest( '-i --save-results' )
@@ -834,8 +802,7 @@ class test_results_tests( unittest.TestCase ):
         resultsfname = os.path.abspath( glob.glob('testing/results.*')[0] )
 
         # create a runtimes file in a subdirectory
-        ok,out = util.run_cmd( util.resultspy + ' save ' + resultsfname, directory='tsrc' )
-        assert ok
+        util.runcmd( util.resultspy + ' save ' + resultsfname, chdir='tsrc' )
 
         tr = results.TestResults( 'tsrc/'+timesfname )
         assert tr.dirList() == ['tsrc/one','tsrc/two']
@@ -849,8 +816,7 @@ class test_results_tests( unittest.TestCase ):
         vrun.assertCounts( total=2, npass=2 )
 
         util.runvvtest( '-i --save-results' )
-        ok,out = util.run_cmd( util.resultspy+' save -w '+resultsfname, directory='tsrc' )
-        assert ok
+        util.runcmd( util.resultspy+' save -w '+resultsfname, chdir='tsrc' )
 
         # dog gone
         tr = results.TestResults( 'tsrc/'+timesfname )
@@ -867,7 +833,7 @@ class test_results_tests( unittest.TestCase ):
         vrun = util.runvvtest( 'tsrc' )
         vrun.assertCounts( total=3, npass=3 )
         tdir = vrun.resultsDir()
-        util.run_cmd( util.resultspy + ' save', directory='tsrc' )  # bootstrap runtimes
+        util.runcmd( util.resultspy + ' save', chdir='tsrc' )  # bootstrap runtimes
 
         os.mkdir( 'testing' )
         os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
@@ -884,29 +850,24 @@ class test_results_tests( unittest.TestCase ):
         tr.writeResults( resultsfname2, 'Plat2', 'Cplr2', mach, tdir )
 
         # check listing a results file
-        ok,out = util.run_cmd( util.resultspy + ' list -p '+resultsfname1 )
-        assert ok
+        x,out = util.runcmd( util.resultspy + ' list -p '+resultsfname1 )
         assert out.strip() == 'Plat1/Cplr1'
-        ok,out = util.run_cmd( util.resultspy + ' list '+resultsfname1 )
-        assert ok
+        x,out = util.runcmd( util.resultspy + ' list '+resultsfname1 )
         assert len( util.grep( out, 'Plat1/Cplr1' ) ) == 0
         assert len( util.grep( out, 'tsrc/two/circle' ) ) == 1
         assert len( util.grep( out, 'tsrc/one/dog' ) ) == 1
         assert len( util.grep( out, 'tsrc/one/cat' ) ) == 1
 
         # create multiplat file with two platform/compiler combos
-        ok,out = util.run_cmd( util.resultspy + ' merge -x ' + \
+        util.runcmd( util.resultspy + ' merge -x ' + \
                                resultsfname1 + ' ' + resultsfname2,
-                          directory='testing' )
-        assert ok
+                     chdir='testing' )
 
         # check listing a multiplatform file
-        ok,out = util.run_cmd( util.resultspy + ' list -p testing/'+multifname )
-        assert ok
+        x,out = util.runcmd( util.resultspy + ' list -p testing/'+multifname )
         assert out.split() == ['Plat1/Cplr1','Plat2/Cplr2']
         
-        ok,out = util.run_cmd( util.resultspy + ' list testing/'+multifname )
-        assert ok
+        x,out = util.runcmd( util.resultspy + ' list testing/'+multifname )
         assert len( util.grep( out, 'Plat1/Cplr1' ) ) == 3
         assert len( util.grep( out, 'Plat2/Cplr2' ) ) == 3
         assert len( util.grep( out, 'tsrc/two/circle' ) ) == 2
@@ -917,10 +878,8 @@ class test_results_tests( unittest.TestCase ):
         shutil.copy( 'testing/'+multifname, 'testing/save' )
 
         # remove Plat1/Cplr1 from the multiplat file
-        ok,out = util.run_cmd( util.resultspy + ' clean -p Plat1/Cplr1 testing/'+multifname )
-        assert ok
-        ok,out = util.run_cmd( util.resultspy + ' list testing/'+multifname )
-        assert ok
+        util.runcmd( util.resultspy + ' clean -p Plat1/Cplr1 testing/'+multifname )
+        x,out = util.runcmd( util.resultspy + ' list testing/'+multifname )
         assert len( util.grep( out, 'Plat1/Cplr1' ) ) == 0
         assert len( util.grep( out, 'Plat2/Cplr2' ) ) == 3
         assert len( util.grep( out, 'tsrc/two/circle' ) ) == 1
@@ -1096,8 +1055,7 @@ class test_results_tests( unittest.TestCase ):
         vrun.assertCounts( total=3, npass=1, diff=1, fail=1 )
 
         # bootstrap with runtimes files then save the test results
-        ok,out = util.run_cmd( util.resultspy + ' save', directory='one' )
-        assert ok
+        util.runcmd( util.resultspy + ' save', chdir='one' )
         util.runvvtest( '--config config -i --save-results' )
 
         rf1 = glob.glob('results.*')[0]
@@ -1108,8 +1066,7 @@ class test_results_tests( unittest.TestCase ):
         mach = os.uname()[1]
         tr.writeResults( rf2, 'Fake', L[3], mach, '/some/fake/path' )
 
-        ok,out = util.run_cmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
-        assert ok
+        x,out = util.runcmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
 
         assert len( util.grep( out, 'Fake.gcc' ) ) == 3
         assert len( util.grep( out, 'pass=1 ' ) ) == 2
@@ -1138,14 +1095,12 @@ class test_results_tests( unittest.TestCase ):
         vrun.assertCounts( total=3, npass=1, diff=1, fail=1 )
 
         # bootstrap with runtimes files then save the test results
-        ok,out = util.run_cmd( util.resultspy + ' save', directory='one' )
-        assert ok
+        util.runcmd( util.resultspy + ' save', chdir='one' )
         util.runvvtest( '-i --save-results' )
 
         rf = glob.glob('results.*')[0]
 
-        ok,out = util.run_cmd( util.resultspy + ' report -G ' + rf )
-        assert ok
+        x,out = util.runcmd( util.resultspy + ' report -G ' + rf )
 
         assert len( util.grep( out, 'pass=1 ' ) ) == 1
         assert len( util.grep( out, 'diff=1 ' ) ) == 1
@@ -1153,8 +1108,7 @@ class test_results_tests( unittest.TestCase ):
         assert len( util.grep( out, 'one/dog' ) ) == 0
         assert len( util.grep( out, 'one/ferret' ) ) == 0
 
-        ok,out = util.run_cmd( util.resultspy + ' report -g ' + rf )
-        assert ok
+        x,out = util.runcmd( util.resultspy + ' report -g ' + rf )
 
         assert len( util.grep( out, 'pass=1 ' ) ) == 1
         assert len( util.grep( out, 'diff=1 ' ) ) == 1
@@ -1183,8 +1137,7 @@ class test_results_tests( unittest.TestCase ):
 
         resultsfname = glob.glob('results.*')[0]
 
-        ok,out = util.run_cmd( util.resultspy + ' report ' + resultsfname )
-        assert ok
+        x,out = util.runcmd( util.resultspy + ' report ' + resultsfname )
 
         tr = results.TestResults( resultsfname )
         assert tr.inProgress()
@@ -1260,8 +1213,7 @@ class test_results_tests( unittest.TestCase ):
         vrun.assertCounts( total=2, npass=2 )
 
         # bootstrap with runtimes files then save the test results
-        ok,out = util.run_cmd( util.resultspy + ' save', directory='subdir' )
-        assert ok
+        util.runcmd( util.resultspy + ' save', chdir='subdir' )
         util.runvvtest( '-i --save-results' )
 
         # compute a new result date to be yesterday's date
@@ -1292,8 +1244,7 @@ class test_results_tests( unittest.TestCase ):
         vrun = util.runvvtest( '-w --save-results subdir' )
         vrun.assertCounts( total=2, npass=2 )
 
-        ok,out = util.run_cmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
-        assert ok
+        x,out = util.runcmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
         assert len( util.grep( out, 'test1' ) ) == 0
         assert len( util.grep( out, 'test2' ) ) == 0
 
@@ -1309,8 +1260,7 @@ class test_results_tests( unittest.TestCase ):
         vrun.assertCounts( total=2, npass=1, timeout=1 )
 
         # the timed out test should not be reported
-        ok,out = util.run_cmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
-        assert ok
+        x,out = util.runcmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
         assert len( util.grep( out, 'test1' ) ) == 0
         assert len( util.grep( out, 'test2' ) ) == 0
 
@@ -1323,8 +1273,7 @@ class test_results_tests( unittest.TestCase ):
         vrun.assertCounts( total=2, npass=1, timeout=1 )
 
         # the timed out test should now be reported
-        ok,out = util.run_cmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
-        assert ok
+        x,out = util.runcmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
         assert len( util.grep( out, 'test1' ) ) == 1
         assert len( util.grep( out, 'test2' ) ) == 0
 
@@ -1381,8 +1330,7 @@ def write_test_circle():
 
 def create_and_save_runtimes():
     ""
-    ok,out = util.run_cmd( util.resultspy + ' save' )
-    assert ok
+    util.runcmd( util.resultspy + ' save' )
 
     # run vvtest to save the test results in TESTING_DIRECTORY
     util.runvvtest( '-i --save-results' )

@@ -148,8 +148,7 @@ class tdd_tests( unittest.TestCase ):
         vrun.assertCounts( total=4, npass=4 )
 
         # bootstrap with runtimes files then save the test results
-        ok,out = util.run_cmd( util.resultspy + ' save' )
-        assert ok
+        util.runcmd( util.resultspy + ' save' )
         vrun = util.runvvtest( '-i --save-results' )
 
         resultsfname = glob.glob('results.*')[0]
@@ -194,8 +193,7 @@ class tdd_tests( unittest.TestCase ):
         vrun.assertCounts( total=4, npass=4 )
 
         # bootstrap with runtimes files then save the test results
-        ok,out = util.run_cmd( util.resultspy + ' save' )
-        assert ok
+        util.runcmd( util.resultspy + ' save' )
         util.runvvtest( '--config config -i --save-results' )
 
         rf1 = glob.glob('results.*')[0]
@@ -206,8 +204,7 @@ class tdd_tests( unittest.TestCase ):
         mach = os.uname()[1]
         tr.writeResults( rf2, 'Fake', L[3], mach, '/some/fake/path' )
 
-        ok,out = util.run_cmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
-        assert ok
+        x,out = util.runcmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
 
         assert len( util.grep( out, 'Fake.gcc' ) ) == 1
         assert len( util.grep( out, 'pass=2 ' ) ) == 2

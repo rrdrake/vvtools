@@ -157,11 +157,10 @@ class runtimes_and_tsum( unittest.TestCase ):
             tdir = vrun.resultsDir()
 
             # create a timings file
-            util.run_cmd( util.resultspy + ' save', directory='tests' )
+            util.runcmd( util.resultspy + ' save', chdir='tests' )
             util.runvvtest( '-i --save-results', chdir=tdir )
             resultsfname = glob.glob('results.*')[0]
-            ok,out = util.run_cmd( util.resultspy + ' merge -x '+resultsfname )
-            assert ok
+            util.runcmd( util.resultspy + ' merge -x '+resultsfname )
 
             util.remove_results()
 
