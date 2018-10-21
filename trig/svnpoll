@@ -12,52 +12,36 @@ import traceback
 import signal
 
 from command import Command
-from mailmessage import Message, get_current_user_name
 
 
-# use signals to implement a timeout mechanism
-class TimeoutException(Exception): pass
-def timeout_handler( signum, frame ):
-    raise TimeoutException( "timeout" )
-
-
-SEND_MAIL_TIMEOUT = 30
-DEFAULT_SMTPHOSTS = ['smtp.sandia.gov','localhost']
-EMAIL_DOMAIN = 'sandia.gov'
 POLL_SLEEP = 60
 
 
 help_page = """
 USAGE:
-    svnemail [OPTIONS]
+    svnpoll [OPTIONS]
 
 SYNOPSIS:
-    The svnemail program monitors a subversion repository for commits and
-sends email to a list of recipients for each commit made.  A plugin mechanism
-can be used to filter in or out commits to be sent.
+    The svnpoll program monitors a subversion repository for commits and
+triggers a plugin hook to handle them.
 
 OPTIONS:
     -h,--help : this help page
     --repo <svn repo url> : specify the subversion repository to monitor
     --svnexe <svn path> : specify the path to the svn executable to use
-    -n : noop mode; print information about what emails would be sent but
-                    do not actually send them
+    -n : noop mode; causes additional echoing by the poller, and noop=True
+         is sent to the hook
 
 PLUGIN:
-    If a file called svnemail_plugin.py exists in the import path, then it
-is imported and probed for these functions:
+    A file called svnpoll_plugin.py is imported and must contain a function
+with this signature:
 
-    should_email_be_sent( commit ) : return true if an email should be sent
-                                     for the given commit; 'commit' is a
-                                     Commit object defined in this file
+    def trigger( commit_obj, noop_bool ):
+        pass
 
-    make_subject( commit ) : return the subject line for the commit email
-
-    get_recipient_addrs( commit ) : return a list of email addresses to send
-                                    the commit email to
-
-    get_smtp_hosts() : return a list of hostnames to use in sending email,
-                       defaults to """ + ', '.join( DEFAULT_SMTPHOSTS ) + """
+The 'commit_obj' is an instance of the Commit class defined in this file.
+If 'noop_bool' is True, then the hook should print what would be done, but
+not actually do it.
 """
 
 
@@ -69,6 +53,7 @@ def main():
     repo = None
     svnexe = 'svn'
     noop = False
+    echo = 'none'
 
     for n,v in optL:
         if n in ['-h','--help']:
@@ -78,31 +63,57 @@ def main():
             svnexe = v
         elif n == '-n':
             noop = True
+            echo = 'echo'
         elif n == '--repo':
             repo = v
 
-    try:
-        import svnemail_plugin as plugin
+    if repo:
+        ass = Assembler()
+        ass.createObjects( repo, svnexe, noop, echo )
+        ass.start()
 
-        if repo == None and hasattr( plugin, 'get_repo_url' ):
-            repo = plugin.get_repo_url()
 
-    except ImportError:
-        plugin = None
+class Assembler:
 
-    if repo != None:
-        monitor_repo( repo, plugin, svnexe, noop )
+    def createObjects(self, repo, svnexe,
+                            noop=False, echo='none',
+                            poll_sleep=POLL_SLEEP ):
+        ""
+        import svnpoll_plugin as hook
 
+        cmtsrc = self.makeSource( repo, svnexe, echo )
+
+        self.monitor = SubversionRepoMonitor( poll_sleep,
+                                              cmtsrc,
+                                              hook,
+                                              noop,
+                                              echo )
+
+    def makeSource(self, repo, svnexe, echo):
+        ""
+        return CommitSource( repo, svnexe, echo )
+
+    def start(self):
+        ""
+        self.monitor.pollLoop()
+
+
+#########################################################################
 
 class Commit:
 
-    def __init__(self, elmt):
+    def __init__(self, repo, etree_elmt):
         ""
-        self.rev = int( elmt.get( 'revision', 0 ) )
-        self.author = get_author( elmt )
-        self.date = get_date( elmt )
-        self.msg = get_message( elmt )
-        self.paths = get_paths( elmt )
+        self.repo = repo
+        self.rev = int( etree_elmt.get( 'revision', 0 ) )
+        self.author = get_author( etree_elmt )
+        self.date = get_date( etree_elmt )
+        self.msg = get_message( etree_elmt )
+        self.paths = get_paths( etree_elmt )
+
+    def getRepoURL(self):
+        ""
+        return self.repo
 
     def getRevision(self):
         ""
@@ -143,7 +154,7 @@ class Commit:
         in the commit.
         """
         pathlist = [ path for act,path in self.paths ]
-        pre = common_path_prefix( pathlist )
+        pre = os.path.commonprefix( pathlist ).rpartition( '/' )[0]
         return pre
 
     def getMessage(self):
@@ -155,138 +166,128 @@ class Commit:
         L = [ ' '+act+' '+path for act,path in self.paths ]
         return '\n'.join( L ) + '\n'
 
+    def asMultiLineString(self):
+        ""
+        buf = time.ctime( self.getDate() ) + '\n'
+        buf += 'Revision: '+str(self.getRevision()) + '\n'
+        buf += 'By '+self.getAuthor() + '\n\n'
+        buf += self.getMessage().strip() + '\n\n'
+        buf += self.formatFileList().strip() + '\n'
+
+        return buf
+
 
 #########################################################################
 
-def monitor_repo( repo, plugin, svnexe, noop ):
-    ""
-    commit_cache = set()
+class SubversionRepoMonitor:
 
-    while True:
+    def __init__(self, poll_sleep, commit_source, hook,
+                       noop=False, echo='none'):
+        ""
+        self.poll_sleep = poll_sleep
+        self.cmtsrc = commit_source
+        self.hook = hook
+        self.echo = echo
+        self.noop = noop
 
-        cmtL = get_recent_commits( repo, svnexe, 5*60, noop )
+    def pollLoop(self):
+        ""
+        commit_cache = set()
 
-        for cmt in cmtL:
+        ok = True
+        while ok:
 
-            rev = cmt.getRevision()
+            cmtL = self.cmtsrc.getRecent( 5*60 )
 
-            if rev not in commit_cache:
-
-                try:
-                    mail_handler( cmt, plugin, repo, noop )
-                except TimeoutException:
-                    raise
-                except Exception:
-                    traceback.print_exc()
-
-                commit_cache.add( rev )
-
-        time.sleep( POLL_SLEEP )
-
-
-def mail_handler( cmt, plugin, repo, noop ):
-    ""
-    reponame = os.path.basename( repo )
-
-    msg = Message()
-
-    if plugin != None and hasattr( plugin, 'should_email_be_sent' ):
-        sendit = plugin.should_email_be_sent( cmt )
-    else:
-        sendit = True
-
-    if sendit:
-        fill_message( msg, cmt, reponame, plugin, noop )
-        if not noop:
-            send_message( msg, plugin )
-
-
-def fill_message( msg, cmt, reponame, plugin, noop ):
-    ""
-    addr = cmt.getAuthor()
-    if '@' not in addr:
-        addr += '@'+EMAIL_DOMAIN
-    msg.set( sendaddr=addr )
-
-    if plugin != None and hasattr( plugin, 'make_subject' ):
-        sbj = plugin.make_subject(cmt)
-    else:
-        sbj = '['+reponame+':'+cmt.getBranch()+'] '+cmt.getShortMessage()
-    msg.set( subject=sbj )
-
-    if plugin != None and hasattr( plugin, 'get_recipient_addrs' ):
-        recv = plugin.get_recipient_addrs( cmt )
-    else:
-        usr = get_current_user_name()
-        recv = usr+'@'+EMAIL_DOMAIN
-    msg.set( recvaddrs=recv )
-
-    body = time.ctime( cmt.getDate() ) + '\n'
-    body += 'Revision: '+str(cmt.getRevision()) + '\n'
-    body += 'By '+cmt.getAuthor() + '\n\n'
-    body += cmt.getMessage().strip() + '\n\n'
-    body += cmt.formatFileList().strip() + '\n'
-    msg.setContent( body )
-
-    if noop:
-        print3( 'To:', recv, ' Subj:', sbj )
-
-
-def send_message( msg, plugin ):
-    ""
-    signal.signal( signal.SIGALRM, timeout_handler )
-
-    timeout = int( SEND_MAIL_TIMEOUT * 0.9 )
-    signal.alarm( SEND_MAIL_TIMEOUT )
-    try:
-        if plugin != None and hasattr( plugin, 'get_smtp_hosts' ):
-            msg.send( smtphosts=plugin.get_smtp_hosts(), timeout=timeout )
-        else:
-            msg.send( smtphosts=DEFAULT_SMTPHOSTS, timeout=timeout )
-
-    finally:
-        signal.alarm(0)
-
-
-def get_recent_commits( repo, svnexe, age, noop ):
-    ""
-    if noop:
-        echo = 'echo'
-    else:
-        echo = 'none'
-
-    etree = svn_log_as_xml( repo, age,
-                            svnexe=svnexe,
-                            echo=echo,
-                            showerrors=noop )
-
-    cmtL = []
-
-    if etree != None:
-
-        curtime = time.time()
-
-        for nd in etree:
-            cmt = Commit( nd )
-            if cmt.getDate() >= curtime - age:
-                cmtL.append( cmt )
-
-        if noop:
             for cmt in cmtL:
-                print3( cmt.getRevision(), cmt.getAuthor(),
-                        time.ctime(cmt.getDate()),
-                        cmt.getBranch(), cmt.getCommonPrefix(),
-                        cmt.getShortMessage(), '\n'+cmt.formatFileList() )
 
-    return cmtL
+                rev = cmt.getRevision()
+
+                if rev not in commit_cache:
+
+                    if self.echo !=  'none':
+                        print3( cmt.getRevision(), cmt.getAuthor(),
+                                time.ctime(cmt.getDate()),
+                                cmt.getBranch(), cmt.getCommonPrefix(),
+                                cmt.getShortMessage(),
+                                '\n'+cmt.formatFileList() )
+
+                    try:
+                        rtn = self.hook.trigger( cmt, self.noop )
+                    except Exception:
+                        rtn = None
+                        traceback.print_exc()
+
+                    if rtn and rtn ==  'break':
+                        ok = False
+                        break
+
+                    commit_cache.add( rev )
+
+            time.sleep( self.poll_sleep )
+
+
+
+class CommitSource:
+
+    def __init__(self, repo, svnexe, echo='none'):
+        ""
+        self.repo = repo
+        self.svnexe = svnexe
+        self.echo = echo
+
+    def getRepoURL(self):
+        ""
+        return self.repo
+
+    def getRecent(self, age):
+        ""
+        etree = self.svnLogAsXML( age )
+
+        cmtL = []
+
+        if etree != None:
+
+            curtime = time.time()
+
+            for nd in etree:
+                cmt = Commit( self.repo, nd )
+                if cmt.getDate() >= curtime - age:
+                    cmtL.append( cmt )
+
+        return cmtL
+
+    def svnLogAsXML(self, age):
+        ""
+        tm = time.localtime( time.time() - age )
+        ts = time.strftime( '%Y-%m-%d %H:%M:%S', tm )
+
+        etree = None
+
+        try:
+            out = self.svnlog( ts )
+        except Exception:
+            if self.echo != 'none':
+                sys.stderr.write( '*** error getting svn log ***\n' )
+                traceback.print_exc()
+                sys.stderr.write( '*****************************\n' )
+            etree = None
+        else:
+            etree = ET.fromstring( out )
+
+        return etree
+
+    def svnlog(self, timestamp):
+        ""
+        cmd = Command( self.svnexe + ' log --xml -v -r' )
+        cmd.arg( '{$timestamp}:HEAD' ).add( self.repo )
+
+        out = cmd.run_output( shell=False, echo=self.echo )
+
+        return out
 
 
 ##################################################################
-
-def common_path_prefix( listofpaths, sep='/' ):
-    ""
-    return os.path.commonprefix(listofpaths).rpartition(sep)[0]
-
 
 def get_author( elmt ):
     ""
@@ -326,28 +327,6 @@ def get_paths( elmt ):
             pathL.append( (act,pnd.text) )
 
     return pathL
-
-
-def svn_log_as_xml( repo, age, svnexe='svn', echo="none", showerrors=False ):
-    ""
-    tm = time.localtime( time.time() - age )
-    ts = time.strftime( '%Y-%m-%d %H:%M:%S', tm )
-
-    etree = None
-
-    try:
-        cmd = Command( '$svnexe log --xml -v -r' ).arg( '{$ts}:HEAD' ).add( repo )
-        out = cmd.run_output( shell=False, echo=echo )
-    except Exception:
-        if showerrors:
-            sys.stderr.write( '*** error getting svn log ***\n' )
-            traceback.print_exc()
-            sys.stderr.write( '*****************************\n' )
-        etree = None
-    else:
-        etree = ET.fromstring( out )
-
-    return etree
 
 
 def print3( *args ):

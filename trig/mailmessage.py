@@ -40,6 +40,9 @@ class Message:
 
     def send(self, smtphosts=None, timeout=None, smtpclass=smtplib.SMTP ):
         """
+        If 'smtpclass' is None, then the message is constructed but instead
+        of sending it, a tuple of strings is returned ( from, to, subject, body ).
+
         Note: Using "localhost" for 'smtphosts' can work, but if the receiver
               email is unknown, then the mail can appear to succeed but just
               get dropped.  Whereas when using "real" smtp hosts, an error will
@@ -54,7 +57,11 @@ class Message:
             msg['Subject'] = self.subject
 
             body = msg.as_string()
-            self._send_mail_message( smtphosts, smtpclass, body, timeout )
+
+            if smtpclass != None:
+                self._send_mail_message( smtphosts, smtpclass, body, timeout )
+            else:
+                return msg['From'], msg['To'], msg['Subject'], body
 
     def _send_mail_message(self, smtphosts, smtpclass, msg_as_string, timeout):
         ""

@@ -85,6 +85,17 @@ class integration_tests( unittest.TestCase ):
     def setUp(self):
         util.setup_test()
 
+    def test_compose_message_but_do_not_send(self):
+        ""
+        msg = MM.Message( 'foo@bar', 'my subject' )
+        msg.setContent( 'my content' )
+
+        frm,to,subj,body = msg.send( smtpclass=None )
+
+        assert 'foo@bar' in to
+        assert 'my subject' in subj
+        assert 'my content' in str(body)
+
     def test_send_basic_text_message(self):
         ""
         MockSMTP.cache.clear()

@@ -332,6 +332,42 @@ class Background:
                 except Exception: pass
 
 
+def runcmd( cmd, chdir=None, raise_on_error=True, print_output=True ):
+    ""
+    dstr = ''
+    if chdir:
+        dstr = 'cd '+chdir+' && '
+        cwd = os.getcwd()
+
+    print3( 'RUN: '+dstr+cmd )
+
+    if chdir:
+        os.chdir( chdir )
+
+    try:
+        pop = subprocess.Popen( cmd, shell=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT )
+
+        out,err = pop.communicate()
+
+        x = pop.returncode
+
+        if sys.version_info[0] >= 3:
+            out = out.decode()
+
+    finally:
+        if chdir:
+            os.chdir( cwd )
+
+    if print_output:
+        print3( out )
+
+    assert x == 0 or not raise_on_error, 'runcmd failed: exit='+str(x)
+
+    return x,out
+
+
 def run_redirect( cmd, redirect_filename ):
     """
     Executes the given command as a child process, waits for it, and returns
@@ -630,3 +666,43 @@ def find_process_in_list( proclist, pid ):
         if pid == L[1]:
             return L
     return None
+
+
+uniq_id = 0
+filename_to_module_map = {}
+
+def create_module_from_filename( fname ):
+    ""
+    global uniq_id
+
+    fname = os.path.normpath( os.path.abspath( fname ) )
+
+    if fname in filename_to_module_map:
+
+        mod = filename_to_module_map[fname]
+
+    else:
+
+        modname = os.path.splitext(os.path.basename(fname))[0]+str(uniq_id)
+        uniq_id += 1
+
+        if sys.version_info[0] < 3 or sys.version_info[1] < 5:
+            import imp
+            fp = open( fname, 'r' )
+            try:
+                spec = ('.py','r',imp.PY_SOURCE)
+                mod = imp.load_module( modname, fp, fname, spec )
+            finally:
+                fp.close()
+        else:
+            import importlib
+            import importlib.machinery as impmach
+            import importlib.util as imputil
+            loader = impmach.SourceFileLoader( modname, fname )
+            spec = imputil.spec_from_file_location( modname, fname, loader=loader )
+            mod = imputil.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+
+        filename_to_module_map[ fname ] = mod
+
+    return mod
