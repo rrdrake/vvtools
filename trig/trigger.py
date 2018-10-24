@@ -15,6 +15,7 @@ import time
 import subprocess
 import getopt
 import signal
+import perms
 
 import timeutils
 
@@ -53,6 +54,9 @@ OPTIONS
         log file.  To avoid this, the same error will not be logged repeatedly.
         After the number of hours given by the -E option, however, the same
         error will be logged again.  The default is one hour.
+
+  --group <unix group name> : group name for log file creation; also causes
+                              group read permissions to be set
 
 TRIGGER SYNTAX:
 
@@ -118,7 +122,7 @@ DEFAULT_ERROR_REPEAT = 1  # hours
 
 def main( arglist ):
     ""
-    optL,argL = getopt.getopt( arglist, 'hr:g:Q:E:', ['help'] )
+    optL,argL = getopt.getopt( arglist, 'hr:g:Q:E:', ['help','group='] )
 
     optD = {}
     for n,v in optL:
@@ -164,7 +168,7 @@ def mainloop( optD, argL ):
         argL = ['.']
     argL = [ os.path.abspath(p) for p in argL ]
 
-    rjobs = FileJobs( logdir, argL, erreset )
+    rjobs = FileJobs( logdir, argL, erreset, optD.get( '--group', None ) )
 
     try:
         append_to_python_path( mydir )
@@ -192,12 +196,13 @@ def mainloop( optD, argL ):
 
 class FileJobs:
     
-    def __init__(self, logdir, jobsrcs, error_reset):
+    def __init__(self, logdir, jobsrcs, error_reset, log_group):
         """
         """
         self.logdir = logdir
         self.jobsrcs = jobsrcs
         self.erreset = error_reset
+        self.group = log_group
 
         self.trigpat = re.compile( ' *# *JOB TRIGGER *[=:]' )
 
@@ -308,26 +313,21 @@ class FileJobs:
         """
         Executes the given root job file as a subprocess.
         """
-        # determine and make the job log subdirectory
-        name = os.path.basename( jobfile )
-        date = time.strftime( "%a_%b_%d_%Y_%H:%M:%S_%Z" )
-        joblogdir = os.path.join( self.logdir, name+'_'+date )
-        os.mkdir( joblogdir )
-        os.chdir( joblogdir )
-        logfp = open( 'log.txt', 'w' )
+        jdir,logfp = open_log_file_for_write( self.logdir, jobfile, self.group )
 
-        printlog( 'launch', 'trigger='+trigspec,
-                            'file='+jobfile,
-                            'logdir='+joblogdir )
+        try:
+            printlog( 'launch', 'trigger='+trigspec,
+                                'file='+jobfile,
+                                'logdir='+jdir )
 
-        # TODO: allow the scripts to be bash or just executable
+            p = subprocess.Popen( [sys.executable,jobfile],
+                                  stdout=logfp.fileno(),
+                                  stderr=subprocess.STDOUT )
 
-        p = subprocess.Popen( [sys.executable,jobfile],
-                              stdout=logfp.fileno(),
-                              stderr=subprocess.STDOUT )
+            self.jobs[ jdir ] = ( jobfile, p )
 
-        self.jobs[ joblogdir ] = ( jobfile, p )
-        logfp.close()
+        finally:
+            logfp.close()
 
         # ensure that each new job gets a different time stamp
         time.sleep( 1 )
@@ -359,6 +359,27 @@ class FileJobs:
                                 'file='+jf,
                                 'logdir='+d )
         self.jobs = {}
+
+
+def open_log_file_for_write( logpath, jobfile, group ):
+    ""
+    name = os.path.basename( jobfile )
+    date = time.strftime( "%a_%b_%d_%Y_%H:%M:%S_%Z" )
+    joblogdir = os.path.join( logpath, name+'_'+date )
+
+    os.mkdir( joblogdir )
+
+    if group:
+        perms.apply_chmod( joblogdir, group, 'g+rx' )
+
+    os.chdir( joblogdir )
+
+    fp = open( 'log.txt', 'w' )
+
+    if group:
+        perms.apply_chmod( 'log.txt', group, 'g+r' )
+
+    return joblogdir, fp
 
 
 def next_trigger_time( spec, curtm ):

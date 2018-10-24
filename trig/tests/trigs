@@ -838,6 +838,58 @@ class misc_tests( unittest.TestCase ):
         assert os.path.exists( markerfile )
 
 
+class permissions_tests( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_group_option_sets_the_log_dir_and_file_group_name(self):
+        ""
+        for grp in probe_for_two_different_groups():
+
+            util.rmallfiles()
+
+            curtm = time.time()
+
+            util.writefile( 'job_foo.py', """
+                # JOB TRIGGER: """+string_time( curtm+3 )+"""
+                fp = open( 'success', 'w' ) ; fp.close()
+                """ )
+
+            os.mkdir( 'logs' )
+            loc = os.path.abspath( 'logs' )
+            time.sleep(1)
+
+            cmd = localpy+' '+trigfile + ' --group '+grp+' -g 2 -Q 7 -r '+loc
+            out = util.runout( cmd )
+            assert not out.strip()
+
+            dL = glob.glob( 'logs/job_foo.py_*' )
+            assert len(dL) == 1
+            assert get_file_group( dL[0] ) == grp
+
+            fL = glob.glob( 'logs/job_foo.py_*/log.txt' )
+            assert len(fL) == 1
+            assert get_file_group( fL[0] ) == grp
+
+
+def probe_for_two_different_groups():
+    ""
+    out = util.runout( 'groups', raise_on_failure=True )
+    grp1,grp2 = out.strip().split()[:2]
+    assert grp1 and grp2 and grp1 != grp2
+    return grp1,grp2
+
+
+def get_file_group( path ):
+    ""
+    import grp
+    gid = os.stat( path ).st_gid
+    ent = grp.getgrgid( gid )
+    return ent[0]
+
+
 #######################################################################
 
 def readlog( logname ):

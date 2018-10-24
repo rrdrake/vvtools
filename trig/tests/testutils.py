@@ -250,13 +250,18 @@ def runout( cmd, raise_on_failure=False ):
     opts = {}
     if type(cmd) == type(''):
         opts['shell'] = True
+
     p = subprocess.Popen( cmd, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT,
                                **opts )
     out = p.communicate()[0]
     try:
         s = out.decode()
-        out = s
+        if sys.version_info[0] < 3:
+            if isinstance( out, unicode ):
+                out = out.encode( 'ascii', 'ignore' )
+        else:
+            out = out.decode()
     except Exception:
         pass
 
