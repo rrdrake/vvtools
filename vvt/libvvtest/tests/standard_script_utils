@@ -1,0 +1,678 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+
+import vvtestutils as vtu
+import testutils as util
+from testutils import print3
+
+
+class script_utils_tests( vtu.vvtestTestCase ):
+
+    def test_using_the_have_diff_utility(self):
+        ""
+        util.writescript( 'pypass.vvt', """
+            #!/usr/bin/env python
+            import os, sys
+            import script_util as util
+            util.if_diff_exit_diff()
+            """ )
+        util.writescript( 'pydiff.vvt', """
+            #!/usr/bin/env python
+            import os, sys
+            import script_util as util
+            util.set_have_diff()
+            util.if_diff_exit_diff()
+            """ )
+        util.writescript( 'pydiff2.vvt', """
+            #!/usr/bin/env python
+            import os, sys
+            import script_util as util
+            util.exit_diff()
+            """ )
+        util.writescript( 'shpass.vvt', """
+            #!/bin/sh
+            source ./vvtest_util.sh
+            if_diff_exit_diff
+            """ )
+        util.writescript( 'shdiff.vvt', """
+            #!/bin/sh
+            source ./vvtest_util.sh
+            set_have_diff
+            if_diff_exit_diff
+            """ )
+        util.writescript( 'shdiff2.vvt', """
+            #!/bin/sh
+            source ./vvtest_util.sh
+            exit_diff
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=6, npass=2, diff=4 )
+
+        assert vrun.countGrepLogs( 'exiting diff', 'pydiff$' ) == 1
+        assert vrun.countGrepLogs( 'exiting diff', 'shdiff$' ) == 1
+        assert vrun.countGrepLogs( 'exiting diff', 'pypass' ) == 0
+        assert vrun.countGrepLogs( 'exiting diff', 'shpass' ) == 0
+
+        vtu.remove_results()
+
+        vrun = vtu.runvvtest( batch=True )
+        vrun.assertCounts( total=6, npass=2, diff=4 )
+
+        assert vrun.countGrepLogs( 'exiting diff', 'pydiff$' ) == 1
+        assert vrun.countGrepLogs( 'exiting diff', 'shdiff$' ) == 1
+        assert vrun.countGrepLogs( 'exiting diff', 'pypass' ) == 0
+        assert vrun.countGrepLogs( 'exiting diff', 'shpass' ) == 0
+
+        vrun = vtu.runvvtest( '-R', chdir=vrun.resultsDir() )
+        vrun.assertCounts( total=6, npass=2, diff=4 )
+
+        assert vrun.countGrepLogs( 'exiting diff', 'pydiff$' ) == 1
+        assert vrun.countGrepLogs( 'exiting diff', 'shdiff$' ) == 1
+        assert vrun.countGrepLogs( 'exiting diff', 'pypass' ) == 0
+        assert vrun.countGrepLogs( 'exiting diff', 'shpass' ) == 0
+
+    def test_the_sedfile_utility(self):
+        ""
+        util.writefile( 'changeme.txt', """
+            the quick brown fox jumps
+            over the lazy dog
+            """ )
+        util.writescript( 'pytest.vvt', """
+            #!/usr/bin/env python
+            #VVT: link = changeme.txt
+            import os
+            import script_util as util
+            assert os.path.islink( 'changeme.txt' )
+            util.sedfile( 'changeme.txt', 'quick', 'lazy', 'jumps', 'steps' )
+            assert not os.path.islink( 'changeme.txt' )
+            """ )
+        util.writescript( 'shtest.vvt', """
+            #!/bin/sh
+            #VVT: link = changeme.txt
+            source ./vvtest_util.sh
+            sedfile changeme.txt "s/quick/speedy/"
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=2, npass=2 )
+
+        assert util.readfile( 'changeme.txt' ).strip() == \
+            "the quick brown fox jumps\nover the lazy dog"
+
+        tdir = vrun.resultsDir()
+
+        assert not os.path.islink( tdir+'/pytest/changeme.txt' )
+        assert util.readfile( tdir+'/pytest/changeme.txt' ).strip() == \
+            "the lazy brown fox steps\nover the lazy dog"
+
+        assert not os.path.islink( tdir+'/shtest/changeme.txt' )
+        assert util.readfile( tdir+'/shtest/changeme.txt' ).strip() == \
+            "the speedy brown fox jumps\nover the lazy dog"
+
+    def test_the_unixdiff_utility(self):
+        ""
+        util.writefile( 'baseline.txt',
+                   'the quick brown fox jumps\n' + \
+                   'over the lazy dog' )
+        util.writescript( 'pypass.vvt', """
+            #!/usr/bin/env python
+            #VVT: link = baseline.txt
+            import os
+            import script_util as util
+            fp = open( 'genfile.txt', 'w' )
+            fp.write( 'the quick brown fox jumps\\n' + \
+                      'over the lazy dog\\n' )
+            fp.close()
+            util.unixdiff( 'baseline.txt', 'genfile.txt' )
+            util.if_diff_exit_diff()
+            """ )
+        util.writescript( 'pydiff.vvt', """
+            #!/usr/bin/env python
+            #VVT: link = baseline.txt
+            import os
+            import script_util as util
+            fp = open( 'genfile.txt', 'w' )
+            fp.write( 'the quick brown fox jumps\\n' + \
+                      'over the super lazy dog\\n' )
+            fp.close()
+            util.unixdiff( 'baseline.txt', 'genfile.txt' )
+            util.if_diff_exit_diff()
+            """ )
+        util.writescript( 'shpass.vvt', """
+            #!/bin/sh
+            #VVT: link = baseline.txt
+            source ./vvtest_util.sh
+            echo "the quick brown fox jumps" > genfile.txt
+            echo "over the lazy dog" >> genfile.txt
+            echo "" >> genfile.xt
+            unixdiff baseline.txt genfile.txt
+            if_diff_exit_diff
+            """ )
+        util.writescript( 'shdiff.vvt', """
+            #!/bin/sh
+            #VVT: link = baseline.txt
+            source ./vvtest_util.sh
+            echo "the quick brown fox jumps" > genfile.txt
+            echo "over the utterly lazy dog" >> genfile.txt
+            echo "" >> genfile.xt
+            unixdiff baseline.txt genfile.txt
+            if_diff_exit_diff
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=4, npass=2, diff=2 )
+
+        assert vrun.countGrepLogs( 'files are diff', 'pypass' ) == 0
+        assert vrun.countGrepLogs( 'files are diff', 'pydiff' ) == 1
+        assert vrun.countGrepLogs( 'files are diff', 'shpass' ) == 0
+        assert vrun.countGrepLogs( 'files are diff', 'shdiff' ) == 1
+
+    def test_the_nlinesdiff_utility(self):
+        ""
+        util.writescript( 'pypass.vvt', """
+            #!/usr/bin/env python
+            import os
+            import script_util as util
+            fp = open( 'genfile.txt', 'w' )
+            fp.write( 'the speedy brown fox jumps\\n' + \
+                      'over the lazy dog\\n' )
+            fp.close()
+            util.nlinesdiff( 'genfile.txt', 2 )
+            util.if_diff_exit_diff()
+            """ )
+        util.writescript( 'pydiff.vvt', """
+            #!/usr/bin/env python
+            import os
+            import script_util as util
+            fp = open( 'genfile.txt', 'w' )
+            fp.write( 'the speedy brown fox jumps\\n' + \
+                      'over the super lazy dog\\n' + \
+                      'and laughed\\n' )
+            fp.close()
+            util.nlinesdiff( 'genfile.txt', 2 )
+            util.if_diff_exit_diff()
+            """ )
+        util.writescript( 'shpass.vvt', """
+            #!/bin/sh
+            source ./vvtest_util.sh
+            echo "the speedy brown fox jumps" > genfile.txt
+            echo "over the lazy dog" >> genfile.txt
+            nlinesdiff genfile.txt 2
+            if_diff_exit_diff
+            """ )
+        util.writescript( 'shdiff.vvt', """
+            #!/bin/sh
+            source ./vvtest_util.sh
+            echo "the speedy brown fox jumps" > genfile.txt
+            echo "over the lazy dog" >> genfile.txt
+            echo "and laughed" >> genfile.txt
+            nlinesdiff genfile.txt 2
+            if_diff_exit_diff
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=4, npass=2, diff=2 )
+
+        assert vrun.countGrepLogs( 'number of lines exceeded', 'pypass' ) == 0
+        assert vrun.countGrepLogs( 'number of lines exceeded', 'pydiff' ) == 1
+        assert vrun.countGrepLogs( 'number of lines exceeded', 'shpass' ) == 0
+        assert vrun.countGrepLogs( 'number of lines exceeded', 'shdiff' ) == 1
+
+    def test_using_the_vvtest_system_utility_functions(self):
+        ""
+        platname = vtu.core_platform_name()
+
+        util.writescript( 'pytest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : A = 1 3 5
+            import script_util as vvt
+            print3 = vvt.print3
+            if vvt.parameter_expr( "A<3 or A=5" ):
+                print3( "with A="+vvt.A+" param expr true" )
+            else:
+                print3( "with A="+vvt.A+" param expr false" )
+            if vvt.platform_expr( 'Junk or """+platname+"""' ):
+                print3( "plat expr true" )
+            else:
+                print3( "plat expr false" )
+            if vvt.platform_expr( 'Junk' ):
+                print3( "plat expr2 true" )
+            else:
+                print3( "plat expr2 false" )
+            if vvt.option_expr( 'dbg and not intel' ):
+                print3( "option expr true" )
+            else:
+                print3( "option expr false" )
+            """ )
+        util.writescript( 'shtest.vvt', """
+            #!/bin/sh
+            #VVT: parameterize : B = 1 3 5
+            source ./vvtest_util.sh
+            if parameter_expr "B<3 or B=5"
+            then
+                echo "with B=$B param expr true"
+            else
+                echo "with B=$B param expr false"
+            fi
+            if platform_expr 'Junk or """+platname+"""'
+            then
+                echo "plat expr true"
+            else
+                echo "plat expr false"
+            fi
+            if platform_expr 'Junk'
+            then
+                echo "plat expr2 true"
+            else
+                echo "plat expr2 false"
+            fi
+            if option_expr 'dbg and not intel'
+            then
+                echo "option expr true"
+            else
+                echo "option expr false"
+            fi
+            """ )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
+
+            assert vrun.countGrepLogs( 'with A=1 param expr true',
+                                       'pytest.A=1' ) == 1
+            assert vrun.countGrepLogs( 'with A=3 param expr false',
+                                       'pytest.A=3' ) == 1
+            assert vrun.countGrepLogs( 'with A=5 param expr true',
+                                       'pytest.A=5' ) == 1
+            assert vrun.countGrepLogs( 'with B=1 param expr true',
+                                       'shtest.B=1' ) == 1
+            assert vrun.countGrepLogs( 'with B=3 param expr false',
+                                       'shtest.B=3' ) == 1
+            assert vrun.countGrepLogs( 'with B=5 param expr true',
+                                       'shtest.B=5' ) == 1
+
+            assert vrun.countGrepLogs( 'plat expr true', 'pytest.A=3' ) == 1
+            assert vrun.countGrepLogs( 'plat expr2 false', 'pytest.A=3' ) == 1
+            assert vrun.countGrepLogs( 'plat expr true', 'shtest.B=5' ) == 1
+            assert vrun.countGrepLogs( 'plat expr2 false', 'shtest.B=5' ) == 1
+
+            assert vrun.countGrepLogs( 'option expr false', 'pytest.A=1' ) == 1
+            assert vrun.countGrepLogs( 'option expr false', 'shtest.B=1' ) == 1
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-o dbg', batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
+
+            assert vrun.countGrepLogs( 'option expr true', 'pytest.A=1' ) == 1
+            assert vrun.countGrepLogs( 'option expr true', 'shtest.B=1' ) == 1
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-o dbg+intel', batch=batch )
+            vrun.assertCounts( total=6, npass=6 )
+
+            assert vrun.countGrepLogs( 'option expr false', 'pytest.A=1' ) == 1
+            assert vrun.countGrepLogs( 'option expr false', 'shtest.B=1' ) == 1
+
+    def test_using_the_vvtest_system_utilities_in_an_analyze_test(self):
+        ""
+        platname = vtu.core_platform_name()
+
+        util.writescript( 'pytest.vvt', """
+            #!/usr/bin/env python
+            #VVT: parameterize : A = 1 2
+            #VVT: analyze : -a
+            import sys
+            import script_util as vvt
+            print3 = vvt.print3
+            if '-a' in sys.argv:
+                pass
+                if vvt.parameter_expr( "not A" ):
+                    print3( "analyze param expr true" )
+                else:
+                    print3( "analyze param expr false" )
+                if vvt.platform_expr( 'Junk or """+platname+"""' ):
+                    print3( "analyze plat expr true" )
+                else:
+                    print3( "analyze plat expr false" )
+                if vvt.platform_expr( 'Junk' ):
+                    print3( "analyze plat expr2 true" )
+                else:
+                    print3( "analyze plat expr2 false" )
+                if vvt.option_expr( 'dbg and not intel' ):
+                    print3( "analyze option expr true" )
+                else:
+                    print3( "analyze option expr false" )
+            """ )
+        util.writescript( 'shtest.vvt', """
+            #!/bin/sh
+            #VVT: parameterize : B = 1 2
+            #VVT: analyze : -a
+            source ./vvtest_util.sh
+            analyze=false
+            for opt in "$@"
+            do
+              [ "$opt" = "-a" ] && analyze=true
+            done
+            if [ $analyze = true ]
+            then
+                if parameter_expr "B"
+                then
+                    echo "analyze param expr true"
+                else
+                    echo "analyze param expr false"
+                fi
+                if platform_expr 'Junk or """+platname+"""'
+                then
+                    echo "analyze plat expr true"
+                else
+                    echo "analyze plat expr false"
+                fi
+                if platform_expr 'Junk'
+                then
+                    echo "analyze plat expr2 true"
+                else
+                    echo "analyze plat expr2 false"
+                fi
+                if option_expr 'dbg and not intel'
+                then
+                    echo "analyze option expr true"
+                else
+                    echo "analyze option expr false"
+                fi
+            fi
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest( '-o dbg' )
+        vrun.assertCounts( total=6, npass=6 )
+
+        assert vrun.countGrepLogs( 'analyze', '*=*' ) == 0
+
+        assert vrun.countGrepLogs( 'analyze param expr true', 'pytest' ) == 1
+        assert vrun.countGrepLogs( 'analyze plat expr true', 'pytest' ) == 1
+        assert vrun.countGrepLogs( 'analyze plat expr2 false', 'pytest' ) == 1
+        assert vrun.countGrepLogs( 'analyze option expr true', 'pytest' ) == 1
+
+        assert vrun.countGrepLogs( 'analyze param expr false', 'shtest' ) == 1
+        assert vrun.countGrepLogs( 'analyze plat expr true', 'shtest' ) == 1
+        assert vrun.countGrepLogs( 'analyze plat expr2 false', 'shtest' ) == 1
+        assert vrun.countGrepLogs( 'analyze option expr true', 'shtest' ) == 1
+
+    def test_the_runcmd_script_util(self):
+        ""
+        util.writescript( 'py1.vvt', """
+            #!/usr/bin/env python
+            import script_util as vvt
+            print3 = vvt.print3
+            x = vvt.runcmd( 'ls -l' )
+            assert x == 0
+            """ )
+        util.writescript( 'py2.vvt', """
+            #!/usr/bin/env python
+            import script_util as vvt
+            print3 = vvt.print3
+            x = vvt.runcmd( 'failprogram', ignore_exit=True )
+            assert x != 0
+            """ )
+        util.writescript( 'py3.vvt', """
+            #!/usr/bin/env python
+            import script_util as vvt
+            print3 = vvt.print3
+            vvt.runcmd( 'failprogram' )
+            print3( 'should not get here' )
+            """ )
+        util.writescript( 'py4.vvt', """
+            #!/usr/bin/env python
+            import script_util as vvt
+            print3 = vvt.print3
+            out = vvt.runcmd( 'ls -l', capture_output=True )
+            print3( out )
+            for line in out.split( '\\n' ):
+                line = line.rstrip()
+                if line and line.split()[-1].endswith( 'vvtest_util.py' ):
+                    print3( 'found', line.split()[-1] )
+            """ )
+
+        util.writescript( 'helloworld', """
+            #!/bin/sh
+            echo "hello world"
+            """ )
+        util.writescript( 'py5.vvt', """
+            #!/usr/bin/env python
+            #VVT: link : helloworld
+            import script_util as vvt
+            print3 = vvt.print3
+            vvt.runcmd( './helloworld progargs', echo=False )
+            """ )
+
+        util.writescript( 'py6.vvt', """
+            #!/usr/bin/env python
+            #VVT: link : helloworld
+            import script_util as vvt
+            print3 = vvt.print3
+            vvt.runcmd( './helloworld', redirect='prog.out' )
+            """ )
+
+        util.writescript( 'hellomars', """
+            #!/bin/sh
+            echo "hello mars"
+            """ )
+        util.writescript( 'py7.vvt', """
+            #!/usr/bin/env python
+            #VVT: link : helloworld hellomars
+            import script_util as vvt
+            print3 = vvt.print3
+            vvt.runcmd( './helloworld', redirect='prog.out' )
+            vvt.runcmd( './hellomars', redirect='prog.out' )
+            """ )
+        util.writescript( 'py8.vvt', """
+            #!/usr/bin/env python
+            #VVT: link : helloworld hellomars
+            import script_util as vvt
+            print3 = vvt.print3
+            vvt.runcmd( './helloworld', redirect='prog.out' )
+            vvt.runcmd( './hellomars', redirect='prog.out', append=True )
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=8, npass=7, fail=1 )
+
+        assert vrun.countGrepLogs( 'vvtest_util.py', 'py1' ) > 0
+
+        assert vrun.countTestLines( 'pass*py2' ) == 1
+        assert vrun.countGrepLogs( 'failprogram', 'py2' ) > 0
+
+        assert vrun.countTestLines( 'pass*py3' ) == 0
+        assert vrun.countGrepLogs( 'command failed*failprogram', 'py3' ) > 0
+
+        assert vrun.countGrepLogs( 'found *vvtest_util.py', 'py4' ) == 1
+
+        assert vrun.countTestLines( 'pass*py5' ) == 1
+        assert vrun.countGrepLogs( 'helloworld*progargs', 'py5' ) == 0
+
+        assert vrun.countGrepLogs( 'hello world', 'py6' ) == 0
+        assert len( util.grepfiles( 'hello world',
+                                    'TestResults*/py6/prog.out' ) ) == 1
+
+        assert vrun.countGrepLogs( 'hello world', 'py7' ) == 0
+        assert vrun.countGrepLogs( 'hello mars', 'py7' ) == 0
+        assert len( util.grepfiles( 'hello world',
+                                    'TestResults*/py7/prog.out' ) ) == 0
+        assert len( util.grepfiles( 'hello mars',
+                                    'TestResults*/py7/prog.out' ) ) == 1
+
+        assert len( util.grepfiles( 'hello world',
+                                    'TestResults*/py8/prog.out' ) ) == 1
+        assert len( util.grepfiles( 'hello mars',
+                                    'TestResults*/py8/prog.out' ) ) == 1
+
+    def test_permissions_helpers_in_script_util(self):
+        ""
+        util.writescript( 'py1.vvt', """
+            #!/usr/bin/env python
+            import script_util as util
+            fp = open( 'script', 'w' )
+            fp.write( '#!/bin/sh\\n' )
+            fp.write( 'echo "script got executed"\\n' )
+            fp.close()
+            assert util.get_permissions( 'script', 'read' )
+            assert util.get_permissions( 'script', 'write' )
+            assert not util.get_permissions( 'script', 'execute' )
+            util.change_permissions( 'script', 'u+x', 'g+x' )
+            assert util.get_permissions( 'script', 'execute' )
+            util.runcmd( './script' )
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
+
+        assert vrun.countGrepLogs( 'script got executed', 'py1' ) == 1
+
+    def test_utilities_catfile_grepfile_prependPATH_which(self):
+        ""
+        util.writefile( 'file1.txt', """
+            this is line one
+            and line two
+            """ )
+        util.writefile( 'file2.txt', """
+            the quick brown fox
+            jumps over the lazy dog
+            """ )
+        util.writescript( 'subdir/myscript', """
+            #!/bin/sh
+            echo "hello from myscript"
+            """ )
+        util.writescript( 'py1.vvt', """
+            #!/usr/bin/env python
+            #VVT: link : file1.txt file2.txt
+            import os
+            import vvtest_util as vvt
+            import script_util as util
+            assert len( util.grepfile( 'tw[op]', 'file1.txt' ) ) == 1
+            util.catfile( 'file2.txt' )
+            util.prependPATH( os.path.join( vvt.SRCDIR, 'subdir' ) )
+            util.print3( 'which =', util.which( 'myscript' ) )
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
+
+        assert vrun.countGrepLogs( 'quick brown fox', 'py1' ) == 1
+        assert vrun.countGrepLogs( 'lazy dog', 'py1' ) == 1
+        assert vrun.countGrepLogs( 'which = /*/subdir/myscript', 'py1' ) == 1
+
+    def test_the_user_termination_function(self):
+        ""
+        util.writescript( 'py1.vvt', """
+            #!/usr/bin/env python
+            import script_util as util
+            def lastcall():
+                util.print3( 'lastcall called' )
+            util.register_termination_function( lastcall )
+            try:
+                raise Exception( 'fake exception' )
+            except Exception:
+                pass
+            """ )
+        util.writescript( 'py2.vvt', """
+            #!/usr/bin/env python
+            import script_util as util
+            def lastcall():
+                util.print3( 'lastcall called' )
+            util.register_termination_function( lastcall )
+            raise Exception( 'fake exception' )
+            util.print3( 'should not be here' )
+            """ )
+        util.writescript( 'py3.vvt', """
+            #!/usr/bin/env python
+            import script_util as util
+            def lastcall():
+                util.print3( 'lastcall called' )
+            util.register_termination_function( lastcall )
+            util.set_have_diff()
+            util.if_diff_exit_diff()
+            util.print3( 'should not be here' )
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=3, npass=1, diff=1, fail=1 )
+
+        assert vrun.countGrepLogs( 'fake exception', 'py1' ) == 0
+        assert vrun.countGrepLogs( 'lastcall called', 'py1' ) == 1
+        assert vrun.countGrepLogs( 'fake exception', 'py2' ) > 0
+        assert vrun.countGrepLogs( 'lastcall called', 'py2' ) == 0
+        assert vrun.countGrepLogs( 'should not be here', 'py2' ) == 0
+        assert vrun.countGrepLogs( 'exiting diff', 'py3' ) == 1
+        assert vrun.countGrepLogs( 'lastcall called', 'py3' ) == 0
+        assert vrun.countGrepLogs( 'should not be here', 'py3' ) == 0
+
+    def test_the_python_trace_utility(self):
+        ""
+        util.writefile( 'file1.txt', """
+            this is line one
+            and line two
+            """ )
+        util.writescript( 'py1.vvt', """
+            #!/usr/bin/env python
+            #VVT: link : file1.txt
+            import os
+            import script_util as util
+            def myfunc( ivar=5 ):
+                funcvar = 2*ivar
+                otherfunc( funcvar )
+            def otherfunc( *args ):
+                assert len(args) == 1
+                util.print3( 'otherfunc args =', args )
+                util.catfile( 'file1.txt' )
+                if 'FOOBAR_NOEXIST_VNAME' in os.environ:
+                    util.print3( 'how could that happen!!' )
+            util.set_python_trace()
+            ivar = 4
+            myfunc( ivar )
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
+
+        xlog = util.globfile( 'TestResults*/py1/execute.log' )
+
+        assert len( util.grepfiles(
+            'myfunc( *ivar *)*py1.vvt:16', xlog ) ) == 1
+        assert len( util.grepfiles(
+            'def myfunc( ivar=5 ):*(ivar=4)*py1.vvt:5', xlog ) ) == 1
+        assert len( util.grepfiles(
+            'def otherfunc( [*]args ):*args=*8*py1.vvt:8', xlog ) ) == 1
+        assert len( util.grepfiles( "catfile( 'file1.txt' )", xlog ) ) == 1
+        assert len( util.grepfiles( "__contains__", xlog ) ) == 0
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
