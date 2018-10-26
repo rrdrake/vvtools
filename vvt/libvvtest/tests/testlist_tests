@@ -10,7 +10,6 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
-import unittest
 import time
 import glob
 import tempfile
@@ -25,10 +24,10 @@ import libvvtest.TestList as TestList
 import libvvtest.TestSpec as TestSpec
 
 
-class TestSpec_to_and_from_string( unittest.TestCase ):
+class TestSpec_to_and_from_string( vtu.vvtestTestCase ):
 
     def setUp(self):
-        util.setup_test( cleanout=False )
+        vtu.vvtestTestCase.setUp( self, cleanout=False )
 
     def test_converting_a_test_to_a_string_and_back(self):
         ""
@@ -41,10 +40,7 @@ class TestSpec_to_and_from_string( unittest.TestCase ):
         assert_TestSpec_same_as_fake( ts2 )
 
 
-class test_list_file_read_write( unittest.TestCase ):
-
-    def setUp(self):
-        util.setup_test()
+class test_list_file_read_write( vtu.vvtestTestCase ):
 
     def test_write_test_list_file_then_read_it(self):
         ""
@@ -194,10 +190,7 @@ class test_list_file_read_write( unittest.TestCase ):
         assert tlr.getFinishDate() == None
 
 
-class TempFile_utility_class( unittest.TestCase ):
-
-    def setUp(self):
-        util.setup_test()
+class TempFile_utility_class( vtu.vvtestTestCase ):
 
     def test_create_then_write_to_then_remove_a_temporary_file(self):
         ""
@@ -257,10 +250,7 @@ class TempFile_utility_class( unittest.TestCase ):
         assert ( fmode & stat.S_IROTH ) != 0
 
 
-class inlining_includes( unittest.TestCase ):
-
-    def setUp(self):
-        util.setup_test()
+class inlining_includes( vtu.vvtestTestCase ):
 
     def test_a_test_list_with_no_includes_is_not_touched(self):
         ""
@@ -305,10 +295,7 @@ class inlining_includes( unittest.TestCase ):
         assert tspec.getAttr( 'aname5' ) == 23
 
 
-class TestList_results_file( unittest.TestCase ):
-
-    def setUp(self):
-        util.setup_test()
+class TestList_results_file( vtu.vvtestTestCase ):
 
     def test_write_a_test_list_file_then_read_it(self):
         ""
@@ -411,10 +398,7 @@ class TestList_results_file( unittest.TestCase ):
         assert tm == None
 
 
-class format_versions( unittest.TestCase ):
-
-    def setUp(self):
-        util.setup_test()
+class format_versions( vtu.vvtestTestCase ):
 
     def test_the_current_testlist_file_format_version(self):
         ""

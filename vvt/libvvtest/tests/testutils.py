@@ -138,7 +138,7 @@ def get_TestCase_classes( test_module ):
     return tcD
 
 
-def setup_test( cleanout=True ):
+def setup_test( cleanout ):
     """
     """
     print3()
@@ -147,15 +147,6 @@ def setup_test( cleanout=True ):
     if cleanout:
         rmallfiles()
         time.sleep(1)
-
-    # for batch tests
-    os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-    os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
-
-    # force the results files to be written locally for testing;
-    # it is used in vvtest when handling the --save-results option
-    os.environ['TESTING_DIRECTORY'] = os.getcwd()
 
 
 def make_working_directory( test_filename ):

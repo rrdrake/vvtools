@@ -13,7 +13,6 @@ import os
 import time
 import traceback
 import signal
-import unittest
 
 import vvtestutils as vtu
 import testutils as util
@@ -22,11 +21,11 @@ from testutils import print3
 import libvvtest.pgexec as pgexec
 
 
-class Timeout_when_baselining( unittest.TestCase ):
+class Timeout_when_baselining( vtu.vvtestTestCase ):
 
     def setUp(self):
         ""
-        util.setup_test()
+        vtu.vvtestTestCase.setUp( self )
 
         # this env var used in vvtest as the time to wait for each test
         # to finish a rebaseline execution
@@ -58,11 +57,11 @@ class Timeout_when_baselining( unittest.TestCase ):
         assert time.time() - t0 < 8
 
 
-class process_group_execution( unittest.TestCase ):
+class process_group_execution( vtu.vvtestTestCase ):
 
     def setUp(self):
         ""
-        util.setup_test()
+        vtu.vvtestTestCase.setUp( self )
         pgexec.register_signal_handlers( reset=True )
 
     def test_signal_exception_class_stores_the_signal_number(self):
@@ -226,11 +225,11 @@ class process_group_execution( unittest.TestCase ):
         assert not os.path.exists( 'touch2.txt' )
 
 
-class integration_signalling_tests( unittest.TestCase ):
+class integration_signalling_tests( vtu.vvtestTestCase ):
 
     def setUp(self):
         ""
-        util.setup_test()
+        vtu.vvtestTestCase.setUp( self )
         pgexec.register_signal_handlers( reset=True )
 
     def test_sub_sub_process_signalling_in_a_test_script(self):
