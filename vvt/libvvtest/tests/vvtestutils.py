@@ -435,19 +435,6 @@ def get_platform_name( vvtest_output ):
     return platname
 
 
-def results_dir( pat=None ):
-    """
-    After running vvtest, this will return the TestResults directory.  If 'pat'
-    is given, then the test results directory name that contains that pattern
-    will be chosen.
-    """
-    for f in os.listdir('.'):
-        if f[:12] == 'TestResults.':
-            if pat == None or f.find( pat ) >= 0:
-                return f
-    return ''
-
-
 def get_results_dir( out ):
     """
     """

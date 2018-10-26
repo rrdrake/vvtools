@@ -492,3 +492,88 @@ def first_path_segment( path ):
                 p = d
             else:
                 return b
+
+
+def list_all_paths( rootpath ):
+    ""
+    pathset = set()
+
+    for dirpath,dirnames,filenames in os.walk( rootpath ):
+
+        pathset.add( dirpath )
+
+        for f in filenames:
+            p = os.path.join( dirpath, f )
+            if not os.path.islink(p):
+                pathset.add(p)
+
+    pL = list( pathset )
+    pL.sort()
+
+    return pL
+
+
+def list_all_directories( rootpath ):
+    ""
+    pathset = set()
+
+    for dirpath,dirnames,filenames in os.walk( rootpath ):
+        pathset.add( dirpath )
+
+    pL = list( pathset )
+    pL.sort()
+
+    return pL
+
+
+def has_owner_execute( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IXUSR ) != 0
+
+
+def has_no_group_permissions( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IRWXG ) == 0
+
+def has_group_sticky( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_ISGID ) != 0
+
+def has_group_read( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IRGRP ) != 0
+
+def has_group_write( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IWGRP ) != 0
+
+def has_group_execute( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IXGRP ) != 0
+
+
+def has_no_world_permissions( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IRWXO ) == 0
+
+def has_world_read( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IROTH ) != 0
+
+def has_world_write( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IWOTH ) != 0
+
+def has_world_execute( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IXOTH ) != 0

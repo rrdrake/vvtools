@@ -169,15 +169,14 @@ class extract_use_cases( vtu.vvtestTestCase ):
             #VVT: baseline : file3.txt, file3.txt
             #VVT: sources : file4.txt ${NAME}_*.py
             import os
-            import script_util as vvt
-            print3 = vvt.print3
-            fp = open( 'file1.txt' ) ; print3( fp.read() ) ; fp.close()
-            fp = open( 'file2.txt' ) ; print3( fp.read() ) ; fp.close()
-            fp = open( vvt.SRCDIR+'/file3.txt' ) ; print3( fp.read() ) ; fp.close()
-            fp = open( vvt.SRCDIR+'/file4.txt' ) ; print3( fp.read() ) ; fp.close()
-            fp = open( vvt.SRCDIR+'/atest_1.py' ) ; print3( fp.read() ) ; fp.close()
+            import vvtest_util as vvt
+            fp = open( 'file1.txt' ) ; print ( fp.read() ) ; fp.close()
+            fp = open( 'file2.txt' ) ; print ( fp.read() ) ; fp.close()
+            fp = open( vvt.SRCDIR+'/file3.txt' ) ; print ( fp.read() ) ; fp.close()
+            fp = open( vvt.SRCDIR+'/file4.txt' ) ; print ( fp.read() ) ; fp.close()
+            fp = open( vvt.SRCDIR+'/atest_1.py' ) ; print ( fp.read() ) ; fp.close()
             if os.path.exists( vvt.SRCDIR+'/2_atest.py' ):
-                print3( 'py file 2 exists' )
+                print ( 'py file 2 exists' )
             """ )
         util.writefile( 'orig/file1.txt', "file one" )
         util.writefile( 'orig/file2.txt', "file two" )
@@ -207,9 +206,7 @@ class extract_use_cases( vtu.vvtestTestCase ):
             #!/usr/bin/env python
             #VVT: parameterize : P = 1 2
             #VVT: analyze : atest_analyze.py
-            import os
-            import script_util as vvt
-            print3 = vvt.print3
+            import vvtest_util as vvt
             fp = open( 'genfile.txt', 'w' )
             fp.write( 'param P='+vvt.P+'\\n' )
             fp.close()
@@ -218,7 +215,7 @@ class extract_use_cases( vtu.vvtestTestCase ):
         util.writescript( "orig/atest_analyze.py", """
             #!/usr/bin/env python
             import os
-            import script_util as vvt
+            import vvtest_util as vvt
             for P in vvt.PARAM_P:
                 fn = '../'+vvt.NAME+'.P='+P+'/genfile.txt'
                 assert os.path.exists( fn )

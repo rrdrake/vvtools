@@ -27,7 +27,6 @@ class parameterize_analyze_script_specs( vtu.vvtestTestCase ):
             #VVT: parameterize : V=a b
             #VVT: analyze : -a
             import os, sys
-            import script_util as vvt
             if '-a' in sys.argv:
                 print ( 'running analyze' )
             else:
@@ -57,7 +56,6 @@ class parameterize_analyze_script_specs( vtu.vvtestTestCase ):
             #VVT: parameterize : V=a
             #VVT: analyze : -a
             import os, sys
-            import script_util as vvt
             if '-a' in sys.argv:
                 print ( 'running analyze' )
             else:
@@ -85,7 +83,7 @@ class parameterize_analyze_script_specs( vtu.vvtestTestCase ):
             #VVT: parameterize : V=a b
             #VVT: analyze : ana.sh
             import os, sys
-            import script_util as vvt
+            import vvtest_util as vvt
             print ( 'running execute with param '+vvt.V )
             """ )
         util.writescript( 'ana.sh', """
@@ -124,11 +122,10 @@ class parameterize_analyze_script_specs( vtu.vvtestTestCase ):
             #VVT: parameterize : V=a b
             #VVT: analyze : analyze
             import os, sys
-            import script_util as vvt
             print ( 'running py execute' )
             """ )
         util.writefile( 'analyze', """
-            import script_util as vvt
+            import vvtest_util as vvt
             print ( "running py analyze" )
             """ )
         time.sleep(1)
@@ -157,7 +154,7 @@ class parameterize_analyze_script_specs( vtu.vvtestTestCase ):
             #VVT: parameterize : V=a b
             #VVT: analyze : -a
             import os, sys
-            import script_util as vvt
+            import vvtest_util as vvt
             if '-a' in sys.argv:
                 print ( 'running analyze with V='+repr(vvt.PARAM_V) )
             else:
@@ -189,15 +186,15 @@ class parameterize_analyze_script_specs( vtu.vvtestTestCase ):
             #!/usr/bin/env python
             #VVT: parameterize : ival = 1 2
             #VVT: analyze : --analyze
-            import os
-            from script_util import *
+            import os, sys
+            import vvtest_util as vvt
             if '--analyze' not in sys.argv[1:]:
-                if not analyze_only():
-                    print3( 'running touch' )
-                    fp = open( 'afile.'+ival, 'w' ) ; fp.close()
-                print3( 'running execute' )
+                if not vvt.opt_analyze:
+                    print ( 'running touch' )
+                    fp = open( 'afile.'+vvt.ival, 'w' ) ; fp.close()
+                print ( 'running execute' )
             else:
-                print3( "running analyze" )
+                print ( "running analyze" )
                 assert os.path.exists( '../pytest.ival=1/afile.1' )
                 assert os.path.exists( '../pytest.ival=2/afile.2' )
             """ )
@@ -212,7 +209,7 @@ class parameterize_analyze_script_specs( vtu.vvtestTestCase ):
                 ls ../shtest.ival=1/afile.1 || exit 1
                 ls ../shtest.ival=2/afile.2 || exit 1
             else
-                analyze_only || {
+                [ $opt_analyze = 1 ] || {
                     echo "running touch"
                     touch afile.$ival
                 }

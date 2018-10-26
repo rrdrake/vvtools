@@ -287,13 +287,13 @@ class dependency_information( vtu.vvtestTestCase ):
             """ )
         util.writescript( 'sub1/testY.vvt', """
             #!/usr/bin/env python
-            import os, time
-            import script_util as su
+            import os, sys, time
+            import vvtest_util as vvt
             time.sleep(3)
             fp = open( 'Y.out', 'w' )
             fp.write( 'testY does not say the right thing'+os.linesep )
             fp.close()
-            su.exit_diff()
+            sys.exit( vvt.diff_exit_status )
             """ )
         util.writescript( 'sub2/testZ.vvt', """
             #!/usr/bin/env python
@@ -309,13 +309,13 @@ class dependency_information( vtu.vvtestTestCase ):
 
             util.writescript( 'sub1/testY.vvt', """
                 #!/usr/bin/env python
-                import os, time
-                import script_util as su
+                import os, sys, time
+                import vvtest_util as vvt
                 time.sleep(3)
                 fp = open( 'Y.out', 'w' )
                 fp.write( 'testY does not say the right thing'+os.linesep )
                 fp.close()
-                su.exit_diff()
+            sys.exit( vvt.diff_exit_status )
                 """ )
             vtu.remove_results()
             time.sleep(1)
@@ -345,15 +345,14 @@ class dependency_information( vtu.vvtestTestCase ):
             #VVT: analyze : --analyze
 
             import sys
-            import script_util as vvt
-            from script_util import print3
+            import vvtest_util as vvt
 
             if "--analyze" in sys.argv[1:]:
-                print3( "Analysis DEPDIRS", vvt.DEPDIRS )
+                print ( "Analysis DEPDIRS", vvt.DEPDIRS )
                 assert len(vvt.DEPDIRS) == 2, 'DEPDIRS not length two'
                 raise Exception( "always fail" )
             else:
-                print3( "value:", vvt.value )
+                print ( "value:", vvt.value )
             """ )
         time.sleep(1)
 
@@ -370,14 +369,14 @@ class dependency_information( vtu.vvtestTestCase ):
         util.writescript( 'testX.vvt', """
             #!/usr/bin/env python
             #VVT: depends on : testY
-            import script_util as vvt
-            vvt.print3( 'DEPDIRS', vvt.DEPDIRS )
+            import vvtest_util as vvt
+            print ( 'DEPDIRS', vvt.DEPDIRS )
             assert len(vvt.DEPDIRS) == 1, 'DEPDIRS not length one'
             raise Exception( 'always fail' )
             """ )
         util.writescript( 'testY.vvt', """
             #!/usr/bin/env python
-            import script_util as vvt
+            import vvtest_util as vvt
             assert len(vvt.DEPDIRS) == 0
             """ )
         time.sleep(1)

@@ -36,8 +36,9 @@ class Timeout_when_baselining( vtu.vvtestTestCase ):
         ""
         util.writefile( 'sleeper.vvt', """
             #VVT: baseline : baseliner.py
-            import script_util as util
-            util.exit_diff()
+            import sys
+            import vvtest_util as vvt
+            sys.exit( vvt.diff_exit_status )
             """ )
         util.writefile( 'baseliner.py', """
             import time

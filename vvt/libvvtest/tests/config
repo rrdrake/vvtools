@@ -169,9 +169,10 @@ class config_tests( vtu.vvtestTestCase ):
         util.writescript( 'pytest.vvt', """
             #!/usr/bin/env python
             import os
-            from script_util_plugin import *
-            assert os.path.samefile( CONFIGDIR, '"""+cfg+"""' )
-            special_function()
+            import vvtest_util as vvt
+            import script_util_plugin as util
+            assert os.path.samefile( vvt.CONFIGDIR, '"""+cfg+"""' )
+            util.special_function()
             """ )
         util.writescript( 'shtest.vvt', """
             #!/bin/sh
@@ -182,9 +183,8 @@ class config_tests( vtu.vvtestTestCase ):
 
         util.writefile( "config/script_util_plugin.py", """
             import os, sys
-            from script_util import *
             def special_function():
-                print3( 'hello from spec func' )
+                print ( 'hello from spec func' )
             """ )
         util.writefile( "config/script_util_plugin.sh", """
             source $VVTESTSRC/config/script_util.sh

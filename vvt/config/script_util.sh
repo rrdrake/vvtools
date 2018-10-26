@@ -16,18 +16,6 @@ analyze_only() {
     fi
 }
 
-cmdline_option() {
-    # given a command line option name, this returns true if that option
-    # was given on the command line
-    optname=$1
-    for var in $CMDLINE_VARS ; do
-        eval val="\$$var"
-        [ "X$val" = "X$optname" ] && return 0
-    done
-    return 1
-}
-
-
 platform_expr() {
     # Evaluates the given platform expression against the current
     # platform name.  For example, the expression could be

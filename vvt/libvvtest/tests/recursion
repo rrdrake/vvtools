@@ -24,9 +24,8 @@ class tests_that_run_vvtest( vtu.vvtestTestCase ):
         plat = vtu.core_platform_name()
 
         util.writefile( 'outside.py.vvt', """
-            import os
+            import os, subprocess
             import vvtest_util as vvt
-            import script_util as util
 
             fp = open( 'inside.py.vvt', 'w' )
             fp.write( "import vvtest_util as vvt"+os.linesep )
@@ -35,7 +34,8 @@ class tests_that_run_vvtest( vtu.vvtestTestCase ):
             fp.write( "fp.close()"+os.linesep )
             fp.close()
 
-            util.runcmd( '"""+vtu.vvtest_file+""" -k inside.py --plat """+plat+"""' )
+            cmd = '"""+vtu.vvtest_file+""" -k inside.py --plat """+plat+"""'
+            subprocess.check_call( cmd, shell=True )
             """ )
         time.sleep(1)
 

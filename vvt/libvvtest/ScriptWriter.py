@@ -117,17 +117,29 @@ def writeScript( testobj, filename, lang, config, plat,
 
         w.add( """
             # save the command line arguments into variables
-            opt_analyze=0
             NUMCMDLINE=0
             CMDLINE_VARS=
             for arg in "$@" ; do
               NUMCMDLINE=$((NUMCMDLINE+1))
               eval CMDLINE_${NUMCMDLINE}='$arg'
               CMDLINE_VARS="$CMDLINE_VARS CMDLINE_${NUMCMDLINE}"
-              [ "X$arg" = "X--execute_analysis_sections" ] && opt_analyze=1
             done
+
+            # this function returns true if the given string was an
+            # argument on the command line
+            cmdline_option() {
+                optname=$1
+                for var in $CMDLINE_VARS ; do
+                    eval val="\$$var"
+                    [ "X$val" = "X$optname" ] && return 0
+                done
+                return 1
+            }
+
+            opt_analyze=0
+            cmdline_option --execute_analysis_sections && opt_analyze=1
             """ )
-        
+
         w.add( '',
                'NAME="'+tname+'"',
                'TESTID="'+testobj.getExecuteDirectory()+'"',

@@ -107,9 +107,9 @@ class script_tests( vtu.vvtestTestCase ):
             """ )
         util.writescript( 'tdiff.vvt', """
             #!/usr/bin/env python
-            import os, sys
-            from script_util import *
-            exit_diff()
+            import sys
+            import vvtest_util as vvt
+            sys.exit( vvt.diff_exit_status )
             """ )
         util.writescript( 'tfail.vvt', """
             #!/usr/bin/env python
@@ -576,7 +576,7 @@ class script_tests( vtu.vvtestTestCase ):
             #VVT: copy (rename, platforms="""+platname+""") : file5.txt,cfile5
             
             import os
-            import script_util as vvt
+            import vvtest_util as vvt
             if vvt.NAME == 'files':
                 assert os.path.exists( 'file1.txt' )
                 assert os.path.islink( 'file1.txt' )
