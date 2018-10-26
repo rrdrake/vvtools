@@ -13,6 +13,7 @@ import os
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -40,19 +41,19 @@ class The_max_timeout_option( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '-T 30', batch=batch )
+            vrun = vtu.runvvtest( '-T 30', batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '--max-timeout 6', batch=batch )
+            vrun = vtu.runvvtest( '--max-timeout 6', batch=batch )
             vrun.assertCounts( total=2, npass=1, timeout=1 )
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '-T 30 --max-timeout 6', batch=batch )
+            vrun = vtu.runvvtest( '-T 30 --max-timeout 6', batch=batch )
             vrun.assertCounts( total=2, npass=1, timeout=1 )
 
 

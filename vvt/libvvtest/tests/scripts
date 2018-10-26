@@ -13,6 +13,7 @@ import os
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -30,7 +31,7 @@ class script_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
         assert vrun.getTestIds() == [ 'hello' ]
         assert vrun.countGrepLogs( 'hello from the hello test script' ) == 1
@@ -44,7 +45,7 @@ class script_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
         assert vrun.getTestIds() == [ 'world' ]
         assert vrun.countGrepLogs( 'hello from the hello/world test script' ) == 1
@@ -56,7 +57,7 @@ class script_tests( unittest.TestCase ):
             "print ( 'hello from the hello test script' )\n" )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
         assert vrun.getTestIds() == [ 'hello' ]
         assert vrun.countGrepLogs( 'hello from the hello test script' ) == 1
@@ -89,9 +90,9 @@ class script_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '-j bin -o dbg', batch=batch )
+            vrun = vtu.runvvtest( '-j bin -o dbg', batch=batch )
             vrun.assertCounts( total=1, npass=1 )
             assert vrun.getTestIds() == [ 'hello.py' ]
 
@@ -125,9 +126,9 @@ class script_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=3, npass=1, diff=1, fail=1 )
 
     def test_multiple_tests_in_one_script_file(self):
@@ -143,9 +144,9 @@ class script_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
             assert vrun.getTestIds() == [ 'multi', 'multi2' ]
@@ -197,7 +198,7 @@ class script_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=7, npass=7 )
 
         assert vrun.getTestIds() == [ 'test1',
@@ -274,7 +275,7 @@ class script_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
 
         assert len( vrun.grepLines( 'skipping *tst1.vvt'  ) ) == 1
@@ -327,7 +328,7 @@ class script_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=6, npass=2, diff=4 )
 
         assert vrun.countGrepLogs( 'exiting diff', 'pydiff$' ) == 1
@@ -335,9 +336,9 @@ class script_tests( unittest.TestCase ):
         assert vrun.countGrepLogs( 'exiting diff', 'pypass' ) == 0
         assert vrun.countGrepLogs( 'exiting diff', 'shpass' ) == 0
 
-        util.remove_results()
+        vtu.remove_results()
 
-        vrun = util.runvvtest( batch=True )
+        vrun = vtu.runvvtest( batch=True )
         vrun.assertCounts( total=6, npass=2, diff=4 )
 
         assert vrun.countGrepLogs( 'exiting diff', 'pydiff$' ) == 1
@@ -345,7 +346,7 @@ class script_tests( unittest.TestCase ):
         assert vrun.countGrepLogs( 'exiting diff', 'pypass' ) == 0
         assert vrun.countGrepLogs( 'exiting diff', 'shpass' ) == 0
 
-        vrun = util.runvvtest( '-R', chdir=vrun.resultsDir() )
+        vrun = vtu.runvvtest( '-R', chdir=vrun.resultsDir() )
         vrun.assertCounts( total=6, npass=2, diff=4 )
 
         assert vrun.countGrepLogs( 'exiting diff', 'pydiff$' ) == 1
@@ -376,7 +377,7 @@ class script_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=2, npass=2 )
 
         assert util.readfile( 'changeme.txt' ).strip() == \
@@ -443,7 +444,7 @@ class script_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=4, npass=2, diff=2 )
 
         assert vrun.countGrepLogs( 'files are diff', 'pypass' ) == 0
@@ -495,7 +496,7 @@ class script_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=4, npass=2, diff=2 )
 
         assert vrun.countGrepLogs( 'number of lines exceeded', 'pypass' ) == 0
@@ -543,14 +544,14 @@ class script_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=1, npass=1 )
 
     def test_copy_and_link_files_with_attribute_specifications(self):
         ""
-        platname = util.core_platform_name()
+        platname = vtu.core_platform_name()
 
         util.writefile( 'file1.txt', """
             this is file one
@@ -601,14 +602,14 @@ class script_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '-o dbg', batch=batch )
+            vrun = vtu.runvvtest( '-o dbg', batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
             fn = util.globfile( 'TestResults*/another/file3.txt' )
@@ -616,7 +617,7 @@ class script_tests( unittest.TestCase ):
 
     def test_using_the_vvtest_system_utility_functions(self):
         ""
-        platname = util.core_platform_name()
+        platname = vtu.core_platform_name()
 
         util.writescript( 'pytest.vvt', """
             #!/usr/bin/env python
@@ -673,9 +674,9 @@ class script_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=6, npass=6 )
 
             assert vrun.countGrepLogs( 'with A=1 param expr true',
@@ -699,17 +700,17 @@ class script_tests( unittest.TestCase ):
             assert vrun.countGrepLogs( 'option expr false', 'pytest.A=1' ) == 1
             assert vrun.countGrepLogs( 'option expr false', 'shtest.B=1' ) == 1
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '-o dbg', batch=batch )
+            vrun = vtu.runvvtest( '-o dbg', batch=batch )
             vrun.assertCounts( total=6, npass=6 )
 
             assert vrun.countGrepLogs( 'option expr true', 'pytest.A=1' ) == 1
             assert vrun.countGrepLogs( 'option expr true', 'shtest.B=1' ) == 1
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '-o dbg+intel', batch=batch )
+            vrun = vtu.runvvtest( '-o dbg+intel', batch=batch )
             vrun.assertCounts( total=6, npass=6 )
 
             assert vrun.countGrepLogs( 'option expr false', 'pytest.A=1' ) == 1
@@ -717,7 +718,7 @@ class script_tests( unittest.TestCase ):
 
     def test_using_the_vvtest_system_utilities_in_an_analyze_test(self):
         ""
-        platname = util.core_platform_name()
+        platname = vtu.core_platform_name()
 
         util.writescript( 'pytest.vvt', """
             #!/usr/bin/env python
@@ -785,7 +786,7 @@ class script_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest( '-o dbg' )
+        vrun = vtu.runvvtest( '-o dbg' )
         vrun.assertCounts( total=6, npass=6 )
 
         assert vrun.countGrepLogs( 'analyze', '*=*' ) == 0
@@ -877,7 +878,7 @@ class script_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=8, npass=7, fail=1 )
 
         assert vrun.countGrepLogs( 'vvtest_util.py', 'py1' ) > 0
@@ -927,7 +928,7 @@ class script_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
 
         assert vrun.countGrepLogs( 'script got executed', 'py1' ) == 1
@@ -958,7 +959,7 @@ class script_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
 
         assert vrun.countGrepLogs( 'quick brown fox', 'py1' ) == 1
@@ -999,7 +1000,7 @@ class script_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=3, npass=1, diff=1, fail=1 )
 
         assert vrun.countGrepLogs( 'fake exception', 'py1' ) == 0
@@ -1036,7 +1037,7 @@ class script_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
 
         xlog = util.globfile( 'TestResults*/py1/execute.log' )

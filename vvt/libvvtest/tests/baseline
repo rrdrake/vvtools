@@ -13,6 +13,7 @@ import os
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -59,12 +60,12 @@ class baseline_tests( unittest.TestCase ):
 
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=3, npass=2, diff=1 )
 
         # run baseline and rerun tests
-        util.runvvtest( '-b' )
-        vrun = util.runvvtest( '-R' )
+        vtu.runvvtest( '-b' )
+        vrun = vtu.runvvtest( '-R' )
         vrun.assertCounts( total=3, npass=3 )
 
     def test_filtering_rebaseline_by_testname(self):
@@ -93,12 +94,12 @@ class baseline_tests( unittest.TestCase ):
 
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=2, diff=2 )
 
         # run baseline and rerun tests
-        util.runvvtest( '-b' )
-        vrun = util.runvvtest( '-R' )
+        vtu.runvvtest( '-b' )
+        vrun = vtu.runvvtest( '-R' )
         vrun.assertCounts( total=2, npass=1, diff=1 )
 
         assert vrun.countTestLines( 'pass*/multi$' ) == 1
@@ -134,12 +135,12 @@ class baseline_tests( unittest.TestCase ):
 
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=3, npass=2, diff=1 )
 
         # run baseline and rerun tests
-        util.runvvtest( '-b' )
-        vrun = util.runvvtest( '-R' )
+        vtu.runvvtest( '-b' )
+        vrun = vtu.runvvtest( '-R' )
         vrun.assertCounts( total=3, npass=3 )
 
     def test_script_format_rebaseline_with_external_script(self):
@@ -171,13 +172,13 @@ class baseline_tests( unittest.TestCase ):
 
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, diff=1 )
 
         # run baseline and rerun tests
-        vrun = util.runvvtest( '-b' )
+        vrun = vtu.runvvtest( '-b' )
         assert vrun.countLines( 'FAILED' ) == 0
-        vrun = util.runvvtest( '-R' )
+        vrun = vtu.runvvtest( '-R' )
         vrun.assertCounts( total=1, npass=1 )
 
     def test_script_format_rebaseline_using_option(self):
@@ -211,12 +212,12 @@ class baseline_tests( unittest.TestCase ):
 
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, diff=1 )
 
         # run baseline and rerun tests
-        util.runvvtest( '-b' )
-        vrun = util.runvvtest( '-R' )
+        vtu.runvvtest( '-b' )
+        vrun = vtu.runvvtest( '-R' )
         vrun.assertCounts( total=1, npass=1 )
 
     def test_xml_format_rebaseline_with_script_fragment_and_file_list(self):
@@ -248,12 +249,12 @@ class baseline_tests( unittest.TestCase ):
 
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, diff=1 )
 
         # run baseline and rerun tests
-        util.runvvtest( '-b' )
-        vrun = util.runvvtest( '-R' )
+        vtu.runvvtest( '-b' )
+        vrun = vtu.runvvtest( '-R' )
         vrun.assertCounts( total=1, npass=1 )
 
     def test_variable_expansion_in_baseline_file_list(self):
@@ -287,12 +288,12 @@ class baseline_tests( unittest.TestCase ):
 
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=2, diff=2 )
 
         # run baseline and rerun tests
-        util.runvvtest( '-b' )
-        vrun = util.runvvtest( '-R' )
+        vtu.runvvtest( '-b' )
+        vrun = vtu.runvvtest( '-R' )
         vrun.assertCounts( total=2, npass=2 )
 
     def test_filter_rebaseline_by_parameter_value(self):
@@ -329,11 +330,11 @@ class baseline_tests( unittest.TestCase ):
 
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=4, diff=4 )
 
         # run baseline; only the foo=1 tests should rebaseline
-        vrun = util.runvvtest( '-b' )
+        vrun = vtu.runvvtest( '-b' )
         assert vrun.countLines( 'baselining pybase.foo=1' ) == 1
         assert vrun.countLines( 'baselining bline.foo=1' ) == 1
         assert vrun.countLines( 'baselining bline.foo=2' ) == 0
@@ -345,7 +346,7 @@ class baseline_tests( unittest.TestCase ):
                     'TestResults.*/pybase.foo=1/baseline.log' ) ) == 1
 
         # on rerun, all should pass
-        vrun = util.runvvtest( '-R' )
+        vrun = vtu.runvvtest( '-R' )
         vrun.assertCounts( total=4, npass=4 )
 
     def test_specifying_baseline_for_analyze_only(self):
@@ -384,10 +385,10 @@ class baseline_tests( unittest.TestCase ):
 
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=6, npass=6 )
 
-        vrun = util.runvvtest( '-b -k pass' )
+        vrun = vtu.runvvtest( '-b -k pass' )
         assert vrun.countLines( 'baselining control.foo=1' ) == 1
         assert vrun.countLines( 'baselining control.foo=2' ) == 1
         assert vrun.countLines( 'baselining control.' ) == 3

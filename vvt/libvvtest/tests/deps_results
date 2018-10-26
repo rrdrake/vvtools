@@ -14,7 +14,7 @@ import glob
 import unittest
 import time
 
-
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -45,9 +45,9 @@ class dependency_result_expressions( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=2, fail=1, notrun=1 )
 
             assert len( glob.glob( 'TestResults*/testX/execute.log' ) ) == 0
@@ -69,9 +69,9 @@ class dependency_result_expressions( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=2, npass=1, fail=1 )
 
             lineL = util.grepfiles( 'time=', 'TestResults*/testX/execute.log' )
@@ -94,9 +94,9 @@ class dependency_result_expressions( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=2, npass=1, fail=1 )
 
             lineL = util.grepfiles( 'time=', 'TestResults*/testX/execute.log' )

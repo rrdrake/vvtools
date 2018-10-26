@@ -14,6 +14,7 @@ import re
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -245,7 +246,7 @@ class csh_common_specifications( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
 
         assert len( util.grepfiles( 'kitten output no',
@@ -274,8 +275,8 @@ class csh_common_specifications( unittest.TestCase ):
             """.strip() )
         time.sleep(1)
 
-        util.remove_results()
-        vrun = util.runvvtest()
+        vtu.remove_results()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=2, npass=1, diff=1 )
 
         assert len( util.grepfiles( 'kitten output no',
@@ -316,8 +317,8 @@ class csh_common_specifications( unittest.TestCase ):
             </exeDB>
             """ )
 
-        util.remove_results()
-        vrun = util.runvvtest( '--config config' )
+        vtu.remove_results()
+        vrun = vtu.runvvtest( '--config config' )
         vrun.assertCounts( total=2, npass=1, diff=1 )
 
         assert len( util.grepfiles( 'kitten output no',
@@ -349,8 +350,8 @@ class csh_common_specifications( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        util.remove_results()
-        vrun = util.runvvtest( '--config config' )
+        vtu.remove_results()
+        vrun = vtu.runvvtest( '--config config' )
         vrun.assertCounts( total=2, npass=1, diff=1 )
 
         assert len( util.grepfiles( 'andie is my kitty EOM',

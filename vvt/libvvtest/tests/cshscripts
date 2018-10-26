@@ -14,6 +14,7 @@ import re
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -50,7 +51,7 @@ class writing_csh_scripts( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        fn = os.path.join( os.path.dirname(util.testsrcdir), 'exeDB.xml' )
+        fn = os.path.join( os.path.dirname( vtu.testsrcdir), 'exeDB.xml' )
         xreader = xmlwrapper.XmlDocReader()
         xdoc = xreader.readDoc( fn )
 
@@ -61,7 +62,7 @@ class writing_csh_scripts( unittest.TestCase ):
         assert len(tL) == 1
 
         plat = FakePlatform()
-        toolsdir = os.path.dirname( os.path.dirname( util.testsrcdir ) )
+        toolsdir = os.path.dirname( os.path.dirname( vtu.testsrcdir ) )
         cshScriptWriter.writeScript( tL[0], xdb, plat,
                                      toolsdir, os.getcwd(), testdir,
                                      [], [], 'runscript' )

@@ -14,6 +14,7 @@ import time
 import unittest
 import glob
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -51,21 +52,21 @@ class inlining_results_file_includes( unittest.TestCase ):
 
         opts = '--qsub-limit 1 --force'
 
-        util.interrupt_vvtest_batch( '--qsub-limit 1',
-                                     count=1, signum='SIGTERM' )
+        vtu.interrupt_vvtest_batch( '--qsub-limit 1',
+                                    count=1, signum='SIGTERM' )
         time.sleep(1)
 
         # exactly one of the three tests should have completed
         assert len( util.findfiles( 'touch*.txt', 'TestResults*' ) ) == 1
 
-        util.interrupt_vvtest_batch( '--qsub-limit 1 --force',
-                                     count=1, signum='SIGTERM' )
+        vtu.interrupt_vvtest_batch( '--qsub-limit 1 --force',
+                                    count=1, signum='SIGTERM' )
         time.sleep(1)
 
         # exactly one more of the three tests should have completed
         assert len( util.findfiles( 'touch*.txt', 'TestResults*' ) ) == 2
 
-        vrun = util.runvvtest( '--force', batch=True )
+        vrun = vtu.runvvtest( '--force', batch=True )
         time.sleep(1)
 
         # only the last of the three tests should have been run
@@ -73,7 +74,7 @@ class inlining_results_file_includes( unittest.TestCase ):
         assert len( glob.glob( 'TestResults*/lazy*/touch*.txt' ) ) == 3
 
         # all three tests should show as completed
-        util.runvvtest( '-i' ).assertCounts( total=3, npass=3 )
+        vtu.runvvtest( '-i' ).assertCounts( total=3, npass=3 )
 
     def test_failed_batch_job_issues_warning_about_not_finishing(self):
         ""
@@ -104,7 +105,7 @@ class inlining_results_file_includes( unittest.TestCase ):
         # this should cause batch one to show "did not seem to finish"
 
         opts = '--batch --qsub-limit 1 --qsub-length 40'
-        x,out = util.interrupt_vvtest_run( opts, count=1, qid=1 )
+        x,out = vtu.interrupt_vvtest_run( opts, count=1, qid=1 )
 
         L = util.greplines( 'did not seem to finish:', out )
         assert len(L) == 1
@@ -112,8 +113,8 @@ class inlining_results_file_includes( unittest.TestCase ):
         L2 = [ int(s) for s in L2 ]  # make integer qids
         assert len(L2) == 1 and L2[0] == 1
 
-        assert len( util.greptestlist( 'sleeper[1-4]', out ) ) == 4
-        assert len( util.greptestlist( 'sleeper[1-4] *pass', out ) ) == 3
+        assert len( vtu.greptestlist( 'sleeper[1-4]', out ) ) == 4
+        assert len( vtu.greptestlist( 'sleeper[1-4] *pass', out ) ) == 3
 
 
 ########################################################################

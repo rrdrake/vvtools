@@ -13,6 +13,7 @@ import os
 import unittest
 import time
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -30,19 +31,19 @@ class Testing_boostrap_file( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( npass=1 )
 
     def run_soft_linked_vvtest_and_expect_one_test_pass(self, args=''):
         ""
         cmd = os.path.abspath( 'vvtest' )
-        cmd += ' --plat ' + util.core_platform_name()
+        cmd += ' --plat ' + vtu.core_platform_name()
         if args:
             cmd += ' ' + args
 
         x,out = util.runcmd( cmd )
         assert x == 0
-        counts = util.parse_vvtest_counts( out )
+        counts = vtu.parse_vvtest_counts( out )
         assert counts['npass'] == 1
 
     def test_using_a_softlink_to_vvtest(self):
@@ -51,7 +52,7 @@ class Testing_boostrap_file( unittest.TestCase ):
             import os, sys
             print ( "hello from the python test script" )
             """ )
-        os.symlink( util.vvtest, 'vvtest' )
+        os.symlink( vtu.vvtest_file, 'vvtest' )
         time.sleep(1)
 
         self.run_soft_linked_vvtest_and_expect_one_test_pass()
@@ -62,7 +63,7 @@ class Testing_boostrap_file( unittest.TestCase ):
             import os, sys
             print ( "special env var="+os.environ['SPECIAL_TEST_VAR'] )
             """ )
-        os.symlink( util.vvtest, 'vvtest' )
+        os.symlink( vtu.vvtest_file, 'vvtest' )
         util.writefile( 'vvtest_bootstrap.py', """
             import os
             os.environ['SPECIAL_TEST_VAR'] = 'special value'
@@ -82,7 +83,7 @@ class Testing_boostrap_file( unittest.TestCase ):
                 print ( 'my special function called' )
             """ )
 
-        os.symlink( util.vvtest, 'vvtest' )
+        os.symlink( vtu.vvtest_file, 'vvtest' )
         util.writefile( 'vvtest_bootstrap.py', """
             import os
             os.environ['VVTEST_CONFIGDIR'] = '"""+os.path.abspath('myconfig')+"""'
@@ -115,7 +116,7 @@ class Testing_boostrap_file( unittest.TestCase ):
                 print ( 'command config function called' )
             """ )
 
-        os.symlink( util.vvtest, 'vvtest' )
+        os.symlink( vtu.vvtest_file, 'vvtest' )
         util.writefile( 'vvtest_bootstrap.py', """
             import os
             os.environ['VVTEST_CONFIGDIR'] = '"""+os.path.abspath('myconfig')+"""'

@@ -13,6 +13,7 @@ import os
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -24,7 +25,7 @@ class Timeout_script_specs( unittest.TestCase ):
 
     def test_different_timeout_values(self):
         ""
-        platname = util.core_platform_name()
+        platname = vtu.core_platform_name()
 
         # sleep1 should timeout
         util.writescript( 'sleep1.vvt', """
@@ -55,15 +56,15 @@ class Timeout_script_specs( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=3, npass=2, timeout=1 )
 
-            vrun = util.runvvtest( '-wT 1.5', batch=batch )
+            vrun = vtu.runvvtest( '-wT 1.5', batch=batch )
             vrun.assertCounts( total=3, timeout=3 )
 
-            vrun = util.runvvtest( '-wT 20', batch=batch )
+            vrun = vtu.runvvtest( '-wT 20', batch=batch )
             vrun.assertCounts( total=3, npass=3 )
 
 

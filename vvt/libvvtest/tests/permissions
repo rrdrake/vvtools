@@ -14,6 +14,7 @@ import time
 import stat
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -63,9 +64,9 @@ class integration_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '--perms g=,o=', batch=batch )
+            vrun = vtu.runvvtest( '--perms g=,o=', batch=batch )
             vrun.assertCounts( total=3, npass=3 )
 
             pL = list_all_paths( os.path.abspath( vrun.resultsDir() ) )
@@ -91,9 +92,9 @@ class integration_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '--perms g=rws,o=rwx', batch=batch )
+            vrun = vtu.runvvtest( '--perms g=rws,o=rwx', batch=batch )
             vrun.assertCounts( total=3, npass=3 )
 
             tdir = os.path.abspath( vrun.resultsDir() )

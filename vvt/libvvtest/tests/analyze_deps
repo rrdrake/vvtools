@@ -13,6 +13,7 @@ import os
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -47,9 +48,9 @@ class parameterize_analyze_dependency_handling( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
 
             vrun.assertCounts( total=4, npass=4 )
 
@@ -90,21 +91,21 @@ class parameterize_analyze_dependency_handling( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
             util.writefile( 'atest.xml', fail_test_xml )
             time.sleep(1)
 
             # the analyze should not run because a child fails
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=3, npass=1, fail=1, notrun=1 )
 
             # the analyze should not run here
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=0 )
 
             # double check the state
-            vrun = util.runvvtest( '-i', batch=batch )
+            vrun = vtu.runvvtest( '-i', batch=batch )
             vrun.assertCounts( total=3, npass=1, fail=1, notrun=1 )
 
             # "fix" the failure
@@ -112,14 +113,14 @@ class parameterize_analyze_dependency_handling( unittest.TestCase ):
             time.sleep(1)
 
             # rerun the failure
-            vrun = util.runvvtest( '-k fail', batch=batch )
+            vrun = vtu.runvvtest( '-k fail', batch=batch )
             vrun.assertCounts( total=1, npass=1 )
 
             # now the analyze should run
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=1, npass=1 )
 
-            vrun = util.runvvtest( '-i', batch=batch )
+            vrun = vtu.runvvtest( '-i', batch=batch )
             vrun.assertCounts( total=3, npass=3, fail=0, notrun=0 )
 
     def test_rerun_with_analyze_deps(self):
@@ -152,13 +153,13 @@ class parameterize_analyze_dependency_handling( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
             util.writefile( 'atest.xml', fail_xml_test )
             time.sleep(1)
             
             # the analyze should fail
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=3, npass=2, fail=1 )
 
             # "fix" the execute
@@ -167,7 +168,7 @@ class parameterize_analyze_dependency_handling( unittest.TestCase ):
             
             # the analyze test should NOT run at the same time as the children
             # (if it does in this case, then the analyze test will show a fail)
-            vrun = util.runvvtest( '-R', batch=batch )
+            vrun = vtu.runvvtest( '-R', batch=batch )
             vrun.assertCounts( total=3, npass=3 )
 
     def test_analyze_waits_for_deps_with_limited_num_procs(self):
@@ -191,7 +192,7 @@ class parameterize_analyze_dependency_handling( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        vrun = util.runvvtest( '-n 1' )
+        vrun = vtu.runvvtest( '-n 1' )
         vrun.assertCounts( total=5, npass=5 )
 
     def test_failed_analyze_deps_are_still_listed_with_info_option(self):
@@ -218,11 +219,11 @@ class parameterize_analyze_dependency_handling( unittest.TestCase ):
         time.sleep(1)
 
         # the analyze should be run here
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=3, npass=1, fail=1, notrun=1 )
 
         # the analyze should show up in the listing here
-        vrun = util.runvvtest( '-i -k notrun/pass' )
+        vrun = vtu.runvvtest( '-i -k notrun/pass' )
         vrun.assertCounts( total=2, npass=1, notrun=1 )
 
 

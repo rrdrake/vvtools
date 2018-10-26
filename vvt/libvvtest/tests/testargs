@@ -13,6 +13,7 @@ import os
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -43,9 +44,9 @@ class test_arguments( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( testargs, batch=batch )
+            vrun = vtu.runvvtest( testargs, batch=batch )
             vrun.assertCounts( total=4, npass=4 )
             assert vrun.getTestIds() == [ 'atest.nx=1',
                                           'atest.nx=4',
@@ -56,8 +57,8 @@ class test_arguments( unittest.TestCase ):
 
             tdir = vrun.resultsDir()
 
-            vrun = util.runvvtest( testargs, '-R -p nx=4/planet=earth',
-                                   batch=batch, chdir=tdir )
+            vrun = vtu.runvvtest( testargs, '-R -p nx=4/planet=earth',
+                                  batch=batch, chdir=tdir )
             vrun.assertCounts( total=2, npass=2 )
 
             assert vrun.getTestIds() == [ 'atest.nx=4',

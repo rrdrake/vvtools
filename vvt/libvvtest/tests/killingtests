@@ -15,6 +15,7 @@ import traceback
 import signal
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -47,11 +48,11 @@ class Timeout_when_baselining( unittest.TestCase ):
 
         os.environ['VVTEST_BASELINE_TIMEOUT'] = '3'
 
-        util.runvvtest().assertCounts( total=1, diff=1 )
+        vtu.runvvtest().assertCounts( total=1, diff=1 )
 
         t0 = time.time()
 
-        vrun = util.runvvtest( '-b' )
+        vrun = vtu.runvvtest( '-b' )
 
         assert 'TIMED OUT' in vrun.out
         assert time.time() - t0 < 8
@@ -251,7 +252,7 @@ class integration_signalling_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest( '-T 2' )
+        vrun = vtu.runvvtest( '-T 2' )
         vrun.assertCounts( total=1, timeout=1 )
 
         time.sleep(11)

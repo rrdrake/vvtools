@@ -14,6 +14,7 @@ import re
 import time, shutil
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -39,11 +40,11 @@ class config_tests( unittest.TestCase ):
                 def compiler( platname, opts ):
                     return "BASIC"
                 """ )
-            util.remove_results()
+            vtu.remove_results()
             time.sleep(1)
 
-            vrun = util.runvvtest( '--config config', batch=batch,
-                                                      addplatform=False )
+            vrun = vtu.runvvtest( '--config config', batch=batch,
+                                                     addplatform=False )
 
             platname, cplr = check_get_compiler_and_platform( vrun )
             assert platname == "XBox"
@@ -55,12 +56,12 @@ class config_tests( unittest.TestCase ):
                 def compiler( platname, opts ):
                     return "Fortran"
                 """ )
-            util.remove_results()
+            vtu.remove_results()
             time.sleep(1)
 
             os.environ['VVTEST_CONFIGDIR'] = 'nonsense'
             try:
-                vrun = util.runvvtest( batch=batch, addplatform=False )
+                vrun = vtu.runvvtest( batch=batch, addplatform=False )
             finally:
                 del os.environ['VVTEST_CONFIGDIR']
             platname, cplr = check_get_compiler_and_platform( vrun )
@@ -95,7 +96,7 @@ class config_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
 
         # only run this test if the number of processors is at least 4
         maxprocs = extract_maxprocs( vrun.out )
@@ -105,7 +106,7 @@ class config_tests( unittest.TestCase ):
             vrun.assertCounts( total=4, npass=4 )
 
             # assert vrun.num_pass == 4
-            util.remove_results()
+            vtu.remove_results()
 
             util.writefile( "config/platform_plugin.py", """
                 import os, sys
@@ -114,17 +115,17 @@ class config_tests( unittest.TestCase ):
                 """ )
             time.sleep(1)
 
-            vrun = util.runvvtest( '--config config' )
+            vrun = vtu.runvvtest( '--config config' )
             vrun.assertCounts( total=2, npass=2 )
 
             assert extract_maxprocs( vrun.out ) == 2
 
             assert vrun.getTestIds() == [ 'atest.np=1', 'btest.np=2' ]
 
-            util.remove_results()
+            vtu.remove_results()
             time.sleep(1)
 
-            vrun = util.runvvtest( '--config config', batch=True )
+            vrun = vtu.runvvtest( '--config config', batch=True )
             vrun.assertCounts( total=2, npass=2 )
 
             assert extract_maxprocs( vrun.out ) == 2
@@ -156,7 +157,7 @@ class config_tests( unittest.TestCase ):
             echo "my var from env = $MY_PLATFORM_VAR"
             """ )
 
-        vrun = util.runvvtest( '--config config' )
+        vrun = vtu.runvvtest( '--config config' )
         vrun.assertCounts( total=2, npass=2 )
 
         assert vrun.countGrepLogs( "plat vars = *MY_PLATFORM_VAR", 'pytest' ) == 1
@@ -199,9 +200,9 @@ class config_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '--config config', batch=batch )
+            vrun = vtu.runvvtest( '--config config', batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
             assert vrun.countGrepLogs( "hello from spec func", 'pytest' ) == 1
@@ -217,7 +218,7 @@ class config_tests( unittest.TestCase ):
         time.sleep(1)
 
         # first grab the default compiler and platform name
-        vrun = util.runvvtest( '--config config', addplatform=False )
+        vrun = vtu.runvvtest( '--config config', addplatform=False )
         default_platname, default_cplr = check_get_compiler_and_platform( vrun )
 
         # override idplatform.py but misspell the function names, which will
@@ -228,10 +229,10 @@ class config_tests( unittest.TestCase ):
             def compilers( platname, opts ):
                 return "BASIC"
             """ )
-        util.remove_results()
+        vtu.remove_results()
         time.sleep(1)
 
-        vrun = util.runvvtest( '--config config', addplatform=False )
+        vrun = vtu.runvvtest( '--config config', addplatform=False )
         core_platname, core_cplr = check_get_compiler_and_platform( vrun )
         # no guarantees about the value here; just make sure it is non-empty
         assert core_cplr and core_platname
@@ -243,10 +244,10 @@ class config_tests( unittest.TestCase ):
             def compiler( platname, opts ):
                 return ''
             """ )
-        util.remove_results()
+        vtu.remove_results()
         time.sleep(1)
 
-        vrun = util.runvvtest( '--config config', addplatform=False )
+        vrun = vtu.runvvtest( '--config config', addplatform=False )
         platname, cplr = check_get_compiler_and_platform( vrun )
         assert cplr == core_cplr
         assert platname == core_platname
@@ -258,10 +259,10 @@ class config_tests( unittest.TestCase ):
             def compiler( platname, opts ):
                 pass
             """ )
-        util.remove_results()
+        vtu.remove_results()
         time.sleep(1)
 
-        vrun = util.runvvtest( '--config config', addplatform=False )
+        vrun = vtu.runvvtest( '--config config', addplatform=False )
         platname, cplr = check_get_compiler_and_platform( vrun )
         assert cplr == core_cplr
         assert platname == core_platname
@@ -273,10 +274,10 @@ class config_tests( unittest.TestCase ):
             def compiler( platname, opts ):
                 if platname == 'PlayStation': return "BASIC"
             """ )
-        util.remove_results()
+        vtu.remove_results()
         time.sleep(1)
 
-        vrun = util.runvvtest( '--config config --plat PlayStation' )
+        vrun = vtu.runvvtest( '--config config --plat PlayStation' )
         platname, cplr = check_get_compiler_and_platform( vrun )
         assert cplr == "BASIC"
         assert platname == "PlayStation"

@@ -15,6 +15,7 @@ import glob
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -61,9 +62,9 @@ class postclean_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=4, npass=4 )
 
             tdir = vrun.resultsDir()
@@ -83,7 +84,7 @@ class postclean_tests( unittest.TestCase ):
             assert len( glob.glob( tdir+'/ana/execute.log' ) ) == 1
             assert len( glob.glob( tdir+'/ana/anagen.txt' ) ) == 1
 
-            vrun = util.runvvtest( '-R -C', batch=batch )
+            vrun = vtu.runvvtest( '-R -C', batch=batch )
             vrun.assertCounts( total=4, npass=4 )
 
             assert len( glob.glob( tdir+'/pclean/afile.txt' ) ) == 0
@@ -124,9 +125,9 @@ class postclean_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '-C', batch=batch )
+            vrun = vtu.runvvtest( '-C', batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
             tdir = vrun.resultsDir()

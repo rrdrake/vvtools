@@ -13,6 +13,7 @@ import os
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -41,15 +42,15 @@ class runtimes_and_tmin_tmax( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        util.runvvtest().assertCounts( total=3, npass=3 )
+        vtu.runvvtest().assertCounts( total=3, npass=3 )
 
-        util.runvvtest( '-i' ).assertCounts( total=3, npass=3 )
+        vtu.runvvtest( '-i' ).assertCounts( total=3, npass=3 )
 
-        vrun = util.runvvtest( '-i --tmax 6' )
+        vrun = vtu.runvvtest( '-i --tmax 6' )
         vrun.assertCounts( total=2, npass=2 )
         assert vrun.getTestIds() == [ 'AA', 'BB' ]
 
-        vrun = util.runvvtest( '-i --tmin 3' )
+        vrun = vtu.runvvtest( '-i --tmin 3' )
         vrun.assertCounts( total=2, npass=2 )
         assert vrun.getTestIds() == [ 'BB', 'CC' ]
 
@@ -74,25 +75,25 @@ class runtimes_and_tmin_tmax( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
             if os.path.exists( 'timings' ):
                 os.remove( 'timings' )
 
-            vrun = util.runvvtest( 'tests', batch=batch )
+            vrun = vtu.runvvtest( 'tests', batch=batch )
             vrun.assertCounts( total=3, npass=3 )
             tdir = vrun.resultsDir()
 
             # create a timings file
-            util.runcmd( util.resultspy + ' save', chdir='tests' )
-            util.runvvtest( '-i --save-results', chdir=tdir )
+            util.runcmd( vtu.resultspy + ' save', chdir='tests' )
+            vtu.runvvtest( '-i --save-results', chdir=tdir )
             resultsfname = util.globfile('results.*')
-            util.runcmd( util.resultspy + ' merge -x '+resultsfname )
+            util.runcmd( vtu.resultspy + ' merge -x '+resultsfname )
 
-            util.remove_results()
+            vtu.remove_results()
 
             # select tests based on the timings file
-            vrun = util.runvvtest( '--tmax 6 tests', batch=batch )
+            vrun = vtu.runvvtest( '--tmax 6 tests', batch=batch )
             vrun.assertCounts( total=2, npass=2 )
             assert vrun.getTestIds() == [ 'AA', 'BB' ]
 
@@ -100,11 +101,11 @@ class runtimes_and_tmin_tmax( unittest.TestCase ):
             # not be in the TestResults test list;  check this by running vvtest
             # inside the TestResults directory (test CC should never be run)
 
-            vrun = util.runvvtest( batch=batch, chdir=tdir )
+            vrun = vtu.runvvtest( batch=batch, chdir=tdir )
             vrun.assertCounts( total=0 )
 
             # if we force tests to rerun, only 2 should be run
-            vrun = util.runvvtest( '-R', batch=batch, chdir=tdir )
+            vrun = vtu.runvvtest( '-R', batch=batch, chdir=tdir )
             vrun.assertCounts( total=2, npass=2 )
             assert vrun.getTestIds() == [ 'AA', 'BB' ]
 
@@ -142,32 +143,32 @@ class runtimes_and_tmin_tmax( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
             if os.path.exists( 'timings' ):
                 os.remove( 'timings' )
 
-            vrun = util.runvvtest( 'tests', batch=batch )
+            vrun = vtu.runvvtest( 'tests', batch=batch )
             vrun.assertCounts( total=6, npass=6 )
             tdir = vrun.resultsDir()
 
             # create a timings file
-            util.runcmd( util.resultspy + ' save', chdir='tests' )
-            util.runvvtest( '-i --save-results', chdir=tdir )
+            util.runcmd( vtu.resultspy + ' save', chdir='tests' )
+            vtu.runvvtest( '-i --save-results', chdir=tdir )
             resultsfname = util.globfile('results.*')
-            util.runcmd( util.resultspy + ' merge -x '+resultsfname )
+            util.runcmd( vtu.resultspy + ' merge -x '+resultsfname )
 
-            util.remove_results()
+            vtu.remove_results()
 
             # none of the execute/analyze tests should have been selected
-            vrun = util.runvvtest( '--tmax 6 tests', batch=batch )
+            vrun = vtu.runvvtest( '--tmax 6 tests', batch=batch )
             vrun.assertCounts( total=1, npass=1 )
             assert vrun.getTestIds() == [ 'AA' ]
 
-            vrun = util.runvvtest( batch=batch, chdir=tdir )
+            vrun = vtu.runvvtest( batch=batch, chdir=tdir )
             vrun.assertCounts( total=0 )
 
-            vrun = util.runvvtest( '-R', batch=batch, chdir=tdir )
+            vrun = vtu.runvvtest( '-R', batch=batch, chdir=tdir )
             vrun.assertCounts( total=1, npass=1 )
             assert vrun.getTestIds() == [ 'AA' ]
 
@@ -205,25 +206,25 @@ class runtimes_and_tmin_tmax( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( 'tests', batch=batch )
+            vrun = vtu.runvvtest( 'tests', batch=batch )
             vrun.assertCounts( total=6, npass=6 )
             tdir = vrun.resultsDir()
 
-            vrun = util.runvvtest( '--tmin 3 tests', batch=batch )
+            vrun = vtu.runvvtest( '--tmin 3 tests', batch=batch )
             vrun.assertCounts( total=0 )
 
             # check that the test list in TestResults.* directory is intact
-            vrun = util.runvvtest( '-i', chdir=tdir )
+            vrun = vtu.runvvtest( '-i', chdir=tdir )
             vrun.assertCounts( total=6, npass=6 )
 
-            vrun = util.runvvtest( '-R --tmin 3 tests', batch=batch )
+            vrun = vtu.runvvtest( '-R --tmin 3 tests', batch=batch )
             vrun.assertCounts( total=1, npass=1 )
             assert vrun.getTestIds() == [ 'CC' ]
 
             # check that the test list in TestResults.* directory has old results
-            vrun = util.runvvtest( '-i', chdir=tdir )
+            vrun = vtu.runvvtest( '-i', chdir=tdir )
             vrun.assertCounts( total=6, npass=6 )
 
 

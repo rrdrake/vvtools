@@ -14,6 +14,7 @@ import time
 import glob
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -34,20 +35,20 @@ class parameter_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( "-p 'np<8' -P 'np=1'", batch=batch )
+            vrun = vtu.runvvtest( "-p 'np<8' -P 'np=1'", batch=batch )
             vrun.assertCounts( total=1, npass=1 )
             assert vrun.countGrepLogs( 'execute basic2' ) == 1
             assert vrun.countGrepLogs( 'execute basic2 np = 4' ) == 1
 
-            vrun = util.runvvtest( "-p 'np<=8'", batch=batch )
+            vrun = vtu.runvvtest( "-p 'np<=8'", batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
-            vrun = util.runvvtest( "-i", batch=batch )
+            vrun = vtu.runvvtest( "-i", batch=batch )
             vrun.assertCounts( total=3, npass=3 )
 
-            vrun = util.runvvtest( "-i -p 'np=4'", batch=batch )
+            vrun = vtu.runvvtest( "-i -p 'np=4'", batch=batch )
             vrun.assertCounts( total=1, npass=1 )
 
     def test_multiple_parameterize(self):
@@ -62,18 +63,18 @@ class parameter_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=4, npass=4 )
 
             lines = util.grepfiles( 'execute basic',
                                 'TestResults*/basic.dt=0.01.np=4/execute.log' )
             assert len(lines) == 1 and 'np = 4 dt = 0.01' in lines[0]
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( "-p 'np=4'", batch=batch )
+            vrun = vtu.runvvtest( "-p 'np=4'", batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
             lines = util.grepfiles( 'execute basic',
@@ -84,7 +85,7 @@ class parameter_tests( unittest.TestCase ):
                                 'TestResults*/basic.dt=0.1.np=4/execute.log' )
             assert len(lines) == 1 and 'np = 4 dt = 0.1' in lines[0]
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
     def test_an_empty_parameterize(self):
@@ -97,13 +98,13 @@ class parameter_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
 
         assert len( util.findfiles( 'execute.log', 'TestResults*' ) ) == 1
         assert vrun.countGrepLogs( 'execute basic3 np = 0' ) == 1
 
-        util.remove_results()
+        vtu.remove_results()
 
         util.writefile( 'basic.xml', """
           <rtest name="basic">
@@ -113,7 +114,7 @@ class parameter_tests( unittest.TestCase ):
           </rtest>""")
         time.sleep(1)
 
-        vrun = util.runvvtest( '-k foobar' )
+        vrun = vtu.runvvtest( '-k foobar' )
         vrun.assertCounts( total=1, npass=1 )
 
         assert len( util.findfiles( 'execute.log', 'TestResults*' ) ) == 1
@@ -129,13 +130,13 @@ class parameter_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        util.runvvtest().assertCounts( total=4, npass=4 )
+        vtu.runvvtest().assertCounts( total=4, npass=4 )
 
-        vrun = util.runvvtest( '-R -p AA=2' )
+        vrun = vtu.runvvtest( '-R -p AA=2' )
         vrun.assertCounts( total=2, npass=2 )
 
         cd = util.globfile( 'TestResults*/params.AA=2.BB=bar' )
-        vrun = util.runvvtest( '-R', chdir=cd )
+        vrun = vtu.runvvtest( '-R', chdir=cd )
         vrun.assertCounts( total=1, npass=1 )
 
     def test_that_an_analyze_section_will_have_the_parameters_available(self):
@@ -152,7 +153,7 @@ class parameter_tests( unittest.TestCase ):
             </rtest> """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=5, npass=5 )
         tdir = vrun.resultsDir()
 
@@ -163,7 +164,7 @@ class parameter_tests( unittest.TestCase ):
         assert len(lines) == 1
         assert lines[0].split('=')[1].split() == ['0.1','0.01']
 
-        vrun = util.runvvtest( '-R', chdir=tdir+'/basic' )
+        vrun = vtu.runvvtest( '-R', chdir=tdir+'/basic' )
         vrun.assertCounts( total=1, npass=1 )
 
         lines = vrun.greplogs( 'access PARAM_np' )
@@ -185,7 +186,7 @@ class parameter_tests( unittest.TestCase ):
             </rtest> """ )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=3, npass=3 )
         tdir = vrun.resultsDir()
 
@@ -193,7 +194,7 @@ class parameter_tests( unittest.TestCase ):
         assert len(lines) == 1
         assert lines[0].split('=')[1].split() == ['0.1/1','0.01/4']
 
-        vrun = util.runvvtest( '-R', chdir=tdir+'/zip' )
+        vrun = vtu.runvvtest( '-R', chdir=tdir+'/zip' )
         vrun.assertCounts( total=1, npass=1 )
 
         lines = vrun.greplogs( 'access PARAM_dt_np' )
@@ -214,15 +215,15 @@ class parameter_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( "-p 'isize<=2 or not isize'", batch=batch )
+            vrun = vtu.runvvtest( "-p 'isize<=2 or not isize'", batch=batch )
             vrun.assertCounts( total=3, npass=3 )
 
             assert len( glob.glob( 'TestResults*/basic.isize=*' ) ) == 2
             basic_dir = util.globfile( 'TestResults*/basic' )
 
-            vrun = util.runvvtest( "-R", batch=batch, chdir=basic_dir )
+            vrun = vtu.runvvtest( "-R", batch=batch, chdir=basic_dir )
             vrun.assertCounts( total=1, npass=1 )
 
     def test_that_an_analyze_sees_restricted_parameters(self):
@@ -239,9 +240,9 @@ class parameter_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( "-p 'isize<=2 or not isize'", batch=batch )
+            vrun = vtu.runvvtest( "-p 'isize<=2 or not isize'", batch=batch )
             vrun.assertCounts( total=3, npass=3 )
             tdir = vrun.resultsDir()
 
@@ -251,7 +252,7 @@ class parameter_tests( unittest.TestCase ):
             pL = lines[0].split('=',1)[1].strip().split()
             assert pL == ['1', '2']
 
-            vrun = util.runvvtest( "-R", batch=batch, chdir=tdir+'/basic' )
+            vrun = vtu.runvvtest( "-R", batch=batch, chdir=tdir+'/basic' )
             vrun.assertCounts( total=1, npass=1 )
 
             lines = util.grepfiles( 'access PARAM_isize',
@@ -292,9 +293,9 @@ class parameter_tests( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=12, npass=12 )
 
             def assert_grep( pattern, count ):
@@ -322,9 +323,9 @@ class parameter_tests( unittest.TestCase ):
                                  'TestResults*/params1.animal=cat/execute.log' )
             assert len( sL ) == 1
 
-            util.runvvtest( '-ik animal' ).assertCounts( total=2, npass=2 )
-            util.runvvtest( '-ik dog' ).assertCounts( total=0 )
-            util.runvvtest( '-ik Z' ).assertCounts( total=4, npass=4 )
+            vtu.runvvtest( '-ik animal' ).assertCounts( total=2, npass=2 )
+            vtu.runvvtest( '-ik dog' ).assertCounts( total=0 )
+            vtu.runvvtest( '-ik Z' ).assertCounts( total=4, npass=4 )
 
 
 #####################################################################

@@ -13,13 +13,13 @@ import os
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
 import libvvtest.TestSpecCreator as TestSpecCreator
 from libvvtest.RuntimeConfig import RuntimeConfig
 
-sys.path.insert( 1, os.path.dirname( os.path.dirname( util.testsrcdir ) ) )
 import results
 
 
@@ -50,10 +50,10 @@ class runtimes_and_timings( unittest.TestCase ):
             </rtest>""")
         time.sleep(1)
 
-        platname = util.core_platform_name()
+        platname = vtu.core_platform_name()
         tests = os.path.abspath( 'tests' )
 
-        vrun = util.runvvtest( tests )
+        vrun = vtu.runvvtest( tests )
         vrun.assertCounts( total=3, npass=3 )
 
         # create a test source tree runtimes file but without any test results
@@ -72,11 +72,11 @@ class runtimes_and_timings( unittest.TestCase ):
         os.mkdir('testing')
         time.sleep(1)
         os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
-        util.runvvtest( '-i --save-results' )
+        vtu.runvvtest( '-i --save-results' )
 
         resultsfname = os.path.abspath( util.globfile('testing/results.*') )
         plat,cplr = get_platform_compiler( resultsfname )
-        util.runcmd( util.resultspy + ' merge '+resultsfname, chdir='testing' )
+        util.runcmd( vtu.resultspy + ' merge '+resultsfname, chdir='testing' )
 
         # leave the source tree runtimes file empty and use the
         # multiplatform results
@@ -126,11 +126,11 @@ class runtimes_and_timings( unittest.TestCase ):
         tests = os.path.abspath( 'tests' )
 
         # run first to get the timings
-        vrun = util.runvvtest( tests )
+        vrun = vtu.runvvtest( tests )
         vrun.assertCounts( total=6, npass=6 )
 
         # run again one at a time and check the execution order
-        vrun = util.runvvtest( '-n 1 -R '+tests )
+        vrun = vtu.runvvtest( '-n 1 -R '+tests )
         vrun.assertCounts( total=6, npass=6 )
 
         assert vrun.startedTestIds() == [ 'CC', 'BB.planet=venus',
@@ -160,26 +160,26 @@ class runtimes_and_timings( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
             if os.path.exists( 'timings' ):
                 os.remove( 'timings' )
 
             # without a runtimes available, all tests should run
-            vrun = util.runvvtest( '--tmax 6 tests', batch=batch )
+            vrun = vtu.runvvtest( '--tmax 6 tests', batch=batch )
             vrun.assertCounts( total=3, npass=3 )
 
             tdir = vrun.resultsDir()
 
             # create a timings file
-            util.runcmd( util.resultspy + ' save', chdir='tests' )
-            util.runvvtest( '-i --save-results', chdir=tdir )
+            util.runcmd( vtu.resultspy + ' save', chdir='tests' )
+            vtu.runvvtest( '-i --save-results', chdir=tdir )
             resultsfname = util.globfile('results.*')
-            util.runcmd( util.resultspy + ' merge -x '+resultsfname )
+            util.runcmd( vtu.resultspy + ' merge -x '+resultsfname )
 
             # select tests based on the timings file
-            util.remove_results()
-            vrun = util.runvvtest( '--tmax 6 tests', batch=batch )
+            vtu.remove_results()
+            vrun = vtu.runvvtest( '--tmax 6 tests', batch=batch )
             vrun.assertCounts( total=2, npass=2 )
             assert vrun.getTestIds() == ['AA','BB']
 

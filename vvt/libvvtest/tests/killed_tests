@@ -15,6 +15,7 @@ import unittest
 import signal
 import glob
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -34,16 +35,16 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            out = util.launch_vvtest_then_terminate_it( batch=batch,
-                                                        signum=signal.SIGINT )
+            out = vtu.launch_vvtest_then_terminate_it( batch=batch,
+                                                       signum=signal.SIGINT )
             print3( out )
 
-            counts = util.parse_vvtest_counts( out )
+            counts = vtu.parse_vvtest_counts( out )
             assert counts['total'] == 1 and counts['notrun'] == 1
 
-            vrun = util.runvvtest()
+            vrun = vtu.runvvtest()
             vrun.assertCounts( total=1, npass=1 )
             assert vrun.countLines( 'rror*another process' ) == 0
 
@@ -57,15 +58,15 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            out = util.launch_vvtest_then_terminate_it( batch=batch )
+            out = vtu.launch_vvtest_then_terminate_it( batch=batch )
             print3( out )
 
-            counts = util.parse_vvtest_counts( out )
+            counts = vtu.parse_vvtest_counts( out )
             assert counts['total'] == 1 and counts['notrun'] == 1
 
-            vrun = util.runvvtest( raise_on_error=False )
+            vrun = vtu.runvvtest( raise_on_error=False )
             assert vrun.x > 0
             assert vrun.countLines( 'rror*another process' ) == 1
 
@@ -77,15 +78,15 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        out = util.launch_vvtest_then_terminate_it()
+        out = vtu.launch_vvtest_then_terminate_it()
         print3( out )
 
         tdir = util.globfile( 'TestResults*' )
 
-        counts = util.parse_vvtest_counts( out )
+        counts = vtu.parse_vvtest_counts( out )
         assert counts['total'] == 1 and counts['notrun'] == 1
 
-        vrun = util.runvvtest( raise_on_error=False, chdir=tdir )
+        vrun = vtu.runvvtest( raise_on_error=False, chdir=tdir )
         assert vrun.x > 0
         assert vrun.countLines( 'rror*another process' ) == 1
 
@@ -105,24 +106,24 @@ class running_after_vvtest_is_killed( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
             # using SIGTERM prevents the "finished" mark from getting placed
-            spec = util.interrupt_test_hook( batch=batch, count=1,
-                                             signum='SIGTERM' )
-            util.run_vvtest_with_hook( '--qsub-limit 1 -n 1', spec, batch=batch )
+            spec = vtu.interrupt_test_hook( batch=batch, count=1,
+                                            signum='SIGTERM' )
+            vtu.run_vvtest_with_hook( '--qsub-limit 1 -n 1', spec, batch=batch )
 
             # this one should fail
-            vrun = util.runvvtest( raise_on_error=False, batch=batch )
+            vrun = vtu.runvvtest( raise_on_error=False, batch=batch )
             assert vrun.x > 0
             assert vrun.countLines( 'rror*another process' ) == 1
 
             # this one should be forced to run
-            vrun = util.runvvtest( '--force', batch=batch )
+            vrun = vtu.runvvtest( '--force', batch=batch )
             vrun.assertCounts( total=1, npass=1 )
             assert vrun.countLines( 'rror*another process' ) == 0
 
-            util.runvvtest( '-i' ).assertCounts( total=2, npass=2 )
+            vtu.runvvtest( '-i' ).assertCounts( total=2, npass=2 )
 
 
 ########################################################################

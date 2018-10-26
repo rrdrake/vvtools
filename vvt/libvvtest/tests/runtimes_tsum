@@ -13,6 +13,7 @@ import os
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -54,17 +55,17 @@ class runtimes_and_tsum( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '--tsum 7 tests', batch=batch )
+            vrun = vtu.runvvtest( '--tsum 7 tests', batch=batch )
             vrun.assertCounts( total=6, npass=6 )
 
-            vrun = util.runvvtest( '-R --tsum 7 tests', batch=batch )
+            vrun = vtu.runvvtest( '-R --tsum 7 tests', batch=batch )
             vrun.assertCounts( total=2, npass=2 )
             assert vrun.getTestIds() == [ 'AA', 'CC' ]
 
             # check that the full list is still intact
-            vrun = util.runvvtest( '-R tests', batch=batch )
+            vrun = vtu.runvvtest( '-R tests', batch=batch )
             vrun.assertCounts( total=6, npass=6 )
 
     def test_using_tsum_will_run_parameterize_analyze_tests(self):
@@ -99,19 +100,19 @@ class runtimes_and_tsum( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '--tsum 10 tests', batch=batch )
+            vrun = vtu.runvvtest( '--tsum 10 tests', batch=batch )
             vrun.assertCounts( total=6, npass=6 )
 
-            vrun = util.runvvtest( '-R --tsum 10 tests', batch=batch )
+            vrun = vtu.runvvtest( '-R --tsum 10 tests', batch=batch )
             vrun.assertCounts( total=4, npass=4 )
             assert vrun.getTestIds() == [ 'BB', 'BB.planet=mars',
                                           'BB.planet=mercury',
                                           'BB.planet=venus' ]
 
             # check that the full list is still intact
-            vrun = util.runvvtest( '-R tests', batch=batch )
+            vrun = vtu.runvvtest( '-R tests', batch=batch )
             vrun.assertCounts( total=6, npass=6 )
 
     def test_tsum_option_will_use_timings_file(self):
@@ -146,28 +147,28 @@ class runtimes_and_tsum( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
             if os.path.exists( 'timings' ):
                 os.remove( 'timings' )
 
-            vrun = util.runvvtest( 'tests', batch=batch )
+            vrun = vtu.runvvtest( 'tests', batch=batch )
             vrun.assertCounts( total=6, npass=6 )
             tdir = vrun.resultsDir()
 
             # create a timings file
-            util.runcmd( util.resultspy + ' save', chdir='tests' )
-            util.runvvtest( '-i --save-results', chdir=tdir )
+            util.runcmd( vtu.resultspy + ' save', chdir='tests' )
+            vtu.runvvtest( '-i --save-results', chdir=tdir )
             resultsfname = util.globfile('results.*')
-            util.runcmd( util.resultspy + ' merge -x '+resultsfname )
+            util.runcmd( vtu.resultspy + ' merge -x '+resultsfname )
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '--tsum 6 tests', batch=batch )
+            vrun = vtu.runvvtest( '--tsum 6 tests', batch=batch )
             vrun.assertCounts( total=2, npass=2 )
             assert vrun.getTestIds() == [ 'AA', 'CC' ]
 
-            vrun = util.runvvtest( '-R', chdir=tdir, batch=batch )
+            vrun = vtu.runvvtest( '-R', chdir=tdir, batch=batch )
             vrun.assertCounts( total=2, npass=2 )
             assert vrun.getTestIds() == [ 'AA', 'CC' ]
 

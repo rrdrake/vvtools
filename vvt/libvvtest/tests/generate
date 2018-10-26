@@ -13,6 +13,7 @@ import os
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -29,7 +30,7 @@ class generate_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        util.runvvtest( '-g' ).assertCounts( total=1, notrun=1 )
+        vtu.runvvtest( '-g' ).assertCounts( total=1, notrun=1 )
         self.grep_testlist( 'null', 1 )
 
     def grep_testlist(self, pattern, expected_count, subdir=None):
@@ -72,7 +73,7 @@ class generate_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        util.runvvtest( '-g' ).assertCounts( total=3, notrun=3 )
+        vtu.runvvtest( '-g' ).assertCounts( total=3, notrun=3 )
         self.grep_testlist( 'null', 1 )
         self.grep_testlist( 'boom', 2 )
         self.grep_testlist( 'hello*world', 1 )
@@ -85,7 +86,7 @@ class generate_tests( unittest.TestCase ):
             </rtest>""")
         time.sleep(1)
 
-        util.runvvtest( '-g' ).assertCounts( total=9, notrun=9 )
+        vtu.runvvtest( '-g' ).assertCounts( total=9, notrun=9 )
         self.assert_9_testlist()
 
     def test_when_xml_files_are_in_a_subdirectory(self):
@@ -111,31 +112,31 @@ class generate_tests( unittest.TestCase ):
         os.mkdir('temp3')
         time.sleep(1)
 
-        util.runvvtest( '-g' ).assertCounts( total=9, notrun=9 )
+        vtu.runvvtest( '-g' ).assertCounts( total=9, notrun=9 )
         self.assert_9_testlist()
 
-        util.remove_results()
+        vtu.remove_results()
 
         # put the name of the subdir on the command line
 
-        vrun = util.runvvtest( '-g ../subdir', chdir='temp1' )
+        vrun = vtu.runvvtest( '-g ../subdir', chdir='temp1' )
         vrun.assertCounts( total=9, notrun=9 )
         self.assert_9_testlist( 'temp1' )
 
         # try an absolute path
 
-        vrun = util.runvvtest( '-g '+os.path.abspath( 'subdir' ),
+        vrun = vtu.runvvtest( '-g '+os.path.abspath( 'subdir' ),
                                chdir='temp2' )
         vrun.assertCounts( total=9, notrun=9 )
         self.assert_9_testlist( 'temp2' )
         assert not os.path.exists('temp2/testlist')
 
         # check the runscript with -g
-        vrun = util.runvvtest( '-g ../subdir', chdir='temp3' )
+        vrun = vtu.runvvtest( '-g ../subdir', chdir='temp3' )
         assert len( util.findfiles( 'runscript', 'temp3' ) ) == 9
 
         # try out the -S option with -g
-        vrun = util.runvvtest( '-gS hello=jupiter subdir' )
+        vrun = vtu.runvvtest( '-gS hello=jupiter subdir' )
         assert vrun.countTestLines( 'boom.hello=jupiter' ) == 1
 
     def test_that_TestResults_and_Build_directories_are_excluded_from_scans(self):
@@ -146,7 +147,7 @@ class generate_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
 
         util.writefile( vrun.resultsDir()+'/two.xml', """
@@ -155,9 +156,9 @@ class generate_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        util.runvvtest().assertCounts( total=0 )
+        vtu.runvvtest().assertCounts( total=0 )
 
-        util.runvvtest( '-R' ).assertCounts( total=1, npass=1 )
+        vtu.runvvtest( '-R' ).assertCounts( total=1, npass=1 )
 
         os.mkdir( 'Build_gnu4_opt' )
         util.writefile( "Build_gnu4_opt/three.xml", """
@@ -166,9 +167,9 @@ class generate_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        util.runvvtest().assertCounts( total=0 )
+        vtu.runvvtest().assertCounts( total=0 )
 
-        util.runvvtest( '-R' ).assertCounts( total=1, npass=1 )
+        vtu.runvvtest( '-R' ).assertCounts( total=1, npass=1 )
 
     def test_that_soft_links_are_followed(self):
         ""
@@ -194,7 +195,7 @@ class generate_tests( unittest.TestCase ):
 
         time.sleep(1)
 
-        util.runvvtest( 'one' ).assertCounts( total=3, npass=3 )
+        vtu.runvvtest( 'one' ).assertCounts( total=3, npass=3 )
 
     def test_that_multiple_tests_in_one_xml_file_works(self):
         ""
@@ -208,7 +209,7 @@ class generate_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=2, npass=2 )
 
         assert len( util.findfiles( 'execute.log', 'TestResults*' ) ) == 2
@@ -227,17 +228,17 @@ class generate_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        vrun = util.runvvtest( '-k justmulti' )
+        vrun = vtu.runvvtest( '-k justmulti' )
         vrun.assertCounts( total=1, npass=1 )
         assert vrun.countGrepLogs( 'test name multiXXX' ) == 1
         assert vrun.countGrepLogs( 'test name multi_2ndXXX' ) == 0
 
-        vrun = util.runvvtest( '-w -k just2nd' )
+        vrun = vtu.runvvtest( '-w -k just2nd' )
         vrun.assertCounts( total=1, npass=1 )
         assert vrun.countGrepLogs( 'test name multiXXX' ) == 0
         assert vrun.countGrepLogs( 'test name multi_2ndXXX' ) == 1
 
-        vrun = util.runvvtest( '-w -k common' )
+        vrun = vtu.runvvtest( '-w -k common' )
         vrun.assertCounts( total=2, npass=2 )
         assert vrun.countGrepLogs( 'test name multiXXX' ) == 1
         assert vrun.countGrepLogs( 'test name multi_2ndXXX' ) == 1
@@ -253,7 +254,7 @@ class generate_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=5, npass=5 )
         assert vrun.countTestLines( 'multi.paramA=one' ) == 1
         assert vrun.countTestLines( 'multi.paramA=two' ) == 1
@@ -272,7 +273,7 @@ class generate_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        vrun = util.runvvtest( '-w' )
+        vrun = vtu.runvvtest( '-w' )
         vrun.assertCounts( total=5, npass=5 )
         assert vrun.countTestLines( 'multi.paramA=one' ) == 1
         assert vrun.countTestLines( 'multi.paramA=two' ) == 1
@@ -282,7 +283,7 @@ class generate_tests( unittest.TestCase ):
         assert vrun.countGrepLogs( 'test name multiXXX' ) == 2
         assert vrun.countGrepLogs( 'test name multi_2ndXXX' ) == 3
 
-        vrun = util.runvvtest( '-w -p paramB' )
+        vrun = vtu.runvvtest( '-w -p paramB' )
         vrun.assertCounts( total=3, npass=3 )
         assert vrun.countTestLines( 'multi.paramA=one' ) == 0
         assert vrun.countTestLines( 'multi.paramA=two' ) == 0

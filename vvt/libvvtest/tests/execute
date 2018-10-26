@@ -15,6 +15,7 @@ import glob
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -30,7 +31,7 @@ class execute_tests( unittest.TestCase ):
             <rtest name="null">
             </rtest>""" )
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
         tL = vrun.grepTestLines( '.*' )
         assert len(tL) == 1 and os.path.exists( tL[0].split()[-1] )
@@ -50,7 +51,7 @@ class execute_tests( unittest.TestCase ):
             exit 0""" )
         time.sleep(1)
 
-        util.runvvtest().assertCounts( total=1, npass=1 )
+        vtu.runvvtest().assertCounts( total=1, npass=1 )
         sL = util.grepfiles( 'hello world', 'TestResults*/helloworld/execute.log' )
         assert len( sL ) == 1
 
@@ -78,7 +79,7 @@ class execute_tests( unittest.TestCase ):
             </rtest>""")
         time.sleep(1)
 
-        util.runvvtest().assertCounts( total=1, npass=1 )
+        vtu.runvvtest().assertCounts( total=1, npass=1 )
 
     def test_link_and_copy_files_that_do_not_exist(self):
         ""
@@ -120,7 +121,7 @@ class execute_tests( unittest.TestCase ):
             </rtest>""")
         time.sleep(1)
 
-        util.runvvtest().assertCounts( total=4, fail=4 )
+        vtu.runvvtest().assertCounts( total=4, fail=4 )
 
         sL = util.grepfiles( 'lsfile ', 'TestResults.*/*/execute.log' )
         assert len( sL ) == 0
@@ -132,7 +133,7 @@ class execute_tests( unittest.TestCase ):
             """)
         time.sleep(1)
 
-        util.runvvtest( '-R' ).assertCounts( total=4, npass=4 )
+        vtu.runvvtest( '-R' ).assertCounts( total=4, npass=4 )
 
         sL = util.grepfiles( 'lsfile file.txt', 'TestResults.*/*/execute.log' )
         assert len( sL ) == 4
@@ -154,7 +155,7 @@ class execute_tests( unittest.TestCase ):
         util.writefile( "files/gfileA.txt", "G text file A" )
         time.sleep(1)
 
-        vrun = util.runvvtest( 'subdir' )
+        vrun = vtu.runvvtest( 'subdir' )
         vrun.assertCounts( total=1, npass=1 )
 
         assert vrun.countGrepLogs( 'lsfile file.txt' ) == 1
@@ -195,18 +196,18 @@ class execute_tests( unittest.TestCase ):
             </rtest>""")
         time.sleep(1)
 
-        util.runvvtest().assertCounts( total=3, npass=1, diff=1, fail=1 )
+        vtu.runvvtest().assertCounts( total=3, npass=1, diff=1, fail=1 )
 
         # use -L option (and wipe)
 
-        vrun = util.runvvtest( '-w -L -n 1' )
+        vrun = vtu.runvvtest( '-w -L -n 1' )
         vrun.assertCounts( total=3, npass=1, diff=1, fail=1 )
         assert vrun.countLines( 'Exiting with ' ) == 3
 
         # check running within the test results directory
 
         os.chdir( vrun.resultsDir()+'/PassTest' )
-        util.runvvtest( '-R' ).assertCounts( total=1, npass=1 )
+        vtu.runvvtest( '-R' ).assertCounts( total=1, npass=1 )
 
     def test_the_XMLDIR_variable(self):
         ""
@@ -229,22 +230,22 @@ class execute_tests( unittest.TestCase ):
             </rtest>""")
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
 
         # check using the -M option
 
-        util.remove_results()
+        vtu.remove_results()
 
         os.mkdir( 'mir' )
         time.sleep(1)
 
-        util.runvvtest( '-M '+cwd+'/mir' ).assertCounts( total=1, npass=1 )
+        vtu.runvvtest( '-M '+cwd+'/mir' ).assertCounts( total=1, npass=1 )
 
         # cd into a test and run it
 
         os.chdir( vrun.resultsDir()+'/xdir' )
-        util.runvvtest( '-R' ).assertCounts( total=1, npass=1 )
+        vtu.runvvtest( '-R' ).assertCounts( total=1, npass=1 )
 
     def test_generate_options_g_and_G(self):
         ""
@@ -260,11 +261,11 @@ class execute_tests( unittest.TestCase ):
             exit 0""" )
         time.sleep(1)
 
-        vrun = util.runvvtest( '-gG' )
+        vrun = vtu.runvvtest( '-gG' )
         vrun.assertCounts( total=1, notrun=1 )
 
         os.chdir( vrun.resultsDir()+'/helloworld' )
-        util.runvvtest().assertCounts( total=1, npass=1 )
+        vtu.runvvtest().assertCounts( total=1, npass=1 )
 
         assert len( util.grepfiles( 'hello world', 'execute.log' ) ) == 1
 
@@ -280,13 +281,13 @@ class execute_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        util.runvvtest().assertCounts( total=2, npass=2 )
+        vtu.runvvtest().assertCounts( total=2, npass=2 )
 
         # force a parameter to take on a user defined value
 
-        util.runvvtest( '-S hello=jupiter' ).assertCounts( total=1, npass=1 )
+        vtu.runvvtest( '-S hello=jupiter' ).assertCounts( total=1, npass=1 )
 
-        vrun = util.runvvtest( '-i' )
+        vrun = vtu.runvvtest( '-i' )
         vrun.assertCounts( total=3, npass=3 )
 
         assert vrun.countTestLines( 'hello=jupiter' ) == 1
@@ -316,7 +317,7 @@ class execute_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        util.runvvtest().assertCounts( total=2, npass=2 )
+        vtu.runvvtest().assertCounts( total=2, npass=2 )
 
         assert len( glob.glob( 'TestResults.*/auto1/auto1.xml' ) ) == 1
         assert len( glob.glob( 'TestResults.*/auto2/auto2.xml' ) ) == 1
@@ -332,7 +333,7 @@ class execute_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=2, npass=2 )
 
         xpat = 'TestResults.*/multi/execute.log'
@@ -354,7 +355,7 @@ class execute_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=2, npass=2 )
 
         xpat = 'TestResults.*/multi/execute.log'
@@ -379,7 +380,7 @@ class execute_tests( unittest.TestCase ):
         time.sleep(1)
 
         # the bdir test should be selected because it is scanned first
-        vrun = util.runvvtest( 'bdir adir' )
+        vrun = vtu.runvvtest( 'bdir adir' )
         vrun.assertCounts( total=1, npass=1 )
 
         assert vrun.countGrepLogs( 'test bdir' ) == 1
@@ -390,10 +391,10 @@ class execute_tests( unittest.TestCase ):
         fn = os.readlink( fL[0] )
         assert os.path.samefile( fn, 'bdir/subdir/dup.xml' )
 
-        util.remove_results()
+        vtu.remove_results()
 
         # now the adir test should be selected
-        vrun = util.runvvtest( 'adir bdir' )
+        vrun = vtu.runvvtest( 'adir bdir' )
         vrun.assertCounts( total=1, npass=1 )
 
         assert vrun.countGrepLogs( 'test bdir' ) == 0

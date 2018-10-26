@@ -14,6 +14,7 @@ import time
 import glob
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -30,34 +31,34 @@ class options_tests( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        util.runvvtest( '-h' )
-        util.runvvtest( '-H' )
-        util.runvvtest( '--help' )
+        vtu.runvvtest( '-h' )
+        vtu.runvvtest( '-H' )
+        vtu.runvvtest( '--help' )
 
-        util.runvvtest( '-g' )
-        vrun = util.runvvtest()
+        vtu.runvvtest( '-g' )
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
         assert len( glob.glob( 'TestResults*' ) ) == 1
 
-        util.runvvtest( '-i' ).assertCounts( total=1, npass=1 )
+        vtu.runvvtest( '-i' ).assertCounts( total=1, npass=1 )
 
-        util.runvvtest( '-b' )
+        vtu.runvvtest( '-b' )
 
     def test_mode_combinations_that_are_not_allowed(self):
         ""
-        self.assertRaises( Exception, util.runvvtest, '-gi' )
-        self.assertRaises( Exception, util.runvvtest, '-gb' )
-        self.assertRaises( Exception, util.runvvtest, '-Ri' )
-        self.assertRaises( Exception, util.runvvtest, '-Rb' )
-        self.assertRaises( Exception, util.runvvtest, '-ib' )
+        self.assertRaises( Exception, vtu.runvvtest, '-gi' )
+        self.assertRaises( Exception, vtu.runvvtest, '-gb' )
+        self.assertRaises( Exception, vtu.runvvtest, '-Ri' )
+        self.assertRaises( Exception, vtu.runvvtest, '-Rb' )
+        self.assertRaises( Exception, vtu.runvvtest, '-ib' )
 
     def test_some_bad_option_values(self):
         ""
-        self.assertRaises( Exception, util.runvvtest, '-j dir1 -j dir2' )
-        self.assertRaises( Exception, util.runvvtest, '-M dir1 -M dir2' )
-        self.assertRaises( Exception, util.runvvtest, '-n 1 -n 2' )
-        self.assertRaises( Exception, util.runvvtest, '-n text' )
-        self.assertRaises( Exception, util.runvvtest, '-n -3' )
+        self.assertRaises( Exception, vtu.runvvtest, '-j dir1 -j dir2' )
+        self.assertRaises( Exception, vtu.runvvtest, '-M dir1 -M dir2' )
+        self.assertRaises( Exception, vtu.runvvtest, '-n 1 -n 2' )
+        self.assertRaises( Exception, vtu.runvvtest, '-n text' )
+        self.assertRaises( Exception, vtu.runvvtest, '-n -3' )
 
 
 ############################################################################

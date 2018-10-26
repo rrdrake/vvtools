@@ -13,6 +13,7 @@ import os
 import time
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -35,60 +36,60 @@ class filter_and_parameters( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        platname = util.core_platform_name()
+        platname = vtu.core_platform_name()
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '-N 10', batch=batch )
+            vrun = vtu.runvvtest( '-N 10', batch=batch )
             vrun.assertCounts( total=3, npass=3 )
 
-            vrun = util.runvvtest( '-i', batch=batch )
+            vrun = vtu.runvvtest( '-i', batch=batch )
             vrun.assertCounts( total=3, npass=3 )
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( '-p np=1 -N 10', batch=batch )
+            vrun = vtu.runvvtest( '-p np=1 -N 10', batch=batch )
             vrun.assertCounts( total=1, npass=1 )
 
-            vrun = util.runvvtest( '-R', batch=batch,
-                                         chdir=vrun.resultsDir() )
+            vrun = vtu.runvvtest( '-R', batch=batch,
+                                        chdir=vrun.resultsDir() )
             vrun.assertCounts( total=1, npass=1 )
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( "-p 'np<=3' -N 10", batch=batch )
+            vrun = vtu.runvvtest( "-p 'np<=3' -N 10", batch=batch )
             self.assert_atest_results( vrun, 2, 1, 1, 0 )
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( "-p 'np!=3' -N 10", batch=batch )
+            vrun = vtu.runvvtest( "-p 'np!=3' -N 10", batch=batch )
             self.assert_atest_results( vrun, 2, 1, 0, 1 )
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( "-p 'np>=3' -N 10", batch=batch )
+            vrun = vtu.runvvtest( "-p 'np>=3' -N 10", batch=batch )
             self.assert_atest_results( vrun, 2, 0, 1, 1 )
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( "-p 'np>3' -N 10", batch=batch )
+            vrun = vtu.runvvtest( "-p 'np>3' -N 10", batch=batch )
             self.assert_atest_results( vrun, 1, 0, 0, 1 )
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( "-p 'np<3' -N 10", batch=batch )
+            vrun = vtu.runvvtest( "-p 'np<3' -N 10", batch=batch )
             self.assert_atest_results( vrun, 1, 1, 0, 0 )
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( "-p 'np=1/np=3' -N 10", batch=batch )
+            vrun = vtu.runvvtest( "-p 'np=1/np=3' -N 10", batch=batch )
             self.assert_atest_results( vrun, 2, 1, 1, 0 )
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( "-p 'np>1' -p 'np<6' -N 10", batch=batch )
+            vrun = vtu.runvvtest( "-p 'np>1' -p 'np<6' -N 10", batch=batch )
             self.assert_atest_results( vrun, 1, 0, 1, 0 )
 
     def assert_atest_results(self, vrun, npass, numnp1, numnp3, numnp6):

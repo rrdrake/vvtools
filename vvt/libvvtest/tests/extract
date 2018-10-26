@@ -14,6 +14,7 @@ import time
 import glob
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -46,15 +47,15 @@ class extract_use_cases( unittest.TestCase ):
         util.writefile( 'orig/file4.txt', "file four" )
         time.sleep(1)
 
-        vrun = util.runvvtest( chdir='orig' )
+        vrun = vtu.runvvtest( chdir='orig' )
         vrun.assertCounts( total=1, npass=1 )
         assert vrun.countTestLines( 'pass*atest' ) == 1
 
         # extract the orig directory then run in the extracted area
 
-        util.runvvtest( '--extract copy orig' )
+        vtu.runvvtest( '--extract copy orig' )
 
-        vrun = util.runvvtest( chdir='copy' )
+        vrun = vtu.runvvtest( chdir='copy' )
         vrun.assertCounts( total=1, npass=1 )
         assert vrun.countTestLines( 'pass*atest' ) == 1
 
@@ -81,15 +82,15 @@ class extract_use_cases( unittest.TestCase ):
         util.writefile( 'orig/atest_src.txt', "file four" )
         time.sleep(1)
 
-        vrun = util.runvvtest( chdir='orig' )
+        vrun = vtu.runvvtest( chdir='orig' )
         vrun.assertCounts( total=1, npass=1 )
         assert vrun.countTestLines( 'pass*atest' ) == 1
 
         # extract the orig directory then run in the extracted area
 
-        util.runvvtest( '--extract copy orig' )
+        vtu.runvvtest( '--extract copy orig' )
 
-        vrun = util.runvvtest( chdir='copy' )
+        vrun = vtu.runvvtest( chdir='copy' )
         vrun.assertCounts( total=1, npass=1 )
         assert vrun.countTestLines( 'pass*atest' ) == 1
 
@@ -109,7 +110,7 @@ class extract_use_cases( unittest.TestCase ):
         util.writefile( 'orig/dummy.txt', "file dummy" )
         time.sleep(1)
 
-        util.runvvtest( '--extract copy orig' )
+        vtu.runvvtest( '--extract copy orig' )
 
         fL = glob.glob( 'copy/*' )
         fL.sort()
@@ -117,7 +118,7 @@ class extract_use_cases( unittest.TestCase ):
 
         # this time, exclude one of the tests
 
-        util.runvvtest( '-k multi --extract cp2 orig' )
+        vtu.runvvtest( '-k multi --extract cp2 orig' )
 
         fL = glob.glob( 'cp2/*' )
         fL.sort()
@@ -136,7 +137,7 @@ class extract_use_cases( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        util.runvvtest( '--extract copy orig' )
+        vtu.runvvtest( '--extract copy orig' )
 
         fL = glob.glob( 'copy/*' )
         fL.sort()
@@ -156,7 +157,7 @@ class extract_use_cases( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        util.runvvtest( '--extract copy orig' )
+        vtu.runvvtest( '--extract copy orig' )
 
         fL = glob.glob( 'copy/*' )
         fL.sort()
@@ -190,16 +191,16 @@ class extract_use_cases( unittest.TestCase ):
         util.writefile( 'orig/2_atest.py', "py file two" )
         time.sleep(1)
 
-        vrun = util.runvvtest( chdir='orig' )
+        vrun = vtu.runvvtest( chdir='orig' )
         vrun.assertCounts( total=1, npass=1 )
         assert vrun.countTestLines( 'pass*atest' ) == 1
         assert vrun.countGrepLogs( 'py file 2 exists' ) == 1
 
         # extract the orig directory then run in the extracted area
 
-        util.runvvtest( '--extract copy orig' )
+        vtu.runvvtest( '--extract copy orig' )
 
-        vrun = util.runvvtest( chdir='copy' )
+        vrun = vtu.runvvtest( chdir='copy' )
         vrun.assertCounts( total=1, npass=1 )
         assert vrun.countTestLines( 'pass*atest' ) == 1
         assert vrun.countGrepLogs( 'py file 2 exists' ) == 0
@@ -227,13 +228,13 @@ class extract_use_cases( unittest.TestCase ):
                 assert os.path.exists( fn )
             """ )
 
-        util.runvvtest( chdir='orig' ).assertCounts( total=3, npass=3 )
+        vtu.runvvtest( chdir='orig' ).assertCounts( total=3, npass=3 )
 
         # extract the orig directory then run in the extracted area
 
-        util.runvvtest( '--extract copy orig' )
+        vtu.runvvtest( '--extract copy orig' )
 
-        util.runvvtest( chdir='copy' ).assertCounts( total=3, npass=3 )
+        vtu.runvvtest( chdir='copy' ).assertCounts( total=3, npass=3 )
 
     def test_extract_when_a_subdir_in_source_file_list(self):
         ""
@@ -251,13 +252,13 @@ class extract_use_cases( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        util.runvvtest( chdir='orig' ).assertCounts( total=1, npass=1 )
+        vtu.runvvtest( chdir='orig' ).assertCounts( total=1, npass=1 )
 
         # extract the orig directory then run in the extracted area
 
-        util.runvvtest( '--extract copy orig' )
+        vtu.runvvtest( '--extract copy orig' )
 
-        util.runvvtest( chdir='copy' ).assertCounts( total=1, npass=1 )
+        vtu.runvvtest( chdir='copy' ).assertCounts( total=1, npass=1 )
 
 
 ########################################################################

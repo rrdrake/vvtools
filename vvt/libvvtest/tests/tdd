@@ -16,6 +16,7 @@ import filecmp
 import shutil
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -23,7 +24,6 @@ import libvvtest.TestSpec as TestSpec
 import libvvtest.TestSpecCreator as TestSpecCreator
 import libvvtest.xmlwrapper as xmlwrapper
 
-sys.path.insert( 0, os.path.dirname( os.path.dirname( util.testsrcdir ) ) )
 import results
 
 timesfname = results.runtimes_filename
@@ -64,57 +64,57 @@ class tdd_tests( unittest.TestCase ):
 
         # by default, tests with TDD in keywords should not run
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=2, npass=2 )
         assert vrun.getTestIds() == [ 'testthree', 'testtwo' ]
 
         tdir = vrun.resultsDir()
 
-        vrun = util.runvvtest( '-i' )
+        vrun = vtu.runvvtest( '-i' )
         vrun.assertCounts( total=2, npass=2 )
         assert vrun.getTestIds() == [ 'testthree', 'testtwo' ]
 
-        vrun = util.runvvtest( '-i', chdir=tdir )
+        vrun = vtu.runvvtest( '-i', chdir=tdir )
         vrun.assertCounts( total=2, npass=2 )
         assert vrun.getTestIds() == [ 'testthree', 'testtwo' ]
 
-        util.remove_results()
+        vtu.remove_results()
 
-        vrun = util.runvvtest( batch=True )
+        vrun = vtu.runvvtest( batch=True )
         vrun.assertCounts( total=2, npass=2 )
 
-        vrun = util.runvvtest( '-R', chdir=tdir )
+        vrun = vtu.runvvtest( '-R', chdir=tdir )
         vrun.assertCounts( total=2, npass=2 )
         assert vrun.getTestIds() == [ 'testthree', 'testtwo' ]
 
-        util.remove_results()
+        vtu.remove_results()
 
         # the --include-tdd option means run the tests with TDD
 
-        vrun = util.runvvtest( '--include-tdd' )
+        vrun = vtu.runvvtest( '--include-tdd' )
         vrun.assertCounts( total=4, npass=4 )
         assert vrun.getTestIds() == [ 'testfour',
                                       'testone',
                                       'testthree',
                                       'testtwo' ]
 
-        vrun = util.runvvtest( '-i' )
+        vrun = vtu.runvvtest( '-i' )
         vrun.assertCounts( total=4, npass=4 )
         assert vrun.getTestIds() == [ 'testfour',
                                       'testone',
                                       'testthree',
                                       'testtwo' ]
 
-        vrun = util.runvvtest( '-i', chdir=tdir )
+        vrun = vtu.runvvtest( '-i', chdir=tdir )
         vrun.assertCounts( total=4, npass=4 )
         assert vrun.getTestIds() == [ 'testfour',
                                       'testone',
                                       'testthree',
                                       'testtwo' ]
 
-        util.remove_results()
+        vtu.remove_results()
 
-        vrun = util.runvvtest( '--include-tdd', batch=True )
+        vrun = vtu.runvvtest( '--include-tdd', batch=True )
         vrun.assertCounts( total=4, npass=4 )
 
     def test_that_tests_marked_TDD_carry_the_mark_to_the_test_results_file(self):
@@ -143,12 +143,12 @@ class tdd_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest( '--include-tdd' )
+        vrun = vtu.runvvtest( '--include-tdd' )
         vrun.assertCounts( total=4, npass=4 )
 
         # bootstrap with runtimes files then save the test results
-        util.runcmd( util.resultspy + ' save' )
-        vrun = util.runvvtest( '-i --save-results' )
+        util.runcmd( vtu.resultspy + ' save' )
+        vrun = vtu.runvvtest( '-i --save-results' )
 
         resultsfname = util.globfile('results.*')
         tr = results.TestResults( resultsfname )
@@ -188,12 +188,12 @@ class tdd_tests( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        vrun = util.runvvtest( '--include-tdd --config config' )
+        vrun = vtu.runvvtest( '--include-tdd --config config' )
         vrun.assertCounts( total=4, npass=4 )
 
         # bootstrap with runtimes files then save the test results
-        util.runcmd( util.resultspy + ' save' )
-        util.runvvtest( '--config config -i --save-results' )
+        util.runcmd( vtu.resultspy + ' save' )
+        vtu.runvvtest( '--config config -i --save-results' )
 
         rf1 = util.globfile('results.*')
         tr = results.TestResults( rf1 )
@@ -203,7 +203,7 @@ class tdd_tests( unittest.TestCase ):
         mach = os.uname()[1]
         tr.writeResults( rf2, 'Fake', L[3], mach, '/some/fake/path' )
 
-        x,out = util.runcmd( util.resultspy + ' report ' + rf1 + ' ' + rf2 )
+        x,out = util.runcmd( vtu.resultspy + ' report ' + rf1 + ' ' + rf2 )
 
         assert len( util.greplines( 'Fake.gcc', out ) ) == 1
         assert len( util.greplines( 'pass=2 ', out ) ) == 2
@@ -213,7 +213,7 @@ class tdd_tests( unittest.TestCase ):
         # excercise this, but verifying the values is hard without just
         # bringing up a browser
         ok = util.run_redirect(
-                util.resultspy + ' report --html . ' + rf1 + ' ' + rf2,
+                vtu.resultspy + ' report --html . ' + rf1 + ' ' + rf2,
                            'short.html' )
         assert ok
 

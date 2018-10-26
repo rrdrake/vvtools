@@ -14,6 +14,7 @@ import time
 import glob
 import unittest
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -72,20 +73,20 @@ class parameterize_analyze_logic( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
             util.writefile( 'parentchild/bad.xml', bad_xml )
             time.sleep(1)
 
-            vrun = util.runvvtest( '-k bad parentchild', batch=batch )
+            vrun = vtu.runvvtest( '-k bad parentchild', batch=batch )
             vrun.assertCounts( total=3, npass=1, fail=1, notrun=1 )
 
             # "fix" the bad test
             util.writefile( 'parentchild/bad.xml', fixed_xml )
             time.sleep(1)
 
-            vrun = util.runvvtest( '-R -k notdone/notrun/fail',
-                                   '-k bad parentchild', batch=batch )
+            vrun = vtu.runvvtest( '-R -k notdone/notrun/fail',
+                                  '-k bad parentchild', batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
     def test_not_sure_what_this_tests(self):
@@ -157,20 +158,20 @@ class parameterize_analyze_logic( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
             util.writefile( 'parentchild/bad.xml', bad_xml )
             time.sleep(1)
 
-            vrun = util.runvvtest( 'parentchild', batch=batch )
+            vrun = vtu.runvvtest( 'parentchild', batch=batch )
             vrun.assertCounts( total=6, npass=3, fail=2, notrun=1 )
 
             # "fix" the bad test
             util.writefile( 'parentchild/bad.xml', fix_bad_xml )
             time.sleep(1)
 
-            vrun = util.runvvtest( '-R -k notdone/notrun/fail',
-                                   'parentchild', batch=batch )
+            vrun = vtu.runvvtest( '-R -k notdone/notrun/fail',
+                                  'parentchild', batch=batch )
             vrun.assertCounts( total=3, npass=3 )
 
     def test_a_test_with_analyze_must_have_parameterize(self):
@@ -185,7 +186,7 @@ class parameterize_analyze_logic( unittest.TestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        vrun = util.runvvtest()
+        vrun = vtu.runvvtest()
         vrun.assertCounts( total=0 )
         assert vrun.countLines( 'skipping *noparam' ) == 1
 
@@ -209,9 +210,9 @@ class parameterize_analyze_logic( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=6, npass=6 )
 
             assert len( util.grepfiles( 'exec test multi ',
@@ -245,9 +246,9 @@ class parameterize_analyze_logic( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=5, npass=5 )
 
             assert len( util.grepfiles( 'exec test multi ',
@@ -284,9 +285,9 @@ class parameterize_analyze_logic( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
-            vrun = util.runvvtest( batch=batch )
+            vrun = vtu.runvvtest( batch=batch )
             vrun.assertCounts( total=3, npass=3 )
 
             assert len( util.grepfiles( 'running touch',
@@ -302,7 +303,7 @@ class parameterize_analyze_logic( unittest.TestCase ):
             assert len( util.grepfiles( 'running touch',
                         'TestResults.*/atest/execute.log' ) ) == 0
 
-            vrun = util.runvvtest( '-Ra', batch=batch )
+            vrun = vtu.runvvtest( '-Ra', batch=batch )
             vrun.assertCounts( total=3, npass=3 )
 
             assert len( util.grepfiles( 'running touch',

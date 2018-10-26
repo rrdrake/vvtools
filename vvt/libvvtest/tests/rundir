@@ -17,6 +17,7 @@ import unittest
 import shutil
 from glob import glob
 
+import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
@@ -33,12 +34,12 @@ class rundir_usage( unittest.TestCase ):
 
         for batch in [False,True]:
 
-            util.remove_results()
+            vtu.remove_results()
 
             if os.path.exists( 'myrundir' ):
                 shutil.rmtree( 'myrundir' )
 
-            vrun = util.runvvtest( '--run-dir myrundir', batch=batch )
+            vrun = vtu.runvvtest( '--run-dir myrundir', batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
             assert len( glob( 'TestResults*' ) ) == 0
@@ -57,7 +58,7 @@ class rundir_usage( unittest.TestCase ):
             time.sleep(1)
 
             mymir = os.path.abspath( 'mymirror' )
-            vrun = util.runvvtest( '--run-dir myrundir -M '+mymir, batch=batch )
+            vrun = vtu.runvvtest( '--run-dir myrundir -M '+mymir, batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
             assert len( glob( 'TestResults*' ) ) == 0
@@ -78,8 +79,8 @@ class rundir_usage( unittest.TestCase ):
         write_unit_test_files()
         time.sleep(1)
 
-        self.assertRaises( Exception, util.runvvtest, '--run-dir foo/bar' )
-        self.assertRaises( Exception, util.runvvtest,
+        self.assertRaises( Exception, vtu.runvvtest, '--run-dir foo/bar' )
+        self.assertRaises( Exception, vtu.runvvtest,
                            '--run-dir '+os.path.abspath('myrundir') )
 
 
