@@ -566,6 +566,13 @@ def grep(out, pat):
     return L
 
 
+def globfile( shell_pattern ):
+    ""
+    fL = glob.glob( shell_pattern )
+    assert len( fL ) == 1, 'expected one file, not '+str(fL)
+    return fL[0]
+
+
 def readfile( fname ):
     """
     Read and return the contents of the given filename.

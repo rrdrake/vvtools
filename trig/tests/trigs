@@ -13,6 +13,7 @@ import os
 import time
 import subprocess
 import glob
+import stat
 import unittest
 
 import testutils as util
@@ -827,9 +828,7 @@ class misc_tests( unittest.TestCase ):
         jf = os.path.abspath( 'job_foo.py' )
 
         # get the log directory for the job
-        dL = glob.glob( 'logs/job_foo.py_*' )
-        assert len(dL) == 1
-        ldir = dL[0]
+        ldir = util.globfile( 'logs/job_foo.py_*' )
         assert os.path.isdir( ldir )
         joblog = os.path.join( ldir, 'log.txt' )
         assert os.path.exists( joblog )
@@ -865,13 +864,45 @@ class permissions_tests( unittest.TestCase ):
             out = util.runout( cmd )
             assert not out.strip()
 
-            dL = glob.glob( 'logs/job_foo.py_*' )
-            assert len(dL) == 1
-            assert get_file_group( dL[0] ) == grp
+            dname = util.globfile( 'logs/job_foo.py_*' )
+            assert get_file_group( dname ) == grp
 
-            fL = glob.glob( 'logs/job_foo.py_*/log.txt' )
-            assert len(fL) == 1
-            assert get_file_group( fL[0] ) == grp
+            fname = util.globfile( 'logs/job_foo.py_*/log.txt' )
+            assert get_file_group( fname ) == grp
+
+    def test_group_option_relaxes_the_group_umask(self):
+        ""
+        curtm = time.time()
+
+        util.writefile( 'job_foo.py', """
+            # JOB TRIGGER: """+string_time( curtm+3 )+"""
+            fp = open( 'success', 'w' ) ; fp.close()
+            """ )
+
+        os.mkdir( 'logs' )
+        loc = os.path.abspath( 'logs' )
+        time.sleep(1)
+
+        grp1,grp2 = probe_for_two_different_groups()
+
+        origmask = os.umask( 0o077 )
+        try:
+            cmd = localpy+' '+trigfile + ' --group '+grp1+' -g 2 -Q 7 -r '+loc
+            out = util.runout( cmd )
+            assert not out.strip()
+
+            dname = util.globfile( 'logs/job_foo.py_*' )
+            assert has_group_read( dname )
+            assert not has_group_write( dname )
+            assert has_group_execute( dname )
+
+            fname = util.globfile( 'logs/job_foo.py_*/log.txt' )
+            assert has_group_read( fname )
+            assert not has_group_write( fname )
+            assert not has_group_execute( fname )
+
+        finally:
+            os.umask( origmask )
 
 
 def probe_for_two_different_groups():
@@ -888,6 +919,28 @@ def get_file_group( path ):
     gid = os.stat( path ).st_gid
     ent = grp.getgrgid( gid )
     return ent[0]
+
+
+def has_group_read( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IRGRP ) != 0
+
+def has_group_write( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IWGRP ) != 0
+
+def has_group_execute( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IXGRP ) != 0
+
+
+def has_no_world_permissions( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IRWXO ) == 0
 
 
 #######################################################################

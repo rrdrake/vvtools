@@ -367,6 +367,10 @@ def open_log_file_for_write( logpath, jobfile, group ):
     date = time.strftime( "%a_%b_%d_%Y_%H:%M:%S_%Z" )
     joblogdir = os.path.join( logpath, name+'_'+date )
 
+    if group:
+        # do not mask out rx for group
+        os.umask( os.umask( 0o000 ) & 0o727 )
+
     os.mkdir( joblogdir )
 
     if group:
