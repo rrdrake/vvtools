@@ -1,0 +1,191 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+
+import vvtestutils as vtu
+import testutils as util
+from testutils import print3
+
+import libvvtest.cmdline as cmdline
+
+
+#vvtestmod = util.create_module_from_filename( vtu.vvtest_file )
+
+
+class help_page_tests( vtu.vvtestTestCase ):
+
+    def setUp(self):
+        vtu.vvtestTestCase.setUp( self, cleanout=False )
+
+    def test_write_help_page(self):
+        ""
+        rtn,out,err = util.call_capture_output(
+                            cmdline.parse_command_line, ['-h'] )
+        print3( out )
+        assert 'usage:' in out.lower()
+        assert 'vvtest' in out
+        assert 'Traceback' in err and 'SystemExit' in err
+
+        rtn,out,err = util.call_capture_output(
+                            cmdline.parse_command_line, ['--help'] )
+        assert 'usage:' in out.lower()
+        assert 'vvtest' in out
+        assert 'Traceback' in err and 'SystemExit' in err
+
+        rtn,out,err = util.call_capture_output(
+                            cmdline.parse_command_line, ['help'] )
+        assert 'usage:' in out.lower()
+        assert 'vvtest' in out
+        assert 'Traceback' in err and 'SystemExit' in err
+
+        # expected argument groups
+        assert len( util.greplines( 'Test selection*filters', out ) ) == 1
+        assert len( util.greplines( 'Runtime behavior*behavior', out ) ) == 1
+        assert len( util.greplines( 'Resource controls*resources', out ) ) == 1
+        assert len( util.greplines( 'Runtime configuration*config', out ) ) == 1
+        assert len( util.greplines( 'Batching*batch', out ) ) == 1
+        assert len( util.greplines( 'Results handling*results', out ) ) == 1
+        assert len( util.greplines( 'Other operating modes', out ) ) == 1
+
+    def test_subhelp_spot_check(self):
+        ""
+        rtn,out,err = util.call_capture_output(
+                        cmdline.parse_command_line, [ 'help', 'intro' ] )
+        print3( out )
+        assert 'The vvtest program' in out
+        assert 'Available help sections' not in out
+        assert 'Traceback' in err and 'SystemExit' in err
+
+        rtn,out,err = util.call_capture_output(
+                        cmdline.parse_command_line, [ 'help', 'filters' ] )
+        print3( out )
+        assert 'arbitrary keywords' in out
+        assert 'Traceback' in err and 'SystemExit' in err
+
+    def test_request_nonexistent_section_will_list_available_sections(self):
+        ""
+        rtn,out,err = util.call_capture_output(
+                        cmdline.parse_command_line, [ 'help', 'silverbullet' ] )
+        print3( out )
+        assert 'keyword' in out
+        assert 'parameter' in out
+        assert 'Available help sections' in out
+        assert 'Traceback' in err and 'SystemExit' in err
+
+
+class deprecations( vtu.vvtestTestCase ):
+
+    def test_deprecated_options_that_should_error_out(self):
+        ""
+        rtn,out,err = util.call_capture_output(
+                        cmdline.parse_command_line, [ '-F' ] )
+        assert 'Traceback' in err and 'SystemExit' in err
+
+
+class version_info( vtu.vvtestTestCase ):
+
+    def test_using_version_option_prints_the_version(self):
+        ""
+        rtn,out,err = util.call_capture_output(
+                        cmdline.parse_command_line, [ '--version' ], '1.2.3' )
+        print3( out )
+        assert out.strip() and '1.2.3' in out
+        assert 'Traceback' in err and 'SystemExit' in err
+
+
+class create_derived_options( vtu.vvtestTestCase ):
+
+    def test_creating_keyword_expression(self):
+        ""
+        expr = cmdline.create_keyword_expression( None, None )
+        assert len( expr.getWordList() ) == 0
+
+        expr = cmdline.create_keyword_expression( ['pass'], None )
+        assert expr.getWordList() == [ 'pass' ]
+
+        expr = cmdline.create_keyword_expression( None, ['fail'] )
+        assert expr.getWordList() == [ 'fail' ]
+
+    def test_error_in_keyword_specification(self):
+        ""
+        rtn,out,err = util.call_capture_output(
+                        cmdline.parse_command_line, [ '-k', 'bad"' ] )
+        #print3( err )
+        assert 'command line problem with keyword options' in err
+        assert 'Traceback' in err and 'SystemExit' in err
+
+    def test_creating_unified_parameter_list(self):
+        ""
+        pL = cmdline.create_parameter_list( None, None )
+        assert len( pL ) == 0
+
+        pL = cmdline.create_parameter_list( ['np=1'], None )
+        assert pL == [ 'np=1' ]
+
+        pL = cmdline.create_parameter_list( None, ['np=1'] )
+        assert pL == [ '!np=1' ]
+
+        pL = cmdline.create_parameter_list( ['np<8'], ['np=1/np=4'] )
+        assert pL == [ 'np<8', '!np=1/!np=4' ]
+
+    def test_creating_parameter_dictionary(self):
+        ""
+        pD = cmdline.create_parameter_settings( None )
+        assert pD == None
+
+        pD = cmdline.create_parameter_settings( ['np=1'] )
+        assert pD == { 'np':['1'] }
+
+    def test_cleaning_up_the_sort_options(self):
+        ""
+        letters = cmdline.clean_sort_options( None )
+        assert letters == None
+
+        letters = cmdline.clean_sort_options( ['n'] )
+        assert letters == 'n'
+
+        letters = cmdline.clean_sort_options( ['t','x'] )
+        assert letters == 'tx'
+
+    def test_creating_platform_options(self):
+        ""
+        pD = cmdline.create_platform_options( None )
+        assert pD == {}
+
+        pD = cmdline.create_platform_options( ['name=value'] )
+        assert pD == { 'name':'value' }
+
+        pD = cmdline.create_platform_options( ['name=value', 'key'] )
+        assert pD == { 'name':'value', 'key':'' }
+
+    def test_cleaning_on_off_options(self):
+        ""
+        onL,offL = cmdline.clean_on_off_options( None, None )
+        assert onL == [] and offL == []
+
+        onL,offL = cmdline.clean_on_off_options( ['dbg+a1'], ['foo','bar+baz'] )
+        assert onL == ['a1','dbg']
+        assert offL == ['bar','baz','foo']
+
+    def test_converting_test_runtime_options(self):
+        ""
+        mn,mx,sm = cmdline.convert_test_time_options( None, None, None )
+        assert mn == None and mx == None and sm == None
+
+        mn,mx,sm = cmdline.convert_test_time_options( '1', '2', '3' )
+        assert abs(mn-1) < 1.e-12 and abs(mx-2) < 1.e-12 and abs(sm-3) < 1.e-12
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

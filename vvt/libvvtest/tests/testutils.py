@@ -21,6 +21,7 @@ import getopt
 import random
 import string
 import glob
+import traceback
 import unittest
 
 
@@ -339,6 +340,43 @@ class RedirectStdout:
             self.filep2.close()
 
 
+call_capture_id = 0
+
+def call_capture_output( func, *args, **kwargs ):
+    """
+    Redirect current process stdout & err to files, call the given function
+    with the given arguments, return
+
+        ( output of the function, all stdout, all stderr )
+
+    Exceptions are caught and the traceback is captured in the stderr output.
+    This includes SystemExit, but not KeyboardInterrupt.
+    """
+    global call_capture_id
+    outid = call_capture_id
+    call_capture_id += 1
+
+    of = 'stdout'+str(outid)+'.log'
+    ef = 'stderr'+str(outid)+'.log'
+
+    redir = RedirectStdout( of, ef )
+    rtn = None
+    try:
+        rtn = func( *args, **kwargs )
+    except Exception:
+        traceback.print_exc()
+    except SystemExit:
+        traceback.print_exc()
+    except:
+        redir.close()
+        raise
+
+    redir.close()
+    time.sleep(1)
+
+    return rtn, readfile(of), readfile(ef)
+
+
 def shell_escape( cmd ):
     """
     Returns a string with shell special characters escaped so they are not
@@ -577,3 +615,44 @@ def has_world_execute( path ):
     ""
     fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
     return int( fm & stat.S_IXOTH ) != 0
+
+
+module_uniq_id = 0
+filename_to_module_map = {}
+
+def create_module_from_filename( fname ):
+    ""
+    global module_uniq_id
+
+    fname = os.path.normpath( os.path.abspath( fname ) )
+
+    if fname in filename_to_module_map:
+
+        mod = filename_to_module_map[fname]
+
+    else:
+
+        modname = os.path.splitext(os.path.basename(fname))[0]+str(module_uniq_id)
+        module_uniq_id += 1
+
+        if sys.version_info[0] < 3 or sys.version_info[1] < 5:
+            import imp
+            fp = open( fname, 'r' )
+            try:
+                spec = ('.py','r',imp.PY_SOURCE)
+                mod = imp.load_module( modname, fp, fname, spec )
+            finally:
+                fp.close()
+        else:
+            import importlib
+            import importlib.machinery as impmach
+            import importlib.util as imputil
+            loader = impmach.SourceFileLoader( modname, fname )
+            spec = imputil.spec_from_file_location( modname, fname, loader=loader )
+            mod = imputil.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+
+        filename_to_module_map[ fname ] = mod
+
+    return mod
+

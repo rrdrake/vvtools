@@ -1,0 +1,487 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import re
+
+import vvtestutils as vtu
+import testutils as util
+from testutils import print3
+
+from libvvtest.argutil import ArgumentParser
+import libvvtest.argutil as argutil
+
+
+class basic_option_handling( vtu.vvtestTestCase ):
+
+    def setUp(self):
+        vtu.vvtestTestCase.setUp( self, cleanout=False )
+
+    def test_simple_flag_option(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '-v', action='store_true' )
+
+        args = psr.parse_args( [] )
+        assert not args.v  # has value None in python 2.6
+
+        args = psr.parse_args( ['-v'] )
+        assert args.v
+
+    def test_repeatable_flag_option(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '-v', action='count' )
+
+        args = psr.parse_args( [] )
+        assert not args.v  # has value None in python 2.6
+
+        args = psr.parse_args( ['-v'] )
+        assert args.v == 1
+
+        args = psr.parse_args( ['-vv'] )
+        assert args.v == 2
+
+        args = psr.parse_args( ['-v','-v'] )
+        assert args.v == 2
+
+    def test_a_string_valued_option(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '-f' )  # can optionally add action='store'
+
+        args = psr.parse_args( [] )
+        assert args.f == None
+
+        args = psr.parse_args( ['-f','42'] )
+        assert args.f == '42'
+
+        args = psr.parse_args( ['-f',''] )
+        assert args.f == ''
+
+    def test_an_integer_valued_option(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '--ival', action='store', type=int )
+
+        args = psr.parse_args( [] )
+        assert args.ival == None
+
+        args = psr.parse_args( ['--ival','101'] )
+        assert args.ival == 101
+
+    def test_a_float_valued_option(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '--fval', action='store', type=float )
+
+        args = psr.parse_args( [] )
+        assert args.fval == None
+
+        args = psr.parse_args( ['--fval','1.01'] )
+        assert abs( args.fval - 1.01 ) < 1.e-12
+
+    def test_repeatable_string_option(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '-o', action='append' )
+
+        args = psr.parse_args( [] )
+        print3( args )
+        assert not args.o  # has value None in python 2.6
+
+        args = psr.parse_args( ['-o','on'] )
+        print3( args )
+        assert args.o == ['on']
+
+        args = psr.parse_args( ['-o','on','-o','dbg'] )
+        print3( args )
+        assert args.o == [ 'on', 'dbg' ]
+
+    def test_repeatable_int_option(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '-i', action='append', type=int )
+
+        args = psr.parse_args( [] )
+        print3( args )
+        assert not args.i  # has value None in python 2.6
+
+        args = psr.parse_args( ['-i','89'] )
+        print3( args )
+        assert args.i == [89]
+
+        args = psr.parse_args( ['-i','89','-i','21'] )
+        print3( args )
+        assert args.i == [ 89, 21 ]
+
+    def test_error_when_a_required_option_is_not_given(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '--prefix', required=True )
+
+        rtn,out,err = util.call_capture_output( psr.parse_args, [] )
+        assert 'required' in err and 'Traceback' in err and 'SystemExit' in err
+
+        args = psr.parse_args( ['--prefix','/home/cinderella'] )
+        assert args.prefix == '/home/cinderella'
+
+    def test_nonoption_arguments(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '--prefix' )
+        psr.add_argument( 'other', nargs='*' )
+
+        args = psr.parse_args( [] )
+        print3( args )
+        assert args.other == []
+
+        args = psr.parse_args( ['--prefix','/home/cinderella'] )
+        print3( args )
+        assert args.other == []
+
+        args = psr.parse_args( ['--prefix','/home/cinderella', 'foo', 'bar'] )
+        print3( args )
+        assert args.other == ['foo', 'bar']
+
+        args = psr.parse_args( ['foo', 'bar'] )
+        print3( args )
+        assert args.other == ['foo', 'bar']
+
+        rtn,out,err = util.call_capture_output( psr.parse_args, ['-h'] )
+        print3( out )
+
+    def test_destination_variable_name_for_option_values(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '-f', dest='filename', help='the file name' )
+
+        args = psr.parse_args( [] )
+        print3( args )
+        assert not args.filename
+
+        args = psr.parse_args( ['-f', '/file/name'] )
+        print3( args )
+        assert args.filename == '/file/name'
+
+    def test_specifying_dest_and_metavar_for_an_option(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '-f', dest='filename', metavar='PATH',
+                          help='the file name' )
+
+        args = psr.parse_args( [] )
+        print3( args )
+        assert not args.filename
+
+        args = psr.parse_args( ['-f', '/file/name'] )
+        print3( args )
+        assert args.filename == '/file/name'
+
+        rtn,out,err = util.call_capture_output( psr.parse_args, ['-h'] )
+        print3( out )
+        assert len( util.greplines( '-f *PATH *the file name', out ) ) == 1
+
+    def test_adding_a_hidden_option(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '-f', dest='PATH', help='file name' )
+        psr.add_argument( '-F', help=argutil.SUPPRESS )
+
+        args = psr.parse_args( [] )
+        print3( args )
+        assert not args.F
+
+        args = psr.parse_args( ['-F','val'] )
+        print3( args )
+        assert args.F == 'val'
+
+        rtn,out,err = util.call_capture_output( psr.parse_args, ['-h'] )
+        print3( out )
+        assert len( util.greplines( '-f PATH*file name', out ) ) == 1
+        assert len( util.greplines( '-F', out ) ) == 0
+
+
+class argument_group_tests( vtu.vvtestTestCase ):
+
+    def setUp(self):
+        vtu.vvtestTestCase.setUp( self, cleanout=False )
+
+    def test_two_options_in_two_groups(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '--default', help='default opt group' )
+        grp = psr.add_argument_group( 'config group' )
+        grp.add_argument( '--config', help='config opt group' )
+        grp = psr.add_argument_group( 'advanced group' )
+        grp.add_argument( '--advanced', help='advanced opt group' )
+
+        rtn,out,err = util.call_capture_output( psr.parse_args, ['-h'] )
+        print3( out )
+
+        # the --default option should come just after the --help option
+        pat = '--help[^\n]+\n+[^\n]*--default'
+        assert re.search( pat, out, re.MULTILINE ) != None
+
+        # the --config option should come just after the config group heading
+        pat = 'config group[^\n]+\n+[^\n]*--config'
+        assert re.search( pat, out, re.MULTILINE ) != None
+
+        # the --advanced option should come just after the advanced group heading
+        pat = 'advanced group[^\n]+\n+[^\n]*--advanced'
+        assert re.search( pat, out, re.MULTILINE ) != None
+
+        assert 'Traceback' in err and 'SystemExit' in err
+
+    def test_command_line_options_from_option_groups(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '--default', help='default opt group' )
+        grp = psr.add_argument_group( 'config group' )
+        grp.add_argument( '--config', help='config opt group' )
+        grp = psr.add_argument_group( 'advanced group' )
+        grp.add_argument( '--advanced', help='advanced opt group' )
+
+        args = psr.parse_args( [] )
+        print3( args )
+        assert not args.default
+        assert not args.config
+        assert not args.advanced
+
+        args = psr.parse_args( ['--default','1', '--config','2','--advanced','3'] )
+        print3( args )
+        assert args.default == '1'
+        assert args.config == '2'
+        assert args.advanced == '3'
+
+
+
+
+class terminal_size_tests( vtu.vvtestTestCase ):
+
+    def setUp(self):
+        vtu.vvtestTestCase.setUp( self, cleanout=False )
+
+    def test_call_the_get_terminal_width_function(self):
+        ""
+        w = argutil.get_terminal_width()
+        print3( 'width', w )
+        assert w == None or ( w > 0 and w < 1024*1024 )
+
+
+class help_page_tests( vtu.vvtestTestCase ):
+
+    def setUp(self):
+        ""
+        vtu.vvtestTestCase.setUp( self, cleanout=False )
+        argutil.set_num_columns_for_help_formatter()
+
+    def test_help_with_no_arguments_defined(self):
+        ""
+        psr = ArgumentParser()
+        rtn,out,err = util.call_capture_output( psr.parse_args, ['-h'] )
+
+        assert rtn == None
+        assert 'usage:' in out.lower()
+        assert 'show this help message and exit' in out
+        assert 'Traceback' in err and 'SystemExit' in err
+
+    def test_description_section(self):
+        ""
+        psr = ArgumentParser( description="""
+            Fake descritpion (sp?)
+            Line two.""" )
+        rtn,out,err = util.call_capture_output( psr.parse_args, ['-h'] )
+
+        print3( out )
+        assert 'descritpion' in out
+        for line in out.splitlines():
+            if line.strip().startswith('Fake descritpion'):
+                assert 'Line two' in line
+
+    def test_can_do_raw_formatting_with_description_section(self):
+        ""
+        psr = ArgumentParser( description="""
+            Fake descritpion (sp?)
+            Line two.""", formatter_class=argutil.RawDescriptionHelpFormatter )
+        rtn,out,err = util.call_capture_output( psr.parse_args, ['-h'] )
+
+        print3( out )
+        assert 'descritpion' in out
+        for line in out.splitlines():
+            if 'Fake descritpion' in line:
+                assert not line.startswith( 'Fake' )
+            if line.strip().startswith('Fake descritpion'):
+                assert line.strip() == 'Fake descritpion (sp?)'
+
+    def test_optional_argument_section(self):
+        ""
+        psr = ArgumentParser()
+        psr.add_argument( '-v', help="verbose flag", action='store_true' )
+        psr.add_argument( '--prefix', help="install location" )
+
+        rtn,out,err = util.call_capture_output( psr.parse_args, ['-h'] )
+
+        print3( out )
+        assert '-v' in out and '--prefix' in out
+        for line in out.splitlines():
+            if line.strip().startswith( '-v' ):
+                assert 'verbose flag' in line
+            if line.strip().startswith( '--prefix' ):
+                assert 'install location' in line
+
+    def test_specifying_program_name_for_help_page(self):
+        ""
+        psr = ArgumentParser( prog='bullets' )
+        psr.add_argument( '--prefix' )
+
+        rtn,out,err = util.call_capture_output( psr.parse_args, ['--help'] )
+
+        print3( out )
+        for line in out.splitlines():
+            if 'usage' in line.lower():
+                assert line.strip().split()[1] == 'bullets'
+
+    def test_formatting_the_description_to_preserve_paragraphs(self):
+        ""
+        psr = ArgumentParser( formatter_class=argutil.ParagraphHelpFormatter,
+                              description="""
+            Line one.
+            Line two.
+
+            Paragraph two.
+            """ )
+        psr.add_argument( '-f', help="file   name", dest='filename' )
+
+        rtn,out,err = util.call_capture_output( psr.parse_args, ['-h'] )
+
+        print3( out )
+        assert 'Line one' in out and 'Paragraph two' in out
+        for line in out.splitlines():
+            if 'Line one' in line:
+                assert line.startswith( 'Line one' )
+                assert 'Line two' in line
+                assert 'Paragraph two' not in line
+            if 'Paragraph two' in line:
+                assert line.startswith( 'Paragraph two' )
+
+    def test_wrapping_long_lines(self):
+        ""
+        psr = ArgumentParser( description=long_description )
+        psr.add_argument( '--prefix-to-put-the-installation-artifacts',
+                          help=long_argument_help )
+
+        rtn,out,err = util.call_capture_output( psr.parse_args, ['-h'] )
+
+        print3( out )
+        assert 'This is the start' in out
+        assert 'finishendo' in out
+        assert 'installation-artifacts' in out
+        assert 'created' in out
+        for line in out.splitlines():
+            if 'This is the start' in line:
+                assert 'finishendo' not in line
+            if 'installation-artifacts' in line:
+                assert 'created' not in line
+
+    def test_specifying_the_number_of_columns_for_help_formatter(self):
+        ""
+        # set this before ArgumentParser construction
+        argutil.set_num_columns_for_help_formatter( 40 )
+
+        psr = ArgumentParser( prog='awesome',
+                              description=long_description,
+                              formatter_class=argutil.ParagraphHelpFormatter )
+        psr.add_argument( '--prefix', help=long_argument_help )
+
+        rtn,out,err = util.call_capture_output( psr.parse_args, ['-h'] )
+
+        print3( out )
+        maxcol = max( [ len(line) for line in out.splitlines() ] )
+        assert maxcol < 50
+
+    def test_adding_verbatim_text(self):
+        ""
+        psr = ArgumentParser( formatter_class=argutil.ParagraphHelpFormatter,
+                              description=verbatim_description_input )
+        psr.add_argument( '-f', help="file   name", dest='filename' )
+
+        rtn,out,err = util.call_capture_output( psr.parse_args, ['-h'] )
+
+        print3( out )
+        begin_desc = out[ out.index( 'Line one' ) : ]
+        assert begin_desc.startswith( verbatim_help_message_answer )
+
+
+verbatim_description_input = """
+            Line one.
+            Line two.
+>    1. Item number one.
+>    2. Item two it is.
+
+            Paragraph two.
+>    - Text above is close
+>    - Text below is close
+            End paragraph two.
+
+>    "This is some isolated, quoted text."
+
+Intermediate
+paragraph.
+
+>    "Second quoted text, but the following paragraph should be close."
+            And finally, a happy ending!
+            """
+
+verbatim_help_message_answer = """
+Line one. Line two.
+    1. Item number one.
+    2. Item two it is.
+
+Paragraph two.
+    - Text above is close
+    - Text below is close
+End paragraph two.
+
+    "This is some isolated, quoted text."
+
+Intermediate paragraph.
+
+    "Second quoted text, but the following paragraph should be close."
+And finally, a happy ending!
+""".strip()
+
+
+
+long_description = """
+    This is the start of a long,
+    drawn out description of the program you are about to run.
+    It must be many words to test the wrapping (otherwise some
+    wiseacre is going to run the test with a wide terminal and
+    the test will fail).
+    It must be many words to test the wrapping (otherwise some
+    wiseacre is going to run the test with a wide terminal and
+    the test will fail).
+    This the finishendo.
+""" 
+
+
+long_argument_help = """the installation artifacts are placed in this
+                        prefix directory location and contain everything
+                        needed to run the code; if the directories do
+                        not already exist, they are created
+                     """
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
