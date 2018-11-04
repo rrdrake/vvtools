@@ -16,10 +16,8 @@ def parse_command_line( argvlist, vvtest_version=None ):
     psr = create_parser( argvlist, vvtest_version )
 
     opts = psr.parse_args( argvlist )
-    print ( 'magic: opts', opts )
 
     args = opts.directory
-    print ( 'magic: args', args )
 
     check_print_help_section( psr, args )
 
@@ -31,7 +29,7 @@ def parse_command_line( argvlist, vvtest_version=None ):
 
     derived_opts = create_derived_options( opts )
 
-    return opts, args
+    return opts, derived_opts, args
 
 
 ##############################################################################
@@ -419,6 +417,8 @@ It has been replaced by the --test-args option.
 The -G option has been removed.  It is the same as -g.
 
 The -F option is now an error; it has been replaced with -R.
+
+The -H option has been removed.  It is the same as --help.
 """
 
 
@@ -505,7 +505,7 @@ def create_parser( argvlist, vvtest_version ):
         help='Turn option(s) off if they would be on by default.' )
     grp.add_argument( '-w', dest='wipe', action='store_true',
         help='Wipe previous test results, if present.' )
-    grp.add_argument( '-m', dest='overwrite', action='store_false',
+    grp.add_argument( '-m', dest='nopreclean', action='store_true',
         help='Do not clean out test result directories before running.' )
     grp.add_argument( '--perms', action='append',
         help='Apply permission settings to files and directories in the '
@@ -524,7 +524,7 @@ def create_parser( argvlist, vvtest_version ):
         help='Do not redirect test output to log files.' )
     grp.add_argument( '-a', '--analyze', dest='analyze', action='store_true',
         help='Pass option to tests to only execute sections marked analysis.' )
-    grp.add_argument( '--check', dest='checkname',
+    grp.add_argument( '--check', dest='checkname', action='append',
         help='This option is deprecated (subhelp: deprecated).' )
     grp.add_argument( '--test-args', metavar='ARGS', dest='test_args',
                       action='append',
@@ -666,8 +666,8 @@ def create_derived_options( opts ):
         derived_opts['param_dict'] = paramD
 
         errtype = 'search option'
-        if opts.search != None:
-            derived_opts['search_regex'] = re.compile( opts.search )
+        rxL = create_search_regex_list( opts.search )
+        derived_opts['search_regexes'] = rxL
 
         errtype = 'platform options'
         expr = create_platform_expression( opts.platforms, opts.not_platforms )
@@ -705,19 +705,19 @@ def create_derived_options( opts ):
             raise Exception( 'must be positive' )
 
         errtype = 'max procs'
-        if opts.maxprocs != None and opts.maxprocs <= 0:
+        if opts.maxprocs != None and float(opts.maxprocs) <= 0:
             raise Exception( 'must be positive' )
 
         errtype = 'timeout'
-        if opts.timeout and opts.timeout < 0.0:
+        if opts.timeout and float(opts.timeout) < 0.0:
             opts.timeout = 0.0
 
         errtype = 'timeout multiplier'
-        if opts.multiplier and opts.multiplier < 0.0:
-            raise Exception( 'cannot be negative' )
+        if opts.multiplier and not float(opts.multiplier) > 0.0:
+            raise Exception( 'must be positive' )
 
         errtype = 'max timeout'
-        if opts.maxtimeout and not opts.maxtimeout > 0.0:
+        if opts.maxtimeout and not float(opts.maxtimeout) > 0.0:
             raise Exception( 'must be positive' )
 
         errtype = 'tmin/tmax/tsum'
@@ -794,10 +794,14 @@ def create_parameter_list( params, not_params ):
 
 def create_platform_expression( platforms, not_platforms ):
     ""
-    expr = FilterExpressions.WordExpression( platforms )
+    expr = None
+
+    if platforms or not_platforms:
+        expr = FilterExpressions.WordExpression( platforms )
 
     if not_platforms:
         # convert -X values into -x values
+        exprL = []
         for s in not_platforms:
             s = s.strip()
             if s:
@@ -808,9 +812,26 @@ def create_platform_expression( platforms, not_platforms ):
                         orL.append( '!' + p )
 
                 if len( orL ) > 0:
-                    expr.append( '/'.join( orL ), 'and' )
+                    exprL.append( '/'.join( orL ) )
+
+        if len( exprL ) > 0:
+            expr.append( exprL, 'and' )
 
     return expr
+
+
+def create_search_regex_list( pattern_list ):
+    ""
+    regexL = None
+
+    if pattern_list != None:
+
+        regexL = []
+
+        for pat in pattern_list:
+            regexL.append( re.compile( pat, re.IGNORECASE | re.MULTILINE ) )
+
+    return regexL
 
 
 def create_parameter_settings( set_param ):

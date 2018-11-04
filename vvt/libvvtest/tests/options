@@ -20,7 +20,7 @@ from testutils import print3
 
 class options_tests( vtu.vvtestTestCase ):
 
-    def test_of_each_mode_of_operation(self):
+    def test_spot_check_each_mode_of_operation(self):
         ""
         util.writefile( "null.xml", """
             <rtest name="null">
@@ -28,7 +28,6 @@ class options_tests( vtu.vvtestTestCase ):
         time.sleep(1)
 
         vtu.runvvtest( '-h' )
-        vtu.runvvtest( '-H' )
         vtu.runvvtest( '--help' )
 
         vtu.runvvtest( '-g' )
@@ -40,19 +39,8 @@ class options_tests( vtu.vvtestTestCase ):
 
         vtu.runvvtest( '-b' )
 
-    def test_mode_combinations_that_are_not_allowed(self):
-        ""
-        self.assertRaises( Exception, vtu.runvvtest, '-gi' )
-        self.assertRaises( Exception, vtu.runvvtest, '-gb' )
-        self.assertRaises( Exception, vtu.runvvtest, '-Ri' )
-        self.assertRaises( Exception, vtu.runvvtest, '-Rb' )
-        self.assertRaises( Exception, vtu.runvvtest, '-ib' )
-
     def test_some_bad_option_values(self):
         ""
-        self.assertRaises( Exception, vtu.runvvtest, '-j dir1 -j dir2' )
-        self.assertRaises( Exception, vtu.runvvtest, '-M dir1 -M dir2' )
-        self.assertRaises( Exception, vtu.runvvtest, '-n 1 -n 2' )
         self.assertRaises( Exception, vtu.runvvtest, '-n text' )
         self.assertRaises( Exception, vtu.runvvtest, '-n -3' )
 

@@ -243,7 +243,7 @@ class execute_tests( vtu.vvtestTestCase ):
         os.chdir( vrun.resultsDir()+'/xdir' )
         vtu.runvvtest( '-R' ).assertCounts( total=1, npass=1 )
 
-    def test_generate_options_g_and_G(self):
+    def test_generate_test_area_with_option_g_then_run(self):
         ""
         util.writefile( 'helloworld.xml', """
             <rtest name="helloworld">
@@ -257,7 +257,7 @@ class execute_tests( vtu.vvtestTestCase ):
             exit 0""" )
         time.sleep(1)
 
-        vrun = vtu.runvvtest( '-gG' )
+        vrun = vtu.runvvtest( '-g' )
         vrun.assertCounts( total=1, notrun=1 )
 
         os.chdir( vrun.resultsDir()+'/helloworld' )

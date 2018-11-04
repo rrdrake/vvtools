@@ -23,10 +23,10 @@ class RuntimeConfig:
        'keyword_expr',     # a WordExpression object for keyword filtering
        'option_list',      # list of build options
        'platform_name',    # target platform name
-       'ignore_platforms',  # boolean to turn off filtering by platform
-       'platform_expr_list',  # k-format or string platform expression
-       'search_file_globs',  # file glob patterns used with 'search_patterns'
-       'search_patterns',  # list of regex patterns for seaching within files
+       'ignore_platforms', # boolean to turn off filtering by platform
+       'set_platform_expr',# platform expression
+       'search_file_globs',# file glob patterns used with 'search_regexes'
+       'search_regexes',   # list of regexes for seaching within files
        'include_tdd',      # if True, tests marked TDD are not excluded
        'include_all',      # boolean to turn off test inclusion filtering
        'runtime_range',    # [ minimum runtime, maximum runtime ]
@@ -48,7 +48,7 @@ class RuntimeConfig:
         assert name in RuntimeConfig.known_attrs
         self.attrs[name] = value
         
-        if name in ['platform_name','platform_expr_list']:
+        if name in ['platform_name','set_platform_expr']:
           self._set_platform_expression()
         elif name == 'param_expr_list':
           self.attrs['param_filter'] = FilterExpressions.ParamFilter( value )
@@ -85,10 +85,10 @@ class RuntimeConfig:
         return pf.evaluate(paramD)
     
     def _set_platform_expression(self):
-        exprL = self.attrs.get( 'platform_expr_list', None )
+        pexpr = self.attrs.get( 'set_platform_expr', None )
         pname = self.attrs.get( 'platform_name', None )
-        if exprL != None:
-          self.attrs['platform_expr'] = FilterExpressions.WordExpression( exprL )
+        if pexpr != None:
+          self.attrs['platform_expr'] = pexpr
         elif pname != None:
           self.attrs['platform_expr'] = FilterExpressions.WordExpression( pname )
         else:
@@ -130,20 +130,20 @@ class RuntimeConfig:
         matched in one of the files.  Also returns true if no regular
         expressions were given at construction.
         """
+        regexL = self.attrs.get( 'search_regexes', None )
+        if regexL == None or len(regexL) == 0:
+            return True
+
         fnglob = self.attrs.get( 'search_file_globs', None )
-        srchpats = self.attrs.get( 'search_patterns', None )
-        if fnglob == None or srchpats == None:
-          # filter not applied if no file glob patterns or no search patterns
-          return 1
+        if fnglob == None:
+            # filter not applied if no file glob patterns
+            return True
         
         # TODO: see if there is a way to avoid passing tpsec in here
         
         varD = { 'NAME':tspec.getName() }
         for k,v in tspec.getParameters().items():
           varD[k] = v
-        reL = []
-        for p in srchpats:
-          reL.append( re.compile(p, re.IGNORECASE | re.MULTILINE) )
         for src,dest in tspec.getLinkFiles()+tspec.getCopyFiles():
           src = expand_variables(src,varD)
           for fn in fnglob:
@@ -151,17 +151,17 @@ class RuntimeConfig:
                                    os.path.dirname(tspec.getFilepath()) )
             f = os.path.join( xmldir, src )
             if os.path.exists(f) and fnmatch.fnmatch(os.path.basename(src),fn):
-              for p in reL:
+              for p in regexL:
                 try:
                   fp = open(f)
                   s = fp.read()
                   fp.close()
                   if p.search(s):
-                    return 1
+                    return True
                 except IOError:
                   pass
         
-        return 0
+        return False
 
     def evaluate_runtime(self, test_runtime):
         """

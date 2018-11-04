@@ -166,7 +166,8 @@ class VvtestCommandRunner:
         raise_on_error = options.get( 'raise_on_error', True )
         chdir          = options.get( 'chdir',          None )
 
-        x,out = util.runcmd( self.cmd, chdir=chdir, raise_on_error=False )
+        x,out = util.runcmd( self.cmd, chdir=chdir,
+                             raise_on_error=False, print_output=False )
 
         if not quiet:
             print3( out )

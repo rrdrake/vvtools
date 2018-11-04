@@ -11,6 +11,7 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
+import re
 
 import vvtestutils as vtu
 import testutils as util
@@ -418,6 +419,11 @@ class XML_test_specifications( vtu.vvtestTestCase ):
         print3( "param list", pL )
         assert pL[0] == 'paramA=A1.paramB=B1'
 
+    def expr(self, *string_expr):
+        ""
+        expr = FilterExpressions.WordExpression( list( string_expr ) )
+        return expr
+
     def test_platform_specifications(self):
         ""
         nofltr = RuntimeConfig( platform_name='dummy' )
@@ -517,7 +523,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
         tL = TestSpecCreator.createTestObjects( '.', 'ok9a.xml', None, uf )
         assert len(tL) == 0
         uf = RuntimeConfig( platform_name='something',
-                                          platform_expr_list=['!something'] )
+                            set_platform_expr=self.expr('!something') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok9a.xml', None, uf )
         assert len(tL) == 0
 
@@ -536,7 +542,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
         tL = TestSpecCreator.createTestObjects( '.', 'ok10.xml', None, uf )
         assert len(tL) == 0
         uf = RuntimeConfig( platform_name='Linux',
-                                          platform_expr_list=['IRIX','!SunOS'] )
+                            set_platform_expr=self.expr('IRIX','!SunOS') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok10.xml', None, uf )
         assert len(tL) == 1
 
@@ -570,7 +576,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
         tL = TestSpecCreator.createTestObjects( '.', 'ok11.xml', None, uf )
         assert len(tL) == 1
         uf = RuntimeConfig( platform_name='Linux',
-                            platform_expr_list=['Linux','!IRIX'] )
+                            set_platform_expr=self.expr('Linux','!IRIX') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok11.xml', None, uf )
         assert len(tL) == 1
 
@@ -589,7 +595,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
         tL = TestSpecCreator.createTestObjects( '.', 'ok11a.xml', None, uf )
         assert len(tL) == 1
         uf = RuntimeConfig( platform_name='Linux',
-                            platform_expr_list=['SunOS','!IRIX'] )
+                            set_platform_expr=self.expr('SunOS','!IRIX') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok11a.xml', None, uf )
         assert len(tL) == 1
 
@@ -1396,6 +1402,13 @@ class XML_test_specifications( vtu.vvtestTestCase ):
         tL = TestSpecCreator.createTestObjects( '.', 'ok43.xml', None, uf )
         assert len(tL) == 3
 
+    def regexes(self, *patterns):
+        ""
+        rxL = []
+        for pat in patterns:
+            rxL.append( re.compile( pat, re.IGNORECASE | re.MULTILINE ) )
+        return rxL
+
     def test_using_RuntimeConfig_filtering(self):
         ""
         nofltr = RuntimeConfig( platform_name='dummy' )
@@ -1412,48 +1425,48 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['One'] )
+                            search_regexes=self.regexes('One') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
         assert len(tL) == 2
         print3( tL[0] )
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['three'] )
+                            search_regexes=self.regexes('three') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
         assert len(tL) == 2
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['line two'] )
+                            search_regexes=self.regexes('line two') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
         assert len(tL) == 2
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['line one'] )
+                            search_regexes=self.regexes('line one') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
         assert len(tL) == 0
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['LINE *THEN'] )
+                            search_regexes=self.regexes('LINE *THEN') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
         assert len(tL) == 0
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['LINE .*THEN'] )
+                            search_regexes=self.regexes('LINE .*THEN') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
         assert len(tL) == 2
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['line $'] )
+                            search_regexes=self.regexes('line $') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
         assert len(tL) == 2
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['line$'] )
+                            search_regexes=self.regexes('line$') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
         assert len(tL) == 0
         uf = RuntimeConfig( search_file_globs=['*.nun','*.txt'],
-                            search_patterns=['LINE .*THEN'] )
+                            search_regexes=self.regexes('LINE .*THEN') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
         assert len(tL) == 2
         uf = RuntimeConfig( search_file_globs=['*.nun','*.two'],
-                            search_patterns=['LINE .*THEN'] )
+                            search_regexes=self.regexes('LINE .*THEN') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
         assert len(tL) == 0
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['nomatch','LINE .*THEN'] )
+                            search_regexes=self.regexes('nomatch','LINE .*THEN') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok46.xml', None, uf )
         assert len(tL) == 2
 
@@ -1464,48 +1477,48 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['One'] )
+                            search_regexes=self.regexes('One') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
         assert len(tL) == 2
         print3( tL[0] )
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['three'] )
+                            search_regexes=self.regexes('three') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
         assert len(tL) == 2
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['line two'] )
+                            search_regexes=self.regexes('line two') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
         assert len(tL) == 2
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['line one'] )
+                            search_regexes=self.regexes('line one') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
         assert len(tL) == 0
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['LINE *THEN'] )
+                            search_regexes=self.regexes('LINE *THEN') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
         assert len(tL) == 0
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['LINE .*THEN'] )
+                            search_regexes=self.regexes('LINE .*THEN') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
         assert len(tL) == 2
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['line $'] )
+                            search_regexes=self.regexes('line $') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
         assert len(tL) == 2
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['line$'] )
+                            search_regexes=self.regexes('line$') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
         assert len(tL) == 0
         uf = RuntimeConfig( search_file_globs=['*.nun','*.txt'],
-                            search_patterns=['LINE .*THEN'] )
+                            search_regexes=self.regexes('LINE .*THEN') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
         assert len(tL) == 2
         uf = RuntimeConfig( search_file_globs=['*.nun','*.two'],
-                            search_patterns=['LINE .*THEN'] )
+                            search_regexes=self.regexes('LINE .*THEN') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
         assert len(tL) == 0
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['nomatch','LINE .*THEN'] )
+                            search_regexes=self.regexes('nomatch','LINE .*THEN') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok47.xml', None, uf )
         assert len(tL) == 2
 
@@ -1516,7 +1529,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['One'] )
+                            search_regexes=self.regexes('One') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok48.xml', None, uf )
         assert len(tL) == 0
 
@@ -1527,7 +1540,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['One'] )
+                            search_regexes=self.regexes('One') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok49.xml', None, uf )
         assert len(tL) == 2
         print3( tL[0] )
@@ -1539,7 +1552,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_patterns=['One'] )
+                            search_regexes=self.regexes('One') )
         tL = TestSpecCreator.createTestObjects( '.', 'ok50.xml', None, uf )
         assert len(tL) == 2
         print3( tL[0] )

@@ -278,6 +278,28 @@ class Platform:
         return None
 
 
+def create_Platform_instance( toolsdir, platname, platopts, usenv,
+                              numprocs, maxprocs,
+                              onopts, offopts,
+                              qsubid ):
+    """
+    This function is an adaptor around construct_Platform(), which passes
+    through the command line arguments as a dictionary.  This design is
+    ugly but changing it requires interface changes.
+    """
+    optdict = {}
+    if platname:         optdict['--plat']     = platname
+    if platopts:         optdict['--platopts'] = platopts
+    if usenv:            optdict['-e']         = True
+    if numprocs != None: optdict['-n']         = numprocs
+    if maxprocs != None: optdict['-N']         = maxprocs
+    if onopts:           optdict['-o']         = onopts
+    if offopts:          optdict['-O']         = offopts
+    if qsubid != None:   optdict['--qsub-id']  = qsubid
+
+    return construct_Platform( toolsdir, optdict )
+
+
 def construct_Platform( toolsdir, optdict, **kwargs ):
     """
     This function constructs a Platform object, determines the platform &

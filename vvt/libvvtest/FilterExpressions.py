@@ -93,7 +93,7 @@ class WordExpression:
                     altL.append( bang + k )
                   L.append( bang + k )
                 else:
-                  pass  # should be an error but is currently ignored
+                  raise ValueError( 'invalid word: "'+str(k)+'"' )
               if len(L) > 0:
                 if S: S += ' and '
                 S += '( ' + ' or '.join(L) + ' )'
@@ -204,13 +204,8 @@ class WordExpression:
           try:
             def evalfunc(tok): return 1
             v = eval( s )
-            #print ( 'magic: v type', type(v) )
             assert type(v) == type(False)
-            # if hasattr(types, 'BooleanType'):
-            #   assert type(v) == types.BooleanType
-            # else:
-            #   assert type(v) == type(2)
-          except:
+          except Exception:
             raise ValueError( 'invalid option expression: "' + expr + '"' )
           
           expr = s

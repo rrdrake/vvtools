@@ -49,16 +49,16 @@ class UnitTestingRunHook:
             elif n == 'signum':
                 self.signum = eval( 'signal.'+v )
             elif n == 'qid':
-                self.qid = v.strip()
+                self.qid = int( v.strip() )
 
         self.job_qid = job_qid
 
     def check(self, numrun, numdone):
         ""
         qok = True
-        if self.qid != None and self.job_qid:
+        if self.qid != None and self.job_qid != None:
 
-            assert type( self.job_qid ) == type('')
+            assert type( self.job_qid ) == type(3)
 
             # if the QID is defined and equal to this batch job's queue id
             # then the interrupt will take place; if it is defined but
