@@ -46,16 +46,16 @@ class inlining_results_file_includes( vtu.vvtestTestCase ):
             """ )
         time.sleep(1)
 
-        opts = '--qsub-limit 1 --force'
+        opts = '--batch-limit 1 --force'
 
-        vtu.interrupt_vvtest_batch( '--qsub-limit 1',
+        vtu.interrupt_vvtest_batch( '--batch-limit 1',
                                     count=1, signum='SIGTERM' )
         time.sleep(1)
 
         # exactly one of the three tests should have completed
         assert len( util.findfiles( 'touch*.txt', 'TestResults*' ) ) == 1
 
-        vtu.interrupt_vvtest_batch( '--qsub-limit 1 --force',
+        vtu.interrupt_vvtest_batch( '--batch-limit 1 --force',
                                     count=1, signum='SIGTERM' )
         time.sleep(1)
 
@@ -100,7 +100,7 @@ class inlining_results_file_includes( vtu.vvtestTestCase ):
         # batch zero will be ok, while batch one will crash
         # this should cause batch one to show "did not seem to finish"
 
-        opts = '--batch --qsub-limit 1 --qsub-length 40'
+        opts = '--batch --batch-limit 1 --batch-length 40'
         x,out = vtu.interrupt_vvtest_run( opts, count=1, qid=1 )
 
         L = util.greplines( 'did not seem to finish:', out )

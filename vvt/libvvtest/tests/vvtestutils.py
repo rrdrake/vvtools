@@ -317,11 +317,11 @@ def vvtest_command_line( *cmd_args, **options ):
 
         cmdL.append( '--batch' )
 
-        if '--qsub-limit' not in argL:
-            cmdL.extend( [ '--qsub-limit', '5' ] )
+        if '--batch-limit' not in argL:
+            cmdL.extend( [ '--batch-limit', '5' ] )
 
-        if '--qsub-length' not in argL:
-            cmdL.extend( [ '--qsub-length', '0' ] )
+        if '--batch-length' not in argL:
+            cmdL.extend( [ '--batch-length', '0' ] )
 
     else:
         if '-n' not in argL:

@@ -94,8 +94,8 @@ def populate_configuration_from_options( opts, optD ):
     if optD['offopts']:
         config.set( 'offopts', optD['offopts'] )
 
-    if opts.bindir:
-        config.set( 'exepath', opts.bindir )
+    if opts.bin_dir:
+        config.set( 'exepath', opts.bin_dir )
 
     if opts.configpath:
         config.set( 'configdir', opts.configpath[-1] )
@@ -761,8 +761,8 @@ def readCommandInfo( opts, optD ):
                 else:                  optD['param_list'] = L
             elif kvpair[0] == 'PROJECT':
                 # do not replace if the command line contains -j
-                if not opts.bindir:
-                    opts.bindir = kvpair[1]
+                if not opts.bin_dir:
+                    opts.bin_dir = kvpair[1]
                     config.set( 'exepath', kvpair[1] )
             elif kvpair[0] == 'ONOPTS':
                 optD['onopts'] = kvpair[1].split( '+' )
@@ -1135,7 +1135,7 @@ def batchTestList( opts, optD, toolsdir, tlist, test_dir, plat, perms ):
     """
     assert opts.qsub_id == None
 
-    qsublimit = opts.qsub_limit
+    qsublimit = opts.batch_limit
     if qsublimit == None:
         qsublimit = plat.getDefaultQsubLimit()
     
@@ -1386,7 +1386,7 @@ class Batcher:
     def createTestGroups(self):
         """
         """
-        qlen = self.opts.qsub_length
+        qlen = self.opts.batch_length
         if qlen == None:
             qlen = 30*60
 

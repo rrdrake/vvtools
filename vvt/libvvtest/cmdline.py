@@ -312,11 +312,10 @@ than executing individual tests as resources become open.  In
 order to use the queue submit capability of batch systems, the
 plugin for the platform must be set up to launch batch jobs.
 
-The --qsub-limit option will will limit
-the number of batch jobs submitted to the queue at any one time.
-The default is 5 concurrent batch jobs.
+The --batch-limit option will will limit the number of batch jobs submitted
+to the queue at any one time.  The default is 5 concurrent batch jobs.
 
-The --qsub-length option limits the
+The --batch-length option limits the
 number of tests that are placed into each batch set.  The sum
 of the timeouts of the tests in each set will be less than the
 given number of seconds.  The default is 30 minutes.  The longer
@@ -409,6 +408,12 @@ where the NAME portion is just upper case of <name>.  Those blocks
 are not active by default.  Using this option will cause those
 blocks to be executed as part of the test.
 
+The --qsub-limit option is being deprecated in favor of --batch-limit (with
+the same meaning).
+
+The --qsub-length option is being deprecated in favor of --batch-length (with
+the same meaning).
+
 >DEPRECATED AND REMOVED:
 
 The option --vg could be used to pass the -vg option to each test script.
@@ -435,7 +440,7 @@ def create_parser( argvlist, vvtest_version ):
     psr.add_argument( '--version', dest='version', action='store_true',
         help='Print the version of vvtest and exit.' )
     psr.add_argument( '-v', dest='deprecated_version', action='store_true',
-        help='Deprecated.  Use --version.' )
+        help='Deprecated; use --version.' )
 
     grp = psr.add_argument_group( 'Test selection / filters (subhelp: filters)' )
 
@@ -451,7 +456,7 @@ def create_parser( argvlist, vvtest_version ):
         help='Rerun tests.  Normally tests are not run if they previously '
              'completed.' )
     grp.add_argument( '-F', dest='deprecated_rerun', action='store_true',
-        help='Deprecated. Use -R.' )
+        help='Deprecated; use -R.' )
 
     # parameter filtering
     grp.add_argument( '-p', dest='params', action='append',
@@ -551,7 +556,7 @@ def create_parser( argvlist, vvtest_version ):
 
     # config
     grp = psr.add_argument_group( 'Runtime configuration (subhelp: config)' )
-    grp.add_argument( '-j', dest='bindir', metavar='BINDIR',
+    grp.add_argument( '-j', '--bin-dir', dest='bin_dir', metavar='BINDIR',
         help='Specify the directory containing the project executables.' )
     grp.add_argument( '--config', dest='configpath', action='append',
         help='Directory containing testing plugins and helpers. '
@@ -567,13 +572,17 @@ def create_parser( argvlist, vvtest_version ):
              'monitors for completion.' )
     grp.add_argument( '--pipeline', action='store_true',
         help='Deprecated.  Use --batch instead.' )
-    grp.add_argument( '--qsub-limit', type=int,
+    grp.add_argument( '--batch-limit', type=int,
         help='Limit the number of batch jobs in the queue at any one time. '
              'Default is 5.' )
-    grp.add_argument( '--qsub-length', type=int,
+    grp.add_argument( '--qsub-limit', type=int,
+        help='Deprecated; use --batch-limit.' )
+    grp.add_argument( '--batch-length', type=int,
         help='Limit the number of tests in each job group such that the '
              'sum of their runtimes is less than the given value. '
              'Default is 30 minutes.' )
+    grp.add_argument( '--qsub-length', type=int,
+        help='Deprecated; use --batch-length.' )
     psr.add_argument( '--qsub-id', type=int, help=argutil.SUPPRESS )
 
     # results
@@ -635,16 +644,32 @@ def check_deprecated_option_use( opts ):
         errprint( '*** error: the -F option is deprecated (use -R instead).' )
         sys.exit(1)
 
+    if opts.qsub_limit and opts.batch_limit:
+        errprint( '*** error: cannot use --qsub-limit and --batch-limit '
+                  'at the same time; --qsub-limit is deprecated.' )
+        sys.exit(1)
+
+    if opts.qsub_length and opts.batch_length:
+        errprint( '*** error: cannot use --qsub-length and --batch-length '
+                  'at the same time; --qsub-length is deprecated.' )
+        sys.exit(1)
+
 
 def adjust_option_values( opts ):
     ""
     if opts.pipeline:
-        # --pipeline is deprecated
-        opts.batch = True
+        opts.batch = True  # --pipeline replaced with --batch
 
     if opts.deprecated_version:
-        # -v is deprecated
-        opts.version = True
+        opts.version = True  # -v will be dropped
+
+    if opts.qsub_limit:
+        # --qsub-limit replaced with --batch-limit
+        opts.batch_limit = opts.qsub_limit
+
+    if opts.qsub_length:
+        # --batch-limit replaced with --batch-limit
+        opts.batch_length = opts.qsub_length
 
 
 def create_derived_options( opts ):
@@ -681,12 +706,12 @@ def create_derived_options( opts ):
         platD = create_platform_options( opts.platopt )
         derived_opts['platopt_dict'] = platD
 
-        errtype = 'qsub-limit'
-        if opts.qsub_limit != None and opts.qsub_limit < 0:
+        errtype = 'batch-limit'
+        if opts.batch_limit != None and opts.batch_limit < 0:
             raise Exception( 'limit cannot be negative' )
 
-        errtype = 'qsub-length'
-        if opts.qsub_length != None and opts.qsub_length < 0:
+        errtype = 'batch-length'
+        if opts.batch_length != None and opts.batch_length < 0:
             raise Exception( 'length cannot be negative' )
 
         errtype = 'on/off options'
@@ -727,8 +752,8 @@ def create_derived_options( opts ):
         opts.tsum = sm
 
         errtype = '-j option'
-        if opts.bindir != None:
-            opts.bindir = os.path.normpath( os.path.abspath( opts.bindir ) )
+        if opts.bin_dir != None:
+            opts.bin_dir = os.path.normpath( os.path.abspath( opts.bin_dir ) )
 
         errtype = 'config directory'
         if opts.configpath != None:

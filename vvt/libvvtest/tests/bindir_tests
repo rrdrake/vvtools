@@ -1,0 +1,67 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+
+import vvtestutils as vtu
+import testutils as util
+from testutils import print3
+
+
+class bindir_tests( vtu.vvtestTestCase ):
+
+    def test_that_the_bindir_is_provided_to_the_test_scripts(self):
+        ""
+        util.writescript( 'mybin/myprog', """
+            #!"""+sys.executable+"""
+            print ( 'running myprog' )
+            """ )
+        util.writefile( 'testA.vvt', """
+            import os, sys, subprocess
+            import vvtest_util as vvt
+            sys.stdout.write( 'bindir='+vvt.PROJECT+os.linesep )
+            sys.stdout.flush()
+            subprocess.check_call( vvt.PROJECT+"/myprog", shell=True )
+            """ )
+        util.writefile( 'testB.xml', """
+            <rtest name="testB">
+                <execute> echo "bindir= $PROJECT" || exit 1
+                          $PROJECT/myprog || exit 1
+                </execute>
+            </rtest>
+            """ )
+        os.mkdir( 'bin' )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            for bdir in ['-j','--bin-dir']:
+
+                vtu.remove_results()
+
+                vrun = vtu.runvvtest( bdir+' mybin', batch=batch )
+                vrun.assertCounts( total=2, npass=2 )
+
+                assert len( util.grepfiles( 'running myprog',
+                                    'TestResults*/testA/execute.log' ) ) == 1
+                assert len( util.grepfiles( 'running myprog',
+                                    'TestResults*/testB/execute.log' ) ) == 1
+
+                L = vrun.greplogs( 'bindir=' )
+                assert len(L) == 2
+                assert os.path.samefile( L[0].split('=',1)[1].strip(), 'mybin' )
+                assert os.path.samefile( L[1].split('=',1)[1].strip(), 'mybin' )
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
