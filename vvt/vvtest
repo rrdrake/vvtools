@@ -97,25 +97,25 @@ def populate_configuration_from_options( opts, optD ):
     if opts.bin_dir:
         config.set( 'exepath', opts.bin_dir )
 
-    if opts.configpath:
-        config.set( 'configdir', opts.configpath[-1] )
+    if opts.config:
+        config.set( 'configdir', opts.config[-1] )
     else:
         d = os.getenv( 'VVTEST_CONFIGDIR' )
         if d == None:
             d = os.path.join( config.get('toolsdir'), 'config' )
         config.set( 'configdir', os.path.abspath(d) )
 
-    config.set( 'refresh', not opts.nopreclean )
+    config.set( 'refresh', not opts.dash_m )
     config.set( 'postclean', opts.postclean == True )
 
-    if opts.timeout != None:
-        config.set( 'timeout', opts.timeout )
-    if opts.multiplier != None:
-        config.set( 'multiplier', opts.multiplier )
+    if opts.dash_T != None:
+        config.set( 'timeout', opts.dash_T )
+    if opts.timeout_multiplier != None:
+        config.set( 'multiplier', opts.timeout_multiplier )
 
-    config.set( 'preclean', not opts.nopreclean )
+    config.set( 'preclean', not opts.dash_m )
     config.set( 'analyze', opts.analyze == True )
-    config.set( 'logfile', not opts.nologs )
+    config.set( 'logfile', not opts.dash_L )
 
     if opts.test_args:
         argL = []
@@ -148,15 +148,15 @@ def main():
     # 'test_dir' non-None only if the CWD is in a TestResults.* directory
     test_dir = readCommandInfo( opts, optD )
 
-    if opts.checkname:
-        for n in opts.checkname:
+    if opts.check:
+        for n in opts.check:
             os.environ[ 'CHECK_' + n.upper() ] = ''
 
     if test_dir and optD['param_dict']:
         print3( "*** error: cannot use -S in a TestResults directory" )
         sys.exit(1)
 
-    if test_dir and opts.generate:
+    if test_dir and opts.dash_g:
         print3( "*** error: cannot use -g in a TestResults directory" )
         sys.exit(1)
 
@@ -169,9 +169,9 @@ def main():
 
     rtconfig = construct_RuntimeConfig( plat, opts, optD )
 
-    info = ( opts.info or opts.keys or opts.files )
+    info = ( opts.dash_i or opts.keys or opts.files )
 
-    if opts.generate and not info:
+    if opts.dash_g and not info:
         assert test_dir == None
         generateTestList( opts, optD, dirs, plat, rtconfig, testsubdir )
 
@@ -179,22 +179,22 @@ def main():
         print_info_mode( opts, optD, plat, rtconfig,
                          dirs, test_dir, testsubdir )
 
-    elif opts.baseline:
+    elif opts.dash_b:
 
-        if opts.rerun or opts.wipe:
+        if opts.dash_R or opts.dash_w:
             print3( "*** error: cannot use -R or -w with -b (baseline)" )
             sys.exit(1)
 
         baselineTests( opts, optD, test_dir, plat, rtconfig, testsubdir )
 
-    elif opts.extract_dir:
-        extractTestFiles( opts, optD, dirs, plat, opts.extract_dir, rtconfig )
+    elif opts.extract:
+        extractTestFiles( opts, optD, dirs, plat, opts.extract, rtconfig )
 
     else:
 
         # if no results keywords are specified, then add -k notrun/notdone
         if not keyword_expr.containsResultsKeywords() and \
-           not opts.wipe and not opts.rerun:
+           not opts.dash_w and not opts.dash_R:
             keyword_expr.append( ['notrun/notdone'], 'and' )
 
         if test_dir != None:
@@ -207,11 +207,11 @@ def construct_platform_instance( toolsdir, opts, optD ):
     ""
     plat = vvplatform.create_Platform_instance(
                 toolsdir,
-                opts.platname,         # --plat
+                opts.plat,
                 optD['platopt_dict'],  # --platopt
-                opts.useenv,           # -e
-                opts.numprocs,         # -n
-                opts.maxprocs,         # -N
+                opts.dash_e,
+                opts.dash_n,
+                opts.dash_N,
                 optD['onopts'],        # -o
                 optD['offopts'],       # -O
                 opts.qsub_id )         # --qsub-id
@@ -226,7 +226,7 @@ def construct_RuntimeConfig( plat, opts, optD ):
                   keyword_expr=keyword_expr,
                   option_list=( optD['onopts'] + [plat.getCompiler()] ),
                   platform_name=plat.getName(),
-                  ignore_platforms=( opts.ignore_platforms == True ),
+                  ignore_platforms=( opts.dash_A == True ),
                   set_platform_expr=optD['platform_expr'],
                   search_file_globs=search_fnmatch,
                   search_regexes=optD['search_regexes'],
@@ -256,7 +256,7 @@ def print_info_mode( opts, optD, plat, rtconfig,
         saveResults( opts, optD, tlist, plat, test_dir )
 
     else:
-        if opts.html or opts.junit_filename:
+        if opts.html or opts.junit:
             do_stdout = False
         else:
             do_stdout = True
@@ -265,7 +265,7 @@ def print_info_mode( opts, optD, plat, rtconfig,
                       optD['sort_letters'], opts.results_date,
                       tostdout=do_stdout,
                       tohtml=opts.html,
-                      tojunit=opts.junit_filename )
+                      tojunit=opts.junit )
 
 
 def construct_info_test_list( opts, optD, plat, rtconfig, scan_dirs,
@@ -415,13 +415,13 @@ def generateTestList( opts, optD, dirs, plat, rtconfig, testsubdir ):
     scan_test_source_directories( tlist, dirs, optD['param_dict'] )
 
     loadRunTimes( tlist, plat,
-                  opts.timeout, opts.multiplier, opts.maxtimeout )
+                  opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
 
     tlist.loadAndFilter( plat.getMaxProcs() )
     
     perms = make_PermissionSetter( test_dir, opts.perms )
     
-    createTestDir( testsubdir, perms, opts.mirror_dir )
+    createTestDir( testsubdir, perms, opts.dash_M )
     writeCommandInfo( opts, optD, test_dir, plat, perms )
     printResults( tlist, test_dir, perms,
                   optD['sort_letters'], opts.results_date,
@@ -446,7 +446,7 @@ def extractTestFiles( opts, optD, dirs, plat, target_dir, rtconfig ):
     scan_test_source_directories( tlist, dirs, optD['param_dict'] )
 
     loadRunTimes( tlist, plat,
-                  opts.timeout, opts.multiplier, opts.maxtimeout )
+                  opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
 
     tlist.loadAndFilter( plat.getMaxProcs() )
     
@@ -692,8 +692,8 @@ def writeCommandInfo( opts, optD, test_dir, plat, perms ):
         fp = open( f, "w" )
         fp.write( 'VERSION=' + str(version) + '\n' )
         fp.write( 'DIR=' + os.getcwd() + '\n' )
-        if opts.platname:
-              fp.write( 'PLATFORM=' + opts.platname.strip() + '\n' )
+        if opts.plat:
+              fp.write( 'PLATFORM=' + opts.plat.strip() + '\n' )
         else:
               fp.write( 'PLATFORM=' + plat.getName() + '\n' )
         if optD['param_list']:
@@ -705,19 +705,19 @@ def writeCommandInfo( opts, optD, test_dir, plat, perms ):
             fp.write( 'ONOPTS=' + '+'.join( optD['onopts'] ) + '\n' )
         if optD['offopts']:
             fp.write( 'OFFOPTS=' + '+'.join( optD['offopts'] ) + '\n' )
-        if opts.timeout != None:
-            fp.write( 'TIMEOUT=' + str(opts.timeout).strip() + '\n' )
-        if opts.multiplier != None:
+        if opts.dash_T != None:
+            fp.write( 'TIMEOUT=' + str(opts.dash_T).strip() + '\n' )
+        if opts.timeout_multiplier != None:
             fp.write( 'TIMEOUT_MULTIPLIER=' + \
-                                   str(opts.multiplier).strip() + '\n' )
-        if opts.useenv:
+                                   str(opts.timeout_multiplier).strip() + '\n' )
+        if opts.dash_e:
             fp.write( 'USE_ENV=1\n' )
-        if opts.ignore_platforms:
+        if opts.dash_A:
             fp.write( 'ALL_PLATFORMS=1\n' )
         if opts.include_tdd:
             fp.write( 'INCLUDE_TDD=True\n' )
-        if opts.checkname:
-            fp.write( 'CHECK=' + ' '.join( opts.checkname ) + '\n' )
+        if opts.check:
+            fp.write( 'CHECK=' + ' '.join( opts.check ) + '\n' )
         fp.close()
 
     perms.set( os.path.abspath(f) )
@@ -738,7 +738,7 @@ def readCommandInfo( opts, optD ):
 
     if test_cache != None:
 
-        if optD['onopts'] or optD['offopts'] or opts.generate:
+        if optD['onopts'] or optD['offopts'] or opts.dash_g:
             sys.stderr.write('*** error: ' + \
                 'the -g, -o, and -O options are not allowed ' + \
                 'in a TestResults directory\n')
@@ -754,7 +754,7 @@ def readCommandInfo( opts, optD ):
             elif kvpair[0] == 'DIR':
                 previous_run_dir = kvpair[1]
             elif kvpair[0] == 'PLATFORM':
-                opts.platname = kvpair[1]
+                opts.plat = kvpair[1]
             elif kvpair[0] == 'PARAMETERS':
                 L = eval( kvpair[1] )
                 if optD['param_list']: optD['param_list'].extend(L)
@@ -772,21 +772,21 @@ def readCommandInfo( opts, optD ):
                 config.set( 'offopts', optD['offopts'] )
             elif kvpair[0] == 'TIMEOUT':
                 # do not replace if the command line contains -T
-                if opts.timeout == None:
-                    opts.timeout = kvpair[1]
-                    config.set( 'timeout', float(opts.timeout) )
+                if opts.dash_T == None:
+                    opts.dash_T = kvpair[1]
+                    config.set( 'timeout', float(opts.dash_T) )
             elif kvpair[0] == 'TIMEOUT_MULTIPLIER':
-                if not opts.multiplier:
-                    opts.multiplier = float(kvpair[1])
-                    config.set( 'multiplier', opts.multiplier )
+                if not opts.timeout_multiplier:
+                    opts.timeout_multiplier = float(kvpair[1])
+                    config.set( 'multiplier', opts.timeout_multiplier )
             elif kvpair[0] == 'USE_ENV':
-                opts.useenv = True
+                opts.dash_e = True
             elif kvpair[0] == 'ALL_PLATFORMS':
-                opts.ignore_platforms = True
+                opts.dash_A = True
             elif kvpair[0] == 'INCLUDE_TDD':
                 opts.include_tdd = True
             elif kvpair[0] == 'CHECK':
-                opts.checkname = kvpair[1].split()
+                opts.check = kvpair[1].split()
         fp.close()
 
     if test_cache != None:
@@ -832,9 +832,9 @@ def runTests( opts, optD, toolsdir, dirs, plat, rtconfig, testsubdir ):
 
     perms = make_PermissionSetter( test_dir, opts.perms )
 
-    createTestDir( testsubdir, perms, opts.mirror_dir )
+    createTestDir( testsubdir, perms, opts.dash_M )
 
-    if opts.wipe:
+    if opts.dash_w:
         remove_directory_contents( testsubdir )
 
     writeCommandInfo( opts, optD, test_dir, plat, perms )
@@ -849,7 +849,7 @@ def runTests( opts, optD, toolsdir, dirs, plat, rtconfig, testsubdir ):
     tlist.ensureInlinedTestResultIncludes()
 
     loadRunTimes( tlist, plat,
-                  opts.timeout, opts.multiplier, opts.maxtimeout )
+                  opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
 
     load_filter_and_prune_test_list( test_dir, tlist, plat, None, opts.analyze )
 
@@ -1118,8 +1118,8 @@ def executeTestList( opts, optD, tlist, test_dir, plat, perms, tfile ):
     
     do_html = ( opts.qsub_id == None )
     do_junit = ''
-    if opts.qsub_id == None and opts.junit_filename:
-        do_junit = opts.junit_filename
+    if opts.qsub_id == None and opts.junit:
+        do_junit = opts.junit
     print3()
     printResults( tlist, test_dir, perms,
                   optD['sort_letters'], opts.results_date,
@@ -1154,7 +1154,7 @@ def batchTestList( opts, optD, toolsdir, tlist, test_dir, plat, perms ):
     print3( 'Total number of batch jobs: ' + str(numjobs) + \
             ', maximum concurrent jobs: ' + str(qsublimit) )
 
-    if opts.generate:
+    if opts.dash_g:
       return
     
     schedule = batch.getScheduler()
@@ -1230,10 +1230,9 @@ def batchTestList( opts, optD, toolsdir, tlist, test_dir, plat, perms ):
                 '" due to dependency "' + deptx.atest.getExecuteDirectory() + '"' )
 
     print3()
-    do_junit = opts.junit_filename
     printResults( tlist, test_dir, perms,
                   optD['sort_letters'], opts.results_date,
-                  tohtml=True, tojunit=do_junit )
+                  tohtml=True, tojunit=opts.junit )
     
     elapsed = pretty_time( time.time() - starttime )
     print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
@@ -1424,11 +1423,11 @@ class Batcher:
         self.removeBatchDirectories()
 
         commonopts = ''
-        if self.opts.useenv: commonopts += ' -e'
-        if self.opts.nopreclean: commonopts += ' -m'
+        if self.opts.dash_e: commonopts += ' -e'
+        if self.opts.dash_m: commonopts += ' -m'
         if self.opts.postclean: commonopts += ' -C'
         if self.opts.analyze: commonopts += ' -a'
-        if self.opts.maxprocs: commonopts += ' -N '+str( self.opts.maxprocs )
+        if self.opts.dash_N: commonopts += ' -N '+str( self.opts.dash_N )
         if self.optD['param_list']:
             # have to escape exclamation points
             for s in self.optD['param_list']:
@@ -1502,8 +1501,8 @@ class Batcher:
           else:
             qtime = int( float(qtime) * 1.3 )
 
-        if self.opts.maxtimeout:
-            qtime = min( qtime, float(self.opts.maxtimeout) )
+        if self.opts.max_timeout:
+            qtime = min( qtime, float(self.opts.max_timeout) )
 
         npD[qnumber] = maxnp
         pout = self.namer.getBatchOutputName( qnumber )
@@ -1636,7 +1635,7 @@ def restartTests( opts, optD, toolsdir, test_dir, plat, rtconfig ):
 
     if qid == None:
         loadRunTimes( tlist, plat,
-                      opts.timeout, opts.multiplier, opts.maxtimeout )
+                      opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
 
     reld = computeRelativePath( os.path.abspath(test_dir), os.getcwd() )
 

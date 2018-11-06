@@ -437,48 +437,48 @@ def create_parser( argvlist, vvtest_version ):
                         description=intro,
                         formatter_class=argutil.ParagraphHelpFormatter )
 
-    psr.add_argument( '--version', dest='version', action='store_true',
+    psr.add_argument( '--version', action='store_true',
         help='Print the version of vvtest and exit.' )
-    psr.add_argument( '-v', dest='deprecated_version', action='store_true',
+    psr.add_argument( '-v', dest='dash_v', action='store_true',
         help='Deprecated; use --version.' )
 
     grp = psr.add_argument_group( 'Test selection / filters (subhelp: filters)' )
 
     # keyword filtering
-    grp.add_argument( '-k', dest='keywords', action='append',
+    grp.add_argument( '-k', dest='dash_k', action='append',
         help='Filter tests by including those with a keyword or keyword '
               'expression, such as "-k fast" or "-k fail/diff" '
               '(subhelp: keywords).' )
-    grp.add_argument( '-K', dest='not_keywords', action='append',
+    grp.add_argument( '-K', dest='dash_K', action='append',
         help='Filter tests by including those with a keyword or keyword '
              'expression, such as "-K long" or "-K fail/notdone".' )
-    grp.add_argument( '-R', dest='rerun', action='store_true',
+    grp.add_argument( '-R', dest='dash_R', action='store_true',
         help='Rerun tests.  Normally tests are not run if they previously '
              'completed.' )
-    grp.add_argument( '-F', dest='deprecated_rerun', action='store_true',
+    grp.add_argument( '-F', dest='dash_F', action='store_true',
         help='Deprecated; use -R.' )
 
     # parameter filtering
-    grp.add_argument( '-p', dest='params', action='append',
+    grp.add_argument( '-p', dest='dash_p', action='append',
         help='Filter tests by parameter name and value, such as '
              '"-p np=8" or "-p np<8" or "-p np" '
              '(subhelp: parameters).' )
-    grp.add_argument( '-P', dest='not_params', action='append',
+    grp.add_argument( '-P', dest='dash_P', action='append',
         help='Filter the set of tests by excluding those with a parameter '
              'name and value, such as "-P np".' )
-    grp.add_argument( '-S', dest='set_param', action='append',
+    grp.add_argument( '-S', dest='dash_S', action='append',
         help='Using name=value will set the parameter name to that value in '
              'any test that defines the parameter, such as "-S np=16".' )
 
     # platform filtering
-    grp.add_argument( '-x', dest='platforms', action='append',
+    grp.add_argument( '-x', dest='dash_x', action='append',
         help='Include tests that would, by default, run for the given '
              'platform name, such as "-x Linux" or "-x TLCC2/CTS1" '
              '(subhelp: platforms).' )
-    grp.add_argument( '-X', dest='not_platforms', action='append',
+    grp.add_argument( '-X', dest='dash_X', action='append',
         help='Exclude tests that would, by default, run for the given '
              'platform name, such as "-X Linux" or "-X TLCC2/CTS1".' )
-    grp.add_argument( '-A', dest='ignore_platforms', action='store_true',
+    grp.add_argument( '-A', dest='dash_A', action='store_true',
         help='Ignore platform exclusions specified in the tests.' )
 
     # runtime filtering
@@ -503,14 +503,14 @@ def create_parser( argvlist, vvtest_version ):
 
     # behavior
     grp = psr.add_argument_group( 'Runtime behavior (subhelp: behavior)' )
-    grp.add_argument( '-o', dest='on_options', action='append',
+    grp.add_argument( '-o', dest='dash_o', action='append',
         help='Turn option(s) on, such as "-o dbg" or "-o intel17+dbg" '
              '(subhelp: options).' )
-    grp.add_argument( '-O', dest='off_options', action='append',
+    grp.add_argument( '-O', dest='dash_O', action='append',
         help='Turn option(s) off if they would be on by default.' )
-    grp.add_argument( '-w', dest='wipe', action='store_true',
+    grp.add_argument( '-w', dest='dash_w', action='store_true',
         help='Wipe previous test results, if present.' )
-    grp.add_argument( '-m', dest='nopreclean', action='store_true',
+    grp.add_argument( '-m', dest='dash_m', action='store_true',
         help='Do not clean out test result directories before running.' )
     grp.add_argument( '--perms', action='append',
         help='Apply permission settings to files and directories in the '
@@ -520,48 +520,47 @@ def create_parser( argvlist, vvtest_version ):
     grp.add_argument( '--force', action='store_true',
         help='Force vvtest to run even if it appears to be running in '
              'another process.' )
-    grp.add_argument( '-M', dest='mirror_dir',
+    grp.add_argument( '-M', dest='dash_M',
         help='Use this path to contain the test executions.' )
     grp.add_argument( '--run-dir',
         help='The name of the subdir under the current working '
              'directory to contain the test execution results.' )
-    grp.add_argument( '-L', dest='nologs', action='store_true',
+    grp.add_argument( '-L', dest='dash_L', action='store_true',
         help='Do not redirect test output to log files.' )
     grp.add_argument( '-a', '--analyze', dest='analyze', action='store_true',
         help='Pass option to tests to only execute sections marked analysis.' )
-    grp.add_argument( '--check', dest='checkname', action='append',
+    grp.add_argument( '--check', action='append',
         help='This option is deprecated (subhelp: deprecated).' )
-    grp.add_argument( '--test-args', metavar='ARGS', dest='test_args',
-                      action='append',
+    grp.add_argument( '--test-args', metavar='ARGS', action='append',
         help='Pass options and/or arguments to each test script.' )
 
     # resources
     grp = psr.add_argument_group( 'Resource controls (subhelp: resources)' )
-    grp.add_argument( '-n', dest='numprocs', type=int,
+    grp.add_argument( '-n', dest='dash_n', type=int,
         help='Set the number of processors to use at one time.' )
-    grp.add_argument( '-N', dest='maxprocs', type=int,
+    grp.add_argument( '-N', dest='dash_N', type=int,
         help='Set the maximum number of processors to use, and filter out '
              'tests requiring more.' )
-    grp.add_argument( '--plat', dest='platname',
+    grp.add_argument( '--plat',
         help='Use this platform name for defaults and plugins.' )
     grp.add_argument( '--platopt', action='append',
         help='Pass through name=value settings to the platform, such '
              'as "--platopt ppn=4".' )
-    grp.add_argument( '-T', dest='timeout',
+    grp.add_argument( '-T', dest='dash_T',
         help='Apply timeout in seconds to each test.' )
-    grp.add_argument( '--timeout-multiplier', dest='multiplier', type=float,
+    grp.add_argument( '--timeout-multiplier', type=float,
         help='Apply a float multiplier to the timeout value for each test.' )
-    grp.add_argument( '--max-timeout', dest='maxtimeout',
+    grp.add_argument( '--max-timeout',
         help='Maximum timeout value for each test and for batch jobs.' )
 
     # config
     grp = psr.add_argument_group( 'Runtime configuration (subhelp: config)' )
     grp.add_argument( '-j', '--bin-dir', dest='bin_dir', metavar='BINDIR',
         help='Specify the directory containing the project executables.' )
-    grp.add_argument( '--config', dest='configpath', action='append',
+    grp.add_argument( '--config', action='append',
         help='Directory containing testing plugins and helpers. '
              'Same as VVTEST_CONFIGDIR environment variable.' )
-    grp.add_argument( '-e', dest='useenv', action='store_true',
+    grp.add_argument( '-e', dest='dash_e', action='store_true',
         help='Prevents test harness from overwriting environment '
              'variables prior to each test.' )
 
@@ -587,10 +586,10 @@ def create_parser( argvlist, vvtest_version ):
 
     # results
     grp = psr.add_argument_group( 'Results handling (subhelp: results)' )
-    grp.add_argument( '-i', dest='info', action='store_true',
+    grp.add_argument( '-i', dest='dash_i', action='store_true',
         help='Read and display testing results. Can be run while another '
              'vvtest is running.' )
-    grp.add_argument( '--sort', dest='sort', metavar='LETTERS', action='append',
+    grp.add_argument( '--sort', metavar='LETTERS', action='append',
         help='Sort test listings.  Letters include n=name, '
              'x=execution name, t=runtime, d=execution date, '
              's=status, r=reverse the order.' )
@@ -600,20 +599,20 @@ def create_parser( argvlist, vvtest_version ):
         help='Add an arbitrary tag to the --save-results output file.' )
     grp.add_argument( '--results-date', metavar='DATE',
         help='Specify the date to use in the --save-results output file.' )
-    grp.add_argument( '--junit', metavar='FILENAME', dest='junit_filename',
+    grp.add_argument( '--junit', metavar='FILENAME',
         help='Writes a test summary file in the JUnit XML format.' )
     grp.add_argument( '--html', action='store_true',
         help='Write a test summary file in HTML format.' )
 
     grp = psr.add_argument_group( 'Other operating modes' )
-    grp.add_argument( '-b', dest='baseline', action='store_true',
+    grp.add_argument( '-b', dest='dash_b', action='store_true',
         help='Rebaseline tests that have diffed (subhelp: baseline).' )
 
-    grp.add_argument( '-g', dest='generate', action='store_true',
+    grp.add_argument( '-g', dest='dash_g', action='store_true',
         help='Scan for tests and populate the test results tree, '
              'but do not run any tests (subhelp: behavior).' )
 
-    grp.add_argument( '--extract', metavar='DESTDIR', dest='extract_dir',
+    grp.add_argument( '--extract', metavar='DESTDIR',
         help='Extract test files from their source to the DESTDIR '
              'directory (subhelp; extract).' )
 
@@ -640,7 +639,7 @@ def check_print_version( opts, vvtest_version ):
 
 def check_deprecated_option_use( opts ):
     ""
-    if opts.deprecated_rerun:
+    if opts.dash_F:
         errprint( '*** error: the -F option is deprecated (use -R instead).' )
         sys.exit(1)
 
@@ -660,7 +659,7 @@ def adjust_option_values( opts ):
     if opts.pipeline:
         opts.batch = True  # --pipeline replaced with --batch
 
-    if opts.deprecated_version:
+    if opts.dash_v:
         opts.version = True  # -v will be dropped
 
     if opts.qsub_limit:
@@ -679,15 +678,15 @@ def create_derived_options( opts ):
     try:
 
         errtype = 'keyword options'
-        expr = create_keyword_expression( opts.keywords, opts.not_keywords )
+        expr = create_keyword_expression( opts.dash_k, opts.dash_K )
         derived_opts['keyword_expr'] = expr
 
         errtype = 'parameter options'
-        params = create_parameter_list( opts.params, opts.not_params )
+        params = create_parameter_list( opts.dash_p, opts.dash_P )
         derived_opts['param_list'] = params
 
         errtype = 'setting paramters'
-        paramD = create_parameter_settings( opts.set_param )
+        paramD = create_parameter_settings( opts.dash_S )
         derived_opts['param_dict'] = paramD
 
         errtype = 'search option'
@@ -695,7 +694,7 @@ def create_derived_options( opts ):
         derived_opts['search_regexes'] = rxL
 
         errtype = 'platform options'
-        expr = create_platform_expression( opts.platforms, opts.not_platforms )
+        expr = create_platform_expression( opts.dash_x, opts.dash_X )
         derived_opts['platform_expr'] = expr
 
         errtype = 'the sort option'
@@ -715,7 +714,7 @@ def create_derived_options( opts ):
             raise Exception( 'length cannot be negative' )
 
         errtype = 'on/off options'
-        onL,offL = clean_on_off_options( opts.on_options, opts.off_options )
+        onL,offL = clean_on_off_options( opts.dash_o, opts.dash_O )
         derived_opts['onopts'] = onL
         derived_opts['offopts'] = offL
 
@@ -726,23 +725,23 @@ def create_derived_options( opts ):
                 raise Exception( 'must be a non-empty, single path segment' )
 
         errtype = 'num procs'
-        if opts.numprocs != None and opts.numprocs <= 0:
+        if opts.dash_n != None and opts.dash_n <= 0:
             raise Exception( 'must be positive' )
 
         errtype = 'max procs'
-        if opts.maxprocs != None and float(opts.maxprocs) <= 0:
+        if opts.dash_N != None and float(opts.dash_N) <= 0:
             raise Exception( 'must be positive' )
 
         errtype = 'timeout'
-        if opts.timeout and float(opts.timeout) < 0.0:
-            opts.timeout = 0.0
+        if opts.dash_T and float(opts.dash_T) < 0.0:
+            opts.dash_T = 0.0
 
         errtype = 'timeout multiplier'
-        if opts.multiplier and not float(opts.multiplier) > 0.0:
+        if opts.timeout_multiplier and not float(opts.timeout_multiplier) > 0.0:
             raise Exception( 'must be positive' )
 
         errtype = 'max timeout'
-        if opts.maxtimeout and not float(opts.maxtimeout) > 0.0:
+        if opts.max_timeout and not float(opts.max_timeout) > 0.0:
             raise Exception( 'must be positive' )
 
         errtype = 'tmin/tmax/tsum'
@@ -756,9 +755,9 @@ def create_derived_options( opts ):
             opts.bin_dir = os.path.normpath( os.path.abspath( opts.bin_dir ) )
 
         errtype = 'config directory'
-        if opts.configpath != None:
-            for i,d in enumerate( opts.configpath ):
-                opts.configpath[i] = os.path.normpath( os.path.abspath( d ) )
+        if opts.config != None:
+            for i,d in enumerate( opts.config ):
+                opts.config[i] = os.path.normpath( os.path.abspath( d ) )
 
     except Exception:
         errprint( '*** error: command line problem with', errtype+':',
