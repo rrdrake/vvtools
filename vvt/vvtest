@@ -34,6 +34,12 @@ from libvvtest.PermissionSetter import DummyPermissionSetter
 from libvvtest.PermissionSetter import PermissionSetter
 import libvvtest.testlistio as testlistio
 import libvvtest.utesthooks as utesthooks
+import libvvtest.resultswriter as resultswriter
+from libvvtest.pathutil import relative_execute_directory
+from libvvtest.pathutil import compute_relative_path
+from libvvtest.resultswriter import pretty_time
+
+XstatusString = resultswriter.XstatusString
 
 
 version = '1.1'
@@ -249,6 +255,8 @@ def print_info_mode( opts, optD, plat, rtconfig,
     if not test_dir and testsubdir:
         test_dir = os.path.abspath( testsubdir )
 
+    perms = make_PermissionSetter( test_dir, opts.perms )
+
     if opts.keys or opts.files:
         keywordInformation( tlist, opts.keys, opts.files )
 
@@ -256,16 +264,8 @@ def print_info_mode( opts, optD, plat, rtconfig,
         saveResults( opts, optD, tlist, plat, test_dir )
 
     else:
-        if opts.html or opts.junit:
-            do_stdout = False
-        else:
-            do_stdout = True
-
-        printResults( tlist, test_dir, None,
-                      optD['sort_letters'], opts.results_date,
-                      tostdout=do_stdout,
-                      tohtml=opts.html,
-                      tojunit=opts.junit )
+        wr = make_results_writer( test_dir, perms, opts, optD )
+        wr.info( tlist )
 
 
 def construct_info_test_list( opts, optD, plat, rtconfig, scan_dirs,
@@ -280,7 +280,7 @@ def construct_info_test_list( opts, optD, plat, rtconfig, scan_dirs,
         tlist.readTestList()
         tlist.readTestResults()
         tlist.loadAndFilter( plat.getMaxProcs(),
-                    filter_dir=computeRelativePath( test_dir, os.getcwd() ) )
+                    filter_dir=compute_relative_path( test_dir, os.getcwd() ) )
 
     elif os.path.exists( testsubdir ):
         test_dir = os.path.abspath( testsubdir )
@@ -301,87 +301,6 @@ def construct_info_test_list( opts, optD, plat, rtconfig, scan_dirs,
         tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
 
     return tlist
-
-
-############################################################################
-
-def XstatusString( t, add_date, test_dir, cwd ):
-    """
-    Returns a formatted string containing the job and its status.  If the
-    add_date argument is true, it adds the date the job finished to the
-    returned string.
-    """
-    
-    if isinstance(t, TestExec.TestExec):
-      ref = t.atest
-      s = "%-20s " % ref.getName()
-    else:
-      ref = t
-      s = "%-20s " % t.getName()
-    
-    state = ref.getAttr('state')
-    if state != "notrun":
-      
-      if state == "done":
-        result = ref.getAttr('result')
-        if result == 'diff':
-          s = s + "%-7s %-8s" % ("Exit", "diff")
-        elif result ==  'pass':
-          s = s + "%-7s %-8s" % ("Exit", "pass")
-        elif result == "timeout":
-          s = s + "%-7s %-8s" % ("TimeOut", 'SIGINT')
-        else:
-          s = s + "%-7s %-8s" % ("Exit", "fail(1)")
-        
-        xtime = ref.getAttr('xtime')
-        if xtime >= 0: s = s + (" %-4s" % (str(xtime)+'s'))
-        else:          s = s + "     "
-      else:
-        s = s + "%-7s %-8s     " % ("Running", "")
-    
-    else:
-      s = s + "%-7s %-8s     " % ("NotRun", "")
-    
-    if add_date:
-      xdate = ref.getAttr('xdate')
-      if xdate > 0:
-        s = s + time.strftime( " %m/%d %H:%M:%S", time.localtime(xdate) )
-      else:
-        s = s + "               "
-    
-    s += ' ' + relative_execute_directory( ref, test_dir, cwd )
-    
-    return s
-
-
-def XstatusResult(t):
-    
-    if isinstance(t, TestExec.TestExec): ref = t.atest
-    else:                        ref = t
-    
-    state = ref.getAttr('state')
-    if state == "notrun" or state == "notdone":
-      return state
-    
-    return ref.getAttr('result')
-
-
-def relative_execute_directory( tst, testdir, cwd ):
-    """
-    Returns the test execute directory relative to the given current working
-    directory.
-    """
-    xdir = tst.getExecuteDirectory()
-
-    if testdir == None:
-      return xdir
-    
-    d = os.path.join( testdir, xdir )
-    sdir = issubdir( cwd, d )
-    if sdir == None or sdir == "":
-        return os.path.basename( xdir )
-    
-    return sdir
 
 
 ##############################################################################
@@ -423,9 +342,10 @@ def generateTestList( opts, optD, dirs, plat, rtconfig, testsubdir ):
     
     createTestDir( testsubdir, perms, opts.dash_M )
     writeCommandInfo( opts, optD, test_dir, plat, perms )
-    printResults( tlist, test_dir, perms,
-                  optD['sort_letters'], opts.results_date,
-                  add_date=False )
+
+    wr = make_results_writer( test_dir, perms, opts, optD )
+    wr.prerun( tlist, short=False )
+
     tlist.createTestExecs( test_dir, plat, config, perms )
 
     tlist.stringFileWrite()
@@ -501,7 +421,7 @@ def extractTestFiles( opts, optD, dirs, plat, target_dir, rtconfig ):
             try:
                 os.chdir( from_dir )
                 fL = glob.glob( srcf )
-            except:
+            except Exception:
                 fL = []
             os.chdir( cwd )
 
@@ -625,7 +545,7 @@ def makeMirrorDirectory( Mval, testdirname, perms ):
                 elif os.access( d, os.X_OK ) and os.access( d, os.W_OK ):
                     try:
                         os.mkdir(ud)
-                    except:
+                    except Exception:
                         pass
                     else:
                         Mval = ud
@@ -805,14 +725,19 @@ def load_filter_and_prune_test_list( test_dir, tlist, plat, filter_dir,
     if len(pruneL) > 0:
         print3()
         for pt,ct in pruneL:
-            print3( '*** Warning: analyze test',
-                    relative_execute_directory( pt, test_dir, os.getcwd() ),
+            print3( '*** Warning: analyze test', exec_path( pt, test_dir ),
                     'will not be run due to dependency',
-                    relative_execute_directory( ct, test_dir, os.getcwd() ) )
+                    exec_path( ct, test_dir ) )
     if cntmax > 0:
         print3()
         print3( 'Note: there were', cntmax, 'tests that exceeded the',
                 'maximum number of processors - they will not be run' )
+
+
+def exec_path( testspec, test_dir ):
+    ""
+    xdir = testspec.getExecuteDirectory()
+    return relative_execute_directory( xdir, test_dir, os.getcwd() )
 
 
 def runTests( opts, optD, toolsdir, dirs, plat, rtconfig, testsubdir ):
@@ -853,12 +778,12 @@ def runTests( opts, optD, toolsdir, dirs, plat, rtconfig, testsubdir ):
 
     load_filter_and_prune_test_list( test_dir, tlist, plat, None, opts.analyze )
 
+    results_writer = make_results_writer( test_dir, perms, opts, optD )
+
     if len(tlist.active) > 0:
 
         print3( "Running these tests:" )
-        printResults( tlist, test_dir, perms,
-                      optD['sort_letters'], opts.results_date,
-                      short=True )
+        results_writer.prerun( tlist )
         print3()
 
         tlist.createTestExecs( test_dir, plat, config, perms )
@@ -867,10 +792,14 @@ def runTests( opts, optD, toolsdir, dirs, plat, rtconfig, testsubdir ):
             saveResults( opts, optD, tlist, plat, test_dir, inprogress=True )
 
         if not opts.batch:
-            executeTestList( opts, optD, tlist, test_dir, plat, perms, tfile )
+            executeTestList( opts, optD,
+                             tlist, test_dir, plat, perms, tfile,
+                             results_writer )
 
         else:
-            batchTestList( opts, optD, toolsdir, tlist, test_dir, plat, perms )
+            batchTestList( opts, optD, toolsdir,
+                           tlist, test_dir, plat, perms,
+                           results_writer )
 
         print3( "Test directory:", testsubdir )
 
@@ -879,6 +808,8 @@ def runTests( opts, optD, toolsdir, dirs, plat, rtconfig, testsubdir ):
 
     else:
         print3( "\n--------- no tests to run -----------\n" )
+
+    results_writer.final( tlist )
 
 
 def check_for_currently_running_vvtest( resultsfiles, optforce ):
@@ -899,157 +830,26 @@ def check_for_currently_running_vvtest( resultsfiles, optforce ):
                 sys.exit(1)
 
 
-def printResults( atestlist, test_dir, perms, optsort, optrdate,
-                  short=False, add_date=True,
-                  tostdout=True, tohtml=False, tojunit='' ):
-    """
-    Prints a summary to the screen and also creates an HTML summary file.
-    If 'short' is True, then only a handfull of tests are written to the
-    screen.
-    """
-    rawlist = atestlist.getActiveTests( optsort )
-    
-    Lfail = []; Ltime = []; Ldiff = []; Lpass = []; Lnrun = []; Lndone = []
-    for atest in rawlist:
-        statr = XstatusResult(atest)
-        if   statr == "fail":    Lfail.append(atest)
-        elif statr == "timeout": Ltime.append(atest)
-        elif statr == "diff":    Ldiff.append(atest)
-        elif statr == "pass":    Lpass.append(atest)
-        elif statr == "notrun":  Lnrun.append(atest)
-        elif statr == "notdone": Lndone.append(atest)
-    sumstr = str(len(Lpass)) + " pass, " + \
-             str(len(Ltime)) + " timeout, " + \
-             str(len(Ldiff)) + " diff, " + \
-             str(len(Lfail)) + " fail, " + \
-             str(len(Lnrun)) + " notrun, " + \
-             str(len(Lndone)) + " notdone"
-    
-    if tostdout:
-        cwd = os.getcwd()
-        print3( "==================================================" )
-        if short and len(rawlist) > 16:
-            for atest in rawlist[:8]:
-                print3( XstatusString( atest, add_date, test_dir, cwd ) )
-            print3( "..." )
-            for atest in rawlist[-8:]:
-                print3( XstatusString( atest, add_date, test_dir, cwd ) )
-        else:
-            for atest in rawlist:
-                print3( XstatusString( atest, add_date, test_dir, cwd ) )
-        print3( "==================================================" )
-        print3( "Summary:", sumstr )
-    
-    if tohtml:
-        printHTMLResults( sumstr, test_dir, perms,
-                          Lfail, Ltime, Ldiff, Lpass, Lnrun, Lndone )
+def make_results_writer( test_dir, perms, opts, optD ):
+    ""
+    if opts.qsub_id == None:
+        htmlfile = opts.html
+        junitfile = opts.junit
+    else:
+        htmlfile = None
+        junitfile = None
 
-    if tojunit:
+    writer = resultswriter.ResultsWriter(
+                test_dir, perms,
+                optD['sort_letters'], opts.results_date,
+                htmlfile, junitfile )
 
-        if optrdate != None:
-            try:
-                datestamp = float(optrdate)
-            except:
-                print3( '*** vvtest error: --results-date must be seconds ' + \
-                        'since epoch for use with --junit option' )
-                sys.exit(1)
-        else:
-            datestamp = atestlist.getDateStamp( time.time() )
-
-        print3( "Writing", len(rawlist), "tests to JUnit file", tojunit )
-        results.write_JUnit_file( test_dir, rawlist, tojunit, datestamp )
+    return writer
 
 
-def printHTMLResults( sumstr, test_dir, perms,
-                      Lfail, Ltime, Ldiff, Lpass, Lnrun, Lndone ):
-    """
-    Opens and writes an HTML summary file in the test directory.
-    """
-    
-    if test_dir == ".":
-      test_dir = os.getcwd()
-    if not os.path.isabs(test_dir):
-      test_dir = os.path.abspath(test_dir)
-    
-    fp = open("summary.htm","w")
-    fp.write( "<html>\n<head>\n<title>Test Results</title>\n" )
-    fp.write( "</head>\n<body>\n" )
-    
-    # a summary section
-    
-    fp.write( "<h1>Summary</h1>\n" )
-    fp.write( "  <ul>\n" )
-    fp.write( "  <li> Directory: " + test_dir + "\n" )
-    fp.write( "  <li> " + sumstr + "</li>\n" )
-    fp.write( "  </ul>\n" )
-    
-    # segregate the tests into implicit keywords, such as fail and diff
-    
-    fp.write( '<h1>Tests that showed "fail"</h1>\n' )
-    writeHTMLTestList( fp, test_dir, Lfail )
-    fp.write( '<h1>Tests that showed "timeout"</h1>\n' )
-    writeHTMLTestList( fp, test_dir, Ltime )
-    fp.write( '<h1>Tests that showed "diff"</h1>\n' )
-    writeHTMLTestList( fp, test_dir, Ldiff )
-    fp.write( '<h1>Tests that showed "notdone"</h1>\n' )
-    writeHTMLTestList( fp, test_dir, Lndone )
-    fp.write( '<h1>Tests that showed "pass"</h1>\n' )
-    writeHTMLTestList( fp, test_dir, Lpass )
-    fp.write( '<h1>Tests that showed "notrun"</h1>\n' )
-    writeHTMLTestList( fp, test_dir, Lnrun )
-    
-    fp.write( "</body>\n</html>\n" )
-    fp.close()
-
-    perms.set( os.path.abspath( 'summary.htm' ) )
-
-
-def writeHTMLTestList( fp, test_dir, tlist ):
-    """
-    Used by printHTMLResults().  Writes the HTML for a list of tests to the
-    HTML summary file.
-    """
-    cwd = os.getcwd()
-    
-    fp.write( '  <ul>\n' )
-    
-    for atest in tlist:
-      
-      fp.write( '  <li><code>' + XstatusString(atest, 1, test_dir, cwd) + '</code>\n' )
-      
-      if isinstance(atest, TestExec.TestExec): ref = atest.atest
-      else:                            ref = atest
-      
-      tdir = os.path.join( test_dir, ref.getExecuteDirectory() )
-      assert cwd == tdir[:len(cwd)]
-      reltdir = tdir[len(cwd)+1:]
-      
-      fp.write( "<ul>\n" )
-      thome = atest.getRootpath()
-      xfile = os.path.join( thome, atest.getFilepath() )
-      fp.write( '  <li>XML: <a href="file://' + xfile + '" ' + \
-                       'type="text/plain">' + xfile + "</a></li>\n" )
-      fp.write( '  <li>Parameters:<code>' )
-      for (k,v) in atest.getParameters().items():
-        fp.write( ' ' + k + '=' + v )
-      fp.write( '</code></li>\n' )
-      fp.write( '  <li>Keywords: <code>' + ' '.join(atest.getKeywords()) + \
-                 ' ' + ' '.join( atest.getResultsKeywords() ) + \
-                 '</code></li>\n' )
-      fp.write( '  <li>Status: <code>' + XstatusString(atest, 1, test_dir, cwd) + \
-                 '</code></li>\n' )
-      fp.write( '  <li> Files:' )
-      if os.path.exists(reltdir):
-        for f in os.listdir(reltdir):
-          fp.write( ' <a href="file:' + os.path.join(reltdir,f) + \
-                    '" type="text/plain">' + f + '</a>' )
-      fp.write( '</li>\n' )
-      fp.write( "</ul>\n" )
-      fp.write( "</li>\n" )
-    fp.write( '  </ul>\n' )
-
-
-def executeTestList( opts, optD, tlist, test_dir, plat, perms, tfile ):
+def executeTestList( opts, optD,
+                     tlist, test_dir, plat, perms, tfile,
+                     results_writer ):
     """
     """
     plat.display()
@@ -1073,8 +873,7 @@ def executeTestList( opts, optD, tlist, test_dir, plat, perms, tfile ):
             tnext = tlist.popNext( plat )
 
             if tnext != None:
-                print3( 'Starting:',
-                        relative_execute_directory( tnext.atest, test_dir, cwd ) )
+                print3( 'Starting:', exec_path( tnext.atest, test_dir ) )
                 tnext.start()
                 tlist.appendTestResult( tnext.atest )
             
@@ -1087,7 +886,7 @@ def executeTestList( opts, optD, tlist, test_dir, plat, perms, tfile ):
             showprogress = False
             for tx in list( tlist.getRunning() ):
                 if tx.poll():
-                    xs = XstatusString( tx, False, test_dir, cwd )
+                    xs = XstatusString( tx, test_dir, cwd )
                     print3( "Finished:", xs )
                     tlist.testDone( tx )
                     showprogress = True
@@ -1115,21 +914,17 @@ def executeTestList( opts, optD, tlist, test_dir, plat, perms, tfile ):
         print3( '*** Warning: analyze test skipped for "' + \
                 tx.atest.getExecuteDirectory() + \
                 '" due to dependency "' + deptx.atest.getExecuteDirectory() + '"' )
-    
-    do_html = ( opts.qsub_id == None )
-    do_junit = ''
-    if opts.qsub_id == None and opts.junit:
-        do_junit = opts.junit
+
     print3()
-    printResults( tlist, test_dir, perms,
-                  optD['sort_letters'], opts.results_date,
-                  tohtml=do_html, tojunit=do_junit )
-    
+    results_writer.postrun( tlist )
+
     elapsed = pretty_time( time.time() - starttime )
     print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
 
 
-def batchTestList( opts, optD, toolsdir, tlist, test_dir, plat, perms ):
+def batchTestList( opts, optD, toolsdir,
+                   tlist, test_dir, plat, perms,
+                   results_writer ):
     """
     The 'tlist' is a TestList class instance.
     """
@@ -1186,7 +981,7 @@ def batchTestList( opts, optD, toolsdir, tlist, test_dir, plat, perms ):
                 ids = ' '.join( [ str(qid) for qid in qidL ] )
                 print3( 'Finished batch IDS:', ids )
             for t in doneL:
-                ts = XstatusString( t, False, test_dir, cwd )
+                ts = XstatusString( t, test_dir, cwd )
                 print3( "Finished:", ts )
 
             uthook.check( schedule.numInFlight(), schedule.numPastQueue() )
@@ -1230,32 +1025,10 @@ def batchTestList( opts, optD, toolsdir, tlist, test_dir, plat, perms ):
                 '" due to dependency "' + deptx.atest.getExecuteDirectory() + '"' )
 
     print3()
-    printResults( tlist, test_dir, perms,
-                  optD['sort_letters'], opts.results_date,
-                  tohtml=True, tojunit=opts.junit )
+    results_writer.postrun( tlist )
     
     elapsed = pretty_time( time.time() - starttime )
     print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
-
-
-def pretty_time( nseconds ):
-    """
-    Returns a string with the given number of seconds written in an easily
-    readable form.
-    """
-    h = int( nseconds / 3600 )
-    sh = str(h)+'h'
-
-    m = int( ( nseconds - 3600*h ) / 60 )
-    sm = str(m)+'m'
-
-    s = int( ( nseconds - 3600*h - 60*m ) )
-    if h == 0 and m == 0 and s == 0: s = 1
-    ss = str(s) + 's'
-
-    if h > 0: return sh+' '+sm+' '+ss
-    if m > 0: return sm+' '+ss
-    return ss
 
 
 def loadRunTimes( tlist, plat, opttimeout, optmult, optmaxtimeout ):
@@ -1576,7 +1349,7 @@ def saveResults( opts, optD, tlist, plat, test_dir, inprogress=False ):
         val = float(rdate)
         # assume format was seconds since epoch
         datestr = time.strftime( "%Y_%m_%d", time.localtime( val ) )
-      except:
+      except Exception:
         datestr = rdate  # just take date string verbatim
     else:
       datestamp = tlist.getDateStamp( time.time() )
@@ -1637,7 +1410,7 @@ def restartTests( opts, optD, toolsdir, test_dir, plat, rtconfig ):
         loadRunTimes( tlist, plat,
                       opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
 
-    reld = computeRelativePath( os.path.abspath(test_dir), os.getcwd() )
+    reld = compute_relative_path( os.path.abspath(test_dir), os.getcwd() )
 
     load_filter_and_prune_test_list( test_dir, tlist, plat, reld, opts.analyze )
 
@@ -1645,12 +1418,12 @@ def restartTests( opts, optD, toolsdir, test_dir, plat, rtconfig ):
 
     perms.set( os.path.abspath( tfile ) )
 
+    results_writer = make_results_writer( test_dir, perms, opts, optD )
+
     if len(tlist.active) > 0:
 
         print3( "Running these tests:" )
-        printResults( tlist, test_dir, perms,
-                      optD['sort_letters'], opts.results_date,
-                      short=True )
+        results_writer.prerun( tlist )
         print3()
 
         if opts.save_results:
@@ -1659,16 +1432,22 @@ def restartTests( opts, optD, toolsdir, test_dir, plat, rtconfig ):
         tlist.createTestExecs( test_dir, plat, config, perms )
 
         if not opts.batch:
-            executeTestList( opts, optD, tlist, test_dir, plat, perms, tfile )
+            executeTestList( opts, optD,
+                             tlist, test_dir, plat, perms, tfile,
+                             results_writer )
 
         else:
-            batchTestList( opts, optD, toolsdir, tlist, test_dir, plat, perms )
+            batchTestList( opts, optD, toolsdir,
+                           tlist, test_dir, plat, perms,
+                           results_writer )
 
         if opts.save_results:
             saveResults( opts, optD, tlist, plat, test_dir )
 
     else:
         print3( "\n--------- no tests to run -----------\n" )
+
+    results_writer.final( tlist )
 
 
 def baselineTests( opts, optD, test_dir, plat, rtconfig, testsubdir ):
@@ -1689,7 +1468,7 @@ def baselineTests( opts, optD, test_dir, plat, rtconfig, testsubdir ):
 
     filter_dir = None
     if path_filter != None:
-      filter_dir = computeRelativePath( test_dir, path_filter )
+      filter_dir = compute_relative_path( test_dir, path_filter )
     
     # if the keyword expression does not include a results keyword, then
     # add the 'diff' keyword so that only diffs are rebaselined by default
@@ -1702,12 +1481,11 @@ def baselineTests( opts, optD, test_dir, plat, rtconfig, testsubdir ):
     
     if len(tlist.active) > 0:
 
-        print3( "Baselining these tests:" )
-        printResults( tlist, test_dir, None,
-                      optD['sort_letters'], opts.results_date,
-                      short=False )
-
         perms = make_PermissionSetter( test_dir, opts.perms )
+
+        print3( "Baselining these tests:" )
+        wr = make_results_writer( test_dir, perms, opts, optD )
+        wr.prerun( tlist, short=False )
 
         tlist.createTestExecs( test_dir, plat, config, perms )
 
@@ -1758,7 +1536,7 @@ def getUserName():
     try:
         import getpass
         usr = getpass.getuser()
-    except:
+    except Exception:
         usr = None
     
     if usr == None:
@@ -1766,7 +1544,7 @@ def getUserName():
             uid = os.getuid()
             import pwd
             usr = pwd.getpwuid( uid )[0]
-        except:
+        except Exception:
             usr = None
     
     if usr == None:
@@ -1774,7 +1552,7 @@ def getUserName():
             p = os.path.expanduser( '~' )
             if p != '~':
                 usr = os.path.basename( p )
-        except:
+        except Exception:
             usr = None
     
     if usr == None:
@@ -1788,61 +1566,6 @@ def getUserName():
         raise Exception( "could not determine this process's user name" )
 
     return usr
-
-
-def computeRelativePath(d1, d2):
-    """
-    Compute relative path from directory d1 to directory d2.
-    """
-    
-    assert os.path.isabs(d1)
-    assert os.path.isabs(d2)
-    
-    d1 = os.path.normpath(d1)
-    d2 = os.path.normpath(d2)
-    
-    list1 = d1.split( os.sep )
-    list2 = d2.split( os.sep )
-    
-    while 1:
-      try: list1.remove('')
-      except: break
-    while 1:
-      try: list2.remove('')
-      except: break
-    
-    i = 0
-    while i < len(list1) and i < len(list2):
-      if list1[i] != list2[i]:
-        break
-      i = i + 1
-    
-    p = []
-    j = i
-    while j < len(list1):
-      p.append('..')
-      j = j + 1
-    
-    j = i
-    while j < len(list2):
-      p.append(list2[j])
-      j = j + 1
-    
-    if len(p) > 0:
-      return os.path.normpath( os.sep.join(p) )
-    
-    return "."
-
-
-def issubdir(parent_dir, subdir):
-    """
-    TODO: test for relative paths
-    """
-    lp = len(parent_dir)
-    ls = len(subdir)
-    if ls > lp and parent_dir + '/' == subdir[0:lp+1]:
-      return subdir[lp+1:]
-    return None
 
 
 def print3( *args, **kwargs ):

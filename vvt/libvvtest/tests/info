@@ -269,42 +269,6 @@ class info_tests( vtu.vvtestTestCase ):
         vrun = vtu.runvvtest( '-N '+str(maxprocs)+' --files' )
         assert_files( vrun, [ 'atest.vvt', 'btest.vvt' ] )
 
-    def test_producing_a_JUnit_results_file(self):
-        ""
-        util.writefile( "subdir/param.xml", """
-            <rtest name="param">
-              <parameterize hello="world mars"/>
-              <execute>
-                sleep 1
-                echo "parm=$hello"
-              </execute>
-            </rtest>""" )
-        util.writefile( "FailTest.xml", """
-            <rtest name="FailTest">
-              <execute>
-                sleep 1
-                echo "Exiting with failure status"
-                exit 1
-              </execute>
-            </rtest>""")
-        util.writefile( "DiffTest.xml", """
-            <rtest name="DiffTest">
-              <parameterize np="1 2"/>
-              <execute>
-                sleep 1
-                echo "Exiting with diff status"
-                set have_diff = yes
-              </execute>
-            </rtest>""")
-        time.sleep(1)
-
-        vrun = vtu.runvvtest()
-        vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
-
-        vrun = vtu.runvvtest( '-i --junit=../ju.xml', chdir=vrun.resultsDir() )
-
-        assert len( util.grepfiles( '<testcase ', 'ju.xml' ) ) == 5
-
 
 ############################################################################
 

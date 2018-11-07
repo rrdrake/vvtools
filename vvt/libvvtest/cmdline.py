@@ -601,7 +601,7 @@ def create_parser( argvlist, vvtest_version ):
         help='Specify the date to use in the --save-results output file.' )
     grp.add_argument( '--junit', metavar='FILENAME',
         help='Writes a test summary file in the JUnit XML format.' )
-    grp.add_argument( '--html', action='store_true',
+    grp.add_argument( '--html', metavar='FILENAME',
         help='Write a test summary file in HTML format.' )
 
     grp = psr.add_argument_group( 'Other operating modes' )

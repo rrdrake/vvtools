@@ -1,0 +1,201 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+
+import vvtestutils as vtu
+import testutils as util
+from testutils import print3
+
+
+def write_three_test_files():
+    ""
+    util.writefile( "subdir/param.vvt", """
+        #VVT: parameterize : hello = world mars
+        import time
+        time.sleep(1)
+        """ )
+    util.writefile( "FailTest.vvt", """
+        import os, sys, time
+        import vvtest_util as vvt
+        time.sleep(2)
+        sys.exit(1)
+        """)
+    util.writefile( "DiffTest.xml", """
+        <rtest name="DiffTest">
+            <parameterize np="1 2"/>
+            <execute>
+                sleep 3
+                set have_diff = yes
+            </execute>
+        </rtest>""")
+
+
+class junit_output_format_tests( vtu.vvtestTestCase ):
+
+    def test_producing_a_JUnit_results_file(self):
+        ""
+        write_three_test_files()
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
+
+        vrun = vtu.runvvtest( '-i --junit=../ju.xml', chdir=vrun.resultsDir() )
+        time.sleep(1)
+
+        assert len( util.grepfiles( '<testcase ', 'ju.xml' ) ) == 5
+
+    def test_producing_a_JUnit_results_file_as_part_of_the_execution(self):
+        ""
+        write_three_test_files()
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '--junit ju.xml', batch=batch )
+            vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
+
+            doc = read_xml( 'ju.xml' )
+            assert len( doc.getElementsByTagName('testcase') ) == 5
+
+    def test_no_tests_to_run_still_produces_a_junit_file(self):
+        ""
+        util.writefile( "subdir/param.vvt", """
+            # error on purpose so vvtest skips this test
+            #VVT: parameterize : hello
+            pass
+            """ )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '--junit ju.xml' )
+            vrun.assertCounts( total=0 )
+
+            assert os.path.exists( 'ju.xml' )
+            doc = read_xml( 'ju.xml' )
+            assert len( doc.getElementsByTagName('testcase') ) == 0
+
+
+class html_output_format_tests( vtu.vvtestTestCase ):
+
+    def test_producing_an_HTML_results_file(self):
+        ""
+        write_three_test_files()
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
+
+        vrun = vtu.runvvtest( '-i --html=../tr.htm', chdir=vrun.resultsDir() )
+        time.sleep(1)
+
+        doc = read_xml( 'tr.htm' )
+        lines = get_status_lines_from_html( doc )
+        self.assert_tests_in_html( lines )
+
+    def assert_tests_in_html(self, lines):
+        ""
+        assert len( lines ) == 5
+        linestr = ' '.join(lines)
+        assert len( util.greplines( 'FailTest', linestr ) ) == 1
+        assert len( util.greplines( 'DiffTest.np=1', linestr ) ) == 1
+        assert len( util.greplines( 'DiffTest.np=2', linestr ) ) == 1
+        assert len( util.greplines( 'subdir/param.hello=mars', linestr ) ) == 1
+        assert len( util.greplines( 'subdir/param.hello=world', linestr ) ) == 1
+
+    def test_producing_an_HTML_results_file_as_part_of_execution(self):
+        ""
+        write_three_test_files()
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '--html tr.html' )
+            vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
+            time.sleep(1)
+
+            doc = read_xml( 'tr.html' )
+            lines = get_status_lines_from_html( doc )
+            self.assert_tests_in_html( lines )
+
+
+###########################################################################
+
+def read_xml( filename ):
+    ""
+    import xml
+    import xml.dom.minidom as minidom
+    doc = minidom.parse( filename )
+    return doc
+
+
+def print_xml( domnode, indent='' ):
+    ""
+    if domnode.localName:
+        print3( indent, domnode.localName )
+    if domnode.hasChildNodes():
+        for nd in domnode.childNodes:
+            print_xml( nd, indent+'  ' )
+
+
+def get_status_lines_from_html( htmldoc ):
+    ""
+    lines = []
+
+    nodes = gather_list_items_starting_with( htmldoc, 'Status:' )
+    for nd in nodes:
+        assert nd.hasChildNodes()
+        lines.append( get_subtext_from_html_node( nd ) )
+
+    return lines
+
+
+def gather_list_items_starting_with( doc, starttext ):
+    ""
+    nodes = []
+
+    for nd in doc.getElementsByTagName('li'):
+        if nd.hasChildNodes:
+            firstchild = nd.childNodes[0]
+            val = firstchild.nodeValue
+            if val and val.strip().startswith( starttext ):
+                nodes.append( nd )
+
+    return nodes
+
+
+def get_subtext_from_html_node( node ):
+    ""
+    txt = ''
+
+    if node.hasChildNodes():
+        for subnd in node.childNodes:
+            if subnd.nodeValue and subnd.nodeValue.strip():
+                txt += subnd.nodeValue
+            for subsubnd in subnd.childNodes:
+                if subsubnd.nodeValue and subsubnd.nodeValue.strip():
+                    txt += subsubnd.nodeValue
+
+    return txt
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
