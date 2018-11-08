@@ -370,18 +370,20 @@ def make_execute_log_section( tspec, test_dir, max_kilobytes=10 ):
 def file_read_with_limit( filename, max_kilobytes ):
     ""
     maxsize = max( 128, max_kilobytes * 1024 )
+    fsz = os.path.getsize( filename )
 
     buf = ''
-    if os.path.getsize( filename ) < maxsize:
+    if fsz < maxsize:
         with open( filename, 'r' ) as fp:
             buf = fp.read()
     else:
-        numbytes = int( float(maxsize) * 0.45 + 0.5 )
+        hdr = int( float(maxsize) * 0.20 + 0.5 )
+        bot = fsz - int( float(maxsize) * 0.70 + 0.5 )
         with open( filename, 'r' ) as fp:
-            buf = fp.read( numbytes )
+            buf = fp.read( hdr )
             buf += '\n\n*** the middle of this file has been removed ***\n\n'
-            fp.seek( -numbytes, 2 )
-            buf += fp.read( numbytes )
+            fp.seek( bot )
+            buf += fp.read()
 
     return buf
 
