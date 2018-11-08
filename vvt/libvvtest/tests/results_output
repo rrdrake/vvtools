@@ -16,6 +16,8 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
+import libvvtest.resultswriter as resultswriter
+
 
 def write_three_test_files():
     ""
@@ -28,19 +30,51 @@ def write_three_test_files():
         import os, sys, time
         import vvtest_util as vvt
         time.sleep(2)
-        sys.exit(1)
+        raise Exception( 'pitch a fake exception' )
         """)
     util.writefile( "DiffTest.xml", """
         <rtest name="DiffTest">
             <parameterize np="1 2"/>
             <execute>
                 sleep 3
+                echo "fake difference of 29"
                 set have_diff = yes
             </execute>
         </rtest>""")
 
 
 class junit_output_format_tests( vtu.vvtestTestCase ):
+
+    def test_reading_file_with_size_limit(self):
+        ""
+        util.writefile( 'afile.txt', """
+            line one is number one
+            line two is last one wins
+            """ )
+        time.sleep(1)
+
+        buf = resultswriter.file_read_with_limit( 'afile.txt', 10 )
+        assert len( buf.splitlines() ) > 2
+        assert len( util.greplines( 'line one', buf ) ) == 1
+        assert len( util.greplines( 'line two', buf ) ) == 1
+
+    def test_reading_a_file_that_has_its_middle_taken_out(self):
+        ""
+        line = 'All work and no play makes Jack a dull boy.\n'
+        with open( 'afile.txt', 'w' ) as fp:
+            fp.write( 'The Overlook Hotel.\n' )
+            fp.write( line * 10000 )
+            fp.write( 'REDRUM!  REDRUM!\n' )
+        time.sleep(1)
+
+        assert os.path.getsize( 'afile.txt' ) > 1*1024
+        buf = resultswriter.file_read_with_limit( 'afile.txt', 1 )
+        assert len( buf ) <= 1*1024
+        assert len( buf.splitlines() ) > 10
+        assert buf.lstrip().startswith( 'The Overlook Hotel' )
+        assert buf.rstrip().endswith( 'REDRUM!  REDRUM!' )
+        assert len( util.greplines(
+                        'middle of this file has been removed', buf ) ) == 1
 
     def test_producing_a_JUnit_results_file(self):
         ""
@@ -53,7 +87,9 @@ class junit_output_format_tests( vtu.vvtestTestCase ):
         vrun = vtu.runvvtest( '-i --junit=../ju.xml', chdir=vrun.resultsDir() )
         time.sleep(1)
 
-        assert len( util.grepfiles( '<testcase ', 'ju.xml' ) ) == 5
+        doc = read_xml( 'ju.xml' )
+        self.assert_junit_test_names( doc )
+        self.assert_output_for_diff_and_fail_tests( doc )
 
     def test_producing_a_JUnit_results_file_as_part_of_the_execution(self):
         ""
@@ -68,7 +104,35 @@ class junit_output_format_tests( vtu.vvtestTestCase ):
             vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
 
             doc = read_xml( 'ju.xml' )
-            assert len( doc.getElementsByTagName('testcase') ) == 5
+            self.assert_junit_test_names( doc )
+
+    def assert_junit_test_names(self, doc):
+        ""
+        tL = []
+        for nd in doc.getElementsByTagName('testcase'):
+            tL.append( (nd.getAttribute('name'),nd.getAttribute('time')) )
+        tL.sort()
+        assert [ tup[0] for tup in tL ] == [ 'DiffTest.np=1',
+                                             'DiffTest.np=2',
+                                             'FailTest',
+                                             'subdir/param.hello=mars',
+                                             'subdir/param.hello=world' ]
+        assert abs( int(tL[0][1]) - 4 ) <= 2
+        assert abs( int(tL[1][1]) - 4 ) <= 2
+        assert abs( int(tL[2][1]) - 3 ) <= 2
+        assert abs( int(tL[3][1]) - 2 ) <= 2
+        assert abs( int(tL[4][1]) - 2 ) <= 2
+
+    def assert_output_for_diff_and_fail_tests(self, doc):
+        ""
+        for nd in doc.getElementsByTagName('testcase'):
+            sysnd = find_child_node( nd, 'system-out' )
+            if nd.getAttribute('name').startswith( 'DiffTest' ):
+                txt = get_subtext_from_node(sysnd)
+                assert 'fake difference of 29' in txt
+            elif nd.getAttribute('name').startswith( 'FailTest' ):
+                txt = get_subtext_from_node(sysnd)
+                assert 'pitch a fake exception' in txt
 
     def test_no_tests_to_run_still_produces_a_junit_file(self):
         ""
@@ -162,7 +226,7 @@ def get_status_lines_from_html( htmldoc ):
     nodes = gather_list_items_starting_with( htmldoc, 'Status:' )
     for nd in nodes:
         assert nd.hasChildNodes()
-        lines.append( get_subtext_from_html_node( nd ) )
+        lines.append( get_subtext_from_node( nd ) )
 
     return lines
 
@@ -181,8 +245,10 @@ def gather_list_items_starting_with( doc, starttext ):
     return nodes
 
 
-def get_subtext_from_html_node( node ):
-    ""
+def get_subtext_from_node( node ):
+    """
+    Concatenates XML element content from all children and their children.
+    """
     txt = ''
 
     if node.hasChildNodes():
@@ -194,6 +260,19 @@ def get_subtext_from_html_node( node ):
                     txt += subsubnd.nodeValue
 
     return txt
+
+
+def find_child_node( node, childname ):
+    ""
+    child = None
+
+    if node.hasChildNodes():
+        for subnd in node.childNodes:
+            if subnd.nodeName and subnd.nodeName.strip() == childname:
+                child = subnd
+                break
+
+    return child
 
 
 ############################################################################

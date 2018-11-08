@@ -6,6 +6,7 @@
 
 import os, sys
 import time
+import traceback
 
 from . import TestExec
 from . import pathutil
@@ -337,8 +338,11 @@ def write_JUnit_file( test_dir, rawlist, filename, datestamp ):
         s += '\n      <testcase name="'+t.xdir+'" time="'+str(xt)+'">'
         if warn:
             s += '\n        <skipped message="'+warn+'"/>'
+            s += '\n' + make_execute_log_section( t, test_dir )
         elif fail:
             s += '\n        <failure message="'+fail+'"/>'
+            s += '\n' + make_execute_log_section( t, test_dir )
+
         s += '\n      </testcase>'
     
     s += '\n   </testsuite>'
@@ -347,6 +351,39 @@ def write_JUnit_file( test_dir, rawlist, filename, datestamp ):
     fp = open( filename, 'w' )
     fp.write(s)
     fp.close()
+
+
+def make_execute_log_section( tspec, test_dir, max_kilobytes=10 ):
+    ""
+    logdir = os.path.join( test_dir, tspec.getExecuteDirectory() )
+    logfile = os.path.join( logdir, 'execute.log' )
+
+    try:
+        sysout = file_read_with_limit( logfile, max_kilobytes )
+    except Exception:
+        xs,tb = capture_traceback( sys.exc_info() )
+        sysout = '*** error reading log file: '+str(logfile)+'\n' + tb
+
+    return '<system-out><![CDATA[' + sysout + '\n]]></system-out>'
+
+
+def file_read_with_limit( filename, max_kilobytes ):
+    ""
+    maxsize = max( 128, max_kilobytes * 1024 )
+
+    buf = ''
+    if os.path.getsize( filename ) < maxsize:
+        with open( filename, 'r' ) as fp:
+            buf = fp.read()
+    else:
+        numbytes = int( float(maxsize) * 0.45 + 0.5 )
+        with open( filename, 'r' ) as fp:
+            buf = fp.read( numbytes )
+            buf += '\n\n*** the middle of this file has been removed ***\n\n'
+            fp.seek( -numbytes, 2 )
+            buf += fp.read( numbytes )
+
+    return buf
 
 
 def pretty_time( nseconds ):
@@ -367,6 +404,21 @@ def pretty_time( nseconds ):
     if h > 0: return sh+' '+sm+' '+ss
     if m > 0: return sm+' '+ss
     return ss
+
+
+def capture_traceback( excinfo ):
+    """
+    This should be called in an except block of a try/except, and the argument
+    should be sys.exc_info().  It extracts and formats the traceback for the
+    exception.  Returns a pair ( the exception string, the full traceback ).
+    """
+    xt,xv,xtb = excinfo
+    xs = ''.join( traceback.format_exception_only( xt, xv ) )
+    tb = 'Traceback (most recent call last):\n' + \
+         ''.join( traceback.format_list(
+                        traceback.extract_stack()[:-2] +
+                        traceback.extract_tb( xtb ) ) ) + xs
+    return xs,tb
 
 
 def print3( *args ):
