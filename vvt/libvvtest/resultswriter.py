@@ -83,8 +83,8 @@ class ResultsWriter:
             print3( "Summary:", sumstr )
 
         if tohtml:
-            printHTMLResults( tohtml, sumstr, self.test_dir, self.perms,
-                              Lfail, Ltime, Ldiff, Lpass, Lnrun, Lndone )
+            printHTMLResults( atestlist, tohtml, self.test_dir )
+            self.perms.set( os.path.abspath( tohtml ) )
 
         if tojunit:
 
@@ -99,50 +99,70 @@ class ResultsWriter:
                 datestamp = atestlist.getDateStamp( time.time() )
 
             print3( "Writing", len(rawlist), "tests to JUnit file", tojunit )
-            write_JUnit_file( self.test_dir, rawlist, tojunit, datestamp )
+            write_JUnit_file( atestlist, self.test_dir, tojunit, datestamp )
+            self.perms.set( os.path.abspath( tojunit ) )
 
 
-def printHTMLResults( filename, sumstr, test_dir, perms,
-                      Lfail, Ltime, Ldiff, Lpass, Lnrun, Lndone ):
+def partition_tests_by_result( tlist ):
+    ""
+    parts = { 'fail':[], 'timeout':[], 'diff':[],
+              'pass':[], 'notrun':[], 'notdone':[] }
+
+    for tst in tlist:
+        result = XstatusResult( tst )
+        parts[ result ].append( tst )
+
+    return parts
+
+
+def results_summary_string( testparts ):
+    ""
+    sumL = []
+
+    for result in [ 'pass', 'fail', 'diff', 'timeout', 'notdone', 'notrun' ]:
+        sumL.append( result+'='+str( len( testparts[result] ) ) )
+
+    return ', '.join( sumL )
+
+
+def printHTMLResults( tlist, filename, test_dir ):
     """
     Opens and writes an HTML summary file in the test directory.
     """
-    
-    if test_dir == ".":
-      test_dir = os.getcwd()
-    if not os.path.isabs(test_dir):
-      test_dir = os.path.abspath(test_dir)
-    
+    parts = partition_tests_by_result( tlist.getActiveTests() )
+
+    sumstr = results_summary_string( parts )
+
+    test_dir = os.path.normpath( os.path.abspath( test_dir ) )
+
     fp = open( filename, "w" )
     try:
-        perms.set( os.path.abspath( filename ) )
-
         fp.write( "<html>\n<head>\n<title>Test Results</title>\n" )
         fp.write( "</head>\n<body>\n" )
-        
+
         # a summary section
-        
+
         fp.write( "<h1>Summary</h1>\n" )
         fp.write( "  <ul>\n" )
         fp.write( "  <li> Directory: " + test_dir + " </li>\n" )
         fp.write( "  <li> " + sumstr + "</li>\n" )
         fp.write( "  </ul>\n" )
-        
+
         # segregate the tests into implicit keywords, such as fail and diff
-        
+
         fp.write( '<h1>Tests that showed "fail"</h1>\n' )
-        writeHTMLTestList( fp, test_dir, Lfail )
+        writeHTMLTestList( fp, test_dir, parts['fail'] )
         fp.write( '<h1>Tests that showed "timeout"</h1>\n' )
-        writeHTMLTestList( fp, test_dir, Ltime )
+        writeHTMLTestList( fp, test_dir, parts['timeout'] )
         fp.write( '<h1>Tests that showed "diff"</h1>\n' )
-        writeHTMLTestList( fp, test_dir, Ldiff )
+        writeHTMLTestList( fp, test_dir, parts['diff'] )
         fp.write( '<h1>Tests that showed "notdone"</h1>\n' )
-        writeHTMLTestList( fp, test_dir, Lndone )
+        writeHTMLTestList( fp, test_dir, parts['notdone'] )
         fp.write( '<h1>Tests that showed "pass"</h1>\n' )
-        writeHTMLTestList( fp, test_dir, Lpass )
+        writeHTMLTestList( fp, test_dir, parts['pass'] )
         fp.write( '<h1>Tests that showed "notrun"</h1>\n' )
-        writeHTMLTestList( fp, test_dir, Lnrun )
-        
+        writeHTMLTestList( fp, test_dir, parts['notrun'] )
+
         fp.write( "</body>\n</html>\n" )
 
     finally:
@@ -155,42 +175,45 @@ def writeHTMLTestList( fp, test_dir, tlist ):
     HTML summary file.
     """
     cwd = os.getcwd()
-    
+
     fp.write( '  <ul>\n' )
-    
+
     for atest in tlist:
-      
-      fp.write( '  <li><code>' + XstatusString(atest, test_dir, cwd) + '</code>\n' )
-      
-      if isinstance(atest, TestExec.TestExec): ref = atest.atest
-      else:                            ref = atest
-      
-      tdir = os.path.join( test_dir, ref.getExecuteDirectory() )
-      assert cwd == tdir[:len(cwd)]
-      reltdir = tdir[len(cwd)+1:]
-      
-      fp.write( "<ul>\n" )
-      thome = atest.getRootpath()
-      xfile = os.path.join( thome, atest.getFilepath() )
-      fp.write( '  <li>XML: <a href="file://' + xfile + '" ' + \
-                       'type="text/plain">' + xfile + "</a></li>\n" )
-      fp.write( '  <li>Parameters:<code>' )
-      for (k,v) in atest.getParameters().items():
-        fp.write( ' ' + k + '=' + v )
-      fp.write( '</code></li>\n' )
-      fp.write( '  <li>Keywords: <code>' + ' '.join(atest.getKeywords()) + \
-                 ' ' + ' '.join( atest.getResultsKeywords() ) + \
-                 '</code></li>\n' )
-      fp.write( '  <li>Status: <code>' + XstatusString(atest, test_dir, cwd) + \
-                 '</code></li>\n' )
-      fp.write( '  <li> Files:' )
-      if os.path.exists(reltdir):
-        for f in os.listdir(reltdir):
-          fp.write( ' <a href="file:' + os.path.join(reltdir,f) + \
-                    '" type="text/plain">' + f + '</a>' )
-      fp.write( '</li>\n' )
-      fp.write( "</ul>\n" )
-      fp.write( "</li>\n" )
+
+        fp.write( '  <li><code>' + XstatusString(atest, test_dir, cwd) + '</code>\n' )
+
+        if isinstance(atest, TestExec.TestExec):
+            ref = atest.atest
+        else:
+            ref = atest
+
+        tdir = os.path.join( test_dir, ref.getExecuteDirectory() )
+        assert cwd == tdir[:len(cwd)]
+        reltdir = tdir[len(cwd)+1:]
+
+        fp.write( "<ul>\n" )
+        thome = atest.getRootpath()
+        xfile = os.path.join( thome, atest.getFilepath() )
+        fp.write( '  <li>XML: <a href="file://' + xfile + '" ' + \
+                         'type="text/plain">' + xfile + "</a></li>\n" )
+        fp.write( '  <li>Parameters:<code>' )
+        for (k,v) in atest.getParameters().items():
+            fp.write( ' ' + k + '=' + v )
+        fp.write( '</code></li>\n' )
+        fp.write( '  <li>Keywords: <code>' + ' '.join(atest.getKeywords()) + \
+                   ' ' + ' '.join( atest.getResultsKeywords() ) + \
+                   '</code></li>\n' )
+        fp.write( '  <li>Status: <code>' + XstatusString(atest, test_dir, cwd) + \
+                   '</code></li>\n' )
+        fp.write( '  <li> Files:' )
+        if os.path.exists(reltdir):
+            for f in os.listdir(reltdir):
+                fp.write( ' <a href="file:' + os.path.join(reltdir,f) + \
+                          '" type="text/plain">' + f + '</a>' )
+        fp.write( '</li>\n' )
+        fp.write( "</ul>\n" )
+        fp.write( "</li>\n" )
+
     fp.write( '  </ul>\n' )
 
 
@@ -254,7 +277,7 @@ def XstatusResult(t):
     return ref.getAttr('result')
 
 
-def write_JUnit_file( test_dir, rawlist, filename, datestamp ):
+def write_JUnit_file( tlist, test_dir, filename, datestamp ):
     """
     This collects information from the given test list (a python list of
     TestExec objects), then writes a file in the format of JUnit XML files.
@@ -265,92 +288,72 @@ def write_JUnit_file( test_dir, rawlist, filename, datestamp ):
         https://stackoverflow.com/questions/4922867/
                     junit-xml-format-specification-that-hudson-supports
     then just trial and error until Jenkins showed something reasonable.
+
+    Update Nov 2018: This link is a nice summary of junit in Jenkins
+        http://nelsonwells.net/2012/09/
+                    how-jenkins-ci-parses-and-displays-junit-output/
+    And the junit source repo on GitHub has nice examples in
+        https://github.com/jenkinsci/junit-plugin/
+                    tree/master/src/test/resources/hudson/tasks/junit
     """
+    testL = tlist.getActiveTests()
+    parts = partition_tests_by_result( testL )
+
+    npass = len( parts['pass'] )
+    nwarn = len( parts['diff'] ) + len( parts['notdone'] ) + len( parts['notrun'] )
+    nfail = len( parts['fail'] ) + len( parts['timeout'] )
+
+    tsum = 0.0
+    for tst in testL:
+        tsum += max( 0.0, tst.getAttr( 'xtime', 0.0 ) )
+
     tdir = os.path.basename( test_dir )
     tdir = tdir.replace( '.', '_' )  # a dot is a Java class separator
-    
+
     datestr = time.strftime( "%Y-%m-%dT%H:%M:%S", time.localtime( datestamp ) )
 
-    npass = nwarn = nfail = 0
-    tsum = 0.0
-    for t in rawlist:
-        state = t.getAttr( 'state' )
-        if state == "done":
-            res = t.getAttr( 'result' )
-            if res == "pass":
-                npass += 1
-            elif res == "diff":
-                nwarn += 1
-            else:
-                nfail += 1
-            
-            xt = t.getAttr( 'xtime' )
-            if xt > 0:
-                tsum += xt
-        else:
-            nwarn += 1
-    
-    s = '''
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuites>
-   <testsuite name="vvtest"
-              errors="0" tests="0" failures="0"
-              time="0" timestamp="DATESTAMP"/>
-   <testsuite name="vvtest.TESTDIRNAME"
-              errors="0" skipped="NUMWARN" tests="NUMTESTS" failures="NUMFAIL"
-              time="TIMESUM" timestamp="DATESTAMP">
-'''.strip()
-    
-    s = s.replace( 'TESTDIRNAME', tdir )
-    s = s.replace( 'DATESTAMP', datestr )
-    s = s.replace( 'NUMTESTS', str(npass+nwarn+nfail) )
-    s = s.replace( 'NUMWARN', str(nwarn) )
-    s = s.replace( 'NUMFAIL', str(nfail) )
-    s = s.replace( 'TIMESUM', str(tsum) )
-
-    for t in rawlist:
-        
-        xt = 0.0
-        fail = ''
-        warn = ''
-
-        state = t.getAttr( 'state' )
-        if state == "notrun":
-            warn = 'Test was not run'
-        else:
-            if state == "done":
-                xt = t.getAttr( 'xtime' )
-                if xt < 0:
-                    xt = 0.0
-                
-                res = t.getAttr( 'result' )
-                if res == "pass":
-                    pass
-                elif res == "diff":
-                    warn = 'Test diffed'
-                elif res == "timeout":
-                    fail = 'Test timed out'
-                else:
-                    fail = 'Test failed'
-            else:
-                warn = "Test did not finish"
-        
-        s += '\n      <testcase name="'+t.xdir+'" time="'+str(xt)+'">'
-        if warn:
-            s += '\n        <skipped message="'+warn+'"/>'
-            s += '\n' + make_execute_log_section( t, test_dir )
-        elif fail:
-            s += '\n        <failure message="'+fail+'"/>'
-            s += '\n' + make_execute_log_section( t, test_dir )
-
-        s += '\n      </testcase>'
-    
-    s += '\n   </testsuite>'
-    s += '\n</testsuites>\n'
-    
     fp = open( filename, 'w' )
-    fp.write(s)
-    fp.close()
+    try:
+        fp.write(
+            '<?xml version="1.0" encoding="UTF-8"?>\n' + \
+            '<testsuites>\n' + \
+            '<testsuite name="vvtest"' + \
+                      ' tests="'+str(npass+nwarn+nfail)+'"' + \
+                      ' skipped="'+str(nwarn)+'"' + \
+                      ' failures="'+str(nfail)+'"' + \
+                      ' time="'+str(tsum)+'"' + \
+                      ' timestamp="'+datestr+'">\n' )
+
+        pkgclass = 'vvtest.'+tdir
+
+        for result in [ 'pass', 'fail', 'diff', 'timeout', 'notdone', 'notrun' ]:
+            for tst in parts[result]:
+                write_testcase( fp, tst, result, test_dir, pkgclass )
+
+        fp.write( '</testsuite>\n' + \
+                  '</testsuites>\n' )
+
+    finally:
+        fp.close()
+
+
+def write_testcase( fp, tst, result, test_dir, pkgclass ):
+    ""
+    xt = max( 0.0, tst.getAttr( 'xtime', 0.0 ) )
+
+    fp.write( '<testcase name="'+tst.xdir+'"' + \
+                       ' classname="'+pkgclass+'" time="'+str(xt)+'">\n' )
+
+    if result == 'fail' or result == 'timeout':
+        fp.write( '<failure message="'+result.upper()+'"/>\n' )
+        fp.write( make_execute_log_section( tst, test_dir ) + '\n' )
+    elif result == 'diff':
+        fp.write( '<skipped message="DIFF"/>\n' )
+        fp.write( make_execute_log_section( tst, test_dir ) + '\n' )
+    elif result == 'notdone' or result == 'notrun':
+        fp.write( '<skipped message="'+result.upper()+'"/>\n' )
+
+    fp.write( '</testcase>\n' )
 
 
 def make_execute_log_section( tspec, test_dir, max_kilobytes=10 ):
