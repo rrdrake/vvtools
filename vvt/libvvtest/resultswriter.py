@@ -25,82 +25,69 @@ class ResultsWriter:
         self.htmlfile = htmlfile
         self.junitfile = junitfile
 
+    ### prerun, info, postrun, final are the interface functions
+
     def prerun(self, atestlist, short=True):
         ""
-        self.write( atestlist, short=short )
+        self.write_console( atestlist, short )
 
     def info(self, atestlist):
         ""
-        self.write( atestlist, no_console=self.htmlfile or self.junitfile,
-                               tohtml=self.htmlfile,
-                               tojunit=self.junitfile )
+        if not self.htmlfile and not self.junitfile:
+            self.write_console( atestlist )
+
+        self.check_write_html( atestlist )
+        self.check_write_junit( atestlist )
 
     def postrun(self, atestlist):
         ""
-        self.write( atestlist, tohtml=self.htmlfile,
-                               tojunit=self.junitfile )
+        self.write_console( atestlist )
+        self.check_write_html( atestlist )
+        self.check_write_junit( atestlist )
 
     def final(self, atestlist):
         ""
-        self.write( atestlist, no_console=True,
-                               tohtml=self.htmlfile,
-                               tojunit=self.junitfile )
+        self.check_write_html( atestlist )
+        self.check_write_junit( atestlist )
 
-    def write(self, atestlist, short=False,
-                    no_console=False, tohtml=None, tojunit=None):
+    ###
+
+    def write_console(self, atestlist, short=False):
         ""
         rawlist = atestlist.getActiveTests( self.optsort )
+        write_to_console( rawlist, self.test_dir, short )
 
-        Lfail = []; Ltime = []; Ldiff = []; Lpass = []; Lnrun = []; Lndone = []
-        for atest in rawlist:
-            statr = XstatusResult(atest)
-            if   statr == "fail":    Lfail.append(atest)
-            elif statr == "timeout": Ltime.append(atest)
-            elif statr == "diff":    Ldiff.append(atest)
-            elif statr == "pass":    Lpass.append(atest)
-            elif statr == "notrun":  Lnrun.append(atest)
-            elif statr == "notdone": Lndone.append(atest)
-        sumstr = str(len(Lpass)) + " pass, " + \
-                 str(len(Ltime)) + " timeout, " + \
-                 str(len(Ldiff)) + " diff, " + \
-                 str(len(Lfail)) + " fail, " + \
-                 str(len(Lnrun)) + " notrun, " + \
-                 str(len(Lndone)) + " notdone"
+    def check_write_html(self, atestlist):
+        ""
+        if self.htmlfile:
+            printHTMLResults( atestlist, self.htmlfile, self.test_dir )
+            self.perms.set( os.path.abspath( self.htmlfile ) )
 
-        if not no_console:
-            cwd = os.getcwd()
-            print3( "==================================================" )
-            if short and len(rawlist) > 16:
-                for atest in rawlist[:8]:
-                    print3( XstatusString( atest, self.test_dir, cwd ) )
-                print3( "..." )
-                for atest in rawlist[-8:]:
-                    print3( XstatusString( atest, self.test_dir, cwd ) )
-            else:
-                for atest in rawlist:
-                    print3( XstatusString( atest, self.test_dir, cwd ) )
-            print3( "==================================================" )
-            print3( "Summary:", sumstr )
+    def check_write_junit(self, atestlist):
+        ""
+        if self.junitfile:
 
-        if tohtml:
-            printHTMLResults( atestlist, tohtml, self.test_dir )
-            self.perms.set( os.path.abspath( tohtml ) )
+            datestamp = make_date_stamp( self.optrdate, atestlist )
 
-        if tojunit:
+            testL = atestlist.getActiveTests()
+            print3( "Writing", len(testL), "tests to JUnit file", self.junitfile )
+            write_JUnit_file( testL, self.test_dir, self.junitfile, datestamp )
+            self.perms.set( os.path.abspath( self.junitfile ) )
 
-            if self.optrdate != None:
-                try:
-                    datestamp = float(self.optrdate)
-                except Exception:
-                    print3( '*** vvtest error: --results-date must be seconds ' + \
-                            'since epoch for use with --junit option' )
-                    sys.exit(1)
-            else:
-                datestamp = atestlist.getDateStamp( time.time() )
 
-            print3( "Writing", len(rawlist), "tests to JUnit file", tojunit )
-            write_JUnit_file( atestlist, self.test_dir, tojunit, datestamp )
-            self.perms.set( os.path.abspath( tojunit ) )
+def make_date_stamp( optrdate, tlist ):
+    ""
+    if optrdate != None:
+        try:
+            datestamp = float(optrdate)
+        except Exception:
+            print3( '*** vvtest error: --results-date must be ' + \
+                    'seconds since epoch for use with --junit option' )
+            sys.exit(1)
+    else:
+        datestamp = tlist.getDateStamp( time.time() )
+
+    return datestamp
 
 
 def partition_tests_by_result( tlist ):
@@ -123,6 +110,27 @@ def results_summary_string( testparts ):
         sumL.append( result+'='+str( len( testparts[result] ) ) )
 
     return ', '.join( sumL )
+
+
+def write_to_console( testL, test_dir, short=False ):
+    ""
+    parts = partition_tests_by_result( testL )
+
+    sumstr = results_summary_string( parts )
+
+    cwd = os.getcwd()
+    print3( "==================================================" )
+    if short and len(testL) > 16:
+        for atest in testL[:8]:
+            print3( XstatusString( atest, test_dir, cwd ) )
+        print3( "..." )
+        for atest in testL[-8:]:
+            print3( XstatusString( atest, test_dir, cwd ) )
+    else:
+        for atest in testL:
+            print3( XstatusString( atest, test_dir, cwd ) )
+    print3( "==================================================" )
+    print3( "Summary:", sumstr )
 
 
 def printHTMLResults( tlist, filename, test_dir ):
@@ -277,7 +285,7 @@ def XstatusResult(t):
     return ref.getAttr('result')
 
 
-def write_JUnit_file( tlist, test_dir, filename, datestamp ):
+def write_JUnit_file( testL, test_dir, filename, datestamp ):
     """
     This collects information from the given test list (a python list of
     TestExec objects), then writes a file in the format of JUnit XML files.
@@ -296,7 +304,6 @@ def write_JUnit_file( tlist, test_dir, filename, datestamp ):
         https://github.com/jenkinsci/junit-plugin/
                     tree/master/src/test/resources/hudson/tasks/junit
     """
-    testL = tlist.getActiveTests()
     parts = partition_tests_by_result( testL )
 
     npass = len( parts['pass'] )
