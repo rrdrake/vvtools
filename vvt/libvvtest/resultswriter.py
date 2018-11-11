@@ -8,6 +8,8 @@ import os, sys
 import time
 import traceback
 
+from os.path import join as pjoin
+
 from . import TestExec
 from . import pathutil
 
@@ -15,7 +17,7 @@ from . import pathutil
 class ResultsWriter:
 
     def __init__(self, test_dir, perms, optsort, optrdate,
-                       htmlfile, junitfile ):
+                       htmlfile, junitfile, gitlabdir ):
         ""
         self.test_dir = test_dir
         self.perms = perms
@@ -24,6 +26,7 @@ class ResultsWriter:
 
         self.htmlfile = htmlfile
         self.junitfile = junitfile
+        self.gitlabdir = gitlabdir
 
     ### prerun, info, postrun, final are the interface functions
 
@@ -33,22 +36,22 @@ class ResultsWriter:
 
     def info(self, atestlist):
         ""
-        if not self.htmlfile and not self.junitfile:
+        if not self.htmlfile and not self.junitfile and not self.gitlabdir:
             self.write_console( atestlist )
 
         self.check_write_html( atestlist )
         self.check_write_junit( atestlist )
+        self.check_write_gitlab( atestlist )
 
     def postrun(self, atestlist):
         ""
         self.write_console( atestlist )
-        self.check_write_html( atestlist )
-        self.check_write_junit( atestlist )
 
     def final(self, atestlist):
         ""
         self.check_write_html( atestlist )
         self.check_write_junit( atestlist )
+        self.check_write_gitlab( atestlist )
 
     ###
 
@@ -73,6 +76,22 @@ class ResultsWriter:
             print3( "Writing", len(testL), "tests to JUnit file", self.junitfile )
             write_JUnit_file( testL, self.test_dir, self.junitfile, datestamp )
             self.perms.set( os.path.abspath( self.junitfile ) )
+
+    def check_write_gitlab(self, atestlist):
+        ""
+        if self.gitlabdir:
+
+            testL = atestlist.getActiveTests( self.optsort )
+
+            if not os.path.isdir( self.gitlabdir ):
+                os.mkdir( self.gitlabdir )
+
+            try:
+                conv = GitLabMarkDownConverter( self.test_dir, self.gitlabdir )
+                conv.saveResults( testL )
+
+            finally:
+                self.perms.recurse( self.gitlabdir )
 
 
 def make_date_stamp( optrdate, tlist ):
@@ -190,18 +209,15 @@ def writeHTMLTestList( fp, test_dir, tlist ):
 
         fp.write( '  <li><code>' + XstatusString(atest, test_dir, cwd) + '</code>\n' )
 
-        if isinstance(atest, TestExec.TestExec):
-            ref = atest.atest
-        else:
-            ref = atest
+        ref = ensure_TestSpec( atest )
 
-        tdir = os.path.join( test_dir, ref.getExecuteDirectory() )
+        tdir = pjoin( test_dir, ref.getExecuteDirectory() )
         assert cwd == tdir[:len(cwd)]
         reltdir = tdir[len(cwd)+1:]
 
         fp.write( "<ul>\n" )
         thome = atest.getRootpath()
-        xfile = os.path.join( thome, atest.getFilepath() )
+        xfile = pjoin( thome, atest.getFilepath() )
         fp.write( '  <li>XML: <a href="file://' + xfile + '" ' + \
                          'type="text/plain">' + xfile + "</a></li>\n" )
         fp.write( '  <li>Parameters:<code>' )
@@ -216,7 +232,7 @@ def writeHTMLTestList( fp, test_dir, tlist ):
         fp.write( '  <li> Files:' )
         if os.path.exists(reltdir):
             for f in os.listdir(reltdir):
-                fp.write( ' <a href="file:' + os.path.join(reltdir,f) + \
+                fp.write( ' <a href="file:' + pjoin(reltdir,f) + \
                           '" type="text/plain">' + f + '</a>' )
         fp.write( '</li>\n' )
         fp.write( "</ul>\n" )
@@ -229,12 +245,8 @@ def XstatusString( t, test_dir, cwd ):
     """
     Returns a formatted string containing the job and its status.
     """
-    if isinstance(t, TestExec.TestExec):
-        ref = t.atest
-        s = "%-20s " % ref.getName()
-    else:
-        ref = t
-        s = "%-20s " % t.getName()
+    ref = ensure_TestSpec( t )
+    s = "%-20s " % ref.getName()
 
     state = ref.getAttr('state')
     if state != "notrun":
@@ -250,20 +262,14 @@ def XstatusString( t, test_dir, cwd ):
             else:
                 s = s + "%-7s %-8s" % ("Exit", "fail(1)")
 
-            xtime = ref.getAttr('xtime')
-            if xtime >= 0: s = s + (" %-4s" % (str(xtime)+'s'))
-            else:          s = s + "     "
+            s += ' %-4s' % format_test_run_time( ref )
         else:
             s = s + "%-7s %-8s     " % ("Running", "")
 
     else:
         s = s + "%-7s %-8s     " % ("NotRun", "")
 
-    xdate = ref.getAttr('xdate')
-    if xdate > 0:
-        s = s + time.strftime( " %m/%d %H:%M:%S", time.localtime(xdate) )
-    else:
-        s = s + "               "
+    s += " %14s" % format_test_run_date( ref )
 
     xdir = ref.getExecuteDirectory()
     s += ' ' + pathutil.relative_execute_directory( xdir, test_dir, cwd )
@@ -271,12 +277,27 @@ def XstatusString( t, test_dir, cwd ):
     return s
 
 
+def format_test_run_date( tspec ):
+    ""
+    xdate = tspec.getAttr( 'xdate', 0 )
+    if xdate > 0:
+        return time.strftime( "%m/%d %H:%M:%S", time.localtime(xdate) )
+    else:
+        return ''
+
+
+def format_test_run_time( tspec ):
+    ""
+    xtime = tspec.getAttr( 'xtime', -1 )
+    if xtime >= 0:
+        return pretty_time( xtime )
+    else:
+        return '-'
+
+
 def XstatusResult(t):
     ""
-    if isinstance(t, TestExec.TestExec):
-        ref = t.atest
-    else:
-        ref = t
+    ref = ensure_TestSpec( t )
 
     state = ref.getAttr('state')
     if state == "notrun" or state == "notdone":
@@ -365,8 +386,8 @@ def write_testcase( fp, tst, result, test_dir, pkgclass ):
 
 def make_execute_log_section( tspec, test_dir, max_kilobytes=10 ):
     ""
-    logdir = os.path.join( test_dir, tspec.getExecuteDirectory() )
-    logfile = os.path.join( logdir, 'execute.log' )
+    logdir = pjoin( test_dir, tspec.getExecuteDirectory() )
+    logfile = pjoin( logdir, 'execute.log' )
 
     try:
         sysout = file_read_with_limit( logfile, max_kilobytes )
@@ -398,6 +419,144 @@ def file_read_with_limit( filename, max_kilobytes ):
     return buf
 
 
+class GitLabFileSelector:
+    def include(self, filename):
+        ""
+        bn,ext = os.path.splitext( filename )
+        return ext in [ '.vvt', '.xml', '.log', '.txt', '.py', '.sh' ]
+
+
+class GitLabMarkDownConverter:
+
+    def __init__(self, test_dir, destdir, max_kilobytes=10):
+        ""
+        self.test_dir = test_dir
+        self.destdir = destdir
+        self.max_kilo = max_kilobytes
+
+        self.selector = GitLabFileSelector()
+
+    def saveResults(self, testL):
+        ""
+        parts = partition_tests_by_result( testL )
+
+        fname = pjoin( self.destdir, 'TestResults.md' )
+
+        with open( fname, 'w' ) as fp:
+            for result in [ 'pass', 'fail', 'diff',
+                            'timeout', 'notdone', 'notrun' ]:
+                write_gitlab_results_table( fp, parts[result] )
+
+        for result in [ 'fail', 'diff', 'timeout' ]:
+            for tst in parts[result]:
+                self.createTestFile( ensure_TestSpec( tst ) )
+
+    def createTestFile(self, tspec):
+        ""
+        xdir = tspec.getExecuteDirectory()
+        base = xdir.replace( os.sep, '_' )
+        fname = pjoin( self.destdir, base+'.md' )
+
+        srcdir = pjoin( self.test_dir, xdir )
+
+        result = XstatusString( tspec, self.test_dir, os.getcwd() )
+        preamble = 'Name: '+tspec.getName()+'  \n' + \
+                   'Result: <code>'+result+'</code>  \n' + \
+                   'Run directory: ' + os.path.abspath(srcdir) + '  \n'
+
+        self.createGitlabDirectoryContents( fname, preamble, srcdir )
+
+    def createGitlabDirectoryContents(self, filename, preamble, srcdir):
+        ""
+        with open( filename, 'w' ) as fp:
+
+            fp.write( preamble + '\n' )
+
+            try:
+                stream_gitlab_files( fp, srcdir, self.selector, self.max_kilo )
+
+            except Exception:
+                xs,tb = capture_traceback( sys.exc_info() )
+                fp.write( '\n```\n' + \
+                    '*** error collecting files: '+srcdir+'\n'+tb + \
+                    '```\n' )
+
+
+def write_gitlab_results_table( fp, testL ):
+    ""
+    fp.write( '| Result | Date   | Time   | Path   |\n' + \
+              '| ------ | ------ | -----: | :----- |\n' )
+
+    if len( testL ) > 0:
+        for tst in testL:
+            fp.write( format_gitlab_table_line( tst ) + '\n' )
+    else:
+        fp.write( '| None |   |   |   |\n' )
+
+    fp.write( '\n' )
+
+
+def format_gitlab_table_line( tst ):
+    ""
+    tspec = ensure_TestSpec( tst )
+
+    result = XstatusResult( tspec )
+    dt = format_test_run_date( tspec )
+    tm = format_test_run_time( tspec )
+    path = tspec.getExecuteDirectory()
+
+    s = '| '+result+' | '+dt+' | '+tm+' | '
+    s += format_test_path_for_gitlab( result, path ) + ' |'
+
+    return s
+
+
+def format_test_path_for_gitlab( result, path ):
+    ""
+    if result in ['diff','fail','timeout']:
+        repl = path.replace( os.sep, '_' )
+        return '['+path+']('+repl+'.md)'
+    else:
+        return path
+
+
+def stream_gitlab_files( fp, srcdir, selector, max_kilobytes=10 ):
+    ""
+    fL = os.listdir( srcdir )
+    fL.sort()
+
+    for fn in fL:
+        fullfn = pjoin( srcdir, fn )
+        if selector.include( fullfn ):
+            fp.write( '\n' )
+            write_gitlab_formatted_file( fp, fullfn, max_kilobytes )
+
+
+def write_gitlab_formatted_file( fp, filename, max_kilobytes=10 ):
+    ""
+    bn = os.path.basename( filename )
+
+    fp.write( '<details>\n' + \
+              '<summary>'+bn+'</summary>\n' + \
+              '<pre>\n' )
+
+    try:
+        buf = file_read_with_limit( filename, max_kilobytes )
+    except Exception:
+        xs,tb = capture_traceback( sys.exc_info() )
+        buf = '*** error reading file: '+str(filename)+'\n' + tb
+
+    buf = buf.replace( '&', '&amp;' )
+    buf = buf.replace( '<', '&lt;' )
+    buf = buf.replace( '>', '&gt;' )
+    buf = buf.replace( '"', '&quot;' )
+
+    fp.write( buf )
+
+    fp.write( '</pre>\n' + \
+              '</details>\n' )
+
+
 def pretty_time( nseconds ):
     """
     Returns a string with the given number of seconds written in a human
@@ -416,6 +575,14 @@ def pretty_time( nseconds ):
     if h > 0: return sh+' '+sm+' '+ss
     if m > 0: return sm+' '+ss
     return ss
+
+
+def ensure_TestSpec( testobj ):
+    ""
+    if isinstance( testobj, TestExec.TestExec ):
+        return testobj.atest
+    else:
+        return testobj
 
 
 def capture_traceback( excinfo ):

@@ -11,12 +11,22 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
+import glob
+from os.path import getsize as getfsize
+
+try:
+  from StringIO import StringIO
+except Exception:
+  from io import StringIO
 
 import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
 import libvvtest.resultswriter as resultswriter
+import libvvtest.TestSpec as TestSpec
+from libvvtest.TestSpecCreator import createTestObjects
+from libvvtest.RuntimeConfig import RuntimeConfig
 
 
 def write_three_test_files():
@@ -67,7 +77,7 @@ class junit_output_format_tests( vtu.vvtestTestCase ):
             fp.write( 'REDRUM!  REDRUM!\n' )
         time.sleep(1)
 
-        assert os.path.getsize( 'afile.txt' ) > 1*1024
+        assert getfsize( 'afile.txt' ) > 1*1024
         buf = resultswriter.file_read_with_limit( 'afile.txt', 1 )
         assert len( buf ) <= 1*1024
         assert len( buf.splitlines() ) > 10
@@ -200,6 +210,219 @@ class html_output_format_tests( vtu.vvtestTestCase ):
             self.assert_tests_in_html( lines )
 
 
+class gitlab_output_format_tests( vtu.vvtestTestCase ):
+
+    def test_turning_test_path_to_markdown_link(self):
+        ""
+        s = resultswriter.format_test_path_for_gitlab( 'pass', 'sub/name.np=1' )
+        assert s == 'sub/name.np=1'
+
+        for result in ['diff','fail','timeout']:
+            s = resultswriter.format_test_path_for_gitlab( result,
+                                                           'sub/name.np=1' )
+            assert s == '[sub/name.np=1](sub_name.np=1.md)'
+
+    def test_write_table_line_for_a_test(self):
+        ""
+        tst = make_TestSpec_with_results( 'done', 'pass', 5 )
+        line = resultswriter.format_gitlab_table_line( tst )
+        print3( line )
+        sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
+        assert len(sL) == 4
+        assert sL[0] == 'pass' and sL[2] == '5s'
+        assert sL[3] == 'sdir/atest.np=4'
+
+        tst = make_TestSpec_with_results( 'done', 'fail', 7 )
+        line = resultswriter.format_gitlab_table_line( tst )
+        print3( line )
+        sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
+        assert len(sL) == 4
+        assert sL[0] == 'fail' and sL[2] == '7s'
+        assert sL[3] == '[sdir/atest.np=4](sdir_atest.np=4.md)'
+
+    def test_write_gitlab_results_table(self):
+        ""
+        tL = [ make_TestSpec_with_results( 'done', 'pass', 5, 'good' ),
+               make_TestSpec_with_results( 'done', 'diff', 5, 'bad' ) ]
+
+        sio = StringIO()
+        resultswriter.write_gitlab_results_table( sio, tL )
+
+        val = sio.getvalue()
+        print3( val )
+        assert len( util.greplines( 'Result*Date*Time*Path', val ) ) == 1
+        assert len( util.greplines( '| sdir/good.np=4 |', val ) ) == 1
+        assert len( util.greplines(
+                '[[]sdir/bad.np=4[]][(]sdir_bad.np=4.md[)] [|]', val ) ) == 1
+
+    def test_write_gitlab_collapsable_file_contents(self):
+        ""
+        util.writefile( 'file.txt', """
+            Text with a < and a > and a & and some "quotes" too.
+            This is line two.
+            """ )
+        time.sleep(1)
+
+        sio = StringIO()
+        fn = os.path.abspath('file.txt')
+        resultswriter.write_gitlab_formatted_file( sio, fn )
+
+        val = sio.getvalue()
+        print3( val )
+        assert len( util.greplines( '<summary>file.txt</summary>', val ) ) == 1
+        assert fn not in val
+        assert 'Text with a' in val
+        assert '< and a > and a & and some "quotes"' not in val
+
+    def test_write_gitlab_collapsable_file_with_read_error(self):
+        ""
+        sio = StringIO()
+        fn = os.path.abspath('file.txt')
+        resultswriter.write_gitlab_formatted_file( sio, fn )
+
+        val = sio.getvalue()
+        #print3( val )
+        assert fn in val
+        assert 'error reading file:' in val
+        assert 'Traceback' in val
+
+    def test_stream_file_contents_to_gitlab_collapsable_format(self):
+        ""
+        class MockSelector:
+            def include(self, filename):
+                return True
+
+        self.write_file_pair()
+        time.sleep(1)
+
+        sio = StringIO()
+        resultswriter.stream_gitlab_files( sio, '.', MockSelector() )
+
+        val = sio.getvalue()
+        #print3( val )
+        assert 'This is line two' in val
+        assert 'file.txt' in val
+        assert 'execute.log' in val
+        assert 'This is the stdout and stderr' in val
+
+    def write_file_pair(self, subdir='.'):
+        ""
+        util.writefile( os.path.join( subdir,'file.txt' ), """
+            Text with a < and a > and a & and some "quotes" too.
+            This is line two.
+            """ )
+        util.writefile( os.path.join( subdir,'execute.log' ), """
+            This is the stdout and stderr
+            from running the test.
+            """ )
+
+    def test_stream_file_contents_but_exclude_certain_files(self):
+        ""
+        class MockSelector:
+            def include(self, filename):
+                return os.path.splitext(filename)[1] == '.log'
+
+        self.write_file_pair()
+        time.sleep(1)
+
+        sio = StringIO()
+        resultswriter.stream_gitlab_files( sio, '.', MockSelector() )
+
+        val = sio.getvalue()
+        #print3( val )
+        assert 'file.txt' not in val
+        assert 'execute.log' in val
+
+    def test_create_file_with_directory_contents(self):
+        ""
+        self.write_file_pair( 'subdir' )
+        util.writefile( 'subdir/junk.exo', """
+            this should not be included
+            """ )
+        time.sleep(1)
+
+        preamble = 'Houston, we have a problem.'
+        converter = resultswriter.GitLabMarkDownConverter( None, None )
+        converter.createGitlabDirectoryContents(
+                                    'results.md', preamble, 'subdir' )
+        time.sleep(1)
+
+        assert len( util.grepfiles( preamble, 'results.md' ) ) == 1
+        assert len( util.grepfiles( 'file.txt', 'results.md' ) ) == 1
+        assert len( util.grepfiles( 'execute.log', 'results.md' ) ) == 1
+        assert len( util.grepfiles( 'junk.exo', 'results.md' ) ) == 0
+
+    def test_create_file_directory_contents_but_directory_does_not_exist(self):
+        ""
+        preamble = 'Houston, we have a problem.'
+        converter = resultswriter.GitLabMarkDownConverter( None, None )
+        converter.createGitlabDirectoryContents(
+                                    'results.md', preamble, 'subdir' )
+        time.sleep(1)
+
+        assert len( util.grepfiles( preamble, 'results.md' ) ) == 1
+        assert len( util.grepfiles( 'error collecting files', 'results.md' ) ) == 1
+        assert len( util.grepfiles( 'Traceback', 'results.md' ) ) == 1
+
+    def test_create_markdown_file_for_a_test(self):
+        ""
+        write_three_test_files()
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
+
+        nofltr = RuntimeConfig( platform_name=vrun.platformName() )
+        tL = createTestObjects( '.', 'DiffTest.xml', None, nofltr )
+        tst = tL[0]
+        tst.setAttr( 'state', 'done' )
+        tst.setAttr( 'result', 'diff' )
+        tst.setAttr( 'xtime', 3 )
+        tst.setAttr( 'xdate', int(time.time()) )
+
+        conv = resultswriter.GitLabMarkDownConverter( vrun.resultsDir(), '.' )
+        conv.createTestFile( tst )
+        time.sleep(1)
+
+        mdfile = util.globfile( 'DiffTest.*.md' )
+        xdir = os.path.join( vrun.resultsDir(), tst.getExecuteDirectory() )
+        assert len( util.grepfiles( 'Run directory:*'+xdir, mdfile ) ) == 1
+        assert len( util.grepfiles( 'Result:*DiffTest *diff *', mdfile ) ) == 1
+
+    def test_producing_gitlab_markdown_results_files(self):
+        ""
+        write_three_test_files()
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
+
+        vrun = vtu.runvvtest( '-i --gitlab=../gfm', chdir=vrun.resultsDir() )
+        time.sleep(1)
+
+        assert abs( getfsize( 'gfm/TestResults.md' ) - 831 ) < 100
+        assert getfsize( 'gfm/FailTest.md' ) > 3000
+        assert getfsize( 'gfm/DiffTest.np=1.md' ) > 1000
+        assert getfsize( 'gfm/DiffTest.np=2.md' ) > 1000
+        assert len( glob.glob( 'gfm/*param*' ) ) == 0
+
+    def test_producing_gitlab_markdown_as_part_of_execution(self):
+        ""
+        write_three_test_files()
+        time.sleep(1)
+
+        vrun = vtu.runvvtest( '--gitlab gfm' )
+        vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
+        time.sleep(1)
+
+        assert abs( getfsize( 'gfm/TestResults.md' ) - 831 ) < 100
+        assert getfsize( 'gfm/FailTest.md' ) > 3000
+        assert getfsize( 'gfm/DiffTest.np=1.md' ) > 1000
+        assert getfsize( 'gfm/DiffTest.np=2.md' ) > 1000
+        assert len( glob.glob( 'gfm/*param*' ) ) == 0
+
+
+
 ###########################################################################
 
 def read_xml( filename ):
@@ -273,6 +496,36 @@ def find_child_node( node, childname ):
                 break
 
     return child
+
+
+def make_fake_TestSpec():
+    ""
+    ts = TestSpec.TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
+
+    ts.setKeywords( ['key1','key2'] )
+
+    ts.setParameters( { 'P1':'V1', 'P2':'V2' } )
+
+    return ts
+
+
+def make_TestSpec_with_results( state='notrun', result=None,
+                                runtime=None, name='atest' ):
+    ""
+    ts = TestSpec.TestSpec( name, os.getcwd(), 'sdir/'+name+'.vvt' )
+
+    ts.setKeywords( ['key1','key2'] )
+
+    ts.setParameters( { 'np':'4' } )
+
+    ts.setAttr( 'state', state )
+    if result:
+        ts.setAttr( 'result', result )
+    if runtime != None:
+        ts.setAttr( 'xtime', runtime )
+    ts.setAttr( 'xdate', int(time.time()) )
+
+    return ts
 
 
 ############################################################################
