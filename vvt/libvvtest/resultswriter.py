@@ -356,7 +356,7 @@ def write_JUnit_file( testL, test_dir, filename, datestamp ):
 
         for result in [ 'pass', 'fail', 'diff', 'timeout', 'notdone', 'notrun' ]:
             for tst in parts[result]:
-                write_testcase( fp, tst, result, test_dir, pkgclass )
+                write_testcase( fp, tst, result, test_dir, pkgclass, 10 )
 
         fp.write( '</testsuite>\n' + \
                   '</testsuites>\n' )
@@ -365,7 +365,7 @@ def write_JUnit_file( testL, test_dir, filename, datestamp ):
         fp.close()
 
 
-def write_testcase( fp, tst, result, test_dir, pkgclass ):
+def write_testcase( fp, tst, result, test_dir, pkgclass, max_KB ):
     ""
     xt = max( 0.0, tst.getAttr( 'xtime', 0.0 ) )
 
@@ -374,23 +374,25 @@ def write_testcase( fp, tst, result, test_dir, pkgclass ):
 
     if result == 'fail' or result == 'timeout':
         fp.write( '<failure message="'+result.upper()+'"/>\n' )
-        fp.write( make_execute_log_section( tst, test_dir ) + '\n' )
+        buf = make_execute_log_section( tst, test_dir, max_KB )
+        fp.write( buf + '\n' )
     elif result == 'diff':
         fp.write( '<skipped message="DIFF"/>\n' )
-        fp.write( make_execute_log_section( tst, test_dir ) + '\n' )
+        buf = make_execute_log_section( tst, test_dir, max_KB )
+        fp.write( buf + '\n' )
     elif result == 'notdone' or result == 'notrun':
         fp.write( '<skipped message="'+result.upper()+'"/>\n' )
 
     fp.write( '</testcase>\n' )
 
 
-def make_execute_log_section( tspec, test_dir, max_kilobytes=10 ):
+def make_execute_log_section( tspec, test_dir, max_KB ):
     ""
     logdir = pjoin( test_dir, tspec.getExecuteDirectory() )
     logfile = pjoin( logdir, 'execute.log' )
 
     try:
-        sysout = file_read_with_limit( logfile, max_kilobytes )
+        sysout = file_read_with_limit( logfile, max_KB )
     except Exception:
         xs,tb = capture_traceback( sys.exc_info() )
         sysout = '*** error reading log file: '+str(logfile)+'\n' + tb
@@ -398,9 +400,9 @@ def make_execute_log_section( tspec, test_dir, max_kilobytes=10 ):
     return '<system-out><![CDATA[' + sysout + '\n]]></system-out>'
 
 
-def file_read_with_limit( filename, max_kilobytes ):
+def file_read_with_limit( filename, max_KB ):
     ""
-    maxsize = max( 128, max_kilobytes * 1024 )
+    maxsize = max( 128, max_KB * 1024 )
     fsz = os.path.getsize( filename )
 
     buf = ''
@@ -428,11 +430,11 @@ class GitLabFileSelector:
 
 class GitLabMarkDownConverter:
 
-    def __init__(self, test_dir, destdir, max_kilobytes=10):
+    def __init__(self, test_dir, destdir, max_KB=10):
         ""
         self.test_dir = test_dir
         self.destdir = destdir
-        self.max_kilo = max_kilobytes
+        self.max_KB = max_KB
 
         self.selector = GitLabFileSelector()
 
@@ -443,9 +445,9 @@ class GitLabMarkDownConverter:
         fname = pjoin( self.destdir, 'TestResults.md' )
 
         with open( fname, 'w' ) as fp:
-            for result in [ 'pass', 'fail', 'diff',
-                            'timeout', 'notdone', 'notrun' ]:
-                write_gitlab_results_table( fp, parts[result] )
+            for result in [ 'fail', 'diff', 'timeout',
+                            'pass', 'notrun', 'notdone' ]:
+                write_gitlab_results_table( fp, result, parts[result] )
 
         for result in [ 'fail', 'diff', 'timeout' ]:
             for tst in parts[result]:
@@ -473,7 +475,7 @@ class GitLabMarkDownConverter:
             fp.write( preamble + '\n' )
 
             try:
-                stream_gitlab_files( fp, srcdir, self.selector, self.max_kilo )
+                stream_gitlab_files( fp, srcdir, self.selector, self.max_KB )
 
             except Exception:
                 xs,tb = capture_traceback( sys.exc_info() )
@@ -482,8 +484,10 @@ class GitLabMarkDownConverter:
                     '```\n' )
 
 
-def write_gitlab_results_table( fp, testL ):
+def write_gitlab_results_table( fp, result, testL ):
     ""
+    fp.write( '## Tests that '+result+' = '+str( len(testL) ) + '\n\n' )
+
     fp.write( '| Result | Date   | Time   | Path   |\n' + \
               '| ------ | ------ | -----: | :----- |\n' )
 
@@ -520,41 +524,90 @@ def format_test_path_for_gitlab( result, path ):
         return path
 
 
-def stream_gitlab_files( fp, srcdir, selector, max_kilobytes=10 ):
+def stream_gitlab_files( fp, srcdir, selector, max_KB ):
     ""
-    fL = os.listdir( srcdir )
-    fL.sort()
 
-    for fn in fL:
+    files,namewidth = get_directory_file_list( srcdir )
+
+    for fn in files:
         fullfn = pjoin( srcdir, fn )
-        if selector.include( fullfn ):
-            fp.write( '\n' )
-            write_gitlab_formatted_file( fp, fullfn, max_kilobytes )
+
+        incl = selector.include( fullfn )
+        meta = get_file_meta_data_string( fullfn, namewidth )
+
+        fp.write( '\n' )
+        write_gitlab_formatted_file( fp, fullfn, incl, meta, max_KB )
 
 
-def write_gitlab_formatted_file( fp, filename, max_kilobytes=10 ):
+def get_directory_file_list( srcdir ):
     ""
-    bn = os.path.basename( filename )
+    maxlen = 0
+    fL = []
+    for fn in os.listdir( srcdir ):
+        fL.append( ( os.path.getmtime( pjoin( srcdir, fn ) ), fn ) )
+        maxlen = max( maxlen, len(fn) )
+    fL.sort()
+    files = [ tup[1] for tup in fL ]
 
+    namewidth = min( 30, max( 10, maxlen ) )
+
+    return files, namewidth
+
+
+def write_gitlab_formatted_file( fp, filename, include_content, label, max_KB ):
+    ""
     fp.write( '<details>\n' + \
-              '<summary>'+bn+'</summary>\n' + \
+              '<summary><code>'+label+'</code></summary>\n' + \
               '<pre>\n' )
 
-    try:
-        buf = file_read_with_limit( filename, max_kilobytes )
-    except Exception:
-        xs,tb = capture_traceback( sys.exc_info() )
-        buf = '*** error reading file: '+str(filename)+'\n' + tb
+    if include_content:
+        try:
+            buf = file_read_with_limit( filename, max_KB )
+        except Exception:
+            xs,tb = capture_traceback( sys.exc_info() )
+            buf = '*** error reading file: '+str(filename)+'\n' + tb
 
-    buf = buf.replace( '&', '&amp;' )
-    buf = buf.replace( '<', '&lt;' )
-    buf = buf.replace( '>', '&gt;' )
-    buf = buf.replace( '"', '&quot;' )
+        buf = buf.replace( '&', '&amp;' )
+        buf = buf.replace( '<', '&lt;' )
+        buf = buf.replace( '>', '&gt;' )
+        buf = buf.replace( '"', '&quot;' )
+
+    else:
+        buf = '*** file not archived ***'
 
     fp.write( buf )
 
     fp.write( '</pre>\n' + \
               '</details>\n' )
+
+
+def get_file_meta_data_string( filename, namewidth ):
+    ""
+    bn = os.path.basename( filename )
+
+    try:
+
+        fmt = "%-"+str(namewidth)+'s'
+        if os.path.islink( filename ):
+            fname = os.readlink( filename )
+            meta = fmt % ( bn + ' -> ' + fname )
+            if not os.path.isabs( fname ):
+                d = os.path.dirname( os.path.abspath( filename ) )
+                fname = pjoin( d, fname )
+        else:
+            fname = filename
+            meta = fmt % bn
+
+        fsize = os.path.getsize( fname )
+        meta += " %-12s" % ( ' size='+str(fsize) )
+
+        fmod = os.path.getmtime( fname )
+        meta += ' ' + time.ctime( fmod )
+
+    except Exception:
+        meta += ' *** error: '+str( sys.exc_info()[1] )
+
+    return meta
 
 
 def pretty_time( nseconds ):

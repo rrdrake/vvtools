@@ -246,14 +246,40 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
                make_TestSpec_with_results( 'done', 'diff', 5, 'bad' ) ]
 
         sio = StringIO()
-        resultswriter.write_gitlab_results_table( sio, tL )
+        resultswriter.write_gitlab_results_table( sio, 'mixed', tL )
 
         val = sio.getvalue()
         print3( val )
+        assert len( util.greplines( 'Tests that mixed = 2', val ) ) == 1
         assert len( util.greplines( 'Result*Date*Time*Path', val ) ) == 1
         assert len( util.greplines( '| sdir/good.np=4 |', val ) ) == 1
         assert len( util.greplines(
                 '[[]sdir/bad.np=4[]][(]sdir_bad.np=4.md[)] [|]', val ) ) == 1
+
+    def test_file_meta_data_collection(self):
+        ""
+        util.writefile( 'subdir/zeebra.txt', "I am a zeebra.\n" * 20 )
+        time.sleep(1)
+        util.writefile( 'subdir/ardvaark.txt', "I am an ardvaark.\n" * 21 )
+        time.sleep(1)
+
+        fL,width = resultswriter.get_directory_file_list( 'subdir' )
+        assert fL == [ 'zeebra.txt', 'ardvaark.txt' ]
+        assert width == 12
+
+        meta = resultswriter.get_file_meta_data_string( 'subdir/zeebra.txt', 10 )
+        print3( meta )
+
+        meta = resultswriter.get_file_meta_data_string( 'subdir/foobar.txt', 10 )
+        print3( meta )
+        assert 'error: ' in meta
+
+        os.symlink( 'ardvaark.txt', 'subdir/ardvark.txt' )
+        time.sleep(1)
+
+        meta = resultswriter.get_file_meta_data_string( 'subdir/ardvark.txt', 10 )
+        print3( meta )
+        assert 'error:' not in meta
 
     def test_write_gitlab_collapsable_file_contents(self):
         ""
@@ -265,20 +291,31 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
         sio = StringIO()
         fn = os.path.abspath('file.txt')
-        resultswriter.write_gitlab_formatted_file( sio, fn )
+        resultswriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
 
         val = sio.getvalue()
-        print3( val )
-        assert len( util.greplines( '<summary>file.txt</summary>', val ) ) == 1
+        #print3( val )
+        assert len( util.greplines( '<code>label', val ) ) == 1
         assert fn not in val
         assert 'Text with a' in val
         assert '< and a > and a & and some "quotes"' not in val
+
+        sio = StringIO()
+        fn = os.path.abspath('file.exo')
+        resultswriter.write_gitlab_formatted_file( sio, fn, False, 'label', 10 )
+
+        val = sio.getvalue()
+        #print3( val )
+        assert len( util.greplines( '<code>label', val ) ) == 1
+        assert fn not in val
+        assert 'Text with a' not in val
+        assert 'file not archived' in val
 
     def test_write_gitlab_collapsable_file_with_read_error(self):
         ""
         sio = StringIO()
         fn = os.path.abspath('file.txt')
-        resultswriter.write_gitlab_formatted_file( sio, fn )
+        resultswriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
 
         val = sio.getvalue()
         #print3( val )
@@ -296,7 +333,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         time.sleep(1)
 
         sio = StringIO()
-        resultswriter.stream_gitlab_files( sio, '.', MockSelector() )
+        resultswriter.stream_gitlab_files( sio, '.', MockSelector(), 10 )
 
         val = sio.getvalue()
         #print3( val )
@@ -326,11 +363,11 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         time.sleep(1)
 
         sio = StringIO()
-        resultswriter.stream_gitlab_files( sio, '.', MockSelector() )
+        resultswriter.stream_gitlab_files( sio, '.', MockSelector(), 10 )
 
         val = sio.getvalue()
         #print3( val )
-        assert 'file.txt' not in val
+        assert 'This is line two' not in val
         assert 'execute.log' in val
 
     def test_create_file_with_directory_contents(self):
@@ -350,7 +387,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         assert len( util.grepfiles( preamble, 'results.md' ) ) == 1
         assert len( util.grepfiles( 'file.txt', 'results.md' ) ) == 1
         assert len( util.grepfiles( 'execute.log', 'results.md' ) ) == 1
-        assert len( util.grepfiles( 'junk.exo', 'results.md' ) ) == 0
+        assert len( util.grepfiles( 'should not be included', 'results.md' ) ) == 0
 
     def test_create_file_directory_contents_but_directory_does_not_exist(self):
         ""
@@ -400,7 +437,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         vrun = vtu.runvvtest( '-i --gitlab=../gfm', chdir=vrun.resultsDir() )
         time.sleep(1)
 
-        assert abs( getfsize( 'gfm/TestResults.md' ) - 831 ) < 100
+        assert getfsize( 'gfm/TestResults.md' ) > 800
         assert getfsize( 'gfm/FailTest.md' ) > 3000
         assert getfsize( 'gfm/DiffTest.np=1.md' ) > 1000
         assert getfsize( 'gfm/DiffTest.np=2.md' ) > 1000
@@ -415,7 +452,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
         time.sleep(1)
 
-        assert abs( getfsize( 'gfm/TestResults.md' ) - 831 ) < 100
+        assert getfsize( 'gfm/TestResults.md' ) > 800
         assert getfsize( 'gfm/FailTest.md' ) > 3000
         assert getfsize( 'gfm/DiffTest.np=1.md' ) > 1000
         assert getfsize( 'gfm/DiffTest.np=2.md' ) > 1000
