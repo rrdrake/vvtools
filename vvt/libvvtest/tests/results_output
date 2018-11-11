@@ -212,20 +212,18 @@ class html_output_format_tests( vtu.vvtestTestCase ):
 
 class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
-    def test_turning_test_path_to_markdown_link(self):
+    def test_turning_a_path_to_a_markdown_link(self):
         ""
-        s = resultswriter.format_test_path_for_gitlab( 'pass', 'sub/name.np=1' )
+        s = resultswriter.format_test_path_for_gitlab( 'sub/name.np=1', False )
         assert s == 'sub/name.np=1'
 
-        for result in ['diff','fail','timeout']:
-            s = resultswriter.format_test_path_for_gitlab( result,
-                                                           'sub/name.np=1' )
-            assert s == '[sub/name.np=1](sub_name.np=1.md)'
+        s = resultswriter.format_test_path_for_gitlab( 'sub/name.np=1', True )
+        assert s == '[sub/name.np=1](sub_name.np=1.md)'
 
     def test_write_table_line_for_a_test(self):
         ""
         tst = make_TestSpec_with_results( 'done', 'pass', 5 )
-        line = resultswriter.format_gitlab_table_line( tst )
+        line = resultswriter.format_gitlab_table_line( tst, True )
         print3( line )
         sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
         assert len(sL) == 4
@@ -233,12 +231,20 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         assert sL[3] == 'sdir/atest.np=4'
 
         tst = make_TestSpec_with_results( 'done', 'fail', 7 )
-        line = resultswriter.format_gitlab_table_line( tst )
+        line = resultswriter.format_gitlab_table_line( tst, True )
         print3( line )
         sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
         assert len(sL) == 4
         assert sL[0] == 'fail' and sL[2] == '7s'
         assert sL[3] == '[sdir/atest.np=4](sdir_atest.np=4.md)'
+
+        tst = make_TestSpec_with_results( 'done', 'fail', 7 )
+        line = resultswriter.format_gitlab_table_line( tst, False )
+        print3( line )
+        sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
+        assert len(sL) == 4
+        assert sL[0] == 'fail' and sL[2] == '7s'
+        assert sL[3] == 'sdir/atest.np=4'
 
     def test_write_gitlab_results_table(self):
         ""
@@ -246,15 +252,65 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
                make_TestSpec_with_results( 'done', 'diff', 5, 'bad' ) ]
 
         sio = StringIO()
-        resultswriter.write_gitlab_results_table( sio, 'mixed', tL )
+        resultswriter.write_gitlab_results_table( sio, 'mixed', tL, 100 )
 
         val = sio.getvalue()
         print3( val )
-        assert len( util.greplines( 'Tests that mixed = 2', val ) ) == 1
         assert len( util.greplines( 'Result*Date*Time*Path', val ) ) == 1
         assert len( util.greplines( '| sdir/good.np=4 |', val ) ) == 1
-        assert len( util.greplines(
-                '[[]sdir/bad.np=4[]][(]sdir_bad.np=4.md[)] [|]', val ) ) == 1
+        line = grepforline( 'sdir/bad.np=4', val ).rstrip()
+        assert line.endswith( '[sdir/bad.np=4](sdir_bad.np=4.md) |' )
+
+    def test_write_results_table_with_max_path_links(self):
+        ""
+        tL = [ make_TestSpec_with_results( 'done', 'diff', 5, 'testA' ),
+               make_TestSpec_with_results( 'done', 'diff', 5, 'testB' ),
+               make_TestSpec_with_results( 'done', 'diff', 5, 'testC' ),
+               make_TestSpec_with_results( 'done', 'diff', 5, 'testD' ) ]
+
+        sio = StringIO()
+        resultswriter.write_gitlab_results_table( sio, 'diff', tL, 2 )
+
+        val = sio.getvalue()
+        print3( val )
+
+        line = grepforline( 'sdir/testA.np=4', val ).rstrip()
+        assert line.endswith( '[sdir/testA.np=4](sdir_testA.np=4.md) |' )
+
+        line = grepforline( 'sdir/testB.np=4', val ).rstrip()
+        assert line.endswith( '[sdir/testB.np=4](sdir_testB.np=4.md) |' )
+
+        line = grepforline( 'sdir/testC.np=4', val ).rstrip()
+        assert line.endswith( 'sdir/testC.np=4 |' )
+
+        line = grepforline( 'sdir/testD.np=4', val ).rstrip()
+        assert line.endswith( 'sdir/testD.np=4 |' )
+
+    def test_that_large_results_tables_go_to_separate_file(self):
+        ""
+        tL = [ make_TestSpec_with_results( 'done', 'fail', 5, 'testA' ),
+               make_TestSpec_with_results( 'done', 'fail', 5, 'testB' ),
+               make_TestSpec_with_results( 'done', 'fail', 5, 'testC' ),
+               make_TestSpec_with_results( 'done', 'fail', 5, 'testD' ) ]
+
+        sio = StringIO()
+        resultswriter.write_gitlab_results( sio, 'fail', tL, 'large.md', 2, 3 )
+        time.sleep(1)
+
+        val = sio.getvalue()
+        assert len( util.greplines( 'Tests that fail = 4', val ) ) == 1
+        assert 'large.md' in val
+        assert 'sdir/test' not in val
+        assert len( util.grepfiles( 'Tests that fail = 4', 'large.md' ) ) == 1
+        assert len( util.grepfiles( 'sdir/test', 'large.md' ) ) == 4
+
+        fval = util.readfile( 'large.md' )
+
+        line = grepforline( 'sdir/testC.np=4', fval ).rstrip()
+        assert line.endswith( '[sdir/testC.np=4](sdir_testC.np=4.md) |' )
+
+        line = grepforline( 'sdir/testD.np=4', fval ).rstrip()
+        assert line.endswith( 'sdir/testD.np=4 |' )
 
     def test_file_meta_data_collection(self):
         ""
@@ -461,6 +517,13 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
 
 ###########################################################################
+
+def grepforline( pattern, multi_line_string ):
+    ""
+    lineL = util.greplines( pattern, multi_line_string )
+    assert len( lineL ) == 1
+    return lineL[0]
+
 
 def read_xml( filename ):
     ""

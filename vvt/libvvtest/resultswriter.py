@@ -430,11 +430,16 @@ class GitLabFileSelector:
 
 class GitLabMarkDownConverter:
 
-    def __init__(self, test_dir, destdir, max_KB=10):
+    def __init__(self, test_dir, destdir,
+                       max_KB=10,
+                       big_table_size=100,
+                       max_links_per_table=200 ):
         ""
         self.test_dir = test_dir
         self.destdir = destdir
         self.max_KB = max_KB
+        self.big_table = big_table_size
+        self.max_links = max_links_per_table
 
         self.selector = GitLabFileSelector()
 
@@ -442,16 +447,20 @@ class GitLabMarkDownConverter:
         ""
         parts = partition_tests_by_result( testL )
 
-        fname = pjoin( self.destdir, 'TestResults.md' )
+        basepath = pjoin( self.destdir, 'TestResults' )
+        fname = basepath + '.md'
 
         with open( fname, 'w' ) as fp:
             for result in [ 'fail', 'diff', 'timeout',
                             'pass', 'notrun', 'notdone' ]:
-                write_gitlab_results_table( fp, result, parts[result] )
+                altname = basepath + '_' + result + '.md'
+                write_gitlab_results( fp, result, parts[result], altname,
+                                      self.big_table, self.max_links )
 
         for result in [ 'fail', 'diff', 'timeout' ]:
-            for tst in parts[result]:
-                self.createTestFile( ensure_TestSpec( tst ) )
+            for i,tst in enumerate( parts[result] ):
+                if i < self.max_links:
+                    self.createTestFile( ensure_TestSpec( tst ) )
 
     def createTestFile(self, tspec):
         ""
@@ -484,23 +493,39 @@ class GitLabMarkDownConverter:
                     '```\n' )
 
 
-def write_gitlab_results_table( fp, result, testL ):
+def write_gitlab_results( fp, result, testL, altname,
+                              maxtablesize, max_path_links ):
     ""
-    fp.write( '## Tests that '+result+' = '+str( len(testL) ) + '\n\n' )
+    hdr = '## Tests that '+result+' = '+str( len(testL) ) + '\n\n'
+    fp.write( hdr )
 
+    if len(testL) <= maxtablesize:
+        write_gitlab_results_table( fp, result, testL, max_path_links )
+
+    else:
+        bn = os.path.basename( altname )
+        fp.write( 'Large table contained in ['+bn+']('+bn+').\n\n' )
+        with open( altname, 'w' ) as altfp:
+            altfp.write( hdr )
+            write_gitlab_results_table( altfp, result, testL, max_path_links )
+
+
+def write_gitlab_results_table( fp, result, testL, max_path_links ):
+    ""
     fp.write( '| Result | Date   | Time   | Path   |\n' + \
               '| ------ | ------ | -----: | :----- |\n' )
 
     if len( testL ) > 0:
-        for tst in testL:
-            fp.write( format_gitlab_table_line( tst ) + '\n' )
+        for i,tst in enumerate(testL):
+            add_link = ( i < max_path_links )
+            fp.write( format_gitlab_table_line( tst, add_link ) + '\n' )
     else:
         fp.write( '| None |   |   |   |\n' )
 
     fp.write( '\n' )
 
 
-def format_gitlab_table_line( tst ):
+def format_gitlab_table_line( tst, add_link ):
     ""
     tspec = ensure_TestSpec( tst )
 
@@ -509,15 +534,17 @@ def format_gitlab_table_line( tst ):
     tm = format_test_run_time( tspec )
     path = tspec.getExecuteDirectory()
 
+    makelink = ( add_link and result in ['diff','fail','timeout'] )
+
     s = '| '+result+' | '+dt+' | '+tm+' | '
-    s += format_test_path_for_gitlab( result, path ) + ' |'
+    s += format_test_path_for_gitlab( path, makelink ) + ' |'
 
     return s
 
 
-def format_test_path_for_gitlab( result, path ):
+def format_test_path_for_gitlab( path, makelink ):
     ""
-    if result in ['diff','fail','timeout']:
+    if makelink:
         repl = path.replace( os.sep, '_' )
         return '['+path+']('+repl+'.md)'
     else:
