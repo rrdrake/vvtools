@@ -28,6 +28,17 @@ class ResultsWriter:
         self.junitfile = junitfile
         self.gitlabdir = gitlabdir
 
+        self.runattrs = {}
+        # platform, -oO options, machine name, test_dir,
+        # start date, finish date, vvtest command line
+        # path to python being used, and PYTHONPATH
+        # path to vvtest being used
+        # starting working directory
+
+    def setRunAttr(self, **kwargs):
+        ""
+        self.runattrs.update( kwargs )
+
     ### prerun, info, postrun, final are the interface functions
 
     def prerun(self, atestlist, short=True):
@@ -70,11 +81,13 @@ class ResultsWriter:
         ""
         if self.junitfile:
 
-            datestamp = make_date_stamp( self.optrdate, atestlist )
+            datestamp = atestlist.getDateStamp( time.time() )
+            datestr = make_date_stamp( datestamp, self.optrdate,
+                                       "%Y-%m-%dT%H:%M:%S" )
 
             testL = atestlist.getActiveTests()
             print3( "Writing", len(testL), "tests to JUnit file", self.junitfile )
-            write_JUnit_file( testL, self.test_dir, self.junitfile, datestamp )
+            write_JUnit_file( testL, self.test_dir, self.junitfile, datestr )
             self.perms.set( os.path.abspath( self.junitfile ) )
 
     def check_write_gitlab(self, atestlist):
@@ -87,6 +100,9 @@ class ResultsWriter:
                 os.mkdir( self.gitlabdir )
 
             try:
+                print3( "Writing", len(testL),
+                        "tests in GitLab format to", self.gitlabdir )
+
                 conv = GitLabMarkDownConverter( self.test_dir, self.gitlabdir )
                 conv.saveResults( testL )
 
@@ -94,19 +110,19 @@ class ResultsWriter:
                 self.perms.recurse( self.gitlabdir )
 
 
-def make_date_stamp( optrdate, tlist ):
+def make_date_stamp( testdate, optrdate, timefmt="%Y_%m_%d" ):
     ""
     if optrdate != None:
-        try:
-            datestamp = float(optrdate)
-        except Exception:
-            print3( '*** vvtest error: --results-date must be ' + \
-                    'seconds since epoch for use with --junit option' )
-            sys.exit(1)
+        if type( optrdate ) == type(''):
+            datestr = optrdate
+        else:
+            tup = time.localtime( optrdate )
+            datestr = time.strftime( timefmt, tup )
     else:
-        datestamp = tlist.getDateStamp( time.time() )
+        tup = time.localtime( testdate )
+        datestr = time.strftime( timefmt, tup )
 
-    return datestamp
+    return datestr
 
 
 def partition_tests_by_result( tlist ):
@@ -156,6 +172,9 @@ def printHTMLResults( tlist, filename, test_dir ):
     """
     Opens and writes an HTML summary file in the test directory.
     """
+    datestamp = tlist.getDateStamp( time.time() )
+    datestr = make_date_stamp( datestamp, None, "%Y-%m-%d %H:%M:%S" )
+
     parts = partition_tests_by_result( tlist.getActiveTests() )
 
     sumstr = results_summary_string( parts )
@@ -171,6 +190,7 @@ def printHTMLResults( tlist, filename, test_dir ):
 
         fp.write( "<h1>Summary</h1>\n" )
         fp.write( "  <ul>\n" )
+        fp.write( "  <li> Test date: " + datestr + " </li>\n" )
         fp.write( "  <li> Directory: " + test_dir + " </li>\n" )
         fp.write( "  <li> " + sumstr + "</li>\n" )
         fp.write( "  </ul>\n" )
@@ -306,7 +326,7 @@ def XstatusResult(t):
     return ref.getAttr('result')
 
 
-def write_JUnit_file( testL, test_dir, filename, datestamp ):
+def write_JUnit_file( testL, test_dir, filename, datestr ):
     """
     This collects information from the given test list (a python list of
     TestExec objects), then writes a file in the format of JUnit XML files.
@@ -337,8 +357,6 @@ def write_JUnit_file( testL, test_dir, filename, datestamp ):
 
     tdir = os.path.basename( test_dir )
     tdir = tdir.replace( '.', '_' )  # a dot is a Java class separator
-
-    datestr = time.strftime( "%Y-%m-%dT%H:%M:%S", time.localtime( datestamp ) )
 
     fp = open( filename, 'w' )
     try:
@@ -443,6 +461,12 @@ class GitLabMarkDownConverter:
 
         self.selector = GitLabFileSelector()
 
+        self.runattrs = {}
+
+    def setRunAttr(self, **kwargs):
+        ""
+        self.runattrs.update( kwargs )
+
     def saveResults(self, testL):
         ""
         parts = partition_tests_by_result( testL )
@@ -451,6 +475,9 @@ class GitLabMarkDownConverter:
         fname = basepath + '.md'
 
         with open( fname, 'w' ) as fp:
+
+            write_run_attributes( fp, self.runattrs )
+
             for result in [ 'fail', 'diff', 'timeout',
                             'pass', 'notrun', 'notdone' ]:
                 altname = basepath + '_' + result + '.md'
@@ -491,6 +518,13 @@ class GitLabMarkDownConverter:
                 fp.write( '\n```\n' + \
                     '*** error collecting files: '+srcdir+'\n'+tb + \
                     '```\n' )
+
+
+def write_run_attributes( fp, attrs ):
+    ""
+    for name,value in attrs.items():
+        fp.write( '* '+name+' = '+str(value)+'\n' )
+    fp.write( '\n' )
 
 
 def write_gitlab_results( fp, result, testL, altname,

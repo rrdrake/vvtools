@@ -91,6 +91,18 @@ class deprecations( vtu.vvtestTestCase ):
                         cmdline.parse_command_line, [ '-F' ] )
         assert 'Traceback' in err and 'SystemExit' in err
 
+        rtn,out,err = util.call_capture_output(
+                        cmdline.parse_command_line, [ '-H' ] )
+        assert 'Traceback' in err and 'SystemExit' in err
+
+        rtn,out,err = util.call_capture_output(
+                        cmdline.parse_command_line, [ '--vg' ] )
+        assert 'Traceback' in err and 'SystemExit' in err
+
+        rtn,out,err = util.call_capture_output(
+                        cmdline.parse_command_line, [ '-G' ] )
+        assert 'Traceback' in err and 'SystemExit' in err
+
 
 class version_info( vtu.vvtestTestCase ):
 
@@ -184,6 +196,21 @@ class create_derived_options( vtu.vvtestTestCase ):
 
         mn,mx,sm = cmdline.convert_test_time_options( '1', '2', '3' )
         assert abs(mn-1) < 1.e-12 and abs(mx-2) < 1.e-12 and abs(sm-3) < 1.e-12
+
+    def test_results_date_conversion(self):
+        ""
+        self.assertRaises( Exception, cmdline.check_convert_date_spec, ' ' )
+
+        assert cmdline.check_convert_date_spec( '1_2' ) == '1_2'
+        assert cmdline.check_convert_date_spec( ' 1_2' ) == '1_2'
+        assert cmdline.check_convert_date_spec( ' 1_2 ' ) == '1_2'
+
+        tm = time.time()
+        spec = cmdline.check_convert_date_spec( str(tm) )
+        assert abs( spec - tm ) < 2
+
+        assert cmdline.check_convert_date_spec( '0' ) == '0'
+        assert cmdline.check_convert_date_spec( '-100000000000' ) == '-100000000000'
 
 
 ########################################################################

@@ -37,9 +37,6 @@ import libvvtest.utesthooks as utesthooks
 import libvvtest.resultswriter as resultswriter
 from libvvtest.pathutil import relative_execute_directory
 from libvvtest.pathutil import compute_relative_path
-from libvvtest.resultswriter import pretty_time
-
-XstatusString = resultswriter.XstatusString
 
 
 version = '1.1'
@@ -51,6 +48,78 @@ testlist_name = 'testlist'
 # a FilterExpressions.WordExpression() object filled with the command line
 # -k and -K specifications
 keyword_expr = None
+
+
+def main():
+    ""
+    check_for_bootstrap_file()
+
+    rtdata = RuntimeData( sys.argv )
+
+    # this may call sys.exit (for help or errors)
+    opts,optD,dirs = cmdline.parse_command_line( sys.argv[1:], version )
+
+    global keyword_expr
+    keyword_expr = optD['keyword_expr']
+
+    populate_configuration_from_options( opts, optD, rtdata )
+
+    insert_configdir_into_sys_path( rtdata )
+
+    # 'test_dir' non-None only if the CWD is in a TestResults.* directory
+    test_dir = readCommandInfo( opts, optD, rtdata )
+
+    if opts.check:
+        for n in opts.check:
+            os.environ[ 'CHECK_' + n.upper() ] = ''
+
+    if test_dir and optD['param_dict']:
+        print3( "*** error: cannot use -S in a TestResults directory" )
+        sys.exit(1)
+
+    if test_dir and opts.dash_g:
+        print3( "*** error: cannot use -g in a TestResults directory" )
+        sys.exit(1)
+
+    plat = construct_platform_instance( rtdata, opts, optD )
+    rtdata.setPlatformObject( plat )
+
+    rtdata.setTestSubdir( opts.run_dir, optD['onopts'], optD['offopts'] )
+
+    rtconfig = construct_RuntimeConfig( plat, opts, optD )
+    rtdata.setRuntimeConfig( rtconfig )
+
+    info = ( opts.dash_i or opts.keys or opts.files )
+
+    if opts.dash_g and not info:
+        assert test_dir == None
+        generateTestList( opts, optD, dirs, rtdata )
+
+    elif info:
+        print_info_mode( opts, optD, rtdata, dirs, test_dir )
+
+    elif opts.dash_b:
+
+        if opts.dash_R or opts.dash_w:
+            print3( "*** error: cannot use -R or -w with -b (baseline)" )
+            sys.exit(1)
+
+        baselineTests( opts, optD, test_dir, rtdata )
+
+    elif opts.extract:
+        extractTestFiles( opts, optD, dirs, opts.extract, rtdata )
+
+    else:
+
+        # if no results keywords are specified, then add -k notrun/notdone
+        if not keyword_expr.containsResultsKeywords() and \
+           not opts.dash_w and not opts.dash_R:
+            keyword_expr.append( ['notrun/notdone'], 'and' )
+
+        if test_dir != None:
+            restartTests( opts, optD, rtdata, test_dir )
+        else:
+            runTests( opts, optD, rtdata, dirs )
 
 
 class Configuration:
@@ -72,13 +141,11 @@ class Configuration:
                }
     
     def get(self, name):
-        """
-        """
+        ""
         return self.attrs[name]
     
     def set(self, name, value):
-        """
-        """
+        ""
         if value == None:
           self.attrs[name] = Configuration.defaults[name]
         else:
@@ -90,11 +157,10 @@ class Configuration:
           self.attrs[n] = v
 
 
-config = Configuration()
-
-
-def populate_configuration_from_options( opts, optD ):
+def populate_configuration_from_options( opts, optD, rtdata ):
     ""
+    config = rtdata.getConfiguration()
+
     if optD['onopts']:
         config.set( 'onopts', optD['onopts'] )
     if optD['offopts']:
@@ -108,7 +174,7 @@ def populate_configuration_from_options( opts, optD ):
     else:
         d = os.getenv( 'VVTEST_CONFIGDIR' )
         if d == None:
-            d = os.path.join( config.get('toolsdir'), 'config' )
+            d = os.path.join( rtdata.getToolsDir(), 'config' )
         config.set( 'configdir', os.path.abspath(d) )
 
     config.set( 'refresh', not opts.dash_m )
@@ -130,87 +196,40 @@ def populate_configuration_from_options( opts, optD ):
         config.set( 'testargs', argL )
 
 
-def main():
+class RuntimeData:
+
+    def __init__(self, cmdL):
+        ""
+        self.cmdL = [ os.path.abspath( cmdL[0] ) ]
+        self.cmdL.extend( cmdL[1:] )
+
+        # directory containing this script
+        self.toolsdir = getToolsDirectory()
+
+        self.config = Configuration()
+        self.config.set( 'toolsdir', self.toolsdir )
+
+    def getToolsDir(self): return self.toolsdir
+    def getConfigDir(self): return self.config.get( 'configdir' )
+    def getConfiguration(self): return self.config
+
+    def setPlatformObject(self, platobj): self.plat = platobj
+    def getPlatformObject(self): return self.plat
+
+    def setRuntimeConfig(self, rtconfig): self.rtconfig = rtconfig
+    def getRuntimeConfig(self): return self.rtconfig
+
+    def setTestSubdir(self, optrundir, onopts, offopts):
+        sd = test_results_subdir_name( optrundir, onopts, offopts,
+                                       self.plat.getName() )
+        self.testsubdir = sd
+    def getTestSubdir(self): return self.testsubdir
+
+
+def construct_platform_instance( rtdata, opts, optD ):
     ""
-    # get directory containing this script and the script name itself
-    toolsdir = getToolsDirectory()
+    toolsdir = rtdata.getToolsDir()
 
-    check_for_bootstrap_file()
-
-    # set this before options are parsed
-    config.set( 'toolsdir', toolsdir )
-
-    # this calls sys.exit if help is requested
-    opts,optD,dirs = cmdline.parse_command_line( sys.argv[1:], version )
-
-    global keyword_expr
-    keyword_expr = optD['keyword_expr']
-
-    populate_configuration_from_options( opts, optD )
-
-    # do this after options are parsed
-    insert_configdir_into_sys_path( toolsdir, config )
-
-    # 'test_dir' non-None only if the CWD is in a TestResults.* directory
-    test_dir = readCommandInfo( opts, optD )
-
-    if opts.check:
-        for n in opts.check:
-            os.environ[ 'CHECK_' + n.upper() ] = ''
-
-    if test_dir and optD['param_dict']:
-        print3( "*** error: cannot use -S in a TestResults directory" )
-        sys.exit(1)
-
-    if test_dir and opts.dash_g:
-        print3( "*** error: cannot use -g in a TestResults directory" )
-        sys.exit(1)
-
-    plat = construct_platform_instance( toolsdir, opts, optD )
-
-    testsubdir = test_results_subdir_name( opts.run_dir,
-                                           optD['onopts'],
-                                           optD['offopts'],
-                                           plat.getName() )
-
-    rtconfig = construct_RuntimeConfig( plat, opts, optD )
-
-    info = ( opts.dash_i or opts.keys or opts.files )
-
-    if opts.dash_g and not info:
-        assert test_dir == None
-        generateTestList( opts, optD, dirs, plat, rtconfig, testsubdir )
-
-    elif info:
-        print_info_mode( opts, optD, plat, rtconfig,
-                         dirs, test_dir, testsubdir )
-
-    elif opts.dash_b:
-
-        if opts.dash_R or opts.dash_w:
-            print3( "*** error: cannot use -R or -w with -b (baseline)" )
-            sys.exit(1)
-
-        baselineTests( opts, optD, test_dir, plat, rtconfig, testsubdir )
-
-    elif opts.extract:
-        extractTestFiles( opts, optD, dirs, plat, opts.extract, rtconfig )
-
-    else:
-
-        # if no results keywords are specified, then add -k notrun/notdone
-        if not keyword_expr.containsResultsKeywords() and \
-           not opts.dash_w and not opts.dash_R:
-            keyword_expr.append( ['notrun/notdone'], 'and' )
-
-        if test_dir != None:
-            restartTests( opts, optD, toolsdir, test_dir, plat, rtconfig )
-        else:
-            runTests( opts, optD, toolsdir, dirs, plat, rtconfig, testsubdir )
-
-
-def construct_platform_instance( toolsdir, opts, optD ):
-    ""
     plat = vvplatform.create_Platform_instance(
                 toolsdir,
                 opts.plat,
@@ -246,11 +265,12 @@ def construct_RuntimeConfig( plat, opts, optD ):
     return rtconfig
 
 
-def print_info_mode( opts, optD, plat, rtconfig,
-                     scan_dirs, test_dir, testsubdir ):
+def print_info_mode( opts, optD, rtdata, scan_dirs, test_dir ):
     ""
-    tlist = construct_info_test_list( opts, optD, plat, rtconfig, scan_dirs,
-                                      test_dir, testsubdir )
+    plat = rtdata.getPlatformObject()
+    testsubdir = rtdata.getTestSubdir()
+
+    tlist = construct_info_test_list( opts, optD, rtdata, scan_dirs, test_dir )
 
     if not test_dir and testsubdir:
         test_dir = os.path.abspath( testsubdir )
@@ -268,9 +288,12 @@ def print_info_mode( opts, optD, plat, rtconfig,
         wr.info( tlist )
 
 
-def construct_info_test_list( opts, optD, plat, rtconfig, scan_dirs,
-                              test_dir, testsubdir ):
+def construct_info_test_list( opts, optD, rtdata, scan_dirs, test_dir ):
     ""
+    rtconfig = rtdata.getRuntimeConfig()
+    plat = rtdata.getPlatformObject()
+    testsubdir = rtdata.getTestSubdir()
+
     # always include tdd in info mode
     rtconfig.setAttr( 'include_tdd', True )
 
@@ -322,9 +345,14 @@ def scan_test_source_directories( tlist, scan_dirs, setparams ):
         tlist.scanDirectory( d, setparams )
 
 
-def generateTestList( opts, optD, dirs, plat, rtconfig, testsubdir ):
+def generateTestList( opts, optD, dirs, rtdata ):
     """
     """
+    rtconfig = rtdata.getRuntimeConfig()
+    config = rtdata.getConfiguration()
+    plat = rtdata.getPlatformObject()
+    testsubdir = rtdata.getTestSubdir()
+
     test_dir = os.path.abspath( testsubdir )
 
     tfile = os.path.join( test_dir, testlist_name )
@@ -341,7 +369,7 @@ def generateTestList( opts, optD, dirs, plat, rtconfig, testsubdir ):
     perms = make_PermissionSetter( test_dir, opts.perms )
     
     createTestDir( testsubdir, perms, opts.dash_M )
-    writeCommandInfo( opts, optD, test_dir, plat, perms )
+    writeCommandInfo( opts, optD, rtdata, test_dir, plat, perms )
 
     wr = make_results_writer( test_dir, perms, opts, optD )
     wr.prerun( tlist, short=False )
@@ -355,12 +383,15 @@ def generateTestList( opts, optD, dirs, plat, rtconfig, testsubdir ):
     print3( "Test directory:", testsubdir )
 
 
-def extractTestFiles( opts, optD, dirs, plat, target_dir, rtconfig ):
+def extractTestFiles( opts, optD, dirs, target_dir, rtdata ):
     """
     Uses all the regular filtering mechanisms to gather tests from a test
     source area and copies the files used for each test into a separate
     directory.
     """
+    plat = rtdata.getPlatformObject()
+    rtconfig = rtdata.getRuntimeConfig()
+
     tlist = TestList.TestList( None, rtconfig )
 
     scan_test_source_directories( tlist, dirs, optD['param_dict'] )
@@ -603,10 +634,12 @@ def makeMirrorDirectory( Mval, testdirname, perms ):
     return True
 
 
-def writeCommandInfo( opts, optD, test_dir, plat, perms ):
+def writeCommandInfo( opts, optD, rtdata, test_dir, plat, perms ):
     """
     Creates the test results information file.
     """
+    config = rtdata.getConfiguration()
+
     f = os.path.join(test_dir, 'test.cache')
     if not os.path.exists( f ):
         fp = open( f, "w" )
@@ -643,13 +676,15 @@ def writeCommandInfo( opts, optD, test_dir, plat, perms ):
     perms.set( os.path.abspath(f) )
 
 
-def readCommandInfo( opts, optD ):
+def readCommandInfo( opts, optD, rtdata ):
     """
     Check for a file called 'test.cache' that indicates whether the
     current working directory is a TestResults directory (or subdirectory)
     then open that file for information.  The test results directory is
     returned, or None if not in a TestRestults directory.
     """
+    config = rtdata.getConfiguration()
+
     # an environment variable is used to identify vvtest run recursion
     troot = os.environ.get( 'VVTEST_TEST_ROOT', None )
 
@@ -740,10 +775,16 @@ def exec_path( testspec, test_dir ):
     return relative_execute_directory( xdir, test_dir, os.getcwd() )
 
 
-def runTests( opts, optD, toolsdir, dirs, plat, rtconfig, testsubdir ):
+def runTests( opts, optD, rtdata, dirs ):
     """
     Executes a list of tests.
     """
+    toolsdir = rtdata.getToolsDir()
+    config = rtdata.getConfiguration()
+    rtconfig = rtdata.getRuntimeConfig()
+    plat = rtdata.getPlatformObject()
+    testsubdir = rtdata.getTestSubdir()
+
     # determine the directory that stores the test results then create it
     test_dir = os.path.abspath( testsubdir )
     tfile = os.path.join( test_dir, testlist_name )
@@ -753,7 +794,7 @@ def runTests( opts, optD, toolsdir, dirs, plat, rtconfig, testsubdir ):
     check_for_currently_running_vvtest( tlist.getResultsFilenames(), opts.force )
 
     # this variable allows vvtest tests to run vvtest (ie, allows recursion)
-    os.environ['VVTEST_TEST_ROOT'] = os.path.normpath( os.path.abspath( test_dir ) )
+    os.environ['VVTEST_TEST_ROOT'] = os.path.normpath( test_dir )
 
     perms = make_PermissionSetter( test_dir, opts.perms )
 
@@ -762,7 +803,7 @@ def runTests( opts, optD, toolsdir, dirs, plat, rtconfig, testsubdir ):
     if opts.dash_w:
         remove_directory_contents( testsubdir )
 
-    writeCommandInfo( opts, optD, test_dir, plat, perms )
+    writeCommandInfo( opts, optD, rtdata, test_dir, plat, perms )
 
     scan_test_source_directories( tlist, dirs, optD['param_dict'] )
 
@@ -797,7 +838,7 @@ def runTests( opts, optD, toolsdir, dirs, plat, rtconfig, testsubdir ):
                              results_writer )
 
         else:
-            batchTestList( opts, optD, toolsdir,
+            batchTestList( opts, optD, rtdata,
                            tlist, test_dir, plat, perms,
                            results_writer )
 
@@ -888,7 +929,7 @@ def executeTestList( opts, optD,
             showprogress = False
             for tx in list( tlist.getRunning() ):
                 if tx.poll():
-                    xs = XstatusString( tx, test_dir, cwd )
+                    xs = resultswriter.XstatusString( tx, test_dir, cwd )
                     print3( "Finished:", xs )
                     tlist.testDone( tx )
                     showprogress = True
@@ -900,7 +941,7 @@ def executeTestList( opts, optD,
                 ntot = tlist.numActive()
                 pct = 100 * float(ndone) / float(ntot)
                 div = str(ndone)+'/'+str(ntot)
-                dt = pretty_time( time.time() - starttime )
+                dt = resultswriter.pretty_time( time.time() - starttime )
                 print3( "Progress: " + div+" = %%%.1f"%pct + ', time = '+dt )
 
     finally:
@@ -920,11 +961,11 @@ def executeTestList( opts, optD,
     print3()
     results_writer.postrun( tlist )
 
-    elapsed = pretty_time( time.time() - starttime )
+    elapsed = resultswriter.pretty_time( time.time() - starttime )
     print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
 
 
-def batchTestList( opts, optD, toolsdir,
+def batchTestList( opts, optD, rtdata,
                    tlist, test_dir, plat, perms,
                    results_writer ):
     """
@@ -936,7 +977,7 @@ def batchTestList( opts, optD, toolsdir,
     if qsublimit == None:
         qsublimit = plat.getDefaultQsubLimit()
     
-    batch = Batcher( toolsdir, opts, optD,
+    batch = Batcher( rtdata, opts, optD,
                      plat, test_dir, tlist, perms, qsublimit )
     
     plat.display()
@@ -983,7 +1024,7 @@ def batchTestList( opts, optD, toolsdir,
                 ids = ' '.join( [ str(qid) for qid in qidL ] )
                 print3( 'Finished batch IDS:', ids )
             for t in doneL:
-                ts = XstatusString( t, test_dir, cwd )
+                ts = resultswriter.XstatusString( t, test_dir, cwd )
                 print3( "Finished:", ts )
 
             uthook.check( schedule.numInFlight(), schedule.numPastQueue() )
@@ -996,7 +1037,7 @@ def batchTestList( opts, optD, toolsdir,
                 ntot = tlist.numActive()
                 tpct = 100 * float(ndone) / float(ntot)
                 tdiv = 'tests '+str(ndone)+'/'+str(ntot)
-                dt = pretty_time( time.time() - starttime )
+                dt = resultswriter.pretty_time( time.time() - starttime )
                 print3( "Progress: " + \
                         jdiv+" = %%%.1f"%jpct + ' '+jflt+', ' + \
                         tdiv+" = %%%.1f"%tpct + ', ' + \
@@ -1029,7 +1070,7 @@ def batchTestList( opts, optD, toolsdir,
     print3()
     results_writer.postrun( tlist )
     
-    elapsed = pretty_time( time.time() - starttime )
+    elapsed = resultswriter.pretty_time( time.time() - starttime )
     print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
 
 
@@ -1108,12 +1149,12 @@ def loadRunTimes( tlist, plat, opttimeout, optmult, optmaxtimeout ):
 
 class Batcher:
     
-    def __init__(self, toolsdir, opts, optD,
+    def __init__(self, rtdata, opts, optD,
                        plat, test_dir, tlist, perms, maxjobs):
         """
         The 'tlist' is a TestList class instance.
         """
-        self.toolsdir = toolsdir
+        self.rtdata = rtdata
         self.opts = opts
         self.optD = optD
         self.plat = plat
@@ -1193,6 +1234,8 @@ class Batcher:
     def writeQsubScripts(self, results_suffix):
         """
         """
+        config = self.rtdata.getConfiguration()
+
         self.tlist.markTestsWithDependents()
 
         self.removeBatchDirectories()
@@ -1310,7 +1353,7 @@ class Batcher:
           if qtime < 600: taopts += ' -T ' + str(qtime*0.90)
           else:           taopts += ' -T ' + str(qtime-120)
         
-        cmd = self.toolsdir+'/vvtest ' + taopts + ' || exit 1'
+        cmd = self.rtdata.getToolsDir()+'/vvtest ' + taopts + ' || exit 1'
         fp.writelines( [ cmd+'\n\n' ] )
         
         # echo a marker to determine when a clean batch job exit has occurred
@@ -1343,19 +1386,9 @@ def saveResults( opts, optD, tlist, plat, test_dir, inprogress=False ):
 
     rtag = opts.results_tag
     
-    # determine the date stamp to embed in the file name
-    rdate = opts.results_date
-    if rdate != None:
-      try:
-        assert '_' not in rdate  # recent python 3 allows underscores
-        val = float(rdate)
-        # assume format was seconds since epoch
-        datestr = time.strftime( "%Y_%m_%d", time.localtime( val ) )
-      except Exception:
-        datestr = rdate  # just take date string verbatim
-    else:
-      datestamp = tlist.getDateStamp( time.time() )
-      datestr = time.strftime( "%Y_%m_%d", time.localtime( datestamp ) )
+    # determine the date to embed in the file name
+    datestr = resultswriter.make_date_stamp(
+                    tlist.getDateStamp( time.time() ), opts.results_date )
 
     L = []
     if optD['onopts']:
@@ -1381,9 +1414,14 @@ def saveResults( opts, optD, tlist, plat, test_dir, inprogress=False ):
     tr.writeResults( fname, pname, cplr, mach, test_dir, inprogress )
 
 
-def restartTests( opts, optD, toolsdir, test_dir, plat, rtconfig ):
+def restartTests( opts, optD, rtdata, test_dir ):
     ""
     assert test_dir != None
+
+    toolsdir = rtdata.getToolsDir()
+    config = rtdata.getConfiguration()
+    rtconfig = rtdata.getRuntimeConfig()
+    plat = rtdata.getPlatformObject()
 
     # this variable allows vvtest tests to run vvtest (ie, allows recursion)
     os.environ['VVTEST_TEST_ROOT'] = os.path.normpath( os.path.abspath( test_dir ) )
@@ -1439,7 +1477,7 @@ def restartTests( opts, optD, toolsdir, test_dir, plat, rtconfig ):
                              results_writer )
 
         else:
-            batchTestList( opts, optD, toolsdir,
+            batchTestList( opts, optD, rtdata,
                            tlist, test_dir, plat, perms,
                            results_writer )
 
@@ -1452,8 +1490,13 @@ def restartTests( opts, optD, toolsdir, test_dir, plat, rtconfig ):
     results_writer.final( tlist )
 
 
-def baselineTests( opts, optD, test_dir, plat, rtconfig, testsubdir ):
+def baselineTests( opts, optD, test_dir, rtdata ):
     ""
+    rtconfig = rtdata.getRuntimeConfig()
+    config = rtdata.getConfiguration()
+    plat = rtdata.getPlatformObject()
+    testsubdir = rtdata.getTestSubdir()
+
     path_filter = None
     if test_dir == None:
         test_dir = os.path.abspath( testsubdir )
@@ -1606,11 +1649,11 @@ def check_for_bootstrap_file():
             import vvtest_bootstrap
 
 
-def insert_configdir_into_sys_path( toolsdir, config ):
+def insert_configdir_into_sys_path( rtdata ):
     ""
-    d1 = os.path.normpath( os.path.join( toolsdir, 'config' ) )
+    d1 = os.path.normpath( os.path.join( rtdata.getToolsDir(), 'config' ) )
 
-    d2 = config.get('configdir')
+    d2 = rtdata.getConfigDir()
     if d2:
         d2 = os.path.normpath( d2 )
 

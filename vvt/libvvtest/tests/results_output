@@ -29,6 +29,26 @@ from libvvtest.TestSpecCreator import createTestObjects
 from libvvtest.RuntimeConfig import RuntimeConfig
 
 
+class misc_tests( vtu.vvtestTestCase ):
+
+    def test_make_date_stamp(self):
+        ""
+        tm0 = time.mktime( time.strptime( 'Sun Oct 11 13:20:58 2018' ) )
+        tm1 = tm0 - 600
+
+        s = resultswriter.make_date_stamp( tm0, None )
+        assert s == '2018_10_11'
+
+        s = resultswriter.make_date_stamp( tm0, None, "%Y-%m-%d_%H:%M:%S" )
+        assert s == '2018-10-11_13:20:58'
+
+        s = resultswriter.make_date_stamp( tm0, 'foobar' )
+        assert s == 'foobar'
+
+        s = resultswriter.make_date_stamp( tm0, tm1, "%Y-%m-%d_%H:%M:%S" )
+        assert s == '2018-10-11_13:10:58'
+
+
 def write_three_test_files():
     ""
     util.writefile( "subdir/param.vvt", """

@@ -6,6 +6,7 @@
 
 import sys, os
 import re
+import time
 
 from . import argutil
 from . import FilterExpressions
@@ -23,11 +24,9 @@ def parse_command_line( argvlist, vvtest_version=None ):
 
     check_deprecated_option_use( opts )
 
-    adjust_option_values( opts )
-
     check_print_version( opts, vvtest_version )
 
-    derived_opts = create_derived_options( opts )
+    derived_opts = adjust_options_and_create_derived_options( opts )
 
     return opts, derived_opts, args
 
@@ -598,7 +597,8 @@ def create_parser( argvlist, vvtest_version ):
     grp.add_argument( '--results-tag',
         help='Add an arbitrary tag to the --save-results output file.' )
     grp.add_argument( '--results-date', metavar='DATE',
-        help='Specify the date to use in the --save-results output file.' )
+        help='Specify the testing date, used as a marker or file name in some '
+             'output formats. Can be seconds since epoch or a date string.' )
     grp.add_argument( '--junit', metavar='FILENAME',
         help='Writes a test summary file in the JUnit XML format.' )
     grp.add_argument( '--html', metavar='FILENAME',
@@ -656,9 +656,6 @@ def check_deprecated_option_use( opts ):
                   'at the same time; --qsub-length is deprecated.' )
         sys.exit(1)
 
-
-def adjust_option_values( opts ):
-    ""
     if opts.pipeline:
         opts.batch = True  # --pipeline replaced with --batch
 
@@ -674,7 +671,7 @@ def adjust_option_values( opts ):
         opts.batch_length = opts.qsub_length
 
 
-def create_derived_options( opts ):
+def adjust_options_and_create_derived_options( opts ):
     ""
     derived_opts = {}
 
@@ -761,6 +758,10 @@ def create_derived_options( opts ):
         if opts.config != None:
             for i,d in enumerate( opts.config ):
                 opts.config[i] = os.path.normpath( os.path.abspath( d ) )
+
+        errtype = '--results-date'
+        if opts.results_date != None:
+            opts.results_date = check_convert_date_spec( opts.results_date )
 
     except Exception:
         errprint( '*** error: command line problem with', errtype+':',
@@ -961,6 +962,26 @@ def convert_test_time_options( tmin, tmax, tsum ):
         tsum = float(tsum)
 
     return tmin, tmax, tsum
+
+
+def check_convert_date_spec( date_spec ):
+    ""
+    spec = date_spec.strip()
+
+    if not spec:
+        raise Exception( 'cannot be empty' )
+
+    if '_' not in spec:
+        try:
+            secs = float( spec )
+            if secs > 0:
+                tup = time.localtime( secs )
+                tmstr = time.strftime( "%a %b %d %H:%M:%S %Y", tup )
+                spec = secs  # becomes a float right here
+        except Exception:
+            pass
+
+    return spec
 
 
 def check_print_help_section( psr, args ):
