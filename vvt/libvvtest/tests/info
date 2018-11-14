@@ -120,7 +120,10 @@ class info_tests( vtu.vvtestTestCase ):
         assert_files( vrun, [ 'DiffTest.xml', 'FailTest.xml', 'keys.xml',
                               'param.xml', 'sdir/skeys.xml'] )
 
-        vtu.runvvtest( '-i', chdir=tdir+'/sdir' ).assertCounts( total=1 )
+        vtu.runvvtest( '-i', chdir=tdir ).assertCounts( total=6 )
+        vrun = vtu.runvvtest( '-i', chdir=tdir+'/sdir' )
+        vrun.assertCounts( total=1 )
+        assert vrun.countTestLines( ' skeys' ) == 1
 
         vrun = vtu.runvvtest( '-R --keys', chdir=tdir+'/sdir' )
         assert_keywords( vrun, ['fast', 'jupiter', 'mars'] )

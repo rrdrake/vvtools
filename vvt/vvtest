@@ -35,8 +35,7 @@ from libvvtest.PermissionSetter import PermissionSetter
 import libvvtest.testlistio as testlistio
 import libvvtest.utesthooks as utesthooks
 import libvvtest.resultswriter as resultswriter
-from libvvtest.pathutil import relative_execute_directory
-from libvvtest.pathutil import compute_relative_path
+import libvvtest.pathutil as pathutil
 
 
 version = '1.1'
@@ -66,37 +65,36 @@ def main():
 
     insert_configdir_into_sys_path( rtdata )
 
-    # 'test_dir' non-None only if the CWD is in a TestResults.* directory
-    test_dir = readCommandInfo( opts, optD, rtdata )
+    # non-None only if the CWD is in a TestResults.* directory
+    test_cache_dir = readCommandInfo( opts, optD, rtdata )
 
     if opts.check:
         for n in opts.check:
             os.environ[ 'CHECK_' + n.upper() ] = ''
 
-    if test_dir and optD['param_dict']:
+    if test_cache_dir and optD['param_dict']:
         print3( "*** error: cannot use -S in a TestResults directory" )
         sys.exit(1)
 
-    if test_dir and opts.dash_g:
+    if test_cache_dir and opts.dash_g:
         print3( "*** error: cannot use -g in a TestResults directory" )
         sys.exit(1)
 
-    plat = construct_platform_instance( rtdata, opts, optD )
-    rtdata.setPlatformObject( plat )
+    rtdata.setPlatformObject( opts, optD )
 
     rtdata.setTestSubdir( opts.run_dir, optD['onopts'], optD['offopts'] )
 
-    rtconfig = construct_RuntimeConfig( plat, opts, optD )
-    rtdata.setRuntimeConfig( rtconfig )
+    rtdata.setTestResultsDir( test_cache_dir )
 
-    info = ( opts.dash_i or opts.keys or opts.files )
+    rtdata.setFilterPath()
 
-    if opts.dash_g and not info:
-        assert test_dir == None
+    rtdata.setRuntimeConfig( opts, optD )
+
+    if opts.dash_i or opts.keys or opts.files:
+        print_info_mode( opts, optD, rtdata, dirs )
+
+    elif opts.dash_g:
         generateTestList( opts, optD, dirs, rtdata )
-
-    elif info:
-        print_info_mode( opts, optD, rtdata, dirs, test_dir )
 
     elif opts.dash_b:
 
@@ -104,7 +102,7 @@ def main():
             print3( "*** error: cannot use -R or -w with -b (baseline)" )
             sys.exit(1)
 
-        baselineTests( opts, optD, test_dir, rtdata )
+        baselineTests( opts, optD, rtdata )
 
     elif opts.extract:
         extractTestFiles( opts, optD, dirs, opts.extract, rtdata )
@@ -116,8 +114,8 @@ def main():
            not opts.dash_w and not opts.dash_R:
             keyword_expr.append( ['notrun/notdone'], 'and' )
 
-        if test_dir != None:
-            restartTests( opts, optD, rtdata, test_dir )
+        if rtdata.isRestartMode():
+            restartTests( opts, optD, rtdata )
         else:
             runTests( opts, optD, rtdata, dirs )
 
@@ -204,7 +202,7 @@ class RuntimeData:
         self.cmdL.extend( cmdL[1:] )
 
         # directory containing this script
-        self.toolsdir = getToolsDirectory()
+        self.toolsdir = get_tools_directory()
 
         self.config = Configuration()
         self.config.set( 'toolsdir', self.toolsdir )
@@ -213,23 +211,61 @@ class RuntimeData:
     def getConfigDir(self): return self.config.get( 'configdir' )
     def getConfiguration(self): return self.config
 
-    def setPlatformObject(self, platobj): self.plat = platobj
+    def setPlatformObject(self, opts, optD):
+        self.plat = construct_platform_instance( self.toolsdir, opts, optD )
     def getPlatformObject(self): return self.plat
 
-    def setRuntimeConfig(self, rtconfig): self.rtconfig = rtconfig
+    def setRuntimeConfig(self, opts, optD):
+        self.rtconfig = construct_RuntimeConfig( self.plat, opts, optD )
     def getRuntimeConfig(self): return self.rtconfig
 
     def setTestSubdir(self, optrundir, onopts, offopts):
+        ""
         sd = test_results_subdir_name( optrundir, onopts, offopts,
                                        self.plat.getName() )
         self.testsubdir = sd
-    def getTestSubdir(self): return self.testsubdir
+
+    def getTestSubdir(self):
+        return self.testsubdir
+
+    def setTestResultsDir(self, test_cache_dir):
+        ""
+        if test_cache_dir:
+            assert os.path.isabs( test_cache_dir )
+            self.test_dir = test_cache_dir
+            self.is_restart = True
+        else:
+            self.test_dir = os.path.abspath( self.testsubdir )
+            self.is_restart = False
+
+    def getTestResultsDir(self): return self.test_dir
+
+    def isRestartMode(self):
+        """
+        True if the CWD is within an existing test results directory
+        """
+        return self.is_restart
+
+    def setFilterPath(self):
+        ""
+        cwd = os.getcwd()
+        if pathutil.issubdir( self.test_dir, cwd ):
+            d = pathutil.compute_relative_path( self.test_dir, cwd )
+            self.filterdir = d
+        else:
+            self.filterdir = None
+
+    def getFilterPath(self):
+        """
+        If the current working directory is a subdir of an existing test
+        results directory, then this returns the relative path from the
+        top of the test results directory to the current working directory.
+        """
+        return self.filterdir
 
 
-def construct_platform_instance( rtdata, opts, optD ):
+def construct_platform_instance( toolsdir, opts, optD ):
     ""
-    toolsdir = rtdata.getToolsDir()
-
     plat = vvplatform.create_Platform_instance(
                 toolsdir,
                 opts.plat,
@@ -265,15 +301,13 @@ def construct_RuntimeConfig( plat, opts, optD ):
     return rtconfig
 
 
-def print_info_mode( opts, optD, rtdata, scan_dirs, test_dir ):
+def print_info_mode( opts, optD, rtdata, scan_dirs ):
     ""
     plat = rtdata.getPlatformObject()
-    testsubdir = rtdata.getTestSubdir()
 
-    tlist = construct_info_test_list( opts, optD, rtdata, scan_dirs, test_dir )
+    tlist = construct_info_test_list( opts, optD, rtdata, scan_dirs )
 
-    if not test_dir and testsubdir:
-        test_dir = os.path.abspath( testsubdir )
+    test_dir = rtdata.getTestResultsDir()
 
     perms = make_PermissionSetter( test_dir, opts.perms )
 
@@ -288,25 +322,24 @@ def print_info_mode( opts, optD, rtdata, scan_dirs, test_dir ):
         wr.info( tlist )
 
 
-def construct_info_test_list( opts, optD, rtdata, scan_dirs, test_dir ):
+def construct_info_test_list( opts, optD, rtdata, scan_dirs ):
     ""
     rtconfig = rtdata.getRuntimeConfig()
     plat = rtdata.getPlatformObject()
-    testsubdir = rtdata.getTestSubdir()
+    test_dir = rtdata.getTestResultsDir()
 
     # always include tdd in info mode
     rtconfig.setAttr( 'include_tdd', True )
 
-    if test_dir != None:
+    if rtdata.isRestartMode():
         tfile = os.path.join( test_dir, testlist_name )
         tlist = TestList.TestList( tfile, rtconfig )
         tlist.readTestList()
         tlist.readTestResults()
         tlist.loadAndFilter( plat.getMaxProcs(),
-                    filter_dir=compute_relative_path( test_dir, os.getcwd() ) )
+                             filter_dir=rtdata.getFilterPath() )
 
-    elif os.path.exists( testsubdir ):
-        test_dir = os.path.abspath( testsubdir )
+    elif os.path.exists( test_dir ):
         tfile = os.path.join( test_dir, testlist_name )
         tlist = TestList.TestList( tfile, rtconfig )
         tlist.readTestList()
@@ -772,14 +805,13 @@ def load_filter_and_prune_test_list( test_dir, tlist, plat, filter_dir,
 def exec_path( testspec, test_dir ):
     ""
     xdir = testspec.getExecuteDirectory()
-    return relative_execute_directory( xdir, test_dir, os.getcwd() )
+    return pathutil.relative_execute_directory( xdir, test_dir, os.getcwd() )
 
 
 def runTests( opts, optD, rtdata, dirs ):
     """
     Executes a list of tests.
     """
-    toolsdir = rtdata.getToolsDir()
     config = rtdata.getConfiguration()
     rtconfig = rtdata.getRuntimeConfig()
     plat = rtdata.getPlatformObject()
@@ -1414,20 +1446,16 @@ def saveResults( opts, optD, tlist, plat, test_dir, inprogress=False ):
     tr.writeResults( fname, pname, cplr, mach, test_dir, inprogress )
 
 
-def restartTests( opts, optD, rtdata, test_dir ):
+def restartTests( opts, optD, rtdata ):
     ""
-    assert test_dir != None
-
-    toolsdir = rtdata.getToolsDir()
     config = rtdata.getConfiguration()
     rtconfig = rtdata.getRuntimeConfig()
     plat = rtdata.getPlatformObject()
+    test_dir = rtdata.getTestResultsDir()
 
     # this variable allows vvtest tests to run vvtest (ie, allows recursion)
-    os.environ['VVTEST_TEST_ROOT'] = os.path.normpath( os.path.abspath( test_dir ) )
+    os.environ['VVTEST_TEST_ROOT'] = test_dir
 
-    path_filter = os.getcwd()
-    
     qid = opts.qsub_id
     if qid == None:
         tfile = os.path.join( test_dir, testlist_name )
@@ -1450,7 +1478,7 @@ def restartTests( opts, optD, rtdata, test_dir ):
         loadRunTimes( tlist, plat,
                       opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
 
-    reld = compute_relative_path( os.path.abspath(test_dir), os.getcwd() )
+    reld = rtdata.getFilterPath()
 
     load_filter_and_prune_test_list( test_dir, tlist, plat, reld, opts.analyze )
 
@@ -1490,18 +1518,12 @@ def restartTests( opts, optD, rtdata, test_dir ):
     results_writer.final( tlist )
 
 
-def baselineTests( opts, optD, test_dir, rtdata ):
+def baselineTests( opts, optD, rtdata ):
     ""
     rtconfig = rtdata.getRuntimeConfig()
     config = rtdata.getConfiguration()
     plat = rtdata.getPlatformObject()
-    testsubdir = rtdata.getTestSubdir()
-
-    path_filter = None
-    if test_dir == None:
-        test_dir = os.path.abspath( testsubdir )
-    else:
-        path_filter = os.getcwd()
+    test_dir = rtdata.getTestResultsDir()
 
     tfile = os.path.join( test_dir, testlist_name )
 
@@ -1511,19 +1533,15 @@ def baselineTests( opts, optD, test_dir, rtdata ):
     tlist.readTestResults()
     tlist.ensureInlinedTestResultIncludes()
 
-    filter_dir = None
-    if path_filter != None:
-      filter_dir = compute_relative_path( test_dir, path_filter )
-    
     # if the keyword expression does not include a results keyword, then
     # add the 'diff' keyword so that only diffs are rebaselined by default
     if not keyword_expr.containsResultsKeywords():
-      keyword_expr.append( ['diff'], 'and' )
-    
+        keyword_expr.append( ['diff'], 'and' )
+
     tlist.loadAndFilter( plat.getMaxProcs(),
-                         filter_dir=filter_dir,
+                         filter_dir=rtdata.getFilterPath(),
                          baseline=True )
-    
+
     if len(tlist.active) > 0:
 
         perms = make_PermissionSetter( test_dir, opts.perms )
@@ -1623,7 +1641,7 @@ def print3( *args, **kwargs ):
 
 ###########################################################################
 
-def getToolsDirectory():
+def get_tools_directory():
     ""
     d = sys.path[0]
     if not d:                  d = os.getcwd()

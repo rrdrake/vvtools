@@ -1,0 +1,135 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+from os.path import basename, dirname, abspath
+from os.path import join as pjoin
+
+import vvtestutils as vtu
+import testutils as util
+from testutils import print3
+
+import libvvtest.pathutil as pathutil
+
+
+class issubdir_tests( vtu.vvtestTestCase ):
+
+    def setUp(self):
+        vtu.vvtestTestCase.setUp( self, cleanout=False )
+
+    def test_parent_and_subdir_are_the_same(self):
+        ""
+        val = pathutil.issubdir( os.getcwd(), os.getcwd() )
+        print3( val )
+        assert val == None
+
+    def test_parent_is_the_subdir(self):
+        ""
+        cwd = os.getcwd()
+        val = pathutil.issubdir( cwd, dirname(cwd) )
+        print3( val )
+        assert val == None
+
+    def test_subdir_is_one_directory_below_parent(self):
+        ""
+        sub = os.getcwd()
+        par = dirname( sub )
+        val = pathutil.issubdir( par, sub )
+        print3( val )
+        assert val == basename( sub )
+
+    def test_subdir_is_two_directories_below_parent(self):
+        ""
+        sub = abspath( 'subdir' )
+        par = dirname( dirname( sub ) )
+        val = pathutil.issubdir( par, sub )
+        print3( val )
+        d,b1 = os.path.split( sub )
+        b2 = basename( d )
+        assert val == pjoin( b2, b1 )
+
+
+class relative_execute_directory_tests( vtu.vvtestTestCase ):
+
+    def setUp(self):
+        vtu.vvtestTestCase.setUp( self, cleanout=False )
+
+    def test_no_test_results_dir_just_returns_the_given_xdir(self):
+        ""
+        val = pathutil.relative_execute_directory( 'some/dir', None, None )
+        assert val == 'some/dir'
+
+        val = pathutil.relative_execute_directory( 'some/dir', None, '/whatever' )
+        assert val == 'some/dir'
+
+    def test_when_test_results_dir_and_CWD_are_the_same(self):
+        ""
+        cwd = os.getcwd()
+        val = pathutil.relative_execute_directory( 'sub', cwd, cwd )
+        print3( val )
+        assert val == 'sub'
+
+    def test_when_CWD_is_the_test_execution_dir(self):
+        ""
+        cwd = abspath( 'sub' )
+        tdir = os.getcwd()
+        val = pathutil.relative_execute_directory( 'sub', tdir, cwd )
+        print3( val )
+        assert val == 'sub'
+
+    def test_when_CWD_is_one_above_the_test_execution_dir(self):
+        ""
+        cwd = abspath( 'sub1' )
+        tdir = os.getcwd()
+        val = pathutil.relative_execute_directory( 'sub1/sub2', tdir, cwd )
+        print3( val )
+        assert val == 'sub2'
+
+    def test_when_CWD_is_one_above_the_test_results_dir(self):
+        ""
+        cwd = dirname( os.getcwd() )
+        tdir = os.getcwd()
+        val = pathutil.relative_execute_directory( 'sub', tdir, cwd )
+        print3( val )
+        assert val == pjoin( basename( os.getcwd() ), 'sub' )
+
+
+class compute_relative_path_tests( vtu.vvtestTestCase ):
+
+    def setUp(self):
+        vtu.vvtestTestCase.setUp( self, cleanout=False )
+
+    def test_with_same_paths(self):
+        ""
+        cwd = os.getcwd()
+        val = pathutil.compute_relative_path( cwd, cwd )
+        print3( val )
+        assert val == '.'
+
+    def test_one_directory_different(self):
+        ""
+        d1 = os.getcwd()
+        d2 = dirname( d1 )
+
+        val = pathutil.compute_relative_path( d1, d2 )
+        print3( val )
+        assert val == '..'
+
+        val = pathutil.compute_relative_path( d2, d1 )
+        print3( val )
+        assert val == basename(d1)
+
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

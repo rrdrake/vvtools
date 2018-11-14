@@ -396,6 +396,37 @@ class baseline_tests( vtu.vvtestTestCase ):
         assert vrun.countLines( 'baselining control.' ) == 3
         assert vrun.countLines( 'baselining pybase.' ) == 1
 
+    def test_filtering_the_tests_to_baseline_using_CWD(self):
+        ""
+        util.writefile( 'testA.vvt', """
+            #VVT: baseline : aline.txt, aline.txt
+            import os, sys
+            import vvtest_util as vvt
+            print ( os.listdir('.') )
+            if not os.path.exists( vvt.SRCDIR+'/aline.txt' ):
+                fp = open( 'aline.txt', 'w' ) ; fp.close()
+                sys.exit( vvt.diff_exit_status )
+                """ )
+        util.writefile( 'testB.vvt', """
+            #VVT: baseline : bline.txt, bline.txt
+            import os, sys
+            import vvtest_util as vvt
+            if not os.path.exists( vvt.SRCDIR+'/bline.txt' ):
+                fp = open( 'bline.txt', 'w' ) ; fp.close()
+                sys.exit( vvt.diff_exit_status )
+                """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=2, diff=2 )
+
+        vrun = vtu.runvvtest( '-b', chdir=vrun.resultsDir()+'/testB' )
+        assert vrun.countLines( 'baselining testA' ) == 0
+        assert vrun.countLines( 'baselining testB' ) == 1
+
+        vrun = vtu.runvvtest( '-R' )
+        vrun.assertCounts( total=2, npass=1, diff=1 )
+
 
 #####################################################################
 

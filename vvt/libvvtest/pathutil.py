@@ -66,7 +66,7 @@ def relative_execute_directory( xdir, testdir, cwd ):
     return sdir
 
 
-def issubdir(parent_dir, subdir):
+def issubdir( parent_dir, subdir ):
     """
     TODO: test for relative paths
     """
