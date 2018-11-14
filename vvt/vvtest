@@ -86,6 +86,10 @@ def main():
 
     rtdata.setTestResultsDir( test_cache_dir )
 
+    rtdata.setPermissionsObject( opts, optD )
+
+    rtdata.setResultsWriter( opts, optD )
+
     rtdata.setFilterPath()
 
     rtdata.setRuntimeConfig( opts, optD )
@@ -246,6 +250,15 @@ class RuntimeData:
         """
         return self.is_restart
 
+    def setPermissionsObject(self, opts, optD):
+        self.perms = make_PermissionSetter( self.test_dir, opts.perms )
+    def getPermissionsObject(self): return self.perms
+
+    def setResultsWriter(self, opts, optD):
+        resw = make_results_writer( self.test_dir, self.perms, opts, optD )
+        self.results_writer = resw
+    def getResultsWriter(self): return self.results_writer
+
     def setFilterPath(self):
         ""
         cwd = os.getcwd()
@@ -309,8 +322,6 @@ def print_info_mode( opts, optD, rtdata, scan_dirs ):
 
     test_dir = rtdata.getTestResultsDir()
 
-    perms = make_PermissionSetter( test_dir, opts.perms )
-
     if opts.keys or opts.files:
         keywordInformation( tlist, opts.keys, opts.files )
 
@@ -318,8 +329,7 @@ def print_info_mode( opts, optD, rtdata, scan_dirs ):
         saveResults( opts, optD, tlist, plat, test_dir )
 
     else:
-        wr = make_results_writer( test_dir, perms, opts, optD )
-        wr.info( tlist )
+        rtdata.getResultsWriter().info( tlist )
 
 
 def construct_info_test_list( opts, optD, rtdata, scan_dirs ):
@@ -399,13 +409,12 @@ def generateTestList( opts, optD, dirs, rtdata ):
 
     tlist.loadAndFilter( plat.getMaxProcs() )
     
-    perms = make_PermissionSetter( test_dir, opts.perms )
+    perms = rtdata.getPermissionsObject()
     
     createTestDir( testsubdir, perms, opts.dash_M )
     writeCommandInfo( opts, optD, rtdata, test_dir, plat, perms )
 
-    wr = make_results_writer( test_dir, perms, opts, optD )
-    wr.prerun( tlist, short=False )
+    rtdata.getResultsWriter().prerun( tlist, short=False )
 
     tlist.createTestExecs( test_dir, plat, config, perms )
 
@@ -828,7 +837,7 @@ def runTests( opts, optD, rtdata, dirs ):
     # this variable allows vvtest tests to run vvtest (ie, allows recursion)
     os.environ['VVTEST_TEST_ROOT'] = os.path.normpath( test_dir )
 
-    perms = make_PermissionSetter( test_dir, opts.perms )
+    perms = rtdata.getPermissionsObject()
 
     createTestDir( testsubdir, perms, opts.dash_M )
 
@@ -851,7 +860,7 @@ def runTests( opts, optD, rtdata, dirs ):
 
     load_filter_and_prune_test_list( test_dir, tlist, plat, None, opts.analyze )
 
-    results_writer = make_results_writer( test_dir, perms, opts, optD )
+    results_writer = rtdata.getResultsWriter()
 
     if len(tlist.active) > 0:
 
@@ -1482,11 +1491,11 @@ def restartTests( opts, optD, rtdata ):
 
     load_filter_and_prune_test_list( test_dir, tlist, plat, reld, opts.analyze )
 
-    perms = make_PermissionSetter( test_dir, opts.perms )
+    perms = rtdata.getPermissionsObject()
 
     perms.set( os.path.abspath( tfile ) )
 
-    results_writer = make_results_writer( test_dir, perms, opts, optD )
+    results_writer = rtdata.getResultsWriter()
 
     if len(tlist.active) > 0:
 
@@ -1544,11 +1553,10 @@ def baselineTests( opts, optD, rtdata ):
 
     if len(tlist.active) > 0:
 
-        perms = make_PermissionSetter( test_dir, opts.perms )
+        perms = rtdata.getPermissionsObject()
 
         print3( "Baselining these tests:" )
-        wr = make_results_writer( test_dir, perms, opts, optD )
-        wr.prerun( tlist, short=False )
+        rtdata.getResultsWriter().prerun( tlist, short=False )
 
         tlist.createTestExecs( test_dir, plat, config, perms )
 
