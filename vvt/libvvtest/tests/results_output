@@ -477,6 +477,28 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         assert len( util.grepfiles( 'error collecting files', 'results.md' ) ) == 1
         assert len( util.grepfiles( 'Traceback', 'results.md' ) ) == 1
 
+    def test_test_run_attributes(self):
+        ""
+        conv = resultswriter.GitLabMarkDownConverter( '.', '.' )
+        conv.saveResults( [] )
+        time.sleep(1)
+
+        fval = util.readfile( 'TestResults.md' ).strip()
+        val = fval.split( '## Tests that', 1 )[0]
+        assert val.strip() == ''
+
+        conv = resultswriter.GitLabMarkDownConverter( '.', '.' )
+        tm = time.time()
+        conv.setRunAttr( startdate=str(tm)+' / '+time.ctime(tm),
+                         finishdate=str(tm+10)+' / '+time.ctime(tm+10) )
+        conv.saveResults( [] )
+        time.sleep(1)
+
+        fval = util.readfile( 'TestResults.md' ).strip()
+        val = fval.split( '## Tests that', 1 )[0]
+        assert len( util.greplines( 'startdate', val ) ) == 1
+        assert len( util.greplines( 'finishdate', val ) ) == 1
+
     def test_create_markdown_file_for_a_test(self):
         ""
         write_three_test_files()
@@ -534,6 +556,15 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         assert getfsize( 'gfm/DiffTest.np=2.md' ) > 1000
         assert len( glob.glob( 'gfm/*param*' ) ) == 0
 
+        fval = util.readfile( 'gfm/TestResults.md' ).strip()
+        val = fval.split( '## Tests that', 1 )[0]
+        assert len( util.greplines( 'startdate', val ) ) == 1
+        assert len( util.greplines( 'finishdate', val ) ) == 1
+        assert len( util.greplines( ' vvtest =', val ) ) == 1
+        assert len( util.greplines( ' python =', val ) ) == 1
+        assert len( util.greplines( ' PATH =', val ) ) == 1
+        elap = util.greplines( 'elapsed', val )[0].split('=')[1].strip()
+        assert int( elap[:-1] ) > 1
 
 
 ###########################################################################

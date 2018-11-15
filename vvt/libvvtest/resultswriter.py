@@ -29,17 +29,12 @@ class ResultsWriter:
         self.gitlabdir = gitlabdir
 
         self.runattrs = {}
-        # platform, -oO options, machine name, test_dir,
-        # start date, finish date, vvtest command line
-        # path to python being used, and PYTHONPATH
-        # path to vvtest being used
-        # starting working directory
+
+    ### prerun, info, postrun, final, setRunAttr are the interface functions
 
     def setRunAttr(self, **kwargs):
         ""
         self.runattrs.update( kwargs )
-
-    ### prerun, info, postrun, final are the interface functions
 
     def prerun(self, atestlist, short=True):
         ""
@@ -60,6 +55,10 @@ class ResultsWriter:
 
     def final(self, atestlist):
         ""
+        tm = time.time()
+        self.runattrs['finishdate'] = str(tm) + ' / ' + time.ctime(tm)
+        self.setElapsedTime( tm )
+
         self.check_write_html( atestlist )
         self.check_write_junit( atestlist )
         self.check_write_gitlab( atestlist )
@@ -104,10 +103,18 @@ class ResultsWriter:
                         "tests in GitLab format to", self.gitlabdir )
 
                 conv = GitLabMarkDownConverter( self.test_dir, self.gitlabdir )
+                conv.setRunAttr( **self.runattrs )
                 conv.saveResults( testL )
 
             finally:
                 self.perms.recurse( self.gitlabdir )
+
+    def setElapsedTime(self, finishtime):
+        ""
+        start = self.runattrs.get( 'startdate', None )
+        if start:
+            nsecs = finishtime - float( start.split()[0] )
+            self.runattrs['elapsed'] = pretty_time( nsecs )
 
 
 def make_date_stamp( testdate, optrdate, timefmt="%Y_%m_%d" ):
@@ -522,7 +529,9 @@ class GitLabMarkDownConverter:
 
 def write_run_attributes( fp, attrs ):
     ""
-    for name,value in attrs.items():
+    nvL = list( attrs.items() )
+    nvL.sort()
+    for name,value in nvL:
         fp.write( '* '+name+' = '+str(value)+'\n' )
     fp.write( '\n' )
 

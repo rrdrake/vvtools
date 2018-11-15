@@ -51,6 +51,8 @@ keyword_expr = None
 
 def main():
     ""
+    start_time = time.time()
+
     check_for_bootstrap_file()
 
     rtdata = RuntimeData( sys.argv )
@@ -88,7 +90,7 @@ def main():
 
     rtdata.setPermissionsObject( opts, optD )
 
-    rtdata.setResultsWriter( opts, optD )
+    rtdata.setResultsWriter( opts, optD, start_time )
 
     rtdata.setFilterPath()
 
@@ -254,8 +256,12 @@ class RuntimeData:
         self.perms = make_PermissionSetter( self.test_dir, opts.perms )
     def getPermissionsObject(self): return self.perms
 
-    def setResultsWriter(self, opts, optD):
-        resw = make_results_writer( self.test_dir, self.perms, opts, optD )
+    def setResultsWriter(self, opts, optD, start_time):
+        resw = make_results_writer( opts, optD, start_time,
+                                    self.toolsdir,
+                                    self.test_dir, self.perms,
+                                    self.plat.getName(),
+                                    self.cmdL )
         self.results_writer = resw
     def getResultsWriter(self): return self.results_writer
 
@@ -912,7 +918,10 @@ def check_for_currently_running_vvtest( resultsfiles, optforce ):
                 sys.exit(1)
 
 
-def make_results_writer( test_dir, perms, opts, optD ):
+def make_results_writer( opts, optD,
+                         start_time, toolsdir,
+                         test_dir, perms,
+                         platname, cmdL ):
     ""
     if opts.qsub_id == None:
         htmlfile = opts.html
@@ -927,6 +936,18 @@ def make_results_writer( test_dir, perms, opts, optD ):
                 test_dir, perms,
                 optD['sort_letters'], opts.results_date,
                 htmlfile, junitfile, gitlabdir )
+
+    writer.setRunAttr( startdate=str(start_time)+' / '+time.ctime(start_time) )
+    writer.setRunAttr( platform=platname )
+    writer.setRunAttr( commandline=' '.join( cmdL ) )
+    writer.setRunAttr( hostname=os.uname()[1] )
+    writer.setRunAttr( rundir=test_dir )
+    writer.setRunAttr( curdir=os.getcwd() )
+    writer.setRunAttr( python=sys.executable )
+    writer.setRunAttr( vvtest=toolsdir )
+    writer.setRunAttr( PYTHONPATH=os.environ.get( 'PYTHONPATH', '' ) )
+    writer.setRunAttr( PATH=os.environ.get( 'PATH', '' ) )
+    writer.setRunAttr( LOADEDMODULES=os.environ.get( 'LOADEDMODULES', '' ) )
 
     return writer
 
