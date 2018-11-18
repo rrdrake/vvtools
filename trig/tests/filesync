@@ -20,6 +20,7 @@ import subprocess as sp
 import time
 import unittest
 
+import trigtestutils as trigutil
 import testutils as util
 from testutils import print3
 
@@ -32,10 +33,7 @@ import filesync
 # case, make sure you can ssh to the current machine without a password.
 
 
-# default the local and remote python to the current running python
-localpy = sys.executable
-
-fsynccmd = localpy+' '+os.path.dirname(util.testsrcdir)+'/filesync.py'
+fsynccmd = sys.executable+' '+os.path.dirname(trigutil.testsrcdir)+'/filesync.py'
 
 
 #######################################################################
@@ -134,7 +132,7 @@ class catchall( unittest.TestCase ):
 
     def test_sync_remote_to_local_directory(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'targetdir' )
         tgt = os.path.abspath( 'targetdir' )
@@ -162,7 +160,7 @@ class catchall( unittest.TestCase ):
 
     def test_sync_local_to_remote_directory(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'targetdir' )
         tgt = os.path.abspath( 'targetdir' )
@@ -213,7 +211,7 @@ class catchall( unittest.TestCase ):
 
     def test_sync_remote_to_local_directories_but_exclude_by_age(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'targetdir' )
         tgt = os.path.abspath( 'targetdir' )
@@ -239,7 +237,7 @@ class catchall( unittest.TestCase ):
 
     def test_sync_local_to_remote_directories_but_exclude_by_age(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'targetdir' )
         tgt = os.path.abspath( 'targetdir' )
@@ -351,7 +349,7 @@ class catchall( unittest.TestCase ):
 
     def test_sync_local_to_remote_and_set_multiple_permissions(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'targetdir' )
         tgt = os.path.abspath( 'targetdir' )
@@ -398,7 +396,7 @@ class catchall( unittest.TestCase ):
 
     def test_sync_remote_to_local_and_set_multiple_permissions(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'targetdir' )
         tgt = os.path.abspath( 'targetdir' )
@@ -445,7 +443,7 @@ class catchall( unittest.TestCase ):
 
     def test_sync_remote_to_local_using_globbing(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'targetdir' )
         tgt = os.path.abspath( 'targetdir' )
@@ -471,7 +469,7 @@ class catchall( unittest.TestCase ):
 
     def test_sync_local_to_remote_using_globbing(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'targetdir' )
         tgt = os.path.abspath( 'targetdir' )
@@ -526,7 +524,7 @@ class catchall( unittest.TestCase ):
 
     def test_sync_remote_to_local_with_file_overwrite_when_not_the_same(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'targetdir' )
         tgt = os.path.abspath( 'targetdir' )
@@ -557,7 +555,7 @@ class catchall( unittest.TestCase ):
 
     def test_sync_local_to_remote_with_file_overwrite_when_not_the_same(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'targetdir' )
         tgt = os.path.abspath( 'targetdir' )
@@ -626,7 +624,7 @@ class catchall( unittest.TestCase ):
 
     def test_sync_remote_to_local_with_file_overwrite_when_sha1_not_the_same(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'targetdir' )
         tgt = os.path.abspath( 'targetdir' )
@@ -665,7 +663,7 @@ class catchall( unittest.TestCase ):
 
     def test_sync_local_to_remote_with_file_overwrite_when_sha1_not_the_same(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'targetdir' )
         tgt = os.path.abspath( 'targetdir' )
@@ -725,7 +723,7 @@ class catchall( unittest.TestCase ):
 
     def test_remote_to_local_target_dir_not_exist_error(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         tgt = os.path.abspath( 'targetdir' )
 
@@ -748,7 +746,7 @@ class catchall( unittest.TestCase ):
 
     def test_local_to_remote_target_dir_not_exist_error(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         tgt = os.path.abspath( 'targetdir' )
 
@@ -780,10 +778,9 @@ class catchall( unittest.TestCase ):
         t = time.time() - 600  # make modification & access time 10 minutes ago
         os.utime( 'subdir/file2.txt', (t,t) )
 
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
-        out = util.runout( fsynccmd+' ' + sdir + ' ' + tgt )
-        #print3( out )
+        util.runcmd( fsynccmd+' ' + sdir + ' ' + tgt )
 
         time.sleep(1)
 
@@ -807,11 +804,10 @@ class catchall( unittest.TestCase ):
         t = time.time() - 600  # make modification & access time 10 minutes ago
         os.utime( 'subdir/file2.txt', (t,t) )
 
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
-        out = util.runout( fsynccmd+' --sshexe '+sshprog + \
+        util.runcmd( fsynccmd+' --sshexe '+sshprog + \
                       ' ' + sdir + ' ' + sshmach+':'+tgt )
-        #print3( out )
 
         time.sleep(1)
 
@@ -835,11 +831,10 @@ class catchall( unittest.TestCase ):
         t = time.time() - 600  # make modification & access time 10 minutes ago
         os.utime( 'subdir/file2.txt', (t,t) )
 
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
-        out = util.runout( fsynccmd+' --sshexe '+sshprog + \
+        util.runcmd( fsynccmd+' --sshexe '+sshprog + \
                       ' ' + sshmach+':'+sdir + ' ' + tgt )
-        #print3( out )
 
         time.sleep(1)
 
@@ -863,12 +858,11 @@ class catchall( unittest.TestCase ):
         t = time.time() - 600  # make modification & access time 10 minutes ago
         os.utime( 'subdir/file2.txt', (t,t) )
 
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
-        out = util.runout( fsynccmd+' --sshexe '+sshprog + \
+        util.runcmd( fsynccmd+' --sshexe '+sshprog + \
                       ' --age 300' + \
                       ' ' + sshmach+':'+sdir + ' ' + tgt )
-        #print3( out )
 
         time.sleep(1)
 
@@ -890,12 +884,11 @@ class catchall( unittest.TestCase ):
         t = time.time() - 600  # make modification & access time 10 minutes ago
         os.utime( 'subdir/file2.txt', (t,t) )
 
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
-        out = util.runout( fsynccmd+' --sshexe '+sshprog + \
+        util.runcmd( fsynccmd+' --sshexe '+sshprog + \
                       ' -g "*.csv" -g "*2.*"' + \
                       ' ' + sshmach+':'+sdir + ' ' + tgt )
-        #print3( out )
 
         time.sleep(1)
 
@@ -921,12 +914,11 @@ class catchall( unittest.TestCase ):
         t = time.time() - 600  # make modification & access time 10 minutes ago
         os.utime( 'subdir/file2.txt', (t,t) )
 
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
-        out = util.runout( fsynccmd+' --sshexe '+sshprog + \
+        util.runcmd( fsynccmd+' --sshexe '+sshprog + \
                       ' -T 60' + \
                       ' ' + sshmach+':'+sdir + ' ' + tgt )
-        #print3( out )
 
         time.sleep(1)
 
@@ -945,7 +937,7 @@ class catchall( unittest.TestCase ):
 
     def test_local_to_remote_using_command_line_with_permissions(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'targetdir' )
         tgt = os.path.abspath( 'targetdir' )
@@ -959,10 +951,9 @@ class catchall( unittest.TestCase ):
         assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
         time.sleep(1)
 
-        out = util.runout( fsynccmd+' --sshexe '+sshprog + \
+        util.runcmd( fsynccmd+' --sshexe '+sshprog + \
                       ' --perms g+w --perms o+r' + \
                       ' ' + sshmach+':'+sdir + ' ' + tgt )
-        #print3( out )
         time.sleep(1)
 
         assert os.path.isfile( 'targetdir/file.txt' )
@@ -985,7 +976,7 @@ class catchall( unittest.TestCase ):
 
     def test_local_to_remote_using_command_line_with_whitespace_separated_permissions(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'targetdir' )
         tgt = os.path.abspath( 'targetdir' )
@@ -999,10 +990,9 @@ class catchall( unittest.TestCase ):
         assert sp.call( 'chmod 0600 subdir/file2.txt', shell=True ) == 0
         time.sleep(1)
 
-        out = util.runout( fsynccmd+' --sshexe '+sshprog + \
+        util.runcmd( fsynccmd+' --sshexe '+sshprog + \
                       ' --perms "g+w o+r"' + \
                       ' ' + sshmach+':'+sdir + ' ' + tgt )
-        #print3( out )
         time.sleep(1)
 
         assert os.path.isfile( 'targetdir/file.txt' )
@@ -1025,32 +1015,6 @@ class catchall( unittest.TestCase ):
 
 
 #######################################################################
-
-def get_ssh_pair( fake_ssh_pause=None ):
-    """
-    Returns a pair ( ssh program, ssh machine ).
-    """
-    if util.use_this_ssh == 'ssh' and fake_ssh_pause == None:
-        sshprog = filecopy.rpy.which( 'ssh' )
-        import socket
-        sshmach = socket.gethostname()
-
-    else:
-        st = str(1)
-        if fake_ssh_pause != None:
-            st = str(fake_ssh_pause)
-        util.writescript( 'fakessh', "#!"+localpy+" -E", """
-            import os, sys, getopt, time, pipes
-            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
-            argL.pop(0)  # remove the machine name
-            time.sleep( """+st+""" )
-            os.execl( '/bin/bash', '/bin/bash', '-c', ' '.join( argL ) )
-            """ )
-        sshprog = os.path.abspath( 'fakessh' )
-        sshmach = 'sparky'
-
-    return sshprog, sshmach
-
 
 def filemode( path ):
     """

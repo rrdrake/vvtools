@@ -16,6 +16,7 @@ import unittest
 import filecmp
 import stat
 
+import trigtestutils as trigutil
 import testutils as util
 from testutils import print3
 
@@ -28,10 +29,7 @@ import filecopy
 # case, make sure you can ssh to the current machine without a password.
 
 
-# default the local and remote python to the current running python
-localpy = sys.executable
-
-fcpycmd = localpy+' '+os.path.dirname(util.testsrcdir)+'/filecopy.py'
+fcpycmd = sys.executable+' '+os.path.dirname(trigutil.testsrcdir)+'/filecopy.py'
 
 
 #######################################################################
@@ -473,8 +471,7 @@ class local_and_remote_functions( unittest.TestCase ):
         os.mkdir( 'cpy' )
         time.sleep(1)
 
-        out = util.runout( fcpycmd+' "dir/*" cpy' )
-        #print3( out )
+        util.runcmd( fcpycmd+' "dir/*" cpy' )
         time.sleep(1)
 
         compare_dirs( 'dir', 'cpy' )
@@ -488,8 +485,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
         cmd = fcpycmd+' --fperms o-rwx'
         cmd += ' "dir/*" cpy'
-        out = util.runout( cmd )
-        print3( out )
+        util.runcmd( cmd )
         time.sleep(1)
 
         compare_dirs( 'dir', 'cpy' )
@@ -551,7 +547,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
     def test_remote_to_local_copy(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'dir/file1.txt', 'file 1 content\n' )
         util.writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
@@ -586,7 +582,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
     def test_remote_to_local_copy_with_soft_link(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'dir1/file1.txt', 'file 1 content\n' )
         os.mkdir( 'dir2' )
@@ -618,7 +614,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
     def test_remote_to_local_copy_using_copy_files_function(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'dir/file1.txt', 'file 1 content\n' )
         util.writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
@@ -653,7 +649,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
     def test_remote_to_local_copy_files_with_more_than_one_source(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'dir1/file1.txt', 'file 1 content\n' )
         srcd1 = os.path.abspath( 'dir1' )
@@ -676,7 +672,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
     def test_remote_to_local_copy_files_with_source_file_errors(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'dir1/file1.txt', 'file 1 content\n' )
         srcd1 = os.path.abspath( 'dir1' )
@@ -729,7 +725,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
     def test_remote_to_local_file_copy_using_command_line(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'dir/file1.txt', 'file 1 content\n' )
         util.writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
@@ -738,9 +734,8 @@ class local_and_remote_functions( unittest.TestCase ):
         os.mkdir( 'cpy' )
         time.sleep(1)
 
-        out = util.runout( fcpycmd+' --sshexe '+sshprog+ \
-                        ' "'+sshmach+':'+srcd+'/*" cpy' )
-        print3( out )
+        util.runcmd( fcpycmd+' --sshexe '+sshprog+ \
+                             ' "'+sshmach+':'+srcd+'/*" cpy' )
         time.sleep(1)
 
         compare_dirs( 'dir', 'cpy' )
@@ -755,8 +750,7 @@ class local_and_remote_functions( unittest.TestCase ):
         cmd = fcpycmd+' --sshexe '+sshprog
         cmd += ' --fperms o-rwx'
         cmd += ' "'+sshmach+':'+srcd+'/*" cpy'
-        out = util.runout( cmd )
-        print3( out )
+        util.runcmd( cmd )
         time.sleep(1)
 
         compare_dirs( 'dir', 'cpy' )
@@ -769,7 +763,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
     def test_remote_to_local_copy_files_time_stamp_preservation(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'dir/file1.txt', 'file 1 content\n' )
         util.writefile( 'dir/sub1/file2.txt', 'file 2 content\n' )
@@ -802,7 +796,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
     def test_local_to_remote_copy_files(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'dir/file1.txt', 'file 1 content\n' )
         util.writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
@@ -837,7 +831,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
     def test_local_to_remote_copy_files_with_soft_link(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'dir1/file1.txt', 'file 1 content\n' )
         os.mkdir( 'dir2' )
@@ -868,7 +862,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
     def test_local_to_remote_copy_files_specifying_permissions(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'dir/file1.txt', 'file 1 content\n' )
         util.writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
@@ -904,7 +898,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
     def test_local_to_remote_copy_files_with_more_than_one_source(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'dir1/file1.txt', 'file 1 content\n' )
         util.writefile( 'dir2/sub/file2.txt', 'file 2 content\n' )
@@ -925,7 +919,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
     def test_local_to_remote_copy_files_with_source_file_errors(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'dir1/file1.txt', 'file 1 content\n' )
         util.writefile( 'dir2/sub/file2.txt', 'file 2 content\n' )
@@ -979,7 +973,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
     def test_local_to_remote_file_copy_using_command_line(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'dir/file1.txt', 'file 1 content\n' )
         util.writefile( 'dir/sub/file2.txt', 'file 2 content\n' )
@@ -988,9 +982,8 @@ class local_and_remote_functions( unittest.TestCase ):
         cpd = os.path.abspath( 'cpy' )
         time.sleep(1)
 
-        out = util.runout( fcpycmd+' --sshexe '+sshprog+ \
-                        ' dir/* '+sshmach+':'+cpd )
-        print3( out )
+        util.runcmd( fcpycmd+' --sshexe '+sshprog+ \
+                             ' dir/* '+sshmach+':'+cpd )
         time.sleep(1)
 
         compare_dirs( 'dir', 'cpy' )
@@ -1005,8 +998,7 @@ class local_and_remote_functions( unittest.TestCase ):
         cmd = fcpycmd+' --sshexe '+sshprog
         cmd += ' --fperms o-rwx'
         cmd += ' dir/* '+sshmach+':'+cpd
-        out = util.runout( cmd )
-        print3( out )
+        util.runcmd( cmd )
         time.sleep(1)
 
         compare_dirs( 'dir', 'cpy' )
@@ -1019,7 +1011,7 @@ class local_and_remote_functions( unittest.TestCase ):
 
     def test_local_to_remote_file_copy_time_stamp_preservation(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'dir/file1.txt', 'file 1 content\n' )
         util.writefile( 'dir/sub1/file2.txt', 'file 2 content\n' )
@@ -1077,32 +1069,6 @@ class local_and_remote_functions( unittest.TestCase ):
 
 
 #######################################################################
-
-def get_ssh_pair( fake_ssh_pause=None ):
-    """
-    Returns a pair ( ssh program, ssh machine ).
-    """
-    if util.use_this_ssh == 'ssh' and fake_ssh_pause == None:
-        sshprog = filecopy.rpy.which( 'ssh' )
-        import socket
-        sshmach = socket.gethostname()
-
-    else:
-        st = str(1)
-        if fake_ssh_pause != None:
-            st = str(fake_ssh_pause)
-        util.writescript( 'fakessh', "#!"+localpy+" -E", """
-            import os, sys, getopt, time, pipes
-            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
-            argL.pop(0)  # remove the machine name
-            time.sleep( """+st+""" )
-            os.execl( '/bin/bash', '/bin/bash', '-c', ' '.join( argL ) )
-            """ )
-        sshprog = os.path.abspath( 'fakessh' )
-        sshmach = 'sparky'
-
-    return sshprog, sshmach
-
 
 def filemode( path ):
     """

@@ -20,6 +20,7 @@ import shutil
 import fnmatch
 import unittest
 
+import trigtestutils as trigutil
 import testutils as util
 from testutils import print3
 
@@ -36,7 +37,7 @@ localpy = sys.executable
 # an actual ssh, add the -s option to the unit test command line.  In this
 # case, make sure you can ssh to the current machine without a password.
 
-srcdir = os.path.dirname( util.testsrcdir )
+srcdir = os.path.dirname( trigutil.testsrcdir )
 
 
 #######################################################################
@@ -58,7 +59,7 @@ class catchall( unittest.TestCase ):
 
         fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
         assert len(fL) == 1
-        assert len( util.filegrep( fL[0], 'hello' ) ) == 1
+        assert len( util.grepfiles( 'hello', fL[0] ) ) == 1
 
     def test_running_a_command_with_a_list_of_arguments(self):
         ""
@@ -69,7 +70,7 @@ class catchall( unittest.TestCase ):
 
         fL = fnmatch.filter( os.listdir( '.' ), 'bash-*.log' )
         assert len(fL) == 1
-        assert len( util.filegrep( fL[0], 'hello' ) ) == 1
+        assert len( util.grepfiles( 'hello', fL[0] ) ) == 1
 
     def test_running_a_job_using_a_Command_object(self):
         ""
@@ -96,7 +97,7 @@ class catchall( unittest.TestCase ):
         fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
         assert len(fL) == 1
         f1 = fL[0]
-        assert len( util.filegrep( f1, 'file1.txt' ) ) == 1
+        assert len( util.grepfiles( 'file1.txt', f1 ) ) == 1
 
         # turn off shell expansion and the file glob should not occur
         cmd = command.Command( 'echo file*.txt' )
@@ -107,7 +108,7 @@ class catchall( unittest.TestCase ):
         fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
         assert len(fL) == 2
         fL.remove( f1 )
-        assert len( util.filegrep( fL[0], 'file1.txt' ) ) == 0
+        assert len( util.grepfiles( 'file1.txt', fL[0] ) ) == 0
 
     def test_that_jobs_are_run_in_the_background(self):
         ""
@@ -180,8 +181,8 @@ class catchall( unittest.TestCase ):
 
         fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
         assert len(fL) == 1
-        assert len( util.filegrep( fL[0], 'hello' ) ) == 1
-        assert len( util.filegrep( fL[0], 'job.py' ) ) == 1
+        assert len( util.grepfiles( 'hello', fL[0] ) ) == 1
+        assert len( util.grepfiles( 'job.py', fL[0] ) ) == 1
 
     def test_using_run_wait_but_with_an_error(self):
         ""
@@ -272,7 +273,7 @@ class catchall( unittest.TestCase ):
 
         fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
         assert len(fL) == 1
-        assert len( util.filegrep( fL[0], 'fake failure' ) ) == 1
+        assert len( util.grepfiles( 'fake failure', fL[0] ) ) == 1
 
     def test_running_a_background_job_that_fails_to_launch(self):
         ""
@@ -355,7 +356,8 @@ class catchall( unittest.TestCase ):
 
     def test_log_output_markers(self):
         ""
-        util.writescript( 'scr', '#!/usr/bin/env python', """
+        util.writescript( 'scr', """
+            #!/usr/bin/env python
             import os, sys, time
             sys.path.insert( 0, '"""+srcdir+"""' )
             import runjob
@@ -364,17 +366,16 @@ class catchall( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        out = util.runout( './scr', raise_on_failure=True )
-        print3( out )
+        x,out = util.runcmd( './scr' )
 
         pat = re.compile(
             r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? RunJob: ' )
-        L = util.grep( out, 'RunJob:' )
+        L = util.greplines( 'RunJob:', out )
         assert len(L) == 1 and pat.match( L[0] ) != None
 
         pat = re.compile(
             r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? JobID: ' )
-        L = util.grep( out, 'JobID:' )
+        L = util.greplines( 'JobID:', out )
         assert len(L) == 1
         m = pat.match( L[0] )
         assert m != None
@@ -382,7 +383,7 @@ class catchall( unittest.TestCase ):
 
         pat = re.compile(
             r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? LogFile: ' )
-        L = util.grep( out, 'LogFile:' )
+        L = util.greplines( 'LogFile:', out )
         assert len(L) == 1
         m = pat.match( L[0] )
         assert m != None
@@ -391,7 +392,7 @@ class catchall( unittest.TestCase ):
 
         pat = re.compile(
             r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? JobDone: ' )
-        L = util.grep( out, 'JobDone:' )
+        L = util.greplines( 'JobDone:', out )
         assert len(L) == 1
         m = pat.match( L[0] )
         assert m != None
@@ -415,7 +416,7 @@ class catchall( unittest.TestCase ):
         assert len(fL) == 1
         fn = os.path.join( cd, 'afile.txt' )
         assert os.path.exists( fn )
-        assert len( util.filegrep( fn, "hello" ) ) == 1
+        assert len( util.grepfiles( "hello", fn ) ) == 1
 
     def test_casting_a_Job_instance_to_true(self):
         ""
@@ -430,7 +431,7 @@ class catchall( unittest.TestCase ):
         fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
         assert len(fL) == 1
         assert os.path.exists( 'afile.txt' )
-        assert len( util.filegrep( 'afile.txt', "hello" ) ) == 1
+        assert len( util.grepfiles( "hello", 'afile.txt' ) ) == 1
 
     def test_casting_a_Job_instance_to_false(self):
         ""
@@ -446,11 +447,11 @@ class catchall( unittest.TestCase ):
         fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
         assert len(fL) == 1
         assert os.path.exists( 'afile.txt' )
-        assert len( util.filegrep( 'afile.txt', "hello" ) ) == 1
+        assert len( util.grepfiles( "hello", 'afile.txt' ) ) == 1
 
     def test_running_a_remote_job(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'rdir' )
         os.mkdir( 'ldir' )
@@ -477,13 +478,13 @@ class catchall( unittest.TestCase ):
         assert os.path.basename(lf) == os.path.basename(rf)
         assert filecmp.cmp( lf, rf, False )
 
-        L = util.filegrep( lf, 'hello' )
+        L = util.grepfiles( 'hello', lf )
         assert len(L) == 2
         assert L[1].strip() == 'hello'
 
     def test_running_a_remote_job_that_fails(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'rdir' )
         os.mkdir( 'ldir' )
@@ -513,7 +514,7 @@ class catchall( unittest.TestCase ):
 
     def test_running_two_remote_jobs(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'rdir' )
         os.mkdir( 'ldir' )
@@ -549,16 +550,16 @@ class catchall( unittest.TestCase ):
         assert os.path.basename(lf2) == os.path.basename(rf2)
         assert filecmp.cmp( lf2, rf2, False )
         
-        L = util.filegrep( lf1, 'hello' )
+        L = util.grepfiles( 'hello', lf1 )
         assert len(L) == 2
         assert L[1].strip() == 'hello'
-        L = util.filegrep( lf2, 'world' )
+        L = util.grepfiles( 'world', lf2 )
         assert len(L) == 2
         assert L[1].strip() == 'world'
 
     def test_running_remote_jobs_with_logdir_and_sharedlog_attributes(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'rdir1' )
         os.mkdir( 'rdir2' )
@@ -594,13 +595,13 @@ class catchall( unittest.TestCase ):
 
         fL = fnmatch.filter( os.listdir( rd2 ), 'sleep-*.log' )
         assert len(fL) == 0
-        L = util.filegrep( lf2, 'world' )
+        L = util.grepfiles( 'world', lf2 )
         assert len(L) == 2
         assert L[1].strip() == 'world'
 
     def test_running_a_remote_job_using_a_Command_object(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'rdir' )
         os.mkdir( 'ldir' )
@@ -623,7 +624,7 @@ class catchall( unittest.TestCase ):
 
     def test_running_a_remote_job_using_a_Command_object_without_shell(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'rdir' )
         os.mkdir( 'ldir' )
@@ -657,12 +658,12 @@ class catchall( unittest.TestCase ):
 
         fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
         assert len(fL) == 1
-        assert len( util.filegrep( fL[0], 'hello' ) ) == 1
-        assert len( util.filegrep( fL[0], 'world' ) ) == 0
+        assert len( util.grepfiles( 'hello', fL[0] ) ) == 1
+        assert len( util.grepfiles( 'world', fL[0] ) ) == 0
 
     def test_timing_out_a_remote_job(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'rdir' )
         os.mkdir( 'ldir' )
@@ -693,11 +694,11 @@ class catchall( unittest.TestCase ):
         assert os.path.basename(lf) == os.path.basename(rf)
         assert filecmp.cmp( lf, rf, False )
         
-        L = util.filegrep( lf, 'hello' )
+        L = util.grepfiles( 'hello', lf )
         assert len(L) == 2
         assert L[1].strip() == 'hello'
         # it should timeout before print "world"
-        L = util.filegrep( lf, 'world' )
+        L = util.grepfiles( 'world', lf )
         assert len(L) == 1
         assert L[0].strip() != 'world'
 
@@ -714,12 +715,12 @@ class catchall( unittest.TestCase ):
 
         fL = fnmatch.filter( os.listdir( '.' ), 'echo-*.log' )
         assert len(fL) == 1
-        assert len( util.filegrep( fL[0], 'hello' ) ) == 1
-        assert len( util.filegrep( fL[0], 'world' ) ) == 0
+        assert len( util.grepfiles( 'hello', fL[0] ) ) == 1
+        assert len( util.grepfiles( 'world', fL[0] ) ) == 0
 
     def test_using_timeout_date_on_a_remote_job(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'rdir' )
         os.mkdir( 'ldir' )
@@ -751,17 +752,17 @@ class catchall( unittest.TestCase ):
         assert os.path.basename(lf) == os.path.basename(rf)
         assert filecmp.cmp( lf, rf, False )
         
-        L = util.filegrep( lf, 'hello' )
+        L = util.grepfiles( 'hello', lf )
         assert len(L) == 2
         assert L[1].strip() == 'hello'
         # it should timeout before print "world"
-        L = util.filegrep( lf, 'world' )
+        L = util.grepfiles( 'world', lf )
         assert len(L) == 1
         assert L[0].strip() != 'world'
 
     def test_giving_timeout_date_to_a_remote_job_combined_with_waitforjobid(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'rdir' )
         os.mkdir( 'ldir' )
@@ -792,17 +793,17 @@ class catchall( unittest.TestCase ):
         for i in range(2):
             lf = os.path.join( ld, fL[i] )
 
-            L = util.filegrep( lf, 'hello' )
+            L = util.grepfiles( 'hello', lf )
             assert len(L) == 2
             assert L[1].strip() == 'hello'
             # it should timeout before print "world"
-            L = util.filegrep( lf, 'world' )
+            L = util.grepfiles( 'world', lf )
             assert len(L) == 1
             assert L[0].strip() != 'world'
 
     def test_a_failure_to_connect_to_remote_machine(self):
         ""
-        sshprog,sshmach = get_ssh_pair( connect_failure=True )
+        sshprog,sshmach = util.get_ssh_pair( connect_failure=True )
 
         os.mkdir( 'rdir' )
         os.mkdir( 'ldir' )
@@ -821,7 +822,7 @@ class catchall( unittest.TestCase ):
 
     def test_using_uptime_in_the_testing_infrastructure(self):
         ""
-        sshprog,sshmach = get_ssh_pair( uptime=30 )
+        sshprog,sshmach = util.get_ssh_pair( uptime=30 )
 
         os.mkdir( 'rdir' )
         os.mkdir( 'ldir' )
@@ -849,16 +850,16 @@ class catchall( unittest.TestCase ):
         assert os.path.basename(lf) == os.path.basename(rf)
         assert filecmp.cmp( lf, rf, False )
         
-        L = util.filegrep( lf, 'hello' )
+        L = util.grepfiles( 'hello', lf )
         assert len(L) == 2
         assert L[1].strip() == 'hello'
-        L = util.filegrep( lf, 'world' )
+        L = util.grepfiles( 'world', lf )
         assert len(L) == 2
         assert L[1].strip() == 'world'
 
     def test_when_ssh_dies_in_the_middle_of_a_job(self):
         ""
-        sshprog,sshmach = get_ssh_pair( uptime=5 )
+        sshprog,sshmach = util.get_ssh_pair( uptime=5 )
 
         os.mkdir( 'rdir' )
         os.mkdir( 'ldir' )
@@ -887,16 +888,16 @@ class catchall( unittest.TestCase ):
         assert os.path.basename(lf) == os.path.basename(rf)
         assert filecmp.cmp( lf, rf, False )
         
-        L = util.filegrep( lf, 'hello' )
+        L = util.grepfiles( 'hello', lf )
         assert len(L) == 2
         assert L[1].strip() == 'hello'
-        L = util.filegrep( lf, 'world' )
+        L = util.grepfiles( 'world', lf )
         assert len(L) == 2
         assert L[1].strip() == 'world'
 
     def test_incremental_log_updating(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'rdir' )
         os.mkdir( 'ldir' )
@@ -904,7 +905,8 @@ class catchall( unittest.TestCase ):
         ld = os.path.abspath( 'ldir' )  # local run and log directory
 
         scr = os.path.abspath( 'makeout' )
-        util.writescript( scr, '#!/usr/bin/env python', """
+        util.writescript( scr, """
+            #!/usr/bin/env python
             import os, sys, time
             def print3( *args ):
                 sys.stdout.write( ' '.join( [ str(a) for a in args ] ) + os.linesep )
@@ -947,13 +949,15 @@ class catchall( unittest.TestCase ):
 
     def test_defining_COMMAND_DRYRUN_to_prevent_local_job_execution(self):
         ""
-        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd1.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file1.txt', 'w' ) ; fp.close()
             """ )
         cmd1 = os.path.abspath( 'cmd1.py' )
 
-        util.writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd2.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file2.txt', 'w' ) ; fp.close()
             """ )
@@ -972,7 +976,8 @@ class catchall( unittest.TestCase ):
 
     def test_defining_COMMAND_DRYRUN_to_prevent_remote_job_execution(self):
         ""
-        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd1.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file1.txt', 'w' ) ; fp.close()
             """ )
@@ -990,13 +995,15 @@ class catchall( unittest.TestCase ):
         """
         define COMMAND_DRYRUN to "1", local
         """
-        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd1.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file1.txt', 'w' ) ; fp.close()
             """ )
         cmd1 = os.path.abspath( 'cmd1.py' )
 
-        util.writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd2.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file2.txt', 'w' ) ; fp.close()
             """ )
@@ -1015,7 +1022,8 @@ class catchall( unittest.TestCase ):
 
     def test_set_COMMAND_DRYRUN_to_one_on_remote_job(self):
         ""
-        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd1.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file1.txt', 'w' ) ; fp.close()
             """ )
@@ -1031,13 +1039,15 @@ class catchall( unittest.TestCase ):
 
     def test_set_COMMAND_DRYRUN_to_list_of_names_on_local_job(self):
         ""
-        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd1.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file1.txt', 'w' ) ; fp.close()
             """ )
         cmd1 = os.path.abspath( 'cmd1.py' )
 
-        util.writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd2.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file2.txt', 'w' ) ; fp.close()
             """ )
@@ -1056,21 +1066,24 @@ class catchall( unittest.TestCase ):
 
     def test_set_COMMAND_DRYRUN_to_list_of_names_on_remote_job(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
-        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd1.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file1.txt', 'w' ) ; fp.close()
             """ )
         cmd1 = os.path.abspath( 'cmd1.py' )
 
-        util.writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd2.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file2.txt', 'w' ) ; fp.close()
             """ )
         cmd2 = os.path.abspath( 'cmd2.py' )
 
-        util.writescript( 'cmd3.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd3.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file3.txt', 'w' ) ; fp.close()
             """ )
@@ -1121,7 +1134,8 @@ class catchall( unittest.TestCase ):
 
     def test_log_ordering_when_using_waitforjobid(self):
         ""
-        util.writescript( 'scr', '#!/usr/bin/env python', """
+        util.writescript( 'scr', """
+            #!/usr/bin/env python
             import os, sys, time
             sys.path.insert( 0, '"""+srcdir+"""' )
             import runjob
@@ -1132,8 +1146,7 @@ class catchall( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        out = util.runout( './scr', raise_on_failure=True )
-        print3( out )
+        x,out = util.runcmd( './scr' )
         #os.system( './scr' )
 
         L = greplog( '(Submit|RunJob|JobDone)', out )
@@ -1153,7 +1166,8 @@ class catchall( unittest.TestCase ):
 
     def test_log_ordering_when_using_waitforjobid_and_wait_job(self):
         ""
-        util.writescript( 'scr', '#!/usr/bin/env python', """
+        util.writescript( 'scr', """
+            #!/usr/bin/env python
             import os, sys, time
             sys.path.insert( 0, '"""+srcdir+"""' )
             import runjob
@@ -1164,8 +1178,7 @@ class catchall( unittest.TestCase ):
             """ )
         time.sleep(1)
 
-        out = util.runout( './scr', raise_on_failure=True )
-        print3( out )
+        x,out = util.runcmd( './scr' )
         #os.system( './scr' )
 
         L = greplog( '(Submit|RunJob|JobDone)', out )
@@ -1248,63 +1261,13 @@ def greplog( msg, logoutput ):
     """
     pat = re.compile(
         r'\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)([^]]*20[0-9][0-9]\])+? '+msg+': ' )
+    regex = re.compile( msg )
     L = []
-    for line in util.grep( logoutput, msg ):
-        if pat.match( line ):
-            L.append( line.rstrip() )
+    for line in logoutput.splitlines():
+        if regex.search( line ) != None:
+            if pat.match( line ):
+                L.append( line.rstrip() )
     return L
-
-
-def get_ssh_pair( connect_failure=False, uptime=None ):
-    """
-    Returns a pair ( ssh program, ssh machine ).
-    """
-    if util.use_this_ssh == 'ssh' and connect_failure == False and uptime == None:
-        sshprog = which( 'ssh' )
-        import socket
-        sshmach = socket.gethostname()
-    
-    elif uptime != None:
-        # make the fake ssh session to die after 'uptime' seconds
-        util.writescript( 'fakessh', "#!"+localpy+" -E", """
-            import os, sys, getopt, time, subprocess, signal
-            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
-            mach = argL.pop(0)  # remove the machine name
-            time.sleep( 1 )
-            p = subprocess.Popen( ['/bin/bash', '-c', ' '.join( argL )] )
-            t0 = time.time()
-            while time.time() - t0 < """+str(uptime)+""":
-                x = p.poll()
-                if x != None:
-                    break
-                time.sleep(1)
-            if x == None:
-                if hasattr( p, 'terminate' ):
-                    p.terminate()
-                else:
-                    os.kill( p.pid, signal.SIGTERM )
-                    x = p.wait()
-                x = 1
-            sys.exit( x )
-            """ )
-        sshprog = os.path.abspath( 'fakessh' )
-        sshmach = 'sparky'
-
-    else:
-        util.writescript( 'fakessh', "#!"+localpy+" -E", """
-            import os, sys, getopt, time
-            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
-            mach = argL.pop(0)  # remove the machine name
-            time.sleep( 1 )
-            if """+repr(connect_failure)+""":
-                sys.stderr.write( "Fake connection falure to "+mach+os.linesep )
-                sys.exit(1)
-            os.execl( '/bin/bash', '/bin/bash', '-c', ' '.join( argL ) )
-            """ )
-        sshprog = os.path.abspath( 'fakessh' )
-        sshmach = 'sparky'
-
-    return sshprog, sshmach
 
 
 #######################################################################

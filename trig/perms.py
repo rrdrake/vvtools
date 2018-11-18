@@ -212,7 +212,7 @@ def fileowner( path ):
     uid = os.stat( path ).st_uid
     try:
         ent = pwd.getpwuid( uid )
-    except:
+    except Exception:
         return None
     return ent[0]
 
@@ -226,7 +226,8 @@ def filegroup( path ):
     gid = os.stat( path ).st_gid
     try:
         ent = grp.getgrgid( gid )
-    except:
+    except Exception:
+        raise  # magic
         return None
     return ent[0]
 

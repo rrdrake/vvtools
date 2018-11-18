@@ -14,6 +14,7 @@ import os
 import time
 import unittest
 
+import trigtestutils as trigutil
 import testutils as util
 from testutils import print3
 
@@ -28,12 +29,6 @@ trigfile = os.path.join( trigger.mydir, 'trigger.py' )
 
 localpy = sys.executable
 
-# By default, a "fake" ssh script is used that acts like ssh.  To use
-# an actual ssh, add the -s option to the unit test command line.  In this
-# case, make sure you can ssh to the current machine without a password.
-
-
-#######################################################################
 
 class catchall( unittest.TestCase ):
 
@@ -59,7 +54,7 @@ class catchall( unittest.TestCase ):
         loc = os.path.abspath( 'logs' )
         
         cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd )
         #print3( out )
         #os.system( cmd )
         assert not out.strip()
@@ -87,7 +82,7 @@ class catchall( unittest.TestCase ):
         time.sleep(1)
         
         cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd )
         #print3( out )
         #os.system( cmd )
         assert not out.strip()
@@ -104,7 +99,7 @@ class catchall( unittest.TestCase ):
         time.sleep(1)
         
         cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd )
         #print3( out )
         #os.system( cmd )
         assert not out.strip()
@@ -126,7 +121,8 @@ class catchall( unittest.TestCase ):
 
     def test_read_runcmd_log_file(self):
         ""
-        util.writescript( 'scr', '#!/usr/bin/env python', """
+        util.writescript( 'scr', """
+            #!"""+sys.executable+"""
             import os, sys, time
             sys.path.insert( 0, '"""+trigdir+"""' )
             import runcmd
@@ -150,7 +146,8 @@ class catchall( unittest.TestCase ):
 
     def test_read_runcmd_log_files_with_multiple_commands(self):
         ""
-        util.writescript( 'scr', '#!/usr/bin/env python', """
+        util.writescript( 'scr', """
+            #!"""+sys.executable+"""
             import os, sys, time
             sys.path.insert( 0, '"""+trigdir+"""' )
             import runcmd
@@ -182,14 +179,16 @@ class catchall( unittest.TestCase ):
         """
         runcmd.py log read, command that calls command
         """
-        util.writescript( 'scr2', '#!/usr/bin/env python', """
+        util.writescript( 'scr2', """
+            #!"""+sys.executable+"""
             import os, sys, time
             sys.path.insert( 0, '"""+trigdir+"""' )
             import runcmd
             out = runcmd.run_output( 'echo hello ; sleep 1' )
             time.sleep(2)
             """ )
-        util.writescript( 'scr1', '#!/usr/bin/env python', """
+        util.writescript( 'scr1', """
+            #!"""+sys.executable+"""
             import os, sys, time
             sys.path.insert( 0, '"""+trigdir+"""' )
             import runcmd
@@ -226,7 +225,8 @@ class catchall( unittest.TestCase ):
         """
         runjob.py log read
         """
-        util.writescript( 'scr', '#!/usr/bin/env python', """
+        util.writescript( 'scr', """
+            #!"""+sys.executable+"""
             import os, sys, time
             sys.path.insert( 0, '"""+trigdir+"""' )
             import runjob
@@ -250,7 +250,8 @@ class catchall( unittest.TestCase ):
         ""
         os.mkdir( 'rdir' )
         rdir = os.path.abspath( 'rdir' )
-        util.writescript( 'scr', '#!/usr/bin/env python', """
+        util.writescript( 'scr', """
+            #!"""+sys.executable+"""
             import os, sys, time
             sys.path.insert( 0, '"""+trigdir+"""' )
             import runjob
@@ -274,13 +275,14 @@ class catchall( unittest.TestCase ):
 
     def test_read_runjob_log_file_with_machine(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'rdir' )
         os.mkdir( 'ldir' )
         rdir = os.path.abspath( 'rdir' )  # remote run directory
         ldir = os.path.abspath( 'ldir' )  # local run and log directory
-        util.writescript( 'scr', '#!/usr/bin/env python', """
+        util.writescript( 'scr', """
+            #!"""+sys.executable+"""
             import os, sys, time
             sys.path.insert( 0, '"""+trigdir+"""' )
             import runjob
@@ -310,7 +312,8 @@ class catchall( unittest.TestCase ):
         """
         runjob.py log read, nested multiple jobs
         """
-        util.writescript( 'scr', '#!/usr/bin/env python', """
+        util.writescript( 'scr', """
+            #!"""+sys.executable+"""
             import os, sys, time
             sys.path.insert( 0, '"""+trigdir+"""' )
             import runjob
@@ -342,7 +345,8 @@ class catchall( unittest.TestCase ):
         ""
         curtm = time.time()
 
-        util.writescript( 'scr', '#!/usr/bin/env python', """
+        util.writescript( 'scr', """
+            #!"""+sys.executable+"""
             import os, sys, time
             sys.path.insert( 0, '"""+trigdir+"""' )
             import runcmd
@@ -364,7 +368,7 @@ class catchall( unittest.TestCase ):
         time.sleep(1)
 
         cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd )
         #print3( out )
         #os.system( cmd )
         assert not out.strip()
@@ -407,7 +411,8 @@ class catchall( unittest.TestCase ):
         ""
         curtm = time.time()
 
-        util.writescript( 'scr', '#!/usr/bin/env python', """
+        util.writescript( 'scr', """
+            #!"""+sys.executable+"""
             import os, sys, time
             sys.path.insert( 0, '"""+trigdir+"""' )
             import runcmd
@@ -429,7 +434,7 @@ class catchall( unittest.TestCase ):
         time.sleep(1)
 
         cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd )
         #print3( out )
         #os.system( cmd )
         assert not out.strip()
@@ -494,7 +499,7 @@ class catchall( unittest.TestCase ):
         time.sleep(1)
 
         cmd = localpy+' '+trigfile + ' -g 2 -Q 15 -r '+loc
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd )
         #print3( out )
         #os.system( cmd )
         assert not out.strip()
@@ -517,58 +522,6 @@ class catchall( unittest.TestCase ):
 
 
 #######################################################################
-
-def get_ssh_pair( connect_failure=False, uptime=None ):
-    """
-    Returns a pair ( ssh program, ssh machine ).
-    """
-    if util.use_this_ssh == 'ssh' and connect_failure == False and uptime == None:
-        sshprog = which( 'ssh' )
-        import socket
-        sshmach = socket.gethostname()
-    
-    elif uptime != None:
-        # make the fake ssh session to die after 'uptime' seconds
-        util.writescript( 'fakessh', "#!"+localpy+" -E", """
-            import os, sys, getopt, time, subprocess, signal
-            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
-            mach = argL.pop(0)  # remove the machine name
-            time.sleep( 1 )
-            p = subprocess.Popen( ['/bin/bash', '-c', ' '.join( argL )] )
-            t0 = time.time()
-            while time.time() - t0 < """+str(uptime)+""":
-                x = p.poll()
-                if x != None:
-                    break
-                time.sleep(1)
-            if x == None:
-                if hasattr( p, 'terminate' ):
-                    p.terminate()
-                else:
-                    os.kill( p.pid, signal.SIGTERM )
-                    x = p.wait()
-                x = 1
-            sys.exit( x )
-            """ )
-        sshprog = os.path.abspath( 'fakessh' )
-        sshmach = 'sparky'
-
-    else:
-        util.writescript( 'fakessh', "#!"+localpy+" -E", """
-            import os, sys, getopt, time
-            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
-            mach = argL.pop(0)  # remove the machine name
-            time.sleep( 1 )
-            if """+repr(connect_failure)+""":
-                sys.stderr.write( "Fake connection falure to "+mach+os.linesep )
-                sys.exit(1)
-            os.execl( '/bin/bash', '/bin/bash', '-c', ' '.join( argL ) )
-            """ )
-        sshprog = os.path.abspath( 'fakessh' )
-        sshmach = 'sparky'
-
-    return sshprog, sshmach
-
 
 def string_time( seconds ):
     """

@@ -16,6 +16,7 @@ import glob
 import stat
 import unittest
 
+import trigtestutils as trigutil
 import testutils as util
 from testutils import print3
 
@@ -334,7 +335,7 @@ class running_jobs( unittest.TestCase ):
         loc = os.path.abspath( 'logs' )
         
         cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd )
         assert not out.strip()
         
         ldir,joblog = job_log_path( 'logs', 'job_foo.py' )
@@ -371,7 +372,7 @@ class running_jobs( unittest.TestCase ):
         loc = os.path.abspath( 'logs' )
         
         cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd )
         assert not out.strip()
 
         foodir,foolog = job_log_path( 'logs', 'job_foo.py' )
@@ -405,7 +406,7 @@ class running_jobs( unittest.TestCase ):
         loc = os.path.abspath( 'logs' )
 
         cmd = localpy+' '+trigfile + ' -g 3 -Q 15 -r '+loc
-        bg = util.Background( cmd, outfile='bg1.log' )
+        bg = Background( cmd, outfile='bg1.log' )
 
         time.sleep(4)
 
@@ -448,7 +449,7 @@ class running_jobs( unittest.TestCase ):
         cmd = localpy+' '+trigfile + \
                 ' -g 2 -Q 10 -r logs '+os.getcwd() + \
                 ' dir1 dir2/*.py'
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd )
         assert not out.strip()
 
         loglines = readlog( 'logs/trigger.log' )
@@ -485,7 +486,7 @@ class running_jobs( unittest.TestCase ):
         loc = os.path.abspath( 'logs' )
 
         cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd )
         print3( out )
         assert not out.strip()
 
@@ -510,7 +511,7 @@ class running_jobs( unittest.TestCase ):
 
         secs = str( 6./(60.0*60.0) )
         cmd = localpy+' '+trigfile + ' -g 2 -Q 10 -E '+secs+' -r '+loc
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd )
         assert not out.strip()
 
         lines = readlog( 'logs/trigger.log' )
@@ -534,7 +535,7 @@ class running_jobs( unittest.TestCase ):
         loc = os.path.abspath( 'logs' )
         
         cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd )
         assert not out.strip()
         
         lines = readlog( 'logs/trigger.log' )
@@ -555,10 +556,10 @@ class running_jobs( unittest.TestCase ):
         loc = os.path.abspath( 'logs' )
         
         cmd = localpy+' '+trigfile + ' -g 2 -Q 6'
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd, raise_on_error=False )
 
         assert time.time() - curtm < 5
-        assert len( util.grep( out, 'Traceback' ) ) > 0
+        assert len( util.greplines( 'Traceback', out ) ) > 0
 
     def test_error_launching_trigger_cuz_log_directory_does_not_exist(self):
         ""
@@ -569,10 +570,10 @@ class running_jobs( unittest.TestCase ):
 
         curtm = time.time()
         cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd, raise_on_error=False )
 
         assert time.time() - curtm < 5
-        assert len( util.grep( out, 'Traceback' ) ) > 0
+        assert len( util.greplines( 'Traceback', out ) ) > 0
 
 
 def write_job_file( filename, jobname, trigger_time,
@@ -618,13 +619,13 @@ def assert_job_log_content( logname, pwd=None, line_value=None ):
     content = util.readfile( logname )
 
     if pwd != None:
-        lines = util.grep( content, 'PWD:' )
+        lines = util.greplines( 'PWD:', content )
         assert len( lines ) == 1
         file_pwd = lines[0].split(':',1)[1].strip()
         assert os.path.samefile( pwd, file_pwd )
 
     if line_value != None:
-        lines = util.grep( content, line_value )
+        lines = util.greplines( line_value, content )
         assert len( lines ) == 1
         assert lines[0].strip() == line_value
 
@@ -646,7 +647,7 @@ class trigger_startup( unittest.TestCase ):
         loc = os.path.abspath( 'logs' )
         
         cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd )
         assert not out.strip()
         
         lines1 = readlog( 'logs/trigger.log' )
@@ -662,7 +663,7 @@ class trigger_startup( unittest.TestCase ):
         write_job_file( 'job_bar.py', 'bar', curtm+2 )
 
         cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc
-        out = util.runout( cmd )
+        x,out = util.runcmd( cmd )
         assert not out.strip()
         
         lines2 = readlog( 'logs/trigger.log' )
@@ -692,7 +693,7 @@ class trigger_startup( unittest.TestCase ):
 
         os.chdir( 'jobs1' )    
         cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc1
-        bg1 = util.Background( cmd, outfile='bg1.log' )
+        bg1 = Background( cmd, outfile='bg1.log' )
 
         os.chdir( '..' )
         time.sleep(1)
@@ -702,7 +703,7 @@ class trigger_startup( unittest.TestCase ):
 
         os.chdir( 'jobs2' )    
         cmd = localpy+' '+trigfile + ' -g 2 -Q 6 -r '+loc2
-        bg2 = util.Background( cmd, outfile='bg2.log' )
+        bg2 = Background( cmd, outfile='bg2.log' )
 
         x = bg1.wait() ; assert x == 0
         x = bg2.wait() ; assert x == 0
@@ -738,14 +739,12 @@ class trigger_startup( unittest.TestCase ):
         loc = os.path.abspath( 'logs' )
 
         cmd = localpy+' '+trigfile + ' -g 1 -Q 5 -r '+loc
-        out = util.runout( cmd )
-        #print3( out )
+        x,out = util.runcmd( cmd )
         assert not out.strip()
 
         time.sleep(1)
 
-        out = util.runout( cmd )
-        #print3( out )
+        x,out = util.runcmd( cmd )
         assert not out.strip()
 
         lines = readlog( 'logs/trigger.log' )
@@ -773,7 +772,7 @@ class misc_tests( unittest.TestCase ):
         loc = os.path.abspath( 'logs' )
 
         cmd = localpy+' '+trigfile + ' -g 3 -Q 60 -r '+loc
-        bg = util.Background( cmd, outfile='bg1.log' )
+        bg = Background( cmd, outfile='bg1.log' )
 
         time.sleep(4)
 
@@ -818,8 +817,7 @@ class misc_tests( unittest.TestCase ):
         loc = os.path.abspath( 'logs' )
 
         cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
-        out = util.runout( cmd )
-        #print3( out )
+        x,out = util.runcmd( cmd )
         #os.system( cmd )
         assert not out.strip()
 
@@ -845,7 +843,7 @@ class permissions_tests( unittest.TestCase ):
 
     def test_group_option_sets_the_log_dir_and_file_group_name(self):
         ""
-        for grp in probe_for_two_different_groups():
+        for grp in util.probe_for_two_different_groups():
 
             util.rmallfiles()
 
@@ -861,14 +859,14 @@ class permissions_tests( unittest.TestCase ):
             time.sleep(1)
 
             cmd = localpy+' '+trigfile + ' --group '+grp+' -g 2 -Q 7 -r '+loc
-            out = util.runout( cmd )
+            x,out = util.runcmd( cmd )
             assert not out.strip()
 
             dname = util.globfile( 'logs/job_foo.py_*' )
-            assert get_file_group( dname ) == grp
+            assert util.get_file_group( dname ) == grp
 
             fname = util.globfile( 'logs/job_foo.py_*/log.txt' )
-            assert get_file_group( fname ) == grp
+            assert util.get_file_group( fname ) == grp
 
     def test_group_option_relaxes_the_group_umask(self):
         ""
@@ -883,64 +881,26 @@ class permissions_tests( unittest.TestCase ):
         loc = os.path.abspath( 'logs' )
         time.sleep(1)
 
-        grp1,grp2 = probe_for_two_different_groups()
+        grp1,grp2 = util.probe_for_two_different_groups()
 
         origmask = os.umask( 0o077 )
         try:
             cmd = localpy+' '+trigfile + ' --group '+grp1+' -g 2 -Q 7 -r '+loc
-            out = util.runout( cmd )
+            x,out = util.runcmd( cmd )
             assert not out.strip()
 
             dname = util.globfile( 'logs/job_foo.py_*' )
-            assert has_group_read( dname )
-            assert not has_group_write( dname )
-            assert has_group_execute( dname )
+            assert util.has_group_read( dname )
+            assert not util.has_group_write( dname )
+            assert util.has_group_execute( dname )
 
             fname = util.globfile( 'logs/job_foo.py_*/log.txt' )
-            assert has_group_read( fname )
-            assert not has_group_write( fname )
-            assert not has_group_execute( fname )
+            assert util.has_group_read( fname )
+            assert not util.has_group_write( fname )
+            assert not util.has_group_execute( fname )
 
         finally:
             os.umask( origmask )
-
-
-def probe_for_two_different_groups():
-    ""
-    out = util.runout( 'groups', raise_on_failure=True )
-    grp1,grp2 = out.strip().split()[:2]
-    assert grp1 and grp2 and grp1 != grp2
-    return grp1,grp2
-
-
-def get_file_group( path ):
-    ""
-    import grp
-    gid = os.stat( path ).st_gid
-    ent = grp.getgrgid( gid )
-    return ent[0]
-
-
-def has_group_read( path ):
-    ""
-    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
-    return int( fm & stat.S_IRGRP ) != 0
-
-def has_group_write( path ):
-    ""
-    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
-    return int( fm & stat.S_IWGRP ) != 0
-
-def has_group_execute( path ):
-    ""
-    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
-    return int( fm & stat.S_IXGRP ) != 0
-
-
-def has_no_world_permissions( path ):
-    ""
-    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
-    return int( fm & stat.S_IRWXO ) == 0
 
 
 #######################################################################
@@ -1071,6 +1031,43 @@ def epoch_at_month_start( curtm ):
     raise Exception( 'algorithm failed' )
 
 
+class Background:
+
+    def __init__(self, cmd, outfile=None):
+        """
+        """
+        self.cmd = cmd
+        if outfile != None:
+            fp = open( outfile, 'w' )
+            self.p = subprocess.Popen( cmd, shell=True,
+                                       stdout=fp.fileno(), 
+                                       stderr=fp.fileno() )
+            fp.close()
+        else:
+            self.p = subprocess.Popen( cmd, shell=True )
+
+    def wait(self, timeout=30):
+        """
+        """
+        if timeout == None:
+            x = self.p.wait()
+            return x
+        for i in range(timeout):
+            x = self.p.poll()
+            if x != None:
+                return x
+            time.sleep(1)
+        self.stop()
+        return None
+    
+    def stop(self):
+        try:
+            os.kill( self.p.pid, signal.SIGINT )
+            self.p.wait()
+        except Exception:
+            if hasattr( self.p, 'terminate' ):
+                try: self.p.terminate()
+                except Exception: pass
 
 
 #######################################################################

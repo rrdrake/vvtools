@@ -18,6 +18,7 @@ import stat
 import shutil
 import unittest
 
+import trigtestutils as trigutil
 import testutils as util
 from testutils import print3
 
@@ -30,7 +31,7 @@ import runcmd
 
 localpy = sys.executable
 
-srcdir = os.path.dirname( util.testsrcdir )
+srcdir = os.path.dirname( trigutil.testsrcdir )
 
 
 #######################################################################
@@ -96,12 +97,12 @@ class catchall( unittest.TestCase ):
             run_command( 'ls', 'cmd2.py', echo=False )
             """ )
 
-        out1 = util.runout( localpy+' cmd1.py', raise_on_failure=True )
+        x,out1 = util.runcmd( localpy+' cmd1.py' )
         #print3( out1 )
-        out2 = util.runout( localpy+' cmd2.py', raise_on_failure=True )
+        x,out2 = util.runcmd( localpy+' cmd2.py' )
         #print3( out2 )
 
-        L = util.grep( out1, 'runcmd:' )
+        L = util.greplines( 'runcmd:', out1 )
         assert len(L) == 1 and 'ls cmd1.py' in L[0]
         st = None
         argL = eval( L[0].split('runcmd:',1)[1].strip() )
@@ -111,13 +112,13 @@ class catchall( unittest.TestCase ):
                 break
         assert st
 
-        L = util.grep( out1, 'return:' )
+        L = util.greplines( 'return:', out1 )
         assert len(L) == 1 and 'ls cmd1.py' in L[0]
         assert st in L[0]
 
-        assert len( util.grep( out1, '^cmd1.py' ) ) == 1
-        assert len( util.grep( out2, 'ls cmd2.py' ) ) == 0
-        assert len( util.grep( out2, '^cmd2.py' ) ) == 1
+        assert len( util.greplines( '^cmd1.py', out1 ) ) == 1
+        assert len( util.greplines( 'ls cmd2.py', out2 ) ) == 0
+        assert len( util.greplines( '^cmd2.py', out2 ) ) == 1
 
     def test_run_output_with_the_echo_keyword_argument(self):
         ""
@@ -139,12 +140,12 @@ class catchall( unittest.TestCase ):
             assert out.find( 'cmd2.py' ) >= 0
             """ )
 
-        out1 = util.runout( localpy+' cmd1.py', raise_on_failure=True )
+        x,out1 = util.runcmd( localpy+' cmd1.py' )
         #print3( out1 )
-        out2 = util.runout( localpy+' cmd2.py', raise_on_failure=True )
+        x,out2 = util.runcmd( localpy+' cmd2.py' )
         #print3( out2 )
 
-        L = util.grep( out1, 'runcmd:' )
+        L = util.greplines( 'runcmd:', out1 )
         assert len(L) == 1 and 'ls cmd1.py' in L[0]
         st = None
         argL = eval( L[0].split('runcmd:',1)[1].strip() )
@@ -154,13 +155,13 @@ class catchall( unittest.TestCase ):
                 break
         assert st
 
-        L = util.grep( out1, 'return:' )
+        L = util.greplines( 'return:', out1 )
         assert len(L) == 1 and 'ls cmd1.py' in L[0]
         assert st in L[0]
 
-        assert len( util.grep( out1, '^cmd1.py' ) ) == 0
-        assert len( util.grep( out2, 'ls cmd2.py' ) ) == 0
-        assert len( util.grep( out2, '^cmd2.py' ) ) == 0
+        assert len( util.greplines( '^cmd1.py', out1 ) ) == 0
+        assert len( util.greplines( 'ls cmd2.py', out2 ) ) == 0
+        assert len( util.greplines( '^cmd2.py', out2 ) ) == 0
 
     def test_run_timeout_with_the_echo_keyword_argument(self):
         ""
@@ -178,12 +179,12 @@ class catchall( unittest.TestCase ):
             run_timeout( 'ls', 'cmd2.py', timeout=10, echo=False )
             """ )
 
-        out1 = util.runout( localpy+' cmd1.py', raise_on_failure=True )
+        x,out1 = util.runcmd( localpy+' cmd1.py' )
         #print3( out1 )
-        out2 = util.runout( localpy+' cmd2.py', raise_on_failure=True )
+        x,out2 = util.runcmd( localpy+' cmd2.py' )
         #print3( out2 )
 
-        L = util.grep( out1, 'runcmd:' )
+        L = util.greplines( 'runcmd:', out1 )
         assert len(L) == 1 and 'ls cmd1.py' in L[0]
         st = None
         argL = eval( L[0].split('runcmd:',1)[1].strip() )
@@ -193,13 +194,13 @@ class catchall( unittest.TestCase ):
                 break
         assert st
 
-        L = util.grep( out1, 'return:' )
+        L = util.greplines( 'return:', out1 )
         assert len(L) == 1 and 'ls cmd1.py' in L[0]
         assert st in L[0]
 
-        assert len( util.grep( out1, '^cmd1.py' ) ) == 1
-        assert len( util.grep( out2, 'ls cmd2.py' ) ) == 0
-        assert len( util.grep( out2, '^cmd2.py' ) ) == 1
+        assert len( util.greplines( '^cmd1.py', out1 ) ) == 1
+        assert len( util.greplines( 'ls cmd2.py', out2 ) ) == 0
+        assert len( util.greplines( '^cmd2.py', out2 ) ) == 1
 
     def test_using_the_chdir_argument(self):
         ""
@@ -246,7 +247,7 @@ class catchall( unittest.TestCase ):
         assert x == 0
         assert os.path.exists( 'subdir/file1.txt' )
         assert os.path.exists( 'subdir/out1.txt' )
-        assert len( util.filegrep( 'subdir/out1.txt', 'hello' ) ) == 1
+        assert len( util.grepfiles( 'hello', 'subdir/out1.txt' ) ) == 1
 
         x = runcmd.run_timeout( 'touch file2.txt ; echo hello', timeout=10,
                                 chdir='subdir', redirect='out2.txt' )
@@ -255,7 +256,7 @@ class catchall( unittest.TestCase ):
         assert x == 0
         assert os.path.exists( 'subdir/file2.txt' )
         assert os.path.exists( 'subdir/out2.txt' )
-        assert len( util.filegrep( 'subdir/out2.txt', 'hello' ) ) == 1
+        assert len( util.grepfiles( 'hello', 'subdir/out2.txt' ) ) == 1
 
         x = runcmd.run_command( 'touch file3.txt ; echo hello',
                                 chdir='subdir',
@@ -265,7 +266,7 @@ class catchall( unittest.TestCase ):
         assert x == 0
         assert os.path.exists( 'subdir/file3.txt' )
         assert os.path.exists( 'out3.txt' )
-        assert len( util.filegrep( 'out3.txt', 'hello' ) ) == 1
+        assert len( util.grepfiles( 'hello', 'out3.txt' ) ) == 1
 
         x = runcmd.run_timeout( 'touch file4.txt ; echo hello',
                                 chdir='subdir', timeout=10,
@@ -275,7 +276,7 @@ class catchall( unittest.TestCase ):
         assert x == 0
         assert os.path.exists( 'subdir/file4.txt' )
         assert os.path.exists( 'out4.txt' )
-        assert len( util.filegrep( 'out4.txt', 'hello' ) ) == 1
+        assert len( util.grepfiles( 'hello', 'out4.txt' ) ) == 1
 
     def test_using_chdir_argument_along_with_a_timeout(self):
         ""
@@ -388,14 +389,14 @@ class catchall( unittest.TestCase ):
         py += ' sys.stderr.write( "world"+os.linesep )'
         out = runcmd.run_output( localpy, '-c', py )
         #print3( out )
-        assert len( util.grep( out, "hello" ) ) == 1
-        assert len( util.grep( out, "world" ) ) == 1
+        assert len( util.greplines( "hello", out ) ) == 1
+        assert len( util.greplines( "world", out ) ) == 1
 
         out = runcmd.run_output( localpy, '-c', py,
                                  include_stderr=False )
         #print3( out )
-        assert len( util.grep( out, "hello" ) ) == 1
-        assert len( util.grep( out, "world" ) ) == 0
+        assert len( util.greplines( "hello", out ) ) == 1
+        assert len( util.greplines( "world", out ) ) == 0
 
         # run in a script to make sure stderr does not get lost
         util.writefile( 'cmd1.py', """
@@ -414,10 +415,10 @@ class catchall( unittest.TestCase ):
                               include_stderr=False, echo=False )
             """ )
 
-        out1 = util.runout( localpy+' cmd1.py', raise_on_failure=True )
+        x,out1 = util.runcmd( localpy+' cmd1.py' )
         #print3( out1 )
         assert out1.strip() == ""
-        out2 = util.runout( localpy+' cmd2.py', raise_on_failure=True )
+        x,out2 = util.runcmd( localpy+' cmd2.py' )
         #print3( out2 )
         assert out2.strip() == "world"
 
@@ -467,9 +468,9 @@ class catchall( unittest.TestCase ):
         assert x != None and x == 0
         assert t1 - t0 < 8
         time.sleep(1)
-        L = util.filegrep( 'ok.txt', 'PID' )[0].strip().split(' ',2)
+        L = util.grepfiles( 'PID', 'ok.txt' )[0].strip().split(' ',2)
         t2 = time.mktime( time.strptime( L[-1] ) )
-        L = util.filegrep( 'ok.txt', 'DONE' )[0].strip().split(' ',1)
+        L = util.grepfiles( 'DONE', 'ok.txt' )[0].strip().split(' ',1)
         t3 = time.mktime( time.strptime( L[-1] ) )
         assert t3 - t2 < 8
 
@@ -480,12 +481,12 @@ class catchall( unittest.TestCase ):
         assert x != None and type(x) == type(2) and x != 0
         assert t1 - t0 < 8
         time.sleep(1)
-        L = util.filegrep( 'fail.txt', 'PID' )[0].strip().split(' ',2)
+        L = util.grepfiles( 'PID', 'fail.txt' )[0].strip().split(' ',2)
         t2 = time.mktime( time.strptime( L[-1] ) )
-        L = util.filegrep( 'fail.txt', 'RAISE' )[0].strip().split(' ',1)
+        L = util.grepfiles( 'RAISE', 'fail.txt' )[0].strip().split(' ',1)
         t3 = time.mktime( time.strptime( L[-1] ) )
         assert t3 - t2 < 8
-        assert len( util.filegrep( 'fail.txt', 'DONE' ) ) == 0
+        assert len( util.grepfiles( 'DONE', 'fail.txt' ) ) == 0
 
         t0 = time.time()
         x = runcmd.run_timeout( localpy, 'tout.py',
@@ -494,9 +495,9 @@ class catchall( unittest.TestCase ):
         assert x == None
         assert t1-t0 >= 5 and t1-t0 < 15
         time.sleep(1)
-        L = util.filegrep( 'tout.txt', 'PID' )[0].strip().split(' ',2)
+        L = util.grepfiles( 'PID', 'tout.txt' )[0].strip().split(' ',2)
         t0 = time.mktime( time.strptime( L[-1] ) )
-        assert len( util.filegrep( 'tout.txt', 'DONE' ) ) == 0
+        assert len( util.grepfiles( 'DONE', 'tout.txt' ) ) == 0
 
         os.remove( 'tout.txt' )
         try:
@@ -506,10 +507,10 @@ class catchall( unittest.TestCase ):
             t1 = time.time()
             msg = str( sys.exc_info()[1] )
         assert msg.find( "Command timed out" ) >= 0
-        assert len( util.filegrep( 'tout.txt', 'PID' ) ) == 1
-        L = util.filegrep( 'tout.txt', 'PID' )[0].strip().split(' ',2)
+        assert len( util.grepfiles( 'PID', 'tout.txt' ) ) == 1
+        L = util.grepfiles( 'PID', 'tout.txt' )[0].strip().split(' ',2)
         t0 = time.mktime( time.strptime( L[-1] ) )
-        assert len( util.filegrep( 'tout.txt', 'DONE' ) ) == 0
+        assert len( util.grepfiles( 'DONE', 'tout.txt' ) ) == 0
 
     def test_sub_sub_processes_should_get_killed_upon_timeout(self):
         ""
@@ -549,16 +550,16 @@ class catchall( unittest.TestCase ):
         assert x != None and x == 0
         assert t1-t0 < 8
 
-        pid1 = util.filegrep( 'tout1.txt', 'PID' )[0].strip().split(' ',2)[1]
-        pid2 = util.filegrep( 'tout2.txt', 'PID' )[0].strip().split(' ',2)[1]
-        assert len( util.filegrep( 'tout1.txt', 'DONE' ) ) == 1
-        assert len( util.filegrep( 'tout2.txt', 'DONE' ) ) == 1
+        pid1 = util.grepfiles( 'PID', 'tout1.txt' )[0].strip().split(' ',2)[1]
+        pid2 = util.grepfiles( 'PID', 'tout2.txt' )[0].strip().split(' ',2)[1]
+        assert len( util.grepfiles( 'DONE', 'tout1.txt' ) ) == 1
+        assert len( util.grepfiles( 'DONE', 'tout2.txt' ) ) == 1
 
         # make sure the child pids have disappeared
         time.sleep(1)
         psout = processes()
-        assert len( util.grep( psout, pid1 ) ) == 0
-        assert len( util.grep( psout, pid2 ) ) == 0
+        assert len( util.greplines( pid1, psout ) ) == 0
+        assert len( util.greplines( pid2, psout ) ) == 0
 
         # same scripts but make the timeout larger
         util.writefile( 'tout3.py', """
@@ -596,16 +597,16 @@ class catchall( unittest.TestCase ):
         assert x == None
         assert t1-t0 >= 5 and t1-t0 < 15
 
-        pid1 = util.filegrep( 'tout3.txt', 'PID' )[0].strip().split(' ',2)[1]
-        pid2 = util.filegrep( 'tout4.txt', 'PID' )[0].strip().split(' ',2)[1]
-        assert len( util.filegrep( 'tout3.txt', 'DONE' ) ) == 0
-        assert len( util.filegrep( 'tout4.txt', 'DONE' ) ) == 0
+        pid1 = util.grepfiles( 'PID', 'tout3.txt' )[0].strip().split(' ',2)[1]
+        pid2 = util.grepfiles( 'PID', 'tout4.txt' )[0].strip().split(' ',2)[1]
+        assert len( util.grepfiles( 'DONE', 'tout3.txt' ) ) == 0
+        assert len( util.grepfiles( 'DONE', 'tout4.txt' ) ) == 0
 
         # make sure the child pids have disappeared
         time.sleep(1)
         psout = processes()
-        assert len( util.grep( psout, pid1 ) ) == 0
-        assert len( util.grep( psout, pid2 ) ) == 0
+        assert len( util.greplines( pid1, psout ) ) == 0
+        assert len( util.greplines( pid2, psout ) ) == 0
 
     def test_using_timeout_date_argument(self):
         ""
@@ -639,9 +640,9 @@ class catchall( unittest.TestCase ):
         assert x != None and x == 0
         assert t1 - t0 < 8
         time.sleep(1)
-        L = util.filegrep( 'ok.txt', 'PID' )[0].strip().split(' ',2)
+        L = util.grepfiles( 'PID', 'ok.txt' )[0].strip().split(' ',2)
         t2 = time.mktime( time.strptime( L[-1] ) )
-        L = util.filegrep( 'ok.txt', 'DONE' )[0].strip().split(' ',1)
+        L = util.grepfiles( 'DONE', 'ok.txt' )[0].strip().split(' ',1)
         t3 = time.mktime( time.strptime( L[-1] ) )
         assert t3 - t2 < 8
 
@@ -653,20 +654,22 @@ class catchall( unittest.TestCase ):
         assert x == None
         assert t1-t0 >= 5 and t1-t0 < 15
         time.sleep(1)
-        L = util.filegrep( 'tout.txt', 'PID' )[0].strip().split(' ',2)
+        L = util.grepfiles( 'PID', 'tout.txt' )[0].strip().split(' ',2)
         t0 = time.mktime( time.strptime( L[-1] ) )
-        assert len( util.filegrep( 'tout.txt', 'DONE' ) ) == 0
+        assert len( util.grepfiles( 'DONE', 'tout.txt' ) ) == 0
 
     # TODO: test poll_interval in run_timeout()
 
     def test_run_command_using_COMMAND_DRYRUN_to_prevent_execution(self):
         ""
-        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd1.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file1.txt', 'w' ) ; fp.close()
             """ )
 
-        util.writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd2.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file2.txt', 'w' ) ; fp.close()
             """ )
@@ -689,12 +692,14 @@ class catchall( unittest.TestCase ):
 
     def test_run_timeout_using_COMMAND_DRYRUN_to_prevent_execution(self):
         ""
-        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd1.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file1.txt', 'w' ) ; fp.close()
             """ )
 
-        util.writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd2.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file2.txt', 'w' ) ; fp.close()
             """ )
@@ -709,12 +714,14 @@ class catchall( unittest.TestCase ):
 
     def test_using_COMMAND_DRYRUN_with_value_of_a_number_one(self):
         ""
-        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd1.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file1.txt', 'w' ) ; fp.close()
             """ )
 
-        util.writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd2.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file2.txt', 'w' ) ; fp.close()
             """ )
@@ -729,22 +736,26 @@ class catchall( unittest.TestCase ):
 
     def test_using_COMMAND_DRYRUN_with_a_list_of_program_names(self):
         ""
-        util.writescript( 'cmd1.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd1.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file1.txt', 'w' ) ; fp.close()
             """ )
 
-        util.writescript( 'cmd2.py', "#!"+localpy+" -E", """
+        util.writescript( 'cmd2.py', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file2.txt', 'w' ) ; fp.close()
             """ )
 
-        util.writescript( 'cmd3', "#!"+localpy+" -E", """
+        util.writescript( 'cmd3', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file3.txt', 'w' ) ; fp.close()
             """ )
 
-        util.writescript( 'cmd4', "#!"+localpy+" -E", """
+        util.writescript( 'cmd4', """
+            #!"""+localpy+""" -E
             import os, sys
             fp = open( 'file4.txt', 'w' ) ; fp.close()
             """ )
@@ -769,7 +780,7 @@ class catchall( unittest.TestCase ):
         sdir = os.path.abspath( 'subdir' )
         time.sleep(1)
 
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         # a simple command with no spaces or arguments
         util.writefile( 'cmd1.py', """
@@ -780,12 +791,12 @@ class catchall( unittest.TestCase ):
                          sshexe='"""+sshprog+"""', raise_on_error=True )
             """ )
 
-        out = util.runout( localpy+' cmd1.py', raise_on_failure=True )
+        x,out = util.runcmd( localpy+' cmd1.py' )
         #print3( out )
         #os.system( localpy+' cmd1.py' )
 
         dow,mo,yr = time.strftime( "%a %b %Y" ).split()
-        L = util.grep( out, yr )
+        L = util.greplines( yr, out )
         assert len( L )  > 0
         assert dow in L[-1] and mo in L[-1]
 
@@ -800,12 +811,12 @@ class catchall( unittest.TestCase ):
                          machine='"""+sshmach+"""', sshexe=sshprog )
             """ )
 
-        out = util.runout( localpy+' cmd2.py', raise_on_failure=True )
+        x,out = util.runcmd( localpy+' cmd2.py' )
         print3( out )
 
-        assert len( util.grep( out, 'file.txt' ) ) == 0
-        assert len( util.grep( out, 'file2.txt' ) ) == 1
-        assert len( util.grep( out, 'a b.txt' ) ) == 0
+        assert len( util.greplines( 'file.txt', out ) ) == 0
+        assert len( util.greplines( 'file2.txt', out ) ) == 1
+        assert len( util.greplines( 'a b.txt', out ) ) == 0
 
         # a command with a quoted argument
         util.writefile( 'cmd3.py', """
@@ -818,13 +829,13 @@ class catchall( unittest.TestCase ):
                          machine='"""+sshmach+"""', sshexe=sshprog )
             """ )
 
-        out = util.runout( localpy+' cmd3.py', raise_on_failure=True )
+        x,out = util.runcmd( localpy+' cmd3.py' )
         #print3( out )
 
         # use a list of arguments
-        assert len( util.grep( out, 'file.txt' ) ) == 0
-        assert len( util.grep( out, 'file2.txt' ) ) == 0
-        assert len( util.grep( out, 'a b.txt' ) ) == 1
+        assert len( util.greplines( 'file.txt', out ) ) == 0
+        assert len( util.greplines( 'file2.txt', out ) ) == 0
+        assert len( util.greplines( 'a b.txt', out ) ) == 1
 
         util.writefile( 'cmd4.py', """
             import os, sys
@@ -836,13 +847,13 @@ class catchall( unittest.TestCase ):
                          raise_on_error=True )
             """ )
 
-        out = util.runout( localpy+' cmd4.py', raise_on_failure=True )
+        x,out = util.runcmd( localpy+' cmd4.py' )
         #print3( out )
         #os.system( localpy+' cmd4.py' )
 
-        assert len( util.grep( out, 'file.txt' ) ) == 0
-        assert len( util.grep( out, 'file2.txt' ) ) == 0
-        assert len( util.grep( out, 'a b.txt' ) ) == 1
+        assert len( util.greplines( 'file.txt', out ) ) == 0
+        assert len( util.greplines( 'file2.txt', out ) ) == 0
+        assert len( util.greplines( 'a b.txt', out ) ) == 1
 
         # use a wildcard
         util.writefile( 'cmd5.py', """
@@ -854,12 +865,12 @@ class catchall( unittest.TestCase ):
             run_command( cmd, machine='"""+sshmach+"""', sshexe=sshprog )
             """ )
 
-        out = util.runout( localpy+' cmd5.py', raise_on_failure=True )
+        x,out = util.runcmd( localpy+' cmd5.py' )
         #print3( out )
 
-        assert len( util.grep( out, 'file.txt' ) ) == 1
-        assert len( util.grep( out, 'file2.txt' ) ) == 1
-        assert len( util.grep( out, 'a b.txt' ) ) == 1
+        assert len( util.greplines( 'file.txt', out ) ) == 1
+        assert len( util.greplines( 'file2.txt', out ) ) == 1
+        assert len( util.greplines( 'a b.txt', out ) ) == 1
 
     def test_run_output_with_machine_argument(self):
         ""
@@ -869,7 +880,7 @@ class catchall( unittest.TestCase ):
         sdir = os.path.abspath( 'subdir' )
         time.sleep(1)
 
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         out = runcmd.run_output( 'date', machine=sshmach,
                                  sshexe=sshprog, raise_on_error=True )
@@ -877,7 +888,7 @@ class catchall( unittest.TestCase ):
         #os.system( localpy+' cmd1.py' )
 
         dow,mo,yr = time.strftime( "%a %b %Y" ).split()
-        L = util.grep( out, yr )
+        L = util.greplines( yr, out )
         assert len( L )  > 0
         assert dow in L[-1] and mo in L[-1]
 
@@ -886,35 +897,35 @@ class catchall( unittest.TestCase ):
                                  sshexe=sshprog, raise_on_error=True )
         #print3( out )
 
-        assert len( util.grep( out, 'file.txt' ) ) == 0
-        assert len( util.grep( out, 'file2.txt' ) ) == 1
-        assert len( util.grep( out, 'a b.txt' ) ) == 0
+        assert len( util.greplines( 'file.txt', out ) ) == 0
+        assert len( util.greplines( 'file2.txt', out ) ) == 1
+        assert len( util.greplines( 'a b.txt', out ) ) == 0
 
         cmd = 'cd '+sdir+' && ls "a b.txt"'
         out = runcmd.run_output( cmd, machine=sshmach,
                                  sshexe=sshprog, raise_on_error=True )
         #print3( out )
 
-        assert len( util.grep( out, 'file.txt' ) ) == 0
-        assert len( util.grep( out, 'file2.txt' ) ) == 0
-        assert len( util.grep( out, 'a b.txt' ) ) == 1
+        assert len( util.greplines( 'file.txt', out ) ) == 0
+        assert len( util.greplines( 'file2.txt', out ) ) == 0
+        assert len( util.greplines( 'a b.txt', out ) ) == 1
 
         out = runcmd.run_output( 'ls', sdir+'/a b.txt', machine=sshmach,
                                  sshexe=sshprog, raise_on_error=True )
         #print3( out )
 
-        assert len( util.grep( out, 'file.txt' ) ) == 0
-        assert len( util.grep( out, 'file2.txt' ) ) == 0
-        assert len( util.grep( out, 'a b.txt' ) ) == 1
+        assert len( util.greplines( 'file.txt', out ) ) == 0
+        assert len( util.greplines( 'file2.txt', out ) ) == 0
+        assert len( util.greplines( 'a b.txt', out ) ) == 1
 
         cmd = 'cd '+sdir+' && ls *'
         out = runcmd.run_output( cmd, machine=sshmach,
                                  sshexe=sshprog, raise_on_error=True )
         #print3( out )
 
-        assert len( util.grep( out, 'file.txt' ) ) == 1
-        assert len( util.grep( out, 'file2.txt' ) ) == 1
-        assert len( util.grep( out, 'a b.txt' ) ) == 1
+        assert len( util.greplines( 'file.txt', out ) ) == 1
+        assert len( util.greplines( 'file2.txt', out ) ) == 1
+        assert len( util.greplines( 'a b.txt', out ) ) == 1
 
     def test_run_timeout_with_machine_argument(self):
         ""
@@ -924,7 +935,7 @@ class catchall( unittest.TestCase ):
         sdir = os.path.abspath( 'subdir' )
         time.sleep(1)
 
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         # a simple command with no spaces or arguments
         util.writefile( 'cmd1.py', """
@@ -935,12 +946,12 @@ class catchall( unittest.TestCase ):
                          sshexe='"""+sshprog+"""', raise_on_error=True )
             """ )
 
-        out = util.runout( localpy+' cmd1.py', raise_on_failure=True )
+        x,out = util.runcmd( localpy+' cmd1.py' )
         #print3( out )
         #os.system( localpy+' cmd1.py' )
 
         dow,mo,yr = time.strftime( "%a %b %Y" ).split()
-        L = util.grep( out, yr )
+        L = util.greplines( yr, out )
         assert len( L )  > 0
         assert dow in L[-1] and mo in L[-1]
 
@@ -955,12 +966,12 @@ class catchall( unittest.TestCase ):
                          machine='"""+sshmach+"""', sshexe=sshprog )
             """ )
 
-        out = util.runout( localpy+' cmd2.py', raise_on_failure=True )
+        x,out = util.runcmd( localpy+' cmd2.py' )
         print3( out )
 
-        assert len( util.grep( out, 'file.txt' ) ) == 0
-        assert len( util.grep( out, 'file2.txt' ) ) == 1
-        assert len( util.grep( out, 'a b.txt' ) ) == 0
+        assert len( util.greplines( 'file.txt', out ) ) == 0
+        assert len( util.greplines( 'file2.txt', out ) ) == 1
+        assert len( util.greplines( 'a b.txt', out ) ) == 0
 
         # a command with a quoted argument
         util.writefile( 'cmd3.py', """
@@ -973,13 +984,13 @@ class catchall( unittest.TestCase ):
                          machine='"""+sshmach+"""', sshexe=sshprog )
             """ )
 
-        out = util.runout( localpy+' cmd3.py', raise_on_failure=True )
+        x,out = util.runcmd( localpy+' cmd3.py' )
         #print3( out )
 
         # use a list of arguments
-        assert len( util.grep( out, 'file.txt' ) ) == 0
-        assert len( util.grep( out, 'file2.txt' ) ) == 0
-        assert len( util.grep( out, 'a b.txt' ) ) == 1
+        assert len( util.greplines( 'file.txt', out ) ) == 0
+        assert len( util.greplines( 'file2.txt', out ) ) == 0
+        assert len( util.greplines( 'a b.txt', out ) ) == 1
 
         util.writefile( 'cmd4.py', """
             import os, sys
@@ -991,13 +1002,13 @@ class catchall( unittest.TestCase ):
                          raise_on_error=True )
             """ )
 
-        out = util.runout( localpy+' cmd4.py', raise_on_failure=True )
+        x,out = util.runcmd( localpy+' cmd4.py' )
         #print3( out )
         #os.system( localpy+' cmd4.py' )
 
-        assert len( util.grep( out, 'file.txt' ) ) == 0
-        assert len( util.grep( out, 'file2.txt' ) ) == 0
-        assert len( util.grep( out, 'a b.txt' ) ) == 1
+        assert len( util.greplines( 'file.txt', out ) ) == 0
+        assert len( util.greplines( 'file2.txt', out ) ) == 0
+        assert len( util.greplines( 'a b.txt', out ) ) == 1
 
         # use a wildcard
         util.writefile( 'cmd5.py', """
@@ -1010,15 +1021,17 @@ class catchall( unittest.TestCase ):
                          machine='"""+sshmach+"""', sshexe=sshprog )
             """ )
 
-        out = util.runout( localpy+' cmd5.py', raise_on_failure=True )
+        x,out = util.runcmd( localpy+' cmd5.py' )
         #print3( out )
 
-        assert len( util.grep( out, 'file.txt' ) ) == 1
-        assert len( util.grep( out, 'file2.txt' ) ) == 1
-        assert len( util.grep( out, 'a b.txt' ) ) == 1
+        assert len( util.greplines( 'file.txt', out ) ) == 1
+        assert len( util.greplines( 'file2.txt', out ) ) == 1
+        assert len( util.greplines( 'a b.txt', out ) ) == 1
 
 
 #######################################################################
+
+# magic: convert the use of this to get_process_list from trigtestutils.py
 
 def processes():
     """
@@ -1036,7 +1049,7 @@ def processes():
         cmd = 'ps -o user,pid,ppid'
     cmd += ' -e'
 
-    out = util.runout( cmd, raise_on_failure=True )
+    x,out = util.runcmd( cmd )
 
     # strip off first non-empty line (the header)
     out = out.strip() + os.linesep
@@ -1052,32 +1065,6 @@ def processes():
         out += os.linesep
 
     return out
-
-
-def get_ssh_pair( fake_ssh_pause=None ):
-    """
-    Returns a pair ( ssh program, ssh machine ).
-    """
-    if util.use_this_ssh == 'ssh' and fake_ssh_pause == None:
-        sshprog = filecopy.rpy.which( 'ssh' )
-        import socket
-        sshmach = socket.gethostname()
-
-    else:
-        st = str(1)
-        if fake_ssh_pause != None:
-            st = str(fake_ssh_pause)
-        util.writescript( 'fakessh', "#!"+localpy+" -E", """
-            import os, sys, getopt, time, pipes
-            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
-            argL.pop(0)  # remove the machine name
-            time.sleep( """+st+""" )
-            os.execl( '/bin/bash', '/bin/bash', '-c', ' '.join( argL ) )
-            """ )
-        sshprog = os.path.abspath( 'fakessh' )
-        sshmach = 'sparky'
-
-    return sshprog, sshmach
 
 
 #######################################################################

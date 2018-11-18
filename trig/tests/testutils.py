@@ -17,35 +17,27 @@ import subprocess
 import signal
 import shlex
 import pipes
-import glob
 import getopt
+import random
+import string
+import glob
+import traceback
 import unittest
 
-# this file is expected to be imported from a script that was run
-# within the tests directory (which is how all the tests are run)
 
-test_filename = None
 working_directory = None
-vvtest = None
-resultspy = None
 use_this_ssh = 'fake'
 remotepy = sys.executable
 
-testsrcdir = os.path.dirname( os.path.abspath( sys.argv[0] ) )
-sys.path.insert( 0, os.path.dirname( testsrcdir ) )
-
 
 def initialize( argv ):
-    """
-    """
-    global test_filename
+    ""
     global working_directory
     global use_this_ssh
-    global vvtest
-    global resultspy
     global remotepy
 
     test_filename = os.path.abspath( argv[0] )
+    working_directory = make_working_directory( test_filename )
 
     optL,argL = getopt.getopt( argv[1:], 'p:sSr:' )
 
@@ -61,15 +53,6 @@ def initialize( argv ):
             remotepy = v
         optD[n] = v
 
-    working_directory = make_working_directory( test_filename )
-
-    testdir = os.path.dirname( test_filename )
-
-    srcdir = os.path.normpath( os.path.join( testdir, '..' ) )
-    topdir = os.path.normpath( os.path.join( srcdir, '..' ) )
-
-    vvtest = os.path.join( topdir, 'vvtest' )
-    resultspy = os.path.join( topdir, 'results.py' )
 
     return optD, argL
 
@@ -172,16 +155,6 @@ def setup_test( cleanout=True ):
         rmallfiles()
         time.sleep(1)
 
-    # for batch tests
-    os.environ['VVTEST_BATCH_READ_INTERVAL'] = '5'
-    os.environ['VVTEST_BATCH_READ_TIMEOUT'] = '15'
-    os.environ['VVTEST_BATCH_SLEEP_LENGTH'] = '1'
-
-    # force the results files to be written locally for testing;
-    # it is used in vvtest when handling the --save-results option
-    os.environ['TESTING_DIRECTORY'] = os.getcwd()
-
-
 
 def make_working_directory( test_filename ):
     """
@@ -201,6 +174,7 @@ def print3( *args ):
     sys.stdout.write( ' '.join( [ str(x) for x in args ] ) + os.linesep )
     sys.stdout.flush()
 
+
 def writefile( fname, content, header=None ):
     """
     Open and write 'content' to file 'fname'.  The content is modified to
@@ -211,7 +185,7 @@ def writefile( fname, content, header=None ):
     pad = None
     lineL = []
     for line in content.split( '\n' ):
-        line = line.rstrip( '\r' )
+        line = line.strip( '\r' )
         lineL.append( line )
         if pad == None and line.strip():
             for i in range(len(line)):
@@ -222,119 +196,28 @@ def writefile( fname, content, header=None ):
     d = os.path.dirname( fname )
     if os.path.normpath(d) not in ['','.']:
         if not os.path.exists(d):
-            os.makedirs(d)
+          os.makedirs(d)
     # open and write contents
     fp = open( fname, 'w' )
     if header != None:
-        fp.write( header.strip() + '\n' )
+        fp.write( header.strip() + os.linesep + os.linesep )
     for line in lineL:
-        if pad != None: fp.write( line[pad:] + '\n' )
-        else:           fp.write( line + '\n' )
+        if pad != None: fp.write( line[pad:] + os.linesep )
+        else:           fp.write( line + os.linesep )
     fp.close()
 
-def writescript( fname, header, content ):
+
+def writescript( fname, content ):
     """
-    The 'header' is something like "#!/bin/sh" and 'content' is the same as
-    for writefile().
     """
-    writefile( fname, content, header )
+    if content[0] == '\n':
+        # remove the first line if it is empty
+        content = content[1:]
+    writefile( fname, content )
     perm = stat.S_IMODE( os.stat(fname)[stat.ST_MODE] )
     perm = perm | stat.S_IXUSR
     try: os.chmod(fname, perm)
     except Exception: pass
-
-
-def runout( cmd, raise_on_failure=False ):
-    """
-    """
-    opts = {}
-    if type(cmd) == type(''):
-        opts['shell'] = True
-
-    p = subprocess.Popen( cmd, stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT,
-                               **opts )
-    out = p.communicate()[0]
-    try:
-        s = out.decode()
-        if sys.version_info[0] < 3:
-            if isinstance( out, unicode ):
-                out = out.encode( 'ascii', 'ignore' )
-        else:
-            out = out.decode()
-    except Exception:
-        pass
-
-    x = p.returncode
-    if raise_on_failure and x != 0:
-        print3(out)
-        raise Exception( 'command failed: ' + str(cmd) )
-
-    return out
-
-    # the below method redirects output to a file rather than a pipe;
-    # sometimes the pipe method will hang if the child does not go away;
-    # however, we would rather know if the child is being left around, so
-    # this redirect method should only be used for debugging
-    
-    #fpout = open( 'runout.log', 'wb' )
-    #opts = {}
-    #if type(cmd) == type(''):
-    #    opts['shell'] = True
-    #p = subprocess.Popen( cmd, stdout=fpout.fileno(),
-    #                           stderr=subprocess.STDOUT,
-    #                           **opts )
-    #p.wait()
-    #fpout.close()
-    #fpout = open( 'runout.log', 'rb' )
-    #out = fpout.read()
-    #fpout.close()
-    #os.remove( 'runout.log' )
-    #try:
-    #    s = out.decode()
-    #    out = s
-    #except Exception:
-    #    pass
-    #return out
-
-
-class Background:
-
-    def __init__(self, cmd, outfile=None):
-        """
-        """
-        self.cmd = cmd
-        if outfile != None:
-            fp = open( outfile, 'w' )
-            self.p = subprocess.Popen( cmd, shell=True,
-                                       stdout=fp.fileno(), 
-                                       stderr=fp.fileno() )
-            fp.close()
-        else:
-            self.p = subprocess.Popen( cmd, shell=True )
-
-    def wait(self, timeout=30):
-        """
-        """
-        if timeout == None:
-            x = self.p.wait()
-            return x
-        for i in range(timeout):
-            x = self.p.poll()
-            if x != None:
-                return x
-            time.sleep(1)
-        self.stop()
-        return None
-    
-    def stop(self):
-        try:
-            os.kill( self.p.pid, signal.SIGINT )
-            self.p.wait()
-        except Exception:
-            if hasattr( self.p, 'terminate' ):
-                try: self.p.terminate()
-                except Exception: pass
 
 
 def runcmd( cmd, chdir=None, raise_on_error=True, print_output=True ):
@@ -424,7 +307,7 @@ def run_redirect( cmd, redirect_filename ):
     x = p.wait()
 
     if outfp != None:
-      outfp.close()
+        outfp.close()
     outfp = None
     fdout = None
 
@@ -467,10 +350,13 @@ call_capture_id = 0
 
 def call_capture_output( func, *args, **kwargs ):
     """
-    Redirect current process stdout & err to files, calls the given function
-    with the given arguments, returns
+    Redirect current process stdout & err to files, call the given function
+    with the given arguments, return
 
-        ( the output of the function, all stdout, all stderr )
+        ( output of the function, all stdout, all stderr )
+
+    Exceptions are caught and the traceback is captured in the stderr output.
+    This includes SystemExit, but not KeyboardInterrupt.
     """
     global call_capture_id
     outid = call_capture_id
@@ -480,10 +366,18 @@ def call_capture_output( func, *args, **kwargs ):
     ef = 'stderr'+str(outid)+'.log'
 
     redir = RedirectStdout( of, ef )
+    rtn = None
     try:
         rtn = func( *args, **kwargs )
-    finally:
+    except Exception:
+        traceback.print_exc()
+    except SystemExit:
+        traceback.print_exc()
+    except:
         redir.close()
+        raise
+
+    redir.close()
     time.sleep(1)
 
     return rtn, readfile(of), readfile(ef)
@@ -501,40 +395,151 @@ def shell_escape( cmd ):
     return ' '.join( [ pipes.quote(s) for s in cmd ] )
 
 
+def get_ssh_pair( fake_ssh_pause=None, connect_failure=False, uptime=None ):
+    """
+    Returns a pair ( ssh program, ssh machine ).
+    """
+    if use_this_ssh == 'ssh' and fake_ssh_pause == None and \
+                                 connect_failure == False and \
+                                 uptime == None:
+        sshprog = which( 'ssh' )
+        import socket
+        sshmach = socket.gethostname()
+
+    elif uptime != None:
+        # make the fake ssh session to die after 'uptime' seconds
+        writescript( 'fakessh', """
+            #!"""+sys.executable+""" -E
+            import os, sys, getopt, time, subprocess, signal
+            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
+            mach = argL.pop(0)  # remove the machine name
+            time.sleep( 1 )
+            p = subprocess.Popen( ['/bin/bash', '-c', ' '.join( argL )] )
+            t0 = time.time()
+            while time.time() - t0 < """+str(uptime)+""":
+                x = p.poll()
+                if x != None:
+                    break
+                time.sleep(1)
+            if x == None:
+                if hasattr( p, 'terminate' ):
+                    p.terminate()
+                else:
+                    os.kill( p.pid, signal.SIGTERM )
+                    x = p.wait()
+                x = 1
+            sys.exit( x )
+            """ )
+        sshprog = os.path.abspath( 'fakessh' )
+        sshmach = 'sparky'
+
+    else:
+        st = str(1)
+        if fake_ssh_pause != None:
+            st = str(fake_ssh_pause)
+        writescript( 'fakessh', """
+            #!"""+sys.executable+""" -E
+            import os, sys, getopt, time, pipes
+            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
+            mach = argL.pop(0)  # remove the machine name
+            time.sleep( """+st+""" )
+            if """+repr(connect_failure)+""":
+                sys.stderr.write( "Fake connection falure to "+mach+os.linesep )
+                sys.exit(1)
+            os.execl( '/bin/bash', '/bin/bash', '-c', ' '.join( argL ) )
+            """ )
+        sshprog = os.path.abspath( 'fakessh' )
+        sshmach = 'sparky'
+
+    return sshprog, sshmach
+
+
+def which( program ):
+    """
+    Returns the absolute path to the given program name if found in PATH.
+    If not found, None is returned.
+    """
+    if os.path.isabs( program ):
+        return program
+
+    pth = os.environ.get( 'PATH', None )
+    if pth:
+        for d in pth.split(':'):
+            f = os.path.join( d, program )
+            if not os.path.isdir(f) and os.access( f, os.X_OK ):
+                return os.path.abspath( f )
+
+    return None
+
+
 def rmallfiles( not_these=None ):
+    ""
     for f in os.listdir("."):
         if not_these == None or not fnmatch.fnmatch( f, not_these ):
-            if os.path.islink(f):
-                os.remove(f)
-            elif os.path.isdir(f):
-                shutil.rmtree(f)
-            else:
-                os.remove(f)
-
-def filegrep(fname, pat):
-    L = []
-    fp = open(fname,"r")
-    repat = re.compile(pat)
-    for line in fp.readlines():
-        line = line.rstrip()
-        if repat.search(line):
-            L.append(line)
-    fp.close()
-    return L
+            fault_tolerant_remove( f )
 
 
-def grepfiles( pattern, *paths ):
+def random_string( numchars=8 ):
     ""
-    # slight modification to the ends of the pattern in order to use
-    # fnmatch to simulate basic shell style matching
+    seq = string.ascii_uppercase + string.digits
+    cL = [ random.choice( seq ) for _ in range(numchars) ]
+    return ''.join( cL )
+
+
+def fault_tolerant_remove( path, num_attempts=5 ):
+    ""
+    dn,fn = os.path.split( path )
+
+    rmpath = os.path.join( dn, 'remove_'+fn + '_'+ random_string() )
+
+    os.rename( path, rmpath )
+
+    for i in range( num_attempts ):
+        try:
+            if os.path.islink( rmpath ):
+                os.remove( rmpath )
+            elif os.path.isdir( rmpath ):
+                shutil.rmtree( rmpath )
+            else:
+                os.remove( rmpath )
+            break
+        except Exception:
+            pass
+
+        time.sleep(1)
+
+
+def readfile( filename ):
+    ""
+    fp = open( filename, 'r' )
+    try:
+        buf = fp.read()
+    finally:
+        fp.close()
+    return buf
+
+
+def adjust_shell_pattern_to_work_with_fnmatch( pattern ):
+    """
+    slight modification to the ends of the pattern in order to use
+    fnmatch to simulate basic shell style matching
+    """
     if pattern.startswith('^'):
         pattern = pattern[1:]
     else:
         pattern = '*'+pattern
+
     if pattern.endswith('$'):
         pattern = pattern[:-1]
     else:
         pattern += '*'
+
+    return pattern
+
+
+def grepfiles( shell_pattern, *paths ):
+    ""
+    pattern = adjust_shell_pattern_to_work_with_fnmatch( shell_pattern )
 
     matchlines = []
 
@@ -556,14 +561,17 @@ def grepfiles( pattern, *paths ):
     return matchlines
 
 
-def grep(out, pat):
-    L = []
-    repat = re.compile(pat)
-    for line in out.split( os.linesep ):
-        line = line.rstrip()
-        if repat.search(line):
-            L.append(line)
-    return L
+def greplines( shell_pattern, string_output ):
+    ""
+    pattern = adjust_shell_pattern_to_work_with_fnmatch( shell_pattern )
+
+    matchlines = []
+
+    for line in string_output.splitlines():
+        if fnmatch.fnmatch( line, pattern ):
+            matchlines.append( line )
+
+    return matchlines
 
 
 def globfile( shell_pattern ):
@@ -573,119 +581,147 @@ def globfile( shell_pattern ):
     return fL[0]
 
 
-def readfile( fname ):
-    """
-    Read and return the contents of the given filename.
-    """
-    fp = open(fname,'r')
-    try:
-        s = fp.read()
-    finally:
-        fp.close()
-    return _STRING_(s)
+def findfiles( pattern, topdir, *topdirs ):
+    ""
+    fS = set()
+
+    dL = []
+    for top in [topdir]+list(topdirs):
+        dL.extend( glob.glob( top ) )
+
+    for top in dL:
+        for dirpath,dirnames,filenames in os.walk( top ):
+            for f in filenames:
+                if fnmatch.fnmatch( f, pattern ):
+                    fS.add( os.path.join( dirpath, f ) )
+
+    fL = list( fS )
+    fL.sort()
+
+    return fL
 
 
-if sys.version_info[0] < 3:
-    # with python 2.x, files, pipes, and sockets work naturally
-    def _BYTES_(s): return s
-    def _STRING_(b): return b
-
-else:
-    # with python 3.x, read/write to files, pipes, and sockets is tricky
-    bytes_type = type( ''.encode() )
-
-    def _BYTES_(s):
-        if type(s) == bytes_type:
-            return s
-        return s.encode( 'ascii' )
-
-    def _STRING_(b):
-        if type(b) == bytes_type:
-            return b.decode()
-        return b
-
-
-def which( program ):
-    """
-    Returns the absolute path to the given program name if found in PATH.
-    If not found, None is returned.
-    """
-    if os.path.isabs( program ):
-        return program
-
-    pth = os.environ.get( 'PATH', None )
-    if pth:
-        for d in pth.split(':'):
-            f = os.path.join( d, program )
-            if not os.path.isdir(f) and os.access( f, os.X_OK ):
-                return os.path.abspath( f )
-
-    return None
-
-
-def get_process_list():
-    """
-    Return a python list of all processes on the current machine, where each
-    entry is a length three list of form
-
-        [ user, pid, ppid ]
-    """
-    plat = sys.platform.lower()
-    if plat.startswith( 'darwin' ):
-        cmd = 'ps -o user,pid,ppid'
+def first_path_segment( path ):
+    ""
+    if os.path.isabs( path ):
+        return os.sep
     else:
-        cmd = 'ps -o user,pid,ppid'
-    cmd += ' -e'
-
-    p = subprocess.Popen( 'ps -o user,pid,ppid -e',
-                          shell=True, stdout=subprocess.PIPE )
-    sout,serr = p.communicate()
-
-    sout = _STRING_(sout)
-
-    # strip off first non-empty line (the header)
-
-    first = True
-    lineL = []
-    for line in sout.split( os.linesep ):
-        line = line.strip()
-        if line:
-            if first:
-                first = False
+        p = path
+        while True:
+            d,b = os.path.split( p )
+            if d and d != '.':
+                p = d
             else:
-                L = line.split()
-                if len(L) == 3:
-                    try:
-                        L[1] = int(L[1])
-                        L[2] = int(L[2])
-                    except Exception:
-                        pass
-                    else:
-                        lineL.append( L )
-
-    return lineL
+                return b
 
 
-def find_process_in_list( proclist, pid ):
-    """
-    Searches for the given 'pid' in 'proclist' (which should be the output
-    from get_process_list().  If not found, None is returned.  Otherwise a
-    list
+def list_all_paths( rootpath ):
+    ""
+    pathset = set()
 
-        [ user, pid, ppid ]
-    """
-    for L in proclist:
-        if pid == L[1]:
-            return L
-    return None
+    for dirpath,dirnames,filenames in os.walk( rootpath ):
+
+        pathset.add( dirpath )
+
+        for f in filenames:
+            p = os.path.join( dirpath, f )
+            if not os.path.islink(p):
+                pathset.add(p)
+
+    pL = list( pathset )
+    pL.sort()
+
+    return pL
 
 
-uniq_id = 0
+def list_all_directories( rootpath ):
+    ""
+    pathset = set()
+
+    for dirpath,dirnames,filenames in os.walk( rootpath ):
+        pathset.add( dirpath )
+
+    pL = list( pathset )
+    pL.sort()
+
+    return pL
+
+
+def has_owner_execute( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IXUSR ) != 0
+
+
+def has_no_group_permissions( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IRWXG ) == 0
+
+def has_group_sticky( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_ISGID ) != 0
+
+def has_group_read( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IRGRP ) != 0
+
+def has_group_write( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IWGRP ) != 0
+
+def has_group_execute( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IXGRP ) != 0
+
+
+def has_no_world_permissions( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IRWXO ) == 0
+
+def has_world_read( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IROTH ) != 0
+
+def has_world_write( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IWOTH ) != 0
+
+def has_world_execute( path ):
+    ""
+    fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
+    return int( fm & stat.S_IXOTH ) != 0
+
+
+def probe_for_two_different_groups():
+    ""
+    x,out = runcmd( 'groups' )
+    grp1,grp2 = out.strip().split()[:2]
+    assert grp1 and grp2 and grp1 != grp2
+    return grp1,grp2
+
+
+def get_file_group( path ):
+    ""
+    import grp
+    gid = os.stat( path ).st_gid
+    ent = grp.getgrgid( gid )
+    return ent[0]
+
+
+module_uniq_id = 0
 filename_to_module_map = {}
 
 def create_module_from_filename( fname ):
     ""
-    global uniq_id
+    global module_uniq_id
 
     fname = os.path.normpath( os.path.abspath( fname ) )
 
@@ -695,8 +731,8 @@ def create_module_from_filename( fname ):
 
     else:
 
-        modname = os.path.splitext(os.path.basename(fname))[0]+str(uniq_id)
-        uniq_id += 1
+        modname = os.path.splitext(os.path.basename(fname))[0]+str(module_uniq_id)
+        module_uniq_id += 1
 
         if sys.version_info[0] < 3 or sys.version_info[1] < 5:
             import imp
@@ -718,3 +754,23 @@ def create_module_from_filename( fname ):
         filename_to_module_map[ fname ] = mod
 
     return mod
+
+
+if sys.version_info[0] < 3:
+    # with python 2.x, files, pipes, and sockets work naturally
+    def _BYTES_(s): return s
+    def _STRING_(b): return b
+
+else:
+    # with python 3.x, read/write to files, pipes, and sockets is tricky
+    bytes_type = type( ''.encode() )
+
+    def _BYTES_(s):
+        if type(s) == bytes_type:
+            return s
+        return s.encode( 'ascii' )
+
+    def _STRING_(b):
+        if type(b) == bytes_type:
+            return b.decode()
+        return b

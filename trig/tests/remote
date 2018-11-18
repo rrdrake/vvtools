@@ -18,6 +18,7 @@ import stat
 import shutil
 import unittest
 
+import trigtestutils as trigutil
 import testutils as util
 from testutils import print3
 
@@ -30,10 +31,7 @@ import remotepython as rpy
 # case, make sure you can ssh to the current machine without a password.
 
 
-# default the local and remote python to the current running python
-localpy = sys.executable
-
-srcdir = os.path.dirname( util.testsrcdir )
+srcdir = os.path.dirname( trigutil.testsrcdir )
 
 
 #######################################################################
@@ -47,7 +45,7 @@ class catchall( unittest.TestCase ):
 
     def test_connection_and_function_call(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -67,7 +65,7 @@ class catchall( unittest.TestCase ):
 
     def test_connection_and_function_call_using_string_content(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         lnk = rpy.RemotePython( sshmach, sshexe=sshprog, remotepy=self.remotepy )
         lnk.addRemoteContent( '''
@@ -84,7 +82,7 @@ def myfunc( myarg, arg2 ):
 
     def test_remote_python_script_has_error_during_load(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -108,7 +106,7 @@ def myfunc( myarg, arg2 ):
 
     def test_unknown_remote_function_name(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -127,7 +125,7 @@ def myfunc( myarg, arg2 ):
 
     def test_unknown_remote_function_but_leave_connection_open(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -148,7 +146,7 @@ def myfunc( myarg, arg2 ):
 
     def test_wrong_arguments_to_a_remote_function(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -168,7 +166,7 @@ def myfunc( myarg, arg2 ):
 
     def test_exception_in_remote_function(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -189,7 +187,7 @@ def myfunc( myarg, arg2 ):
 
     def test_get_a_return_value_from_remote_function(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -212,7 +210,7 @@ def myfunc( myarg, arg2 ):
 
     def test_persistence_of_remote_objects(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -241,7 +239,7 @@ def myfunc( myarg, arg2 ):
 
     def test_local_to_remote_file_xfer(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'srcfile.txt', """
             Line One.
@@ -258,7 +256,7 @@ def myfunc( myarg, arg2 ):
 
     def test_remote_to_local_file_xfer(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmtfile.txt', """
             Line One.
@@ -275,7 +273,7 @@ def myfunc( myarg, arg2 ):
 
     def test_file_put_but_local_file_does_not_exist(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'srcfile.txt', """
             Line One.
@@ -312,7 +310,7 @@ def myfunc( myarg, arg2 ):
 
     def test_file_put_but_remote_directory_does_not_exist(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'srcfile.txt', """
             Line One.
@@ -342,7 +340,7 @@ def myfunc( myarg, arg2 ):
 
     def test_file_get_but_remote_file_does_not_exist(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmtfile.txt', """
             Line One.
@@ -371,7 +369,7 @@ def myfunc( myarg, arg2 ):
 
     def test_file_get_but_local_directory_does_not_exist(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmtfile.txt', """
             Line One.
@@ -403,7 +401,7 @@ def myfunc( myarg, arg2 ):
 
     def test_file_get_zero_length_file(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         t = time.time() - 600
         fp = open( 'rmtfile.txt', 'wb' )
@@ -431,7 +429,7 @@ def myfunc( myarg, arg2 ):
 
     def test_file_put_zero_length_file(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         t = time.time() - 600
         fp = open( 'lclfile.txt', 'wb' )
@@ -462,7 +460,7 @@ def myfunc( myarg, arg2 ):
         This test writes into your home directory.  I don't like that but not
         sure how to test tilde path expansion otherwise.
         """
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         # skip this test if no home directory
         home = os.path.expanduser( '~' )
@@ -498,7 +496,7 @@ def myfunc( myarg, arg2 ):
         This test writes into your home directory.  I don't like that but not
         sure how to test tilde path expansion otherwise.
         """
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         # skip this test if no home directory
         home = os.path.expanduser( '~' )
@@ -537,7 +535,7 @@ def myfunc( myarg, arg2 ):
         This test writes into your home directory.  I don't like that but not
         sure how to test tilde path expansion otherwise.
         """
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         # skip this test if no home directory
         home = os.path.expanduser( '~' )
@@ -573,7 +571,7 @@ def myfunc( myarg, arg2 ):
 
     def test_put_a_binary_file(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         fp = open( 'src.dat', 'wb' )
         buf = struct.pack( 'b', -128 ) * 10
@@ -593,7 +591,7 @@ def myfunc( myarg, arg2 ):
 
     def test_get_a_binary_file(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         fp = open( 'rmt.dat', 'wb' )
         buf = struct.pack( 'b', -128 ) * 10
@@ -613,7 +611,7 @@ def myfunc( myarg, arg2 ):
 
     def test_file_put_using_small_chunk_size(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         fp = open( 'srcfile.txt', 'w' )
         for i in range(100):
@@ -632,7 +630,7 @@ def myfunc( myarg, arg2 ):
 
     def test_file_get_using_small_chunk_size(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         fp = open( 'rmtfile.txt', 'w' )
         for i in range(100):
@@ -651,7 +649,7 @@ def myfunc( myarg, arg2 ):
 
     def test_file_put_with_preserve_turned_on(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         t = time.time() - 600
         util.writefile( 'srcfile.txt', """
@@ -659,7 +657,8 @@ def myfunc( myarg, arg2 ):
             Line Two.
             """ )
         os.utime( 'srcfile.txt', (t,t) )
-        util.writescript( 'script', '#!/bin/bash', """
+        util.writescript( 'script', """
+            #!/bin/bash
             echo "script file"
             """ )
         os.utime( 'script', (t,t) )
@@ -695,7 +694,7 @@ def myfunc( myarg, arg2 ):
 
     def test_file_get_with_preserve_turned_on(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         t = time.time() - 600
         util.writefile( 'rmtfile.txt', """
@@ -703,7 +702,8 @@ def myfunc( myarg, arg2 ):
             Line Two.
             """ )
         os.utime( 'rmtfile.txt', (t,t) )
-        util.writescript( 'script', '#!/bin/bash', """
+        util.writescript( 'script', """
+            #!/bin/bash
             echo "script file"
             """ )
         os.utime( 'script', (t,t) )
@@ -739,7 +739,7 @@ def myfunc( myarg, arg2 ):
 
     def test_remote_function_call_timeout(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -766,7 +766,7 @@ def myfunc( myarg, arg2 ):
 
     def test_timeout_of_connect_function(self):
         ""
-        sshprog,sshmach = get_ssh_pair( fake_ssh_pause=20 )
+        sshprog,sshmach = util.get_ssh_pair( fake_ssh_pause=20 )
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -790,7 +790,7 @@ def myfunc( myarg, arg2 ):
 
     def test_remote_function_call_timeout_using_rcall(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -816,7 +816,7 @@ def myfunc( myarg, arg2 ):
 
     def test_no_timeout_followed_by_timeout(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -850,7 +850,7 @@ def myfunc( myarg, arg2 ):
 
     def test_no_timeout_followed_by_timeout_using_xcall(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -884,7 +884,7 @@ def myfunc( myarg, arg2 ):
 
     def test_a_background_job_stays_alive_even_if_ssh_process_exits(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -908,20 +908,20 @@ def myfunc( myarg, arg2 ):
         assert os.path.exists( 'mylog.txt' )
 
         # check job elapsed time from the log file
-        sd = util.filegrep( 'mylog.txt', 'Start Date:' )[0].split(':',1)[1]
+        sd = util.grepfiles( 'Start Date:', 'mylog.txt' )[0].split(':',1)[1]
         sd = time.mktime( time.strptime( sd.strip() ) )
-        fd = util.filegrep( 'mylog.txt', 'Finish Date:' )[0].split(':',1)[1]
+        fd = util.grepfiles( 'Finish Date:', 'mylog.txt' )[0].split(':',1)[1]
         fd = time.mktime( time.strptime( fd.strip() ) )
         assert fd-sd >= 5 and fd-sd < 15
 
-        L = util.filegrep( 'mylog.txt', 'foo' )
+        L = util.grepfiles( 'foo', 'mylog.txt' )
         assert len(L) == 2 and L[1].strip() == "foo"
-        L = util.filegrep( 'mylog.txt', 'bar' )
+        L = util.grepfiles( 'bar', 'mylog.txt' )
         assert len(L) == 2 and L[1].strip() == "bar"
 
     def test_a_background_job_that_times_out(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -947,25 +947,25 @@ def myfunc( myarg, arg2 ):
         assert os.path.exists( 'mylog.txt' )
 
         # check job elapsed time from the log file
-        sd = util.filegrep( 'mylog.txt', 'Start Date:' )[0].split(':',1)[1]
+        sd = util.grepfiles( 'Start Date:', 'mylog.txt' )[0].split(':',1)[1]
         sd = time.mktime( time.strptime( sd.strip() ) )
-        fd = util.filegrep( 'mylog.txt', 'Finish Date:' )[0].split(':',1)[1]
+        fd = util.grepfiles( 'Finish Date:', 'mylog.txt' )[0].split(':',1)[1]
         fd = time.mktime( time.strptime( fd.strip() ) )
         assert fd-sd >= 5 and fd-sd < 15
 
         # the early echos should print, but certainly not the last one
-        L = util.filegrep( 'mylog.txt', 'CC' )
+        L = util.grepfiles( 'CC', 'mylog.txt' )
         assert len(L) == 2 and L[1].strip() == "CC"
-        L = util.filegrep( 'mylog.txt', 'HH' )
+        L = util.grepfiles( 'HH', 'mylog.txt' )
         assert len(L) == 1 and L[0].strip() != "HH"
 
         # the exit value should be None, indicating a timeout
-        L = util.filegrep( 'mylog.txt', 'Subcommand exit:' )
+        L = util.grepfiles( 'Subcommand exit:', 'mylog.txt' )
         assert len(L) == 1 and L[0].split(':',1)[1].strip() == 'None'
 
     def test_a_background_job_specified_with_a_python_list(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -992,17 +992,17 @@ def myfunc( myarg, arg2 ):
         assert os.path.exists( 'mylog.txt' )
 
         # check job elapsed time from the log file
-        sd = util.filegrep( 'mylog.txt', 'Start Date:' )[0].split(':',1)[1]
+        sd = util.grepfiles( 'Start Date:', 'mylog.txt' )[0].split(':',1)[1]
         sd = time.mktime( time.strptime( sd.strip() ) )
-        fd = util.filegrep( 'mylog.txt', 'Finish Date:' )[0].split(':',1)[1]
+        fd = util.grepfiles( 'Finish Date:', 'mylog.txt' )[0].split(':',1)[1]
         fd = time.mktime( time.strptime( fd.strip() ) )
 
-        L = util.filegrep( 'mylog.txt', 'hello' )
+        L = util.grepfiles( 'hello', 'mylog.txt' )
         assert len(L) == 2 and L[1].strip() == "hello"
 
     def test_a_background_job_using_workdir(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         os.mkdir( 'wdir' )
 
@@ -1030,17 +1030,17 @@ def myfunc( myarg, arg2 ):
         assert os.path.exists( 'mylog.txt' )
 
         # check job elapsed time from the log file
-        sd = util.filegrep( 'mylog.txt', 'Start Date:' )[0].split(':',1)[1]
+        sd = util.grepfiles( 'Start Date:', 'mylog.txt' )[0].split(':',1)[1]
         sd = time.mktime( time.strptime( sd.strip() ) )
-        fd = util.filegrep( 'mylog.txt', 'Finish Date:' )[0].split(':',1)[1]
+        fd = util.grepfiles( 'Finish Date:', 'mylog.txt' )[0].split(':',1)[1]
         fd = time.mktime( time.strptime( fd.strip() ) )
 
-        L = util.filegrep( os.path.join( 'wdir', 'afile.txt' ), 'content' )
+        L = util.grepfiles( 'content', os.path.join( 'wdir', 'afile.txt' ) )
         assert len(L) == 1 and L[0].strip() == "content"
 
     def test_using_remote_evaluate_utility(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         lnk = rpy.RemotePython( sshmach, sshexe=sshprog, remotepy=self.remotepy )
         lnk.connect()
@@ -1052,7 +1052,7 @@ def myfunc( myarg, arg2 ):
 
     def test_using_remote_evaluate_multiple_times_and_an_import(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         lnk = rpy.RemotePython( sshmach, sshexe=sshprog, remotepy=self.remotepy )
         lnk.connect()
@@ -1063,7 +1063,7 @@ def myfunc( myarg, arg2 ):
 
     def test_using_remote_evaluate_where_arguments_are_embedded_in_statements(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         lnk = rpy.RemotePython( sshmach, sshexe=sshprog, remotepy=self.remotepy )
         lnk.connect()
@@ -1077,7 +1077,7 @@ def myfunc( myarg, arg2 ):
 
     def test_using_remote_evaluate_with_no_statements(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         lnk = rpy.RemotePython( sshmach, sshexe=sshprog, remotepy=self.remotepy )
         lnk.connect()
@@ -1087,7 +1087,7 @@ def myfunc( myarg, arg2 ):
 
     def test_remote_object_persistence(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         lnk = rpy.RemotePython( sshmach, sshexe=sshprog, remotepy=self.remotepy )
         lnk.addRemoteContent( '''
@@ -1111,7 +1111,7 @@ def modifyobj( objid, val ):
         """
         that is, remote python code should NOT have __name__ == "__main__"
         """
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         util.writefile( 'rmt.py', """
             import os, sys, time
@@ -1136,19 +1136,18 @@ def modifyobj( objid, val ):
             print3( 'ending' )
             """ )
 
-        out = util.runout( localpy+' lcl.py' )
-        #print3( out )
-        #os.system( localpy+' lcl.py' )
+        x,out = util.runcmd( sys.executable+' lcl.py' )
+        #os.system( sys.executable+' lcl.py' )
 
-        assert len( util.grep( out, 'starting' ) ) == 1
-        assert len( util.grep( out, 'pyname=' ) ) == 1
-        assert len( util.grep( out, '__main__' ) ) == 0
-        assert len( util.grep( out, 'NAME IS MAIN' ) ) == 0
-        assert len( util.grep( out, 'ending' ) ) == 1
+        assert len( util.greplines( 'starting', out ) ) == 1
+        assert len( util.greplines( 'pyname=', out ) ) == 1
+        assert len( util.greplines( '__main__', out ) ) == 0
+        assert len( util.greplines( 'NAME IS MAIN', out ) ) == 0
+        assert len( util.greplines( 'ending', out ) ) == 1
 
     def test_get_machine_info_utility(self):
         ""
-        sshprog,sshmach = get_ssh_pair()
+        sshprog,sshmach = util.get_ssh_pair()
 
         lnk = rpy.RemotePython( sshmach, sshexe=sshprog, remotepy=self.remotepy )
         lnk.connect()
@@ -1167,34 +1166,6 @@ def modifyobj( objid, val ):
 
         assert sn == 'sysname='+os.uname()[0]
         assert nn == 'nodename='+os.uname()[1]
-
-
-#######################################################################
-
-def get_ssh_pair( fake_ssh_pause=None ):
-    """
-    Returns a pair ( ssh program, ssh machine ).
-    """
-    if util.use_this_ssh == 'ssh' and fake_ssh_pause == None:
-        sshprog = filecopy.rpy.which( 'ssh' )
-        import socket
-        sshmach = socket.gethostname()
-
-    else:
-        st = str(1)
-        if fake_ssh_pause != None:
-            st = str(fake_ssh_pause)
-        util.writescript( 'fakessh', "#!"+localpy+" -E", """
-            import os, sys, getopt, time, pipes
-            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
-            argL.pop(0)  # remove the machine name
-            time.sleep( """+st+""" )
-            os.execl( '/bin/bash', '/bin/bash', '-c', ' '.join( argL ) )
-            """ )
-        sshprog = os.path.abspath( 'fakessh' )
-        sshmach = 'sparky'
-
-    return sshprog, sshmach
 
 
 #######################################################################

@@ -21,6 +21,7 @@ import getopt
 import signal
 import unittest
 
+import trigtestutils as trigutil
 import testutils as util
 from testutils import print3
 
@@ -962,7 +963,8 @@ def check_commands( pycmd, shcmd, pyscript, *args ):
 
     # to test the shell command, embed it in a shell script
     shscript = os.path.abspath( pyscript+'.sh' )
-    util.writescript( shscript, "#!/bin/sh", """
+    util.writescript( shscript, """
+        #!/bin/sh
         echo shcmd: """+shcmd+"""
         """+shcmd+""" || exit 1
         """ )
@@ -1101,9 +1103,9 @@ class run_command( unittest.TestCase ):
         runr = command.SubprocessRunner( cmd, None, MockStreams(), echo )
         rtn,out,err = util.call_capture_output( runr.runCommand )
 
-        L = util.grep( out, 'sys.stdout' )
+        L = util.greplines( 'sys.stdout', out )
         assert len(L) == 1
-        L = util.grep( out, 'hello' )
+        L = util.greplines( 'hello', out )
         assert len(L) == 2
         assert L[1].strip() == 'hello'
         assert err == 'world\n'
@@ -1113,9 +1115,9 @@ class run_command( unittest.TestCase ):
                     'sys.stderr.write("world"+os.linesep);' )
         rtn,out,err = util.call_capture_output( cmd.run )
 
-        L = util.grep( out, 'sys.stdout' )
+        L = util.greplines( 'sys.stdout', out )
         assert len(L) == 1
-        L = util.grep( out, 'hello' )
+        L = util.greplines( 'hello', out,  )
         assert len(L) == 2
         assert L[1].strip() == 'hello'
         assert err == 'world\n'
@@ -1125,7 +1127,7 @@ class run_command( unittest.TestCase ):
                     'sys.stderr.write("world"+os.linesep);' )
         rtn,out,err = util.call_capture_output( cmd.run, echo="none" )
 
-        L = util.grep( out, 'sys.stdout' )
+        L = util.greplines( 'sys.stdout', out )
         assert len(L) == 0
         assert out == 'hello\n' and err == 'world\n'
 
@@ -1170,19 +1172,18 @@ class run_command( unittest.TestCase ):
         x,out,err = util.call_capture_output( runr.runCommand,
                                               raise_on_error=False )
         assert x != 0 and x != None
-        assert err.strip()
+        assert err.strip() and 'CommandException' not in err
 
         runr = command.SubprocessRunner( '/path/junk',
                                          None, MockStreams(), MockEcho() )
         x,out,err = util.call_capture_output( runr.runCommand,
                                               raise_on_error=False )
         assert x != 0 and x != None
-        assert err.strip()
+        assert err.strip() and 'CommandException' not in err
 
         runr = command.SubprocessRunner( '/path/junk',
                                          None, MockStreams(), MockEcho() )
-        self.assertRaises( Exception,
-                util.call_capture_output, runr.runCommand, raise_on_error=True )
+        expect_CommandException( runr.runCommand, raise_on_error=True )
 
         # as a python list, the subprocess.Popen() call will raise exception
         runr = command.SubprocessRunner( ['/path/junk'],
@@ -1190,31 +1191,28 @@ class run_command( unittest.TestCase ):
         x,out,err = util.call_capture_output( runr.runCommand,
                                               raise_on_error=False )
         assert x != 0 and x != None
-        assert err.strip()
+        assert err.strip() and 'CommandException' not in err
 
         runr = command.SubprocessRunner( ['/path/junk'],
                                          None, MockStreams(), MockEcho() )
-        self.assertRaises( Exception,
-                util.call_capture_output, runr.runCommand, raise_on_error=True )
+        expect_CommandException( runr.runCommand, raise_on_error=True )
 
         cmd = [ sys.executable, '-c', 'raise Exception("fake exception")' ]
         runr = command.SubprocessRunner( cmd, None, MockStreams(), MockEcho() )
         x,out,err = util.call_capture_output( runr.runCommand,
                                               raise_on_error=False )
         assert x != 0 and x != None
-        assert err.strip()
+        assert err.strip() and 'CommandException' not in err
 
-        self.assertRaises( Exception,
-                util.call_capture_output, runr.runCommand, raise_on_error=True )
+        expect_CommandException( runr.runCommand, raise_on_error=True )
 
         cmd = Command( '/path/junk' )
         x,out,err = util.call_capture_output( cmd.run,
                                               raise_on_error=False )
         assert x != 0 and x != None
-        assert err.strip()
+        assert err.strip() and 'CommandException' not in err
 
-        self.assertRaises( Exception,
-                util.call_capture_output, cmd.run, raise_on_error=True )
+        expect_CommandException( cmd.run, raise_on_error=True )
 
         # redirect error
         cmd = Command( sys.executable, '-c' )
@@ -1223,12 +1221,10 @@ class run_command( unittest.TestCase ):
                                          redirect='/path/noexist/foobar.log',
                                          raise_on_error=False )
         assert x != 0 and x != None
-        assert err.strip()
+        assert err.strip() and 'CommandException' not in err
 
-        self.assertRaises( Exception,
-            util.call_capture_output, cmd.run,
-                                      redirect='/path/noexist/foobar.log',
-                                      raise_on_error=True )
+        expect_CommandException( cmd.run, redirect='/path/noexist/foobar.log',
+                                          raise_on_error=True )
 
         # change directory error
         cmd = Command( sys.executable, '-c' )
@@ -1236,11 +1232,10 @@ class run_command( unittest.TestCase ):
         x,out,err = util.call_capture_output( cmd.run, chdir='/path/noexist',
                                                        raise_on_error=False )
         assert x != 0 and x != None
-        assert err.strip()
+        assert err.strip() and 'CommandException' not in err
 
-        self.assertRaises( Exception,
-            util.call_capture_output, cmd.run, chdir='/path/noexist',
-                                               raise_on_error=True )
+        expect_CommandException( cmd.run, chdir='/path/noexist',
+                                          raise_on_error=True )
 
     def test_using_runit_argument(self):
         ""
@@ -1280,8 +1275,8 @@ class run_command( unittest.TestCase ):
 
         # even with an exception, the final directory should not change
         cmd = Command( '/path/junk' )
-        self.assertRaises( Exception,
-            util.call_capture_output, cmd.run, shell=False, raise_on_error=True )
+        expect_CommandException( cmd.run, shell=False,
+                                          raise_on_error=True )
         assert os.getcwd() == cwd
 
 
@@ -1448,10 +1443,16 @@ class run_output_command( unittest.TestCase ):
         cmd = Command( sys.executable, '-c' )
         cmd.arg( "raise Exception('fake error')" )
 
-        self.assertRaises( Exception,
-            util.call_capture_output, cmd.run_output, capture="stderr",
-                                                      shell=False,
-                                                      raise_on_error=True )
+        expect_CommandException( cmd.run_output, capture="stderr",
+                                                 shell=False,
+                                                 raise_on_error=True )
+
+
+def expect_CommandException( func, *args, **kwargs ):
+    ""
+    rtn,out,err = util.call_capture_output( func, *args, **kwargs )
+    assert rtn == None
+    assert 'Traceback' in err and 'CommandException' in err
 
 
 class run_timeout_command( unittest.TestCase ):
@@ -1555,7 +1556,7 @@ class run_timeout_command( unittest.TestCase ):
         ksp = command.KillableSubprocess( [sys.executable,'sub1.py'] )
         time.sleep(2)
 
-        plist1 = util.get_process_list()
+        plist1 = trigutil.get_process_list()
 
         t0 = time.time()
         assert not ksp.checkIfDone(1)
@@ -1563,7 +1564,7 @@ class run_timeout_command( unittest.TestCase ):
         t1 = time.time()
         time.sleep(1)
 
-        plist2 = util.get_process_list()
+        plist2 = trigutil.get_process_list()
 
         assert t1 - t0 < 6
         L = util.grepfiles( 'START', 'sub1.log' )
@@ -1578,10 +1579,10 @@ class run_timeout_command( unittest.TestCase ):
         assert len( util.grepfiles( 'DONE', 'sub1.log' ) ) == 0
         assert len( util.grepfiles( 'DONE', 'sub2.log' ) ) == 0
 
-        assert util.find_process_in_list( plist1, pid1 ) != None
-        assert util.find_process_in_list( plist1, pid2 ) != None
-        assert util.find_process_in_list( plist2, pid1 ) == None
-        assert util.find_process_in_list( plist2, pid2 ) == None
+        assert trigutil.find_process_in_list( plist1, pid1 ) != None
+        assert trigutil.find_process_in_list( plist1, pid2 ) != None
+        assert trigutil.find_process_in_list( plist2, pid1 ) == None
+        assert trigutil.find_process_in_list( plist2, pid2 ) == None
 
     def test_timeout_a_single_subprocess(self):
         ""
@@ -1636,7 +1637,7 @@ class run_timeout_command( unittest.TestCase ):
         t1 = time.time()
         x = cmd.run_timeout( 3, raise_on_error=False )
         t2 = time.time()
-        plist = util.get_process_list()
+        plist = trigutil.get_process_list()
 
         assert t2-t1 < 6
         assert x == None
@@ -1653,8 +1654,8 @@ class run_timeout_command( unittest.TestCase ):
         assert len( util.grepfiles( 'DONE', 'sub1.log' ) ) == 0
         assert len( util.grepfiles( 'DONE', 'sub2.log' ) ) == 0
 
-        assert util.find_process_in_list( plist, pid1 ) == None
-        assert util.find_process_in_list( plist, pid2 ) == None
+        assert trigutil.find_process_in_list( plist, pid1 ) == None
+        assert trigutil.find_process_in_list( plist, pid2 ) == None
 
 
 ######################################################################
@@ -1757,7 +1758,8 @@ def get_ssh_pair( fake_ssh_pause=None ):
         st = str(1)
         if fake_ssh_pause != None:
             st = str(fake_ssh_pause)
-        util.writescript( 'fakessh', "#!"+localpy+" -E", """
+        util.writescript( 'fakessh', """
+            #!"""+localpy+""" -E
             import os, sys, getopt, time
             optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
             argL.pop(0)  # remove the machine name

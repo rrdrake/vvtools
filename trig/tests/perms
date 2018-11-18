@@ -14,6 +14,7 @@ import time
 import subprocess as sp
 import unittest
 
+import trigtestutils as trigutil
 import testutils as util
 from testutils import print3
 
@@ -24,7 +25,7 @@ import perms
 # default the local and remote python to the current running python
 localpy = sys.executable
 
-srcdir = os.path.dirname( util.testsrcdir )
+srcdir = os.path.dirname( trigutil.testsrcdir )
 
 
 #######################################################################
@@ -62,8 +63,8 @@ class catchall( unittest.TestCase ):
 
     def test_permissions_function_with_setuid_setgid(self):
         ""
-        util.writescript( 'afile', 'header', 'contents' )
-        util.writescript( 'bfile', 'header', 'contents' )
+        util.writescript( 'afile', 'contents' )
+        util.writescript( 'bfile', 'contents' )
         os.mkdir( 'adir' )
         time.sleep(1)
         assert sp.call( 'chmod u+s bfile', shell=True ) == 0
@@ -291,25 +292,21 @@ class catchall( unittest.TestCase ):
         time.sleep(1)
         assert grp == perms.filegroup( 'afile' )
 
-        out = util.runout( localpy+' '+srcdir+'/perms.py -f g=r-x afile',
-                      raise_on_failure=True )
+        util.runcmd( localpy+' '+srcdir+'/perms.py -f g=r-x afile' )
         time.sleep(1)
         assert perms.permission( 'afile', 'group r-x' ) == True
 
         os.mkdir( 'adir' )
         time.sleep(1)
-        out = util.runout( localpy+' '+srcdir+'/perms.py -d g=--x adir',
-                      raise_on_failure=True )
+        util.runcmd( localpy+' '+srcdir+'/perms.py -d g=--x adir' )
         time.sleep(1)
         assert perms.permission( 'adir', 'group --x' ) == True
 
-        out = util.runout( localpy+' '+srcdir+'/perms.py -p g=-w- afile',
-                      raise_on_failure=True )
+        util.runcmd( localpy+' '+srcdir+'/perms.py -p g=-w- afile' )
         time.sleep(1)
         assert perms.permission( 'afile', 'group -w-' ) == True
 
-        out = util.runout( localpy+' '+srcdir+'/perms.py -p g=-wx adir',
-                      raise_on_failure=True )
+        util.runcmd( localpy+' '+srcdir+'/perms.py -p g=-wx adir' )
         time.sleep(1)
         assert perms.permission( 'adir', 'group -wx' ) == True
 
@@ -359,11 +356,10 @@ class catchall( unittest.TestCase ):
             sys.stdout.write( 'success'+os.linesep )
             """ )
 
-        out = util.runout( localpy+' lcl.py' )
-        #print3( out )
+        x,out = util.runcmd( localpy+' lcl.py' )
         #os.system( localpy+' lcl.py' )
 
-        assert len( util.grep( out, 'success' ) ) == 1
+        assert len( util.greplines( 'success', out ) ) == 1
 
     def test_chmod_recurse_with_subdir_and_some_files(self):
         ""
@@ -391,9 +387,8 @@ class catchall( unittest.TestCase ):
         assert perms.permission( 'subdir/bfile', 'group rw-' ) == True
         assert perms.permission( 'subdir/bfile', 'world r--' ) == True
 
-        out = util.runout( localpy+' '+srcdir+'/perms.py -R ' + \
-                      '-p g=--- -f g+w -d g+x subdir',
-                      raise_on_failure=True )
+        util.runcmd( localpy+' '+srcdir+'/perms.py -R ' + \
+                      '-p g=--- -f g+w -d g+x subdir' )
         time.sleep(1)
         assert perms.permission( 'subdir', 'group --x' ) == True
         assert perms.permission( 'subdir/afile', 'group -w-' ) == True

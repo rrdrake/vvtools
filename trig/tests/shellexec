@@ -13,10 +13,11 @@ import os
 import time
 import unittest
 
+import trigtestutils as trigutil
 import testutils as util
 from testutils import print3
 
-bashexec = os.path.join( os.path.dirname(util.testsrcdir), 'bashexec' )
+bashexec = os.path.join( os.path.dirname(trigutil.testsrcdir), 'bashexec' )
 
 
 #######################################################################
@@ -33,13 +34,13 @@ class catchall( unittest.TestCase ):
         dummy = os.path.abspath('dummyfile')
         time.sleep(1)
 
-        out = util.runout( bashexec+' cat '+dummy )
-        print3( out )
+        x,out = util.runcmd( bashexec+' cat '+dummy )
         assert 'dummy contents' in out
 
     def test_setting_a_PATH_directory(self):
         ""
-        util.writescript( 'bin/myscript', '#!'+sys.executable, """
+        util.writescript( 'bin/myscript', """
+            #!"""+sys.executable+"""
             import os, sys
             sys.stdout.write( 'hello from myscript'+os.linesep )
             sys.stdout.flush()
@@ -47,23 +48,23 @@ class catchall( unittest.TestCase ):
         time.sleep(1)
 
         d = os.path.abspath( 'bin' )
-        out = util.runout( bashexec+' -p '+d+' myscript' )
-        print3( out )
+        x,out = util.runcmd( bashexec+' -p '+d+' myscript' )
         assert 'hello from myscript' in out
 
         d = os.path.abspath( 'bin' )
-        out = util.runout( bashexec+' --path '+d+' myscript' )
-        print3( out )
+        x,out = util.runcmd( bashexec+' --path '+d+' myscript' )
         assert 'hello from myscript' in out
 
     def test_using_PATH_values_preserves_order(self):
         ""
-        util.writescript( 'bin1/myscript', '#!'+sys.executable, """
+        util.writescript( 'bin1/myscript', """
+            #!"""+sys.executable+"""
             import os, sys
             sys.stdout.write( 'hello script one'+os.linesep )
             sys.stdout.flush()
             """ )
-        util.writescript( 'bin2/myscript', '#!'+sys.executable, """
+        util.writescript( 'bin2/myscript', """
+            #!"""+sys.executable+"""
             import os, sys
             sys.stdout.write( 'hello script two'+os.linesep )
             sys.stdout.flush()
@@ -72,23 +73,21 @@ class catchall( unittest.TestCase ):
 
         d1 = os.path.abspath( 'bin1' )
         d2 = os.path.abspath( 'bin2' )
-        out = util.runout( bashexec+' -p '+d1+' -p '+d2+' myscript' )
-        print3( out )
+        x,out = util.runcmd( bashexec+' -p '+d1+' -p '+d2+' myscript' )
         assert 'hello script one' in out
 
-        out = util.runout( bashexec+' -p '+d2+' -p '+d1+' myscript' )
-        print3( out )
+        x,out = util.runcmd( bashexec+' -p '+d2+' -p '+d1+' myscript' )
         assert 'hello script two' in out
 
     def test_running_module_command(self):
         ""
-        out = util.runout( bashexec+' -v -m list pwd' )
-        print3( out )
+        x,out = util.runcmd( bashexec+' -v -m list pwd' )
         assert 'module list' in out
 
     def test_arguments_with_spaces_are_preserved(self):
         ""
-        util.writescript( 'myscript', '#!'+sys.executable, """
+        util.writescript( 'myscript', """
+            #!"""+sys.executable+"""
             import os, sys
             nargs = len( sys.argv[1:] )
             sys.stdout.write( 'num arguments '+str(nargs)+os.linesep )
@@ -97,18 +96,15 @@ class catchall( unittest.TestCase ):
         time.sleep(1)
 
         f = os.path.abspath( 'myscript' )
-        out = util.runout( bashexec+' '+f+' "foo bar"' )
-        print3( out )
+        x,out = util.runcmd( bashexec+' '+f+' "foo bar"' )
         assert 'num arguments 1' in out
 
         f = os.path.abspath( 'myscript' )
-        out = util.runout( bashexec+' '+f+' "foo bar" arg2' )
-        print3( out )
+        x,out = util.runcmd( bashexec+' '+f+' "foo bar" arg2' )
         assert 'num arguments 2' in out
 
         f = os.path.abspath( 'myscript' )
-        out = util.runout( bashexec+' '+f+' arg1 "foo bar"' )
-        print3( out )
+        x,out = util.runcmd( bashexec+' '+f+' arg1 "foo bar"' )
         assert 'num arguments 2' in out
 
 

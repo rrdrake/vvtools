@@ -26,16 +26,20 @@ import unittest
 
 
 working_directory = None
+use_this_ssh = 'fake'
+remotepy = sys.executable
+
 
 def initialize( argv ):
     ""
     global working_directory
     global use_this_ssh
+    global remotepy
 
     test_filename = os.path.abspath( argv[0] )
     working_directory = make_working_directory( test_filename )
 
-    optL,argL = getopt.getopt( argv[1:], 'p:sS' )
+    optL,argL = getopt.getopt( argv[1:], 'p:sSr:' )
 
     optD = {}
     for n,v in optL:
@@ -45,6 +49,8 @@ def initialize( argv ):
             use_this_ssh = 'fake'
         elif n == '-S':
             use_this_ssh = 'ssh'
+        elif n == '-r':
+            remotepy = v
         optD[n] = v
 
 
@@ -139,7 +145,7 @@ def get_TestCase_classes( test_module ):
     return tcD
 
 
-def setup_test( cleanout ):
+def setup_test( cleanout=True ):
     """
     """
     print3()
@@ -301,7 +307,7 @@ def run_redirect( cmd, redirect_filename ):
     x = p.wait()
 
     if outfp != None:
-      outfp.close()
+        outfp.close()
     outfp = None
     fdout = None
 
@@ -387,6 +393,83 @@ def shell_escape( cmd ):
     if type(cmd) == type(''):
         return ' '.join( [ pipes.quote(s) for s in shlex.split( cmd ) ] )
     return ' '.join( [ pipes.quote(s) for s in cmd ] )
+
+
+def get_ssh_pair( fake_ssh_pause=None, connect_failure=False, uptime=None ):
+    """
+    Returns a pair ( ssh program, ssh machine ).
+    """
+    if use_this_ssh == 'ssh' and fake_ssh_pause == None and \
+                                 connect_failure == False and \
+                                 uptime == None:
+        sshprog = which( 'ssh' )
+        import socket
+        sshmach = socket.gethostname()
+
+    elif uptime != None:
+        # make the fake ssh session to die after 'uptime' seconds
+        writescript( 'fakessh', """
+            #!"""+sys.executable+""" -E
+            import os, sys, getopt, time, subprocess, signal
+            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
+            mach = argL.pop(0)  # remove the machine name
+            time.sleep( 1 )
+            p = subprocess.Popen( ['/bin/bash', '-c', ' '.join( argL )] )
+            t0 = time.time()
+            while time.time() - t0 < """+str(uptime)+""":
+                x = p.poll()
+                if x != None:
+                    break
+                time.sleep(1)
+            if x == None:
+                if hasattr( p, 'terminate' ):
+                    p.terminate()
+                else:
+                    os.kill( p.pid, signal.SIGTERM )
+                    x = p.wait()
+                x = 1
+            sys.exit( x )
+            """ )
+        sshprog = os.path.abspath( 'fakessh' )
+        sshmach = 'sparky'
+
+    else:
+        st = str(1)
+        if fake_ssh_pause != None:
+            st = str(fake_ssh_pause)
+        writescript( 'fakessh', """
+            #!"""+sys.executable+""" -E
+            import os, sys, getopt, time, pipes
+            optL,argL = getopt.getopt( sys.argv[1:], 'xTv' )
+            mach = argL.pop(0)  # remove the machine name
+            time.sleep( """+st+""" )
+            if """+repr(connect_failure)+""":
+                sys.stderr.write( "Fake connection falure to "+mach+os.linesep )
+                sys.exit(1)
+            os.execl( '/bin/bash', '/bin/bash', '-c', ' '.join( argL ) )
+            """ )
+        sshprog = os.path.abspath( 'fakessh' )
+        sshmach = 'sparky'
+
+    return sshprog, sshmach
+
+
+def which( program ):
+    """
+    Returns the absolute path to the given program name if found in PATH.
+    If not found, None is returned.
+    """
+    if os.path.isabs( program ):
+        return program
+
+    pth = os.environ.get( 'PATH', None )
+    if pth:
+        for d in pth.split(':'):
+            f = os.path.join( d, program )
+            if not os.path.isdir(f) and os.access( f, os.X_OK ):
+                return os.path.abspath( f )
+
+    return None
 
 
 def rmallfiles( not_these=None ):
@@ -617,6 +700,22 @@ def has_world_execute( path ):
     return int( fm & stat.S_IXOTH ) != 0
 
 
+def probe_for_two_different_groups():
+    ""
+    x,out = runcmd( 'groups' )
+    grp1,grp2 = out.strip().split()[:2]
+    assert grp1 and grp2 and grp1 != grp2
+    return grp1,grp2
+
+
+def get_file_group( path ):
+    ""
+    import grp
+    gid = os.stat( path ).st_gid
+    ent = grp.getgrgid( gid )
+    return ent[0]
+
+
 module_uniq_id = 0
 filename_to_module_map = {}
 
@@ -656,3 +755,22 @@ def create_module_from_filename( fname ):
 
     return mod
 
+
+if sys.version_info[0] < 3:
+    # with python 2.x, files, pipes, and sockets work naturally
+    def _BYTES_(s): return s
+    def _STRING_(b): return b
+
+else:
+    # with python 3.x, read/write to files, pipes, and sockets is tricky
+    bytes_type = type( ''.encode() )
+
+    def _BYTES_(s):
+        if type(s) == bytes_type:
+            return s
+        return s.encode( 'ascii' )
+
+    def _STRING_(b):
+        if type(b) == bytes_type:
+            return b.decode()
+        return b
