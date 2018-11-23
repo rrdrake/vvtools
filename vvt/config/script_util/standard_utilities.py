@@ -6,7 +6,7 @@
 
 import os, sys
 
-from vvtest_util import *
+from .deputils import save_test_data, read_test_data
 
 
 def analyze_only():
@@ -15,7 +15,8 @@ def analyze_only():
     analyze previously computed results, such as comparing to baseline or
     examining order of convergence
     """
-    return opt_analyze
+    import vvtest_util as vvt
+    return vvt.opt_analyze
 
 
 def platform_expr( expr ):
@@ -25,9 +26,10 @@ def platform_expr( expr ):
     "Linux or Darwin" and would be true if the current platform
     name is "Linux" or if it is "Darwin".
     '''
+    import vvtest_util as vvt
     import libvvtest.FilterExpressions as filt
     wx = filt.WordExpression( expr )
-    return wx.evaluate( lambda wrd: wrd == PLATFORM )
+    return wx.evaluate( lambda wrd: wrd == vvt.PLATFORM )
 
 def parameter_expr( expr ):
     '''
@@ -36,9 +38,10 @@ def parameter_expr( expr ):
     could be "dt<0.01 and dh=0.1" where dt and dh are parameters
     defined in the test.
     '''
+    import vvtest_util as vvt
     import libvvtest.FilterExpressions as filt
     pf = filt.ParamFilter( expr )
-    return pf.evaluate( PARAM_DICT )
+    return pf.evaluate( vvt.PARAM_DICT )
 
 def option_expr( expr ):
     '''
@@ -47,9 +50,10 @@ def option_expr( expr ):
     could be "not dbg and not intel", which would be false if
     "-o dbg" or "-o intel" were given on the command line.
     '''
+    import vvtest_util as vvt
     import libvvtest.FilterExpressions as filt
     wx = filt.WordExpression( expr )
-    return wx.evaluate( OPTIONS.count )
+    return wx.evaluate( vvt.OPTIONS.count )
 
 ############################################################################
 
@@ -64,11 +68,13 @@ def set_have_diff():
     have_diff = True
 
 def exit_diff():
-    print3( "\n*** exiting diff,", TESTID )
+    ""
+    import vvtest_util as vvt
+    print3( "\n*** exiting diff,", vvt.TESTID )
     # prevent termination func from being called, if one was registered
     global _user_terminate_func_
     _user_terminate_func_ = None
-    sys.exit( diff_exit_status )
+    sys.exit( vvt.diff_exit_status )
 
 def if_diff_exit_diff():
     if have_diff:

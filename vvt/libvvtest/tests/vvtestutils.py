@@ -26,6 +26,8 @@ testsrcdir = dirname( abspath( sys.argv[0] ) )
 vvtdir = dirname( dirname( testsrcdir ) )
 sys.path.insert( 0, vvtdir )
 
+cfgdir = os.path.join( vvtdir, 'config' )
+
 vvtest_file = pjoin( vvtdir, 'vvtest' )
 resultspy = pjoin( vvtdir, 'results.py' )
 

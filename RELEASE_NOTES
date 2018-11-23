@@ -1,5 +1,23 @@
 Improvements:
 
+    - Add python script_utils functions to save and read arbitrary test data.
+      The data is written to a file in the test execution directory.  For
+      example, consider a test named "mytest",
+
+          import script_utils as util
+          util.save_test_data( runtime=34.7, result='pass' )
+
+      The data can be read in as a dictionary from the current or a dependency
+      test.  For example, if the following test depends on "mytest",
+
+          import script_utils as util
+          data = util.read_test_data( "mytest" )
+          print ( 'mytest runtime is', data['runtime'] )
+
+    - Add function to python script_utils to recursively find dependency tests.
+      Use script_utils.deputils.find_depdir( testid ) to get the directory of
+      a direct or indirect dependency test.
+
 Fixes:
 
     - Duplicate paths in DEPDIRS in vvtest_util.py file, issue #13.
@@ -8,6 +26,25 @@ Fixes:
       tests coming from a general "depends on" specification.
 
 Changes:
+
+    - In python script tests, "import script_util" will no longer import all
+      the symbols from the vvtest_util.py file.  That is, instead of this in
+      your test file,
+
+          import script_util as util
+          util.print3( 'NAME =', util.NAME )
+
+      you now have to import vvtest_util.py separately,
+
+          import vvtest_util as vvt
+          import script_util as util
+          util.print3( 'NAME =', vvt.NAME )
+
+      or, of course, just dump all the symbols into the current namespace,
+
+          from vvtest_util import *
+          from script_util import *
+          print3( 'NAME =', NAME )
 
     - The (argument) and (file) attributes to the "baseline" directive are no
       longer supported, such as
@@ -41,7 +78,7 @@ Changes:
 
       A related aspect of this is that only (and always both) python and bash
       script util fragments are written to the test run directory.  Before
-      this, other languages were supported, such as csh.
+      this change, other languages were supported, such as csh.
 
     - The test list format used for running tests has changed.  It is now at
       version 32 and previous versions cannot be read.  This just means that
@@ -75,8 +112,8 @@ Changes:
       defining CHECK_FOO before running vvtest accomplishes the same thing.
       Also, the more general --test-args option is a better solution.
 
-    - The --vg has been removed.  It was used to run Valgrind on each test.
-      The same thing can be accomplished using --test-args.
+    - The --vg option has been removed.  It was used to run Valgrind on each
+      test.  The same thing can be accomplished using --test-args.
 
     - The -G option has been removed.  It is historical.
 
