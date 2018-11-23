@@ -796,6 +796,21 @@ class removing_paths( vtu.vvtestTestCase ):
         assert len( glob.glob( 'subdir*' ) ) == 2
 
 
+class file_utilities( vtu.vvtestTestCase ):
+
+    def test_the_readfile_function(self):
+        ""
+        import script_util.standard_utilities as stdutil
+
+        fileval = 'My file contents.\nLine two.\n'
+        with open( 'afile.txt', 'w' ) as fp:
+            fp.write( fileval )
+        time.sleep(1)
+
+        rval = stdutil.readfile( 'afile.txt' )
+        assert rval == fileval
+
+
 class deputils_tests( vtu.vvtestTestCase ):
 
     def test_data_file_path_name_depends_on_existence_of_vvtest_util_file(self):

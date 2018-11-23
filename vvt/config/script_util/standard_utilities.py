@@ -253,6 +253,15 @@ def which( program ):
 
 ############################################################################
 
+def readfile( filename ):
+    ""
+    with open( filename, 'r' ) as fp:
+        buf = fp.read()
+
+    return buf
+
+############################################################################
+
 def sedfile( filename, pattern, replacement, *more ):
     '''
     Apply one or more regex pattern replacements to each
