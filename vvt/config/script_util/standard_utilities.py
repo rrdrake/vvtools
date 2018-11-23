@@ -5,6 +5,11 @@
 # Government retains certain rights in this software.
 
 import os, sys
+import string
+import random
+import time
+import re
+import glob
 
 from .deputils import save_test_data, read_test_data
 
@@ -707,3 +712,66 @@ def change_filemode( fmode, spec, *more_specs ):
         else:           fmode = fmode & ( ~(bits) )
 
     return fmode
+
+
+############################################################################
+
+def move_aside_existing_path( path, keep=1 ):
+    """
+    Renames a path to one with '.old0' appended.  By default, only one old
+    path is kept (older ones are deleted).
+    """
+    if os.path.exists( path ):
+
+        pat = re.compile( '[.]old[0-9]+$' )
+
+        fL = []
+
+        for f in glob.glob( os.path.abspath(path)+'.old*' ):
+            ext = os.path.splitext(f)[1]
+            if pat.search( ext ) != None:
+                num = int( ext[4:] )
+                if num+1 < keep:
+                    fL.append( (num,f) )
+                else:
+                    fault_tolerant_remove( f )
+
+        fL.sort()
+        fL.reverse()
+
+        for num,f in fL:
+            bn,ext = os.path.splitext(f)
+            os.rename( f, bn+'.old'+str(num+1) )
+
+        if keep > 0:
+            os.rename( path, path+'.old0' )
+
+
+def random_string( numchars=8 ):
+    ""
+    seq = string.ascii_uppercase + string.digits
+    cL = [ random.choice( seq ) for _ in range(numchars) ]
+    return ''.join( cL )
+
+
+def fault_tolerant_remove( path, num_attempts=5 ):
+    ""
+    dn,fn = os.path.split( path )
+
+    rmpath = os.path.join( dn, 'remove_'+fn + '_'+ random_string() )
+
+    os.rename( path, rmpath )
+
+    for i in range( num_attempts ):
+        try:
+            if os.path.islink( rmpath ):
+                os.remove( rmpath )
+            elif os.path.isdir( rmpath ):
+                shutil.rmtree( rmpath )
+            else:
+                os.remove( rmpath )
+            break
+        except Exception:
+            pass
+
+        time.sleep(1)

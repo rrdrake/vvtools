@@ -713,6 +713,89 @@ class script_utils_tests( vtu.vvtestTestCase ):
         assert len( util.grepfiles( "__contains__", xlog ) ) == 0
 
 
+class removing_paths( vtu.vvtestTestCase ):
+
+    def test_fault_tolerant_remove(self):
+        ""
+        import script_util.standard_utilities as stdutil
+
+        util.writefile( 'topfile', 'file' )
+        util.writefile( 'subdir/file.txt', 'data' )
+        os.symlink( 'subdir/file.txt', 'softlink' )
+        time.sleep(1)
+
+        stdutil.fault_tolerant_remove( 'topfile' )
+        stdutil.fault_tolerant_remove( 'subdir' )
+        stdutil.fault_tolerant_remove( 'softlink' )
+
+        time.sleep(1)
+
+        assert len( glob.glob( 'topfile*' ) ) == 0
+        assert len( glob.glob( 'subdir*' ) ) == 0
+        assert len( glob.glob( 'softlink*' ) ) == 0
+
+    def test_move_aside_a_path(self):
+        ""
+        import script_util.standard_utilities as stdutil
+
+        stdutil.move_aside_existing_path( 'noexistpath' )
+
+        self.write_test_files()
+
+        stdutil.move_aside_existing_path( 'file.txt' )
+        stdutil.move_aside_existing_path( 'subdir' )
+
+        time.sleep(1)
+        assert not os.path.exists( 'file.txt' )
+        assert os.path.exists( 'file.txt.old0' )
+        assert not os.path.exists( 'subdir' )
+        assert os.path.isdir( 'subdir.old0' )
+
+    def write_test_files(self):
+        ""
+        util.writefile( 'file.txt', 'hello' )
+        util.writefile( 'subdir/afile', 'junk' )
+        time.sleep(1)
+
+    def test_move_aside_a_path_multiple_times(self):
+        ""
+        import script_util.standard_utilities as stdutil
+
+        self.write_test_files()
+
+        stdutil.move_aside_existing_path( 'file.txt' )
+        stdutil.move_aside_existing_path( 'subdir' )
+
+        self.write_test_files()
+
+        stdutil.move_aside_existing_path( 'file.txt' )
+        stdutil.move_aside_existing_path( 'subdir' )
+
+        time.sleep(1)
+        assert len( glob.glob( 'file.txt*' ) ) == 1
+        assert len( glob.glob( 'subdir*' ) ) == 1
+
+    def test_move_aside_a_path_multiple_times_keeping_2(self):
+        ""
+        import script_util.standard_utilities as stdutil
+
+        self.write_test_files()
+
+        stdutil.move_aside_existing_path( 'file.txt', keep=2 )
+        stdutil.move_aside_existing_path( 'subdir', keep=2 )
+
+        self.write_test_files()
+
+        stdutil.move_aside_existing_path( 'file.txt', keep=2 )
+        stdutil.move_aside_existing_path( 'subdir', keep=2 )
+
+        time.sleep(1)
+        assert not os.path.exists( 'file.txt' )
+        assert not os.path.exists( 'subdir' )
+        assert len( glob.glob( 'file.txt*' ) ) == 2
+        assert len( glob.glob( 'subdir*' ) ) == 2
+
+
 class deputils_tests( vtu.vvtestTestCase ):
 
     def test_data_file_path_name_depends_on_existence_of_vvtest_util_file(self):
