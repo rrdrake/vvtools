@@ -10,6 +10,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
+from os.path import abspath
 import time
 
 import vvtestutils as vtu
@@ -437,6 +438,27 @@ class the_core_make_execute_command_function( vtu.vvtestTestCase ):
         cmdL = TE.make_core_execute_command( tspec, 1 )
         assert cmdL == None
 
+    def test_running_in_a_directory_containing_a_colon(self):
+        ""
+        util.writefile( 'sub:dir/atest.vvt', """
+            import os, sys
+            print ( 'before', sys.path )
+            import script_util.standard_utilities as util
+            print ( 'after', sys.path )
+            import vvtest_util as vvt
+            for n in ['NAME','TESTID','TESTROOT','SRCDIR']:
+                util.print3( n, '=', eval( 'vvt.'+n ) )
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest( chdir='sub:dir' )
+        vrun.assertCounts( total=1, npass=1 )
+
+        assert vrun.countGrepLogs( 'NAME = atest' ) == 1
+        assert vrun.countGrepLogs( 'TESTID = atest' ) == 1
+        lineL = vrun.greplogs( 'SRCDIR =' )
+        assert len( lineL ) == 1
+        assert lineL[0].split( ' = ', 1 )[1].strip() == abspath( 'sub:dir' )
 
 
 ########################################################################
