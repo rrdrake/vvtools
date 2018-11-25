@@ -213,6 +213,25 @@ class script_tests( vtu.vvtestTestCase ):
         assert vrun.countGrepLogs( 'hello from the test5a test' ) == 1
         assert vrun.countGrepLogs( 'hello from the test5b test' ) == 1
 
+    def test_using_testname_specification_as_alias_for_name(self):
+        ""
+        util.writefile( 'multi.vvt', """
+            #VVT: testname=testA
+            #VVT: name : testB
+            #VVT: testname = testC
+            import vvtest_util as vvt
+            print ( "hello from the "+vvt.NAME+" test" )
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=3, npass=3 )
+
+        assert vrun.getTestIds() == [ 'testA', 'testB', 'testC' ]
+        assert vrun.countGrepLogs( 'hello from the testA test' ) == 1
+        assert vrun.countGrepLogs( 'hello from the testB test' ) == 1
+        assert vrun.countGrepLogs( 'hello from the testC test' ) == 1
+
     def test_incorrect_specification_syntax(self):
         ""
         util.writescript( 'tst1.vvt', """

@@ -439,7 +439,8 @@ def testNameList_scr( vspecs ):
     """
     L = []
 
-    for spec in vspecs.getSpecList( "name" ):
+    specL = vspecs.getSpecList("testname") + vspecs.getSpecList("name")
+    for spec in specL:
 
         if spec.attrs:
             raise TestSpecError( 'no attributes allowed here, ' + \
