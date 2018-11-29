@@ -13,7 +13,7 @@ from . import TestSpec
 from . import FilterExpressions
 
 from .ParameterSet import ParameterSet
-from .ScriptReader import ScriptReader
+from .ScriptReader import ScriptReader, check_parse_attributes_section
 from .TestSpecError import TestSpecError
 
 
@@ -446,7 +446,8 @@ def testNameList_scr( vspecs ):
             raise TestSpecError( 'no attributes allowed here, ' + \
                                  'line ' + str(spec.lineno) )
 
-        name = spec.value
+        name,attrD = parse_test_name_value( spec.value, spec.lineno )
+
         if not name or not allowableString(name):
             raise TestSpecError( 'missing or invalid test name, ' + \
                                  'line ' + str(spec.lineno) )
@@ -457,6 +458,44 @@ def testNameList_scr( vspecs ):
         L.append( vspecs.basename() )
 
     return L
+
+
+def parse_test_name_value( value, lineno ):
+    ""
+    name = value
+    aD = {}
+
+    sL = value.split( None, 1 )
+    if len(sL) == 2:
+        name,tail = sL
+
+        if tail[0] == '#':
+            pass
+
+        elif tail[0] == '(':
+            aD,tail = check_parse_attributes_section( tail, str(lineno) )
+            check_test_name_attributes( aD, lineno )
+
+        else:
+            raise TestSpecError( 'invalid test name: ' + \
+                    ', line ' + str(lineno) )
+
+    return name, aD
+
+
+def check_test_name_attributes( attrD, lineno ):
+    ""
+    if attrD:
+
+        checkD = {}
+        checkD.update( attrD )
+
+        checkD.pop( 'depends on', None )
+        checkD.pop( 'result', None )
+
+        if len( checkD ) > 0:
+            raise TestSpecError( 'unexpected attributes: ' + \
+                ' '.join( checkD.keys() ) + ', line ' + str(lineno) )
 
 
 def parseKeywords_scr( tspec, vspecs, tname ):
@@ -832,6 +871,8 @@ def parseDependencies_scr( t, vspecs, evaluator ):
         #VVT: depends on (result=pass) : testname
         #VVT: depends on (result="pass or diff") : testname
         #VVT: depends on (result="*") : testname
+
+        #VVT: testname = testA (depends on=testB, result="*")
     """
     tname = t.getName()
     params = t.getParameters()
@@ -839,16 +880,37 @@ def parseDependencies_scr( t, vspecs, evaluator ):
     for spec in vspecs.getSpecList( 'depends on' ):
         if filterAttr_scr( spec.attrs, tname, params, evaluator, spec.lineno ):
 
-            wx = None
-            if spec.attrs != None and 'result' in spec.attrs:
-                result = spec.attrs['result'].strip()
-                if result == '*':
-                    wx = FilterExpressions.WordExpression()
-                else:
-                    wx = FilterExpressions.WordExpression( result )
+            wx = create_dependency_result_expression( spec.attrs )
 
             for val in spec.value.strip().split():
                 t.addDependency( val, wx )
+
+    specL = vspecs.getSpecList("testname") + vspecs.getSpecList("name")
+    for spec in specL:
+
+        name,attrD = parse_test_name_value( spec.value, spec.lineno )
+        if name == tname:
+
+            wx = create_dependency_result_expression( attrD )
+
+            for depname in attrD.get( 'depends on', '' ).split():
+                t.addDependency( depname, wx )
+
+
+def create_dependency_result_expression( attrs ):
+    ""
+    wx = None
+
+    if attrs != None and 'result' in attrs:
+
+        result = attrs['result'].strip()
+
+        if result == '*':
+            wx = FilterExpressions.WordExpression()
+        else:
+            wx = FilterExpressions.WordExpression( result )
+
+    return wx
 
 
 def testname_ok_scr( attrs, tname ):

@@ -16,6 +16,8 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
+import libvvtest.TestSpecCreator as TestSpecCreator
+from libvvtest.TestSpecError import TestSpecError
 
 class script_tests( vtu.vvtestTestCase ):
 
@@ -39,12 +41,24 @@ class script_tests( vtu.vvtestTestCase ):
             #VVT: name=world
             echo "hello from the hello/world test script"
             """ )
+        util.writescript( 'namerr1.vvt', """
+            #VVT: name (foo=bar) = world
+            assert False
+            """ )
+        util.writescript( 'namerr2.vvt', """
+            #VVT: name = world mars
+            assert False
+            """ )
         time.sleep(1)
 
         vrun = vtu.runvvtest()
         vrun.assertCounts( total=1, npass=1 )
+
         assert vrun.getTestIds() == [ 'world' ]
         assert vrun.countGrepLogs( 'hello from the hello/world test script' ) == 1
+
+        assert vrun.countLines( 'skipping *namerr1.vvt*no attr' ) == 1
+        assert vrun.countLines( 'skipping *namerr2.vvt*invalid' ) == 1
 
     def test_that_python_is_always_used_to_run_non_executable_scripts(self):
         ""
@@ -414,6 +428,71 @@ class script_tests( vtu.vvtestTestCase ):
 
             fn = util.globfile( 'TestResults*/another/file3.txt' )
             assert not os.path.islink( fn )
+
+    def test_parsing_test_name_specifications(self):
+        ""
+        nm,aD = TestSpecCreator.parse_test_name_value( 'testA', 'info' )
+        assert nm == 'testA' and len(aD) == 0
+
+        self.assertRaises( TestSpecError,
+            TestSpecCreator.parse_test_name_value, 'testA testB', 'info' )
+
+        nm,aD = TestSpecCreator.parse_test_name_value( '', 'info' )
+        assert nm == '' and len(aD) == 0
+
+        nm,aD = TestSpecCreator.parse_test_name_value( 'testA # comment', 'info' )
+        assert nm == 'testA' and len(aD) == 0
+
+        nm,aD = TestSpecCreator.parse_test_name_value( 'testA ()', 'info' )
+        assert nm == 'testA' and len(aD) == 0
+
+        self.assertRaises( TestSpecError,
+            TestSpecCreator.parse_test_name_value, 'testA (foo=bar)', 'info' )
+
+        self.assertRaises( TestSpecError,
+            TestSpecCreator.parse_test_name_value,
+                'testA (depends on=testB ', 'info' )
+
+        nm,aD = TestSpecCreator.parse_test_name_value(
+                    'testA (depends on=testB)', 'info' )
+        assert nm == 'testA' and aD == { 'depends on':'testB' }
+
+        nm,aD = TestSpecCreator.parse_test_name_value(
+                    'testA (depends on=testB, result="*")', 'info' )
+        assert nm == 'testA' and aD == { 'depends on':'testB', 'result':'*' }
+
+        nm,aD = TestSpecCreator.parse_test_name_value(
+                    'testA (result="*", depends on=testB)', 'info' )
+        assert nm == 'testA' and aD == { 'depends on':'testB', 'result':'*' }
+
+        nm,aD = TestSpecCreator.parse_test_name_value(
+                    'testA (depends on=testB testC, result=pass)', 'info' )
+        assert nm == 'testA' and aD == { 'depends on':'testB testC',
+                                         'result':'pass' }
+
+    def test_combining_test_name_spec_with_dependency_spec(self):
+        ""
+        util.writefile( 'hello.vvt', """
+            #VVT: testname = world (depends on=mars, result=diff)
+            import vvtest_util as vvt
+            print ( 'DEPS = '+' '.join( vvt.DEPDIRS ) )
+            """ )
+        util.writefile( 'mars.vvt', """
+            import sys
+            import vvtest_util as vvt
+            sys.exit( vvt.diff_exit_status )
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=2, npass=1, diff=1 )
+
+        assert vrun.getTestIds() == [ 'mars', 'world' ]
+
+        lineL = vrun.greplogs( 'DEPS =' )
+        assert len(lineL) == 1
+        depd = lineL[0].split( 'DEPS =', 1 )[1].strip()
+        assert os.path.samefile( depd, vrun.resultsDir()+'/mars' )
 
 
 ########################################################################

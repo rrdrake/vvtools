@@ -168,7 +168,6 @@ class ScriptReader:
         Turns the list of string specifications into keywords with attributes
         and content.
         """
-        ppat = ScriptReader.ATTRPAT
         kpat = ScriptReader.DEFPAT
 
         for info,line in self.speclineL:
@@ -179,46 +178,17 @@ class ScriptReader:
             if m:
                 key = line[:m.end()-1].strip()
                 rest = line[m.end()-1:]
-                if rest and rest[0] == '(':
-                    # extract attribute(s)
-                    m = ppat.match( rest )
-                    if m:
-                        attrs = rest[:m.end()]
-                        attrs = attrs.lstrip('(').rstrip(')').strip()
-                        rest = rest[m.end():].strip()
-                        if rest and rest[0] in ':=':
-                            val = rest[1:]
-                        elif rest:
-                            raise TestSpecError( \
-                              'extra text following attributes, ' + info )
-                    else:
-                        raise TestSpecError( \
-                              'malformed attribute specification, ' + info )
-                else:
+
+                attrs,val = check_parse_attributes_section( rest, info )
+                if attrs == None:
                     val = rest[1:].strip()
+
             else:
                 key = line.strip()
 
             if not key:
                 raise TestSpecError( \
                         'missing or invalid specification keyword, ' + info )
-
-            if attrs:
-                # process the attributes into a dictionary
-                D = {}
-                for s in attrs.split(','):
-                    s = s.strip().strip('"').strip()
-                    i = s.find( '=' )
-                    if i == 0:
-                        raise TestSpecError( \
-                                'invalid attribute specification, ' + info )
-                    elif i > 0:
-                        n = s[:i]
-                        v = s[i+1:].strip().strip('"')
-                        D[n] = v
-                    elif s:
-                        D[s] = ''
-                attrs = D
 
             if key == 'insert directive file':
                 insert_specs = self._parse_insert_file( info, val )
@@ -247,6 +217,72 @@ class ScriptReader:
                             'directive failed: ' + str( sys.exc_info()[1] ) )
 
         return inclreader.getSpecList()
+
+
+def split_attr_match( matchobj, origstr ):
+    ""
+    attrs = origstr[:matchobj.end()]
+    attrs = attrs.lstrip('(').rstrip(')').strip()
+
+    therest = origstr[matchobj.end():].strip()
+
+    return attrs, therest
+
+
+def parse_attr_string_into_dict( attrstr, info ):
+    ""
+    D = {}
+    for s in attrstr.split(','):
+        s = s.strip().strip('"').strip()
+        i = s.find( '=' )
+        if i == 0:
+            raise TestSpecError( \
+                    'invalid attribute specification, ' + info )
+        elif i > 0:
+            n = s[:i]
+            v = s[i+1:].strip().strip('"')
+            D[n] = v
+        elif s:
+            D[s] = ''
+
+    return D
+
+
+def check_parse_attributes_section( a_string, file_and_lineno ):
+    ""
+    attrD = None
+    tail = None
+
+    attrs = None
+    a_string = a_string.strip()
+
+    if a_string and a_string[0] == '(':
+
+        m = ScriptReader.ATTRPAT.match( a_string )
+        if m:
+            attrs,rest = split_attr_match( m, a_string )
+
+            if rest:
+                if rest[0] in ':=':
+                    tail = rest[1:]
+                elif rest[0] == '#':
+                    tail = ''
+                else:
+                    raise TestSpecError( \
+                        'extra text following attributes, ' + file_and_lineno )
+            else:
+                tail = ''
+        else:
+            raise TestSpecError( \
+                  'malformed attribute specification, ' + file_and_lineno )
+
+    else:
+        tail = a_string
+
+    if attrs != None:
+        attrD = parse_attr_string_into_dict( attrs, file_and_lineno )
+
+    return attrD, tail
 
 
 class FileLineReader:
