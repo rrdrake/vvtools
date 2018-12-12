@@ -639,12 +639,20 @@ class orphan_branches( unittest.TestCase ):
 
     def test_create_orphan_branch(self):
         ""
+        self.run_create_orphan_branch_test()
+
+    def test_clone_master_only_then_create_orphan_branch(self):
+        ""
+        self.run_create_orphan_branch_test( 'master' )
+
+    def run_create_orphan_branch_test(self, initial_branchname=None):
+        ""
         url = create_bare_repo_with_topic_branch()
         util.writefile( 'readme.txt', 'this is adam' )
         time.sleep(1)
 
         git = GitInterface()
-        git.clone( url, 'ex' )
+        git.clone( url, 'ex', initial_branchname )
         git.createRemoteOrphanBranch( 'loner', 'readme.txt', 'start fresh' )
 
         assert git.currentBranch() == 'loner'
