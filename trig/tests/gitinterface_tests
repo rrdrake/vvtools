@@ -14,6 +14,7 @@ from os.path import abspath
 import time
 import shutil
 import glob
+import filecmp
 import unittest
 
 import trigtestutils as trigutil
@@ -22,6 +23,8 @@ from testutils import print3
 
 from gitinterface import GitInterfaceError, GitInterface
 from gitinterface import set_environ
+from gitinterface import copy_directory_contents_to_current_directory
+from gitinterface import copy_path_to_current_directory
 
 from command import Command, CommandException
 
@@ -571,6 +574,111 @@ class pulling( unittest.TestCase ):
 
         assert git1.currentBranch() == 'master'
         assert util.readfile( 'ex1/file.txt' ).strip() == 'also modified contents'
+
+
+class orphan_branches( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+    def test_copying_directory_contents(self):
+        ""
+        util.writefile( 'subdir/myfile.txt', 'hello my file' )
+        src = os.path.abspath( 'subdir' )
+        os.mkdir( 'destdir' )
+        util.writefile( 'subdir/adir/another.txt', 'what' )
+        os.symlink( 'myfile.txt', 'subdir/linkfile' )
+        time.sleep(1)
+
+        os.chdir( 'destdir' )
+        fL = copy_directory_contents_to_current_directory( src )
+
+        time.sleep(1)
+
+        fL.sort()
+        assert fL == [ 'adir', 'linkfile', 'myfile.txt' ]
+        dstL = os.listdir( '.' )
+        dstL.sort()
+        assert dstL == fL
+        assert filecmp.cmp( '../subdir/myfile.txt', 'myfile.txt' )
+        assert filecmp.cmp( '../subdir/adir/another.txt', 'adir/another.txt' )
+
+    def test_copy_file_or_directory_to_current_directory(self):
+        ""
+        util.writefile( 'subdir/myfile.txt', 'hello my file' )
+        src = os.path.abspath( 'subdir' )
+        os.mkdir( 'destdir1' ) ; d1 = os.path.abspath( 'destdir1' )
+        os.mkdir( 'destdir2' ) ; d2 = os.path.abspath( 'destdir2' )
+        os.mkdir( 'destdir3' ) ; d3 = os.path.abspath( 'destdir3' )
+        util.writefile( 'subdir/adir/another.txt', 'what' )
+        os.symlink( 'myfile.txt', 'subdir/linkfile' )
+        time.sleep(1)
+
+        cwd = os.getcwd()
+
+        os.chdir( d1 )
+        fL1 = copy_path_to_current_directory( src+'/adir' )
+
+        os.chdir( d2 )
+        fL2 = copy_path_to_current_directory( src+'/myfile.txt' )
+
+        os.chdir( d3 )
+        fL3 = copy_path_to_current_directory( src+'/linkfile' )
+
+        time.sleep(1)
+
+        os.chdir( cwd )
+        assert util.readfile( d1+'/another.txt' ).strip() == 'what'
+        assert fL1 == [ 'another.txt' ]
+        assert util.readfile( d2+'/myfile.txt' ).strip() == 'hello my file'
+        assert fL2 == [ 'myfile.txt' ]
+        assert os.path.islink( d3+'/linkfile' )
+        assert os.readlink( d3+'/linkfile' ) == 'myfile.txt'
+        assert fL3 == [ 'linkfile' ]
+
+    def test_create_orphan_branch(self):
+        ""
+        url = create_bare_repo_with_topic_branch()
+        util.writefile( 'readme.txt', 'this is adam' )
+        time.sleep(1)
+
+        git = GitInterface()
+        git.clone( url, 'ex' )
+        git.createRemoteOrphanBranch( 'loner', 'readme.txt', 'start fresh' )
+
+        assert git.currentBranch() == 'loner'
+        assert 'loner' in git.listRemoteBranches()
+        fL = glob.glob( 'ex/*' )
+        assert len( fL ) == 1 and fL[0] == 'ex/readme.txt'
+
+        git.checkoutBranch( 'master' )
+        assert not os.path.exists( 'ex/readme.txt' )
+        assert util.readfile( 'ex/file.txt' ).strip() == 'file contents'
+
+        git2 = GitInterface()
+        git2.clone( url, 'ex2', branch='loner' )
+        fL = glob.glob( 'ex2/*' )
+        assert len( fL ) == 1 and fL[0] == 'ex2/readme.txt'
+
+    def test_orphan_branch_creation_errors(self):
+        ""
+        url = create_bare_repo_with_topic_branch()
+        push_file_to_repo( url, 'file.txt', 'new contents' )
+
+        util.writefile( 'readme.txt', 'this is adam' )
+        time.sleep(1)
+
+        git = GitInterface( url )
+        checkout_to_previous_sha1( git.getRootPath() )
+
+        self.assertRaises( GitInterfaceError,
+            git.createRemoteOrphanBranch, 'loner', 'readme.txt', 'start it' )
+
+        git.clone( url, 'ex2' )
+        assert git.currentBranch() == 'master'
+        self.assertRaises( GitInterfaceError,
+            git.createRemoteOrphanBranch, 'topic', 'readme.txt', 'start it' )
 
 
 ###########################################################################

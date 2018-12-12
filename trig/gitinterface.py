@@ -11,6 +11,8 @@ import os
 from os.path import abspath, normpath
 import time
 import pipes
+import shutil
+import tempfile
 
 from command import Command, CommandException
 
@@ -215,6 +217,38 @@ class GitInterface:
         self.run( 'push -u origin', branchname )
         self.run( 'merge', curbranch )
 
+    def createRemoteOrphanBranch(self, branchname, filepath, message):
+        """
+        Create and push a branch containing a copy of the given path
+        (a single file or all files in a directory), with the given intial
+        commit message.  It will share no history with any other branch.
+        """
+        if not self.currentBranch():
+            raise GitInterfaceError( 'must currently be on a branch' )
+
+        if branchname in self.listRemoteBranches():
+            raise GitInterfaceError(
+                    'branch name already exists on remote: '+branchname )
+
+        # newer versions of git have a git checkout --orphan option; the
+        # implementation here creates a temporary repo with an initial
+        # commit then fetches that into the current repository
+
+        filepath = os.path.abspath( filepath )
+
+        tmpdir = tempfile.mkdtemp( '.gitinterface' )
+        try:
+            with check_make_directory( tmpdir ):
+                create_fresh_repo_with_these_files(
+                                    self.gitexe, filepath, message )
+
+            self.run( 'fetch', tmpdir, 'master:'+branchname )
+            self.run( 'checkout', branchname )
+            self.run( 'push -u origin', branchname )
+
+        finally:
+            shutil.rmtree( tmpdir )
+
     def deleteRemoteBranch(self, branchname):
         ""
         curbranch = self.currentBranch()
@@ -348,6 +382,53 @@ def split_and_create_directory( repo_path ):
         os.makedirs( path )
 
     return path, name
+
+
+def copy_path_to_current_directory( filepath ):
+    ""
+    if os.path.isdir( filepath ):
+        fL = copy_directory_contents_to_current_directory( filepath )
+    else:
+        bn = os.path.basename( filepath )
+
+        if os.path.islink( filepath ):
+            os.symlink( os.readlink( filepath ), bn )
+        else:
+            shutil.copyfile( filepath, bn )
+
+        fL = [ bn ]
+
+    return fL
+
+
+def copy_directory_contents_to_current_directory( dirpath ):
+    ""
+    fL = []
+
+    for fn in os.listdir( dirpath ):
+        if fn not in ['.git','.svn']:
+
+            fL.append( fn )
+
+            src = os.path.join( dirpath, fn )
+            if os.path.islink( src ):
+                os.symlink( os.readlink(src), fn )
+            elif os.path.isdir( src ):
+                shutil.copytree( src, fn, symlinks=True )
+            else:
+                shutil.copy( src, fn )
+
+    return fL
+
+
+def create_fresh_repo_with_these_files( gitexe, filepath, message ):
+    ""
+    Command( '$gitexe init' ).run()
+
+    fL = copy_path_to_current_directory( filepath )
+
+    cmd = Command( '$gitexe add' ).escape( *fL ).run()
+    cmd = Command( '$gitexe commit -m').escape( message ).run()
 
 
 def print3( *args ):
