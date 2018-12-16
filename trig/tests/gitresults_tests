@@ -1,0 +1,131 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+from os.path import abspath
+import time
+import unittest
+
+import trigtestutils as trigutil
+import testutils as util
+from testutils import print3
+
+from gitresults import ResultsHandler
+from gitresults import create_orphan_branch, branch_name_and_directory
+from gitinterface import GitInterface
+
+
+
+class the_tests( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+        self.url = trigutil.create_local_bare_repository( 'subdir' )
+        trigutil.push_file_to_repo( self.url, 'file.txt', 'file contents' )
+        time.sleep(1)
+
+    def test_create_orphan_branch(self):
+        ""
+        git = GitInterface()
+        git.clone( self.url, branch='master' )
+
+        create_orphan_branch( git, 'resbranch', 'resdir' )
+
+        assert git.currentBranch() == 'resbranch'
+        assert os.path.isfile( 'example/resdir/.create' )
+        assert not os.path.exists( 'example/file.txt' )
+
+        git2 = GitInterface()
+        git2.clone( self.url, 'ex', 'resbranch' )
+        assert os.path.isfile( 'ex/resdir/.create' )
+        assert not os.path.exists( 'ex/file.txt' )
+
+    def add_first_set_of_results(self):
+        ""
+        git = GitInterface()
+        git.clone( self.url, branch='master' )
+
+        res = ResultsHandler( git )
+        branch,subdir = res.setNamingScheme()
+        rdir = res.createResultsDirectory()
+
+        util.writefile( rdir+'/data1.txt', 'data file one' )
+        util.writefile( rdir+'/data2.txt', 'data file two' )
+
+        res.pushResults( 'my first results' )
+
+        # check that the branch got pushed
+        git = GitInterface()
+        git.clone( self.url, 'check', branch )
+        assert not os.path.exists( 'check/file.txt' )
+        dat = util.readfile( 'check/'+subdir+'/data1.txt' )
+        assert dat.strip() == 'data file one'
+        dat = util.readfile( 'check/'+subdir+'/data2.txt' )
+        assert dat.strip() == 'data file two'
+
+    def test_add_first_set_of_results(self):
+        ""
+        self.add_first_set_of_results()
+
+    def test_add_second_set_of_results(self):
+        ""
+        self.add_first_set_of_results()
+
+        git = GitInterface()
+        git.clone( self.url, '2nd', 'master' )
+
+        res = ResultsHandler( git )
+        branch,subdir = res.setNamingScheme()
+        rdir = res.createResultsDirectory()
+
+        util.writefile( rdir+'/data3.txt', 'data file three' )
+        util.writefile( rdir+'/data4.txt', 'data file four' )
+
+        res.pushResults( 'my second results' )
+
+        git2 = GitInterface()
+        git2.clone( self.url, 'check2nd', branch )
+        assert not os.path.exists( 'check/file.txt' )
+        dat = util.readfile( 'check2nd/'+subdir+'/data1.txt' )
+        assert dat.strip() == 'data file one'
+        dat = util.readfile( 'check2nd/'+subdir+'/data2.txt' )
+        assert dat.strip() == 'data file two'
+        dat = util.readfile( 'check2nd/'+subdir+'/data3.txt' )
+        assert dat.strip() == 'data file three'
+        dat = util.readfile( 'check2nd/'+subdir+'/data4.txt' )
+        assert dat.strip() == 'data file four'
+
+
+class naming_schemes( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test( cleanout=False )
+
+    def test_default_uses_year_month_for_branch_and_day_hour_for_directory(self):
+        ""
+        tm1 = time.time()
+        bn,sb = branch_name_and_directory()
+
+        ym = time.strftime( "%Y_%m", time.localtime(tm1) )
+        assert ym in bn
+        dh = time.strftime( "%d_%H", time.localtime(tm1) )
+        assert dh in sb
+
+        tm2 = tm1 - 60*24*60*60
+        bn2,sb2 = branch_name_and_directory( tm2 )
+
+        assert bn2 < bn
+
+
+#######################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
