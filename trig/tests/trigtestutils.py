@@ -10,6 +10,7 @@ sys.excepthook = sys.__excepthook__
 import os
 import time
 import subprocess
+import shutil
 import unittest
 
 import testutils as util
@@ -73,3 +74,106 @@ def find_process_in_list( proclist, pid ):
         if pid == L[1]:
             return L
     return None
+
+
+def create_bare_repo_with_topic_branch():
+    ""
+    url = create_local_bare_repository( 'subdir' )
+    push_file_to_repo( url, 'file.txt', 'file contents' )
+    push_new_branch_with_file( url, 'topic', 'file.txt', 'new contents' )
+
+    return url
+
+
+def create_local_bare_repository( subdir='.', name='example' ):
+    ""
+    if not os.path.exists( subdir ):
+        os.makedirs( subdir )
+
+    cwd = os.getcwd()
+    os.chdir( subdir )
+
+    try:
+        if not name.endswith( '.git' ):
+            name += '.git'
+
+        util.runcmd( 'git init --bare '+name )
+
+        url = 'file://'+os.getcwd()+'/'+name
+
+    finally:
+        os.chdir( cwd )
+
+    return url
+
+
+def push_file_to_repo( url, filename, filecontents ):
+    ""
+    os.mkdir( 'addfiletemp' )
+    cwd = os.getcwd()
+    os.chdir( 'addfiletemp' )
+    try:
+        util.runcmd( 'git clone '+url )
+
+        pL = os.listdir( '.' )
+        assert len( pL ) == 1
+        os.chdir( pL[0] )
+
+        util.writefile( filename, filecontents )
+
+        util.runcmd( 'git add '+filename )
+        util.runcmd( 'git commit -m "push_file_to_repo '+time.ctime()+'"' )
+        util.runcmd( 'git push origin master' )
+
+    finally:
+        os.chdir( cwd )
+
+    shutil.rmtree( 'addfiletemp' )
+
+
+def push_new_branch_with_file( url, branchname, filename, filecontents ):
+    ""
+    os.mkdir( 'addfiletemp' )
+    cwd = os.getcwd()
+    os.chdir( 'addfiletemp' )
+    try:
+        util.runcmd( 'git clone '+url )
+
+        pL = os.listdir( '.' )
+        assert len( pL ) == 1
+        os.chdir( pL[0] )
+
+        util.runcmd( 'git checkout -b '+branchname )
+
+        util.writefile( filename, filecontents )
+
+        util.runcmd( 'git add '+filename )
+        util.runcmd( 'git commit -m "push_new_branch_with_file ' + \
+                                                        time.ctime()+'"' )
+        util.runcmd( 'git push -u origin '+branchname )
+
+    finally:
+        os.chdir( cwd )
+
+    shutil.rmtree( 'addfiletemp' )
+
+
+def create_local_branch( local_directory, branchname ):
+    ""
+    cwd = os.getcwd()
+    os.chdir( local_directory )
+    try:
+        util.runcmd( 'git checkout -b '+branchname )
+    finally:
+        os.chdir( cwd )
+
+
+def checkout_to_previous_sha1( directory ):
+    ""
+    cwd = os.getcwd()
+    os.chdir( directory )
+    try:
+        util.runcmd( 'git checkout HEAD^1' )
+
+    finally:
+        os.chdir( cwd )

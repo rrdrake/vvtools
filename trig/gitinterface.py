@@ -34,7 +34,15 @@ class GitInterface:
 
     def getRootPath(self):
         ""
-        return self.root
+        if self.root:
+            return self.root
+
+        try:
+            root = self.runout( 'rev-parse --show-toplevel' ).strip()
+        except CommandException:
+            raise GitInterfaceError( 'could not determine root '
+                                     '(are you in a Git repo?)' )
+        return root
 
     def create(self, directory=None, bare=False):
         """
@@ -179,13 +187,7 @@ class GitInterface:
             elif branchname in self.listBranches( remotes=True ):
                 self.run( 'checkout --track origin/'+branchname )
             elif branchname in self.listRemoteBranches():
-                self.run( 'fetch origin' )
-                try:
-                    self.run( 'checkout --track origin/'+branchname )
-                except CommandException:
-                    raise GitInterfaceError( 'branch appears on remote but ' + \
-                        'fetch plus checkout failed (maybe ' + \
-                        'fetch pattern is too restrictive): '+branchname )
+                self._fetch_then_checkout_branch( branchname )
             else:
                 raise GitInterfaceError( 'branch does not exist: '+branchname )
 
@@ -217,11 +219,11 @@ class GitInterface:
         self.run( 'push -u origin', branchname )
         self.run( 'merge', curbranch )
 
-    def createRemoteOrphanBranch(self, branchname, filepath, message):
+    def createRemoteOrphanBranch(self, branchname, message, path0, *paths):
         """
-        Create and push a branch containing a copy of the given path
-        (a single file or all files in a directory), with the given intial
-        commit message.  It will share no history with any other branch.
+        Create and push a branch containing a copy of the given paths
+        (files and/or directories), with the given intial commit message.
+        It will share no history with any other branch.
         """
         if not self.currentBranch():
             raise GitInterfaceError( 'must currently be on a branch' )
@@ -234,17 +236,17 @@ class GitInterface:
         # implementation here creates a temporary repo with an initial
         # commit then fetches that into the current repository
 
-        filepath = os.path.abspath( filepath )
+        pathL = [ os.path.abspath(p) for p in (path0,)+paths ]
 
         tmpdir = tempfile.mkdtemp( '.gitinterface' )
         try:
-            with check_make_directory( tmpdir ):
-                create_fresh_repo_with_these_files(
-                                    self.gitexe, filepath, message )
+            with change_directory( tmpdir ):
+                create_repo_with_these_files( self.gitexe, message, pathL )
 
-            self.run( 'fetch', tmpdir, 'master:'+branchname )
-            self.run( 'checkout', branchname )
-            self.run( 'push -u origin', branchname )
+            with change_directory( self.getRootPath() ):
+                self.run( 'fetch', tmpdir, 'master:'+branchname )
+                self.run( 'checkout', branchname )
+                self.run( 'push -u origin', branchname )
 
         finally:
             shutil.rmtree( tmpdir )
@@ -273,7 +275,7 @@ class GitInterface:
     def _full_clone(self, url, name, directory):
         ""
         if directory:
-            with check_make_directory( directory ):
+            with make_and_change_directory( directory ):
                 self.run( 'clone', url, '.' )
                 self.root = os.getcwd()
         else:
@@ -286,11 +288,28 @@ class GitInterface:
         if not directory:
             directory = name
 
-        with check_make_directory( directory ):
+        with make_and_change_directory( directory ):
             self.run( 'init' )
             self.root = os.getcwd()
             self.run( 'remote add -f -t', branch, '-m', branch, 'origin', url )
             self.run( 'checkout', branch )
+
+    def _fetch_then_checkout_branch(self, branchname):
+        ""
+        self.run( 'fetch origin' )
+        try:
+            self.run( 'checkout --track origin/'+branchname )
+        except CommandException:
+            try:
+                # try adding the branch in the fetch list
+                self.run( 'config --add remote.origin.fetch ' + \
+                                '+refs/heads/'+branchname + \
+                                ':refs/remotes/origin/'+branchname )
+                self.run( 'fetch origin' )
+                self.run( 'checkout --track origin/'+branchname )
+            except CommandException:
+                raise GitInterfaceError( 'branch appears on remote but ' + \
+                                'fetch plus checkout failed: '+branchname )
 
     def _pop_option_values(self, options):
         ""
@@ -322,7 +341,7 @@ class GitInterface:
 
 ########################################################################
 
-class check_make_directory:
+class change_directory:
 
     def __init__(self, directory):
         ""
@@ -331,16 +350,22 @@ class check_make_directory:
 
     def __enter__(self):
         ""
-        if not os.path.exists( self.directory ):
-            os.makedirs( self.directory )
-
         assert os.path.isdir( self.directory )
-
         os.chdir( self.directory )
 
     def __exit__(self, type, value, traceback):
         ""
         os.chdir( self.cwd )
+
+
+class make_and_change_directory( change_directory ):
+
+    def __enter__(self):
+        ""
+        if not os.path.exists( self.directory ):
+            os.makedirs( self.directory )
+
+        change_directory.__enter__( self )
 
 
 class set_environ:
@@ -386,46 +411,26 @@ def split_and_create_directory( repo_path ):
 
 def copy_path_to_current_directory( filepath ):
     ""
-    if os.path.isdir( filepath ):
-        fL = copy_directory_contents_to_current_directory( filepath )
+    bn = os.path.basename( filepath )
+
+    if os.path.islink( filepath ):
+        os.symlink( os.readlink( filepath ), bn )
+    elif os.path.isdir( filepath ):
+        shutil.copytree( filepath, bn, symlinks=True )
     else:
-        bn = os.path.basename( filepath )
+        shutil.copyfile( filepath, bn )
 
-        if os.path.islink( filepath ):
-            os.symlink( os.readlink( filepath ), bn )
-        else:
-            shutil.copyfile( filepath, bn )
-
-        fL = [ bn ]
-
-    return fL
+    return bn
 
 
-def copy_directory_contents_to_current_directory( dirpath ):
-    ""
-    fL = []
-
-    for fn in os.listdir( dirpath ):
-        if fn not in ['.git','.svn']:
-
-            fL.append( fn )
-
-            src = os.path.join( dirpath, fn )
-            if os.path.islink( src ):
-                os.symlink( os.readlink(src), fn )
-            elif os.path.isdir( src ):
-                shutil.copytree( src, fn, symlinks=True )
-            else:
-                shutil.copy( src, fn )
-
-    return fL
-
-
-def create_fresh_repo_with_these_files( gitexe, filepath, message ):
+def create_repo_with_these_files( gitexe, message, pathL ):
     ""
     Command( '$gitexe init' ).run()
 
-    fL = copy_path_to_current_directory( filepath )
+    fL = []
+    for pn in pathL:
+        fn = copy_path_to_current_directory( pn )
+        fL.append( fn )
 
     cmd = Command( '$gitexe add' ).escape( *fL ).run()
     cmd = Command( '$gitexe commit -m').escape( message ).run()

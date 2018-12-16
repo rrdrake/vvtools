@@ -23,7 +23,6 @@ from testutils import print3
 
 from gitinterface import GitInterfaceError, GitInterface
 from gitinterface import set_environ
-from gitinterface import copy_directory_contents_to_current_directory
 from gitinterface import copy_path_to_current_directory
 
 from command import Command, CommandException
@@ -138,8 +137,8 @@ class create_and_clone( unittest.TestCase ):
 
         with set_environ( https_proxy=None, HTTPS_PROXY=None ):
 
-            url = create_local_bare_repository( 'subdir' )
-            push_file_to_repo( url, 'file.txt', 'file contents' )
+            url = trigutil.create_local_bare_repository( 'subdir' )
+            trigutil.push_file_to_repo( url, 'file.txt', 'file contents' )
 
             assert 'https_proxy' not in os.environ
             assert 'HTTPS_PROXY' not in os.environ
@@ -165,8 +164,8 @@ class create_and_clone( unittest.TestCase ):
 
     def test_clone_a_local_repository(self):
         ""
-        url = create_local_bare_repository( 'subdir' )
-        push_file_to_repo( url, 'file.txt', 'file contents' )
+        url = trigutil.create_local_bare_repository( 'subdir' )
+        trigutil.push_file_to_repo( url, 'file.txt', 'file contents' )
 
         git = GitInterface( clone_from=url )
         time.sleep(1)
@@ -176,7 +175,7 @@ class create_and_clone( unittest.TestCase ):
 
     def test_clone_master_branch_only(self):
         ""
-        url = create_bare_repo_with_topic_branch()
+        url = trigutil.create_bare_repo_with_topic_branch()
 
         # default clone first; a checkout of the branch should succeed
         git = GitInterface()
@@ -194,7 +193,7 @@ class create_and_clone( unittest.TestCase ):
 
     def test_clone_into_a_subdirectory(self):
         ""
-        url = create_bare_repo_with_topic_branch()
+        url = trigutil.create_bare_repo_with_topic_branch()
 
         git1 = GitInterface()
         git1.clone( url, directory='ex1' )
@@ -208,6 +207,31 @@ class create_and_clone( unittest.TestCase ):
         fL = glob.glob( 'ex*/.git/config' )
         fL.sort()
         assert fL == ['ex1/.git/config', 'ex2/.git/config', 'ex3/.git/config']
+
+    def test_getting_root_directory_without_clone(self):
+        ""
+        url = trigutil.create_bare_repo_with_topic_branch()
+        git1 = GitInterface()
+        git1.clone( url, directory='ex1' )
+        util.writefile( 'ex1/subdir/afile', 'my file' )
+        git1.add( 'subdir' )
+        git1.commit( 'add subdir' )
+        git1.push()
+
+        GitInterface( url )
+
+        root = os.path.abspath( 'example' )
+
+        git = GitInterface()
+
+        os.chdir( 'example' )
+        assert os.path.samefile( git.getRootPath(), root )
+
+        os.chdir( 'subdir' )
+        assert os.path.samefile( git.getRootPath(), root )
+
+        os.chdir( '/' )
+        self.assertRaises( GitInterfaceError, git.getRootPath )
 
 
 class commit_and_push( unittest.TestCase ):
@@ -227,8 +251,8 @@ class commit_and_push( unittest.TestCase ):
 
     def test_commit_and_push_a_new_file(self):
         ""
-        url = create_local_bare_repository( 'sdir', 'myrepo' )
-        push_file_to_repo( url, 'file.txt', 'file contents' )
+        url = trigutil.create_local_bare_repository( 'sdir', 'myrepo' )
+        trigutil.push_file_to_repo( url, 'file.txt', 'file contents' )
         time.sleep(1)
 
         git = GitInterface( clone_from=url )
@@ -246,6 +270,32 @@ class commit_and_push( unittest.TestCase ):
         assert len( util.grepfiles( 'file', 'myrepo/file.txt' ) ) == 1
         assert len( util.grepfiles( 'another', 'myrepo/another.txt' ) ) == 1
 
+    def test_add_commit_push_every_changed_file_in_a_directory(self):
+        ""
+        url = trigutil.create_bare_repo_with_topic_branch()
+
+        git = GitInterface( url )
+
+        util.writefile( 'example/adir/afile.txt', 'whatever' )
+        git.add( 'adir/afile.txt' )
+        git.commit( 'create directory' )
+        git.push()
+
+        util.writefile( 'example/adir/afile.txt', 'changed' )
+        util.writefile( 'example/adir/newfile.txt', 'brand spanking new' )
+        util.writefile( 'example/adir/deep/file.txt', 'further down' )
+        time.sleep(1)
+
+        git.add( 'adir' )
+        git.commit( 'add everything under adir' )
+        git.push()
+
+        time.sleep(1)
+        git2 = GitInterface()
+        git2.clone( url, 'check' )
+        assert os.path.isfile( 'check/adir/deep/file.txt' )
+        assert util.readfile( 'check/adir/afile.txt' ).strip() == 'changed'
+
 
 class branches( unittest.TestCase ):
 
@@ -253,7 +303,7 @@ class branches( unittest.TestCase ):
         ""
         util.setup_test()
 
-        self.url = create_bare_repo_with_topic_branch()
+        self.url = trigutil.create_bare_repo_with_topic_branch()
         time.sleep(1)
 
     def test_listing_branches(self):
@@ -302,10 +352,10 @@ class branches( unittest.TestCase ):
 
     def test_current_branch_returns_None_if_in_detached_HEAD_state(self):
         ""
-        push_file_to_repo( self.url, 'file.txt', 'new contents' )
+        trigutil.push_file_to_repo( self.url, 'file.txt', 'new contents' )
 
         git = GitInterface( self.url )
-        checkout_to_previous_sha1( git.getRootPath() )
+        trigutil.checkout_to_previous_sha1( git.getRootPath() )
         assert git.currentBranch() == None
 
     def test_current_branch_fails_if_done_right_after_git_init(self):
@@ -326,7 +376,8 @@ class branches( unittest.TestCase ):
         assert git.listBranches( remotes=True ) == [ 'master', 'topic' ]
         assert git.listRemoteBranches() == [ 'master', 'topic' ]
 
-        push_new_branch_with_file( self.url, 'newtopic', 'file.txt', 'redo' )
+        trigutil.push_new_branch_with_file( self.url, 'newtopic',
+                                            'file.txt', 'redo' )
         time.sleep(1)
 
         assert git.listBranches() == [ 'master' ]
@@ -336,12 +387,6 @@ class branches( unittest.TestCase ):
         assert git.currentBranch() == 'newtopic'
         assert git.listBranches( remotes=True ) == [ 'master', 'newtopic', 'topic' ]
         assert git.listRemoteBranches() == [ 'master', 'newtopic', 'topic' ]
-
-    def test_cannot_checkout_branches_in_a_single_branch_clone(self):
-        ""
-        git = GitInterface()
-        git.clone( self.url, branch='master' )
-        self.assertRaises( GitInterfaceError, git.checkoutBranch, 'topic' )
 
     def test_exception_if_checkout_branch_name_does_not_exist(self):
         ""
@@ -360,9 +405,8 @@ class branches( unittest.TestCase ):
         git.checkoutBranch( 'nasa' )
         assert util.readfile( 'check/file.txt' ).strip() == 'file contents'
 
-    def test_creating_a_branch_and_pushing_a_change(self):
+    def create_a_branch_and_push_a_change(self, git):
         ""
-        git = GitInterface( self.url )
         git.createRemoteBranch( 'nasa' )
         util.writefile( 'example/newfile.txt', 'new contents' )
         git.add( 'newfile.txt' )
@@ -373,6 +417,17 @@ class branches( unittest.TestCase ):
         git.clone( self.url, 'check' )
         git.checkoutBranch( 'nasa' )
         assert util.readfile( 'check/newfile.txt' ).strip() == 'new contents'
+
+    def test_creating_a_branch_and_pushing_a_change(self):
+        ""
+        git = GitInterface( self.url )
+        self.create_a_branch_and_push_a_change( git )
+
+    def test_clone_specific_branch_then_create_a_branch_and_push(self):
+        ""
+        git = GitInterface()
+        git.clone( self.url, branch='master' )
+        self.create_a_branch_and_push_a_change( git )
 
     def test_create_branch_does_not_push_local_changes(self):
         ""
@@ -419,7 +474,7 @@ class branches( unittest.TestCase ):
     def test_create_branch_fails_if_current_branch_is_not_tracked(self):
         ""
         git = GitInterface( self.url )
-        create_local_branch( 'example', 'proximus' )
+        trigutil.create_local_branch( 'example', 'proximus' )
         assert git.currentBranch() == 'proximus'
         self.assertRaises( GitInterfaceError, git.createRemoteBranch, 'nasa' )
 
@@ -497,7 +552,7 @@ class pulling( unittest.TestCase ):
         ""
         util.setup_test()
 
-        self.url = create_bare_repo_with_topic_branch()
+        self.url = trigutil.create_bare_repo_with_topic_branch()
         time.sleep(1)
 
     def clone_twice_and_modify_and_push_file_txt(self):
@@ -582,60 +637,31 @@ class orphan_branches( unittest.TestCase ):
         ""
         util.setup_test()
 
-    def test_copying_directory_contents(self):
-        ""
-        util.writefile( 'subdir/myfile.txt', 'hello my file' )
-        src = os.path.abspath( 'subdir' )
-        os.mkdir( 'destdir' )
-        util.writefile( 'subdir/adir/another.txt', 'what' )
-        os.symlink( 'myfile.txt', 'subdir/linkfile' )
-        time.sleep(1)
-
-        os.chdir( 'destdir' )
-        fL = copy_directory_contents_to_current_directory( src )
-
-        time.sleep(1)
-
-        fL.sort()
-        assert fL == [ 'adir', 'linkfile', 'myfile.txt' ]
-        dstL = os.listdir( '.' )
-        dstL.sort()
-        assert dstL == fL
-        assert filecmp.cmp( '../subdir/myfile.txt', 'myfile.txt' )
-        assert filecmp.cmp( '../subdir/adir/another.txt', 'adir/another.txt' )
-
     def test_copy_file_or_directory_to_current_directory(self):
         ""
         util.writefile( 'subdir/myfile.txt', 'hello my file' )
         src = os.path.abspath( 'subdir' )
-        os.mkdir( 'destdir1' ) ; d1 = os.path.abspath( 'destdir1' )
-        os.mkdir( 'destdir2' ) ; d2 = os.path.abspath( 'destdir2' )
-        os.mkdir( 'destdir3' ) ; d3 = os.path.abspath( 'destdir3' )
+        os.mkdir( 'destdir' ) ; dest = os.path.abspath( 'destdir' )
         util.writefile( 'subdir/adir/another.txt', 'what' )
         os.symlink( 'myfile.txt', 'subdir/linkfile' )
         time.sleep(1)
 
         cwd = os.getcwd()
 
-        os.chdir( d1 )
-        fL1 = copy_path_to_current_directory( src+'/adir' )
-
-        os.chdir( d2 )
-        fL2 = copy_path_to_current_directory( src+'/myfile.txt' )
-
-        os.chdir( d3 )
-        fL3 = copy_path_to_current_directory( src+'/linkfile' )
+        os.chdir( dest )
+        f1 = copy_path_to_current_directory( src+'/adir' )
+        f2 = copy_path_to_current_directory( src+'/myfile.txt' )
+        f3 = copy_path_to_current_directory( src+'/linkfile' )
 
         time.sleep(1)
 
-        os.chdir( cwd )
-        assert util.readfile( d1+'/another.txt' ).strip() == 'what'
-        assert fL1 == [ 'another.txt' ]
-        assert util.readfile( d2+'/myfile.txt' ).strip() == 'hello my file'
-        assert fL2 == [ 'myfile.txt' ]
-        assert os.path.islink( d3+'/linkfile' )
-        assert os.readlink( d3+'/linkfile' ) == 'myfile.txt'
-        assert fL3 == [ 'linkfile' ]
+        assert util.readfile( 'adir/another.txt' ).strip() == 'what'
+        assert f1 == 'adir'
+        assert util.readfile( 'myfile.txt' ).strip() == 'hello my file'
+        assert f2 == 'myfile.txt'
+        assert os.path.islink( 'linkfile' )
+        assert os.readlink( 'linkfile' ) == 'myfile.txt'
+        assert f3 == 'linkfile'
 
     def test_create_orphan_branch(self):
         ""
@@ -647,13 +673,13 @@ class orphan_branches( unittest.TestCase ):
 
     def run_create_orphan_branch_test(self, initial_branchname=None):
         ""
-        url = create_bare_repo_with_topic_branch()
+        url = trigutil.create_bare_repo_with_topic_branch()
         util.writefile( 'readme.txt', 'this is adam' )
         time.sleep(1)
 
         git = GitInterface()
         git.clone( url, 'ex', initial_branchname )
-        git.createRemoteOrphanBranch( 'loner', 'readme.txt', 'start fresh' )
+        git.createRemoteOrphanBranch( 'loner', 'start fresh', 'readme.txt' )
 
         assert git.currentBranch() == 'loner'
         assert 'loner' in git.listRemoteBranches()
@@ -671,127 +697,22 @@ class orphan_branches( unittest.TestCase ):
 
     def test_orphan_branch_creation_errors(self):
         ""
-        url = create_bare_repo_with_topic_branch()
-        push_file_to_repo( url, 'file.txt', 'new contents' )
+        url = trigutil.create_bare_repo_with_topic_branch()
+        trigutil.push_file_to_repo( url, 'file.txt', 'new contents' )
 
         util.writefile( 'readme.txt', 'this is adam' )
         time.sleep(1)
 
         git = GitInterface( url )
-        checkout_to_previous_sha1( git.getRootPath() )
+        trigutil.checkout_to_previous_sha1( git.getRootPath() )
 
         self.assertRaises( GitInterfaceError,
-            git.createRemoteOrphanBranch, 'loner', 'readme.txt', 'start it' )
+            git.createRemoteOrphanBranch, 'loner', 'start it', 'readme.txt' )
 
         git.clone( url, 'ex2' )
         assert git.currentBranch() == 'master'
         self.assertRaises( GitInterfaceError,
-            git.createRemoteOrphanBranch, 'topic', 'readme.txt', 'start it' )
-
-
-###########################################################################
-
-def create_bare_repo_with_topic_branch():
-    ""
-    url = create_local_bare_repository( 'subdir' )
-    push_file_to_repo( url, 'file.txt', 'file contents' )
-    push_new_branch_with_file( url, 'topic', 'file.txt', 'new contents' )
-
-    return url
-
-
-def create_local_bare_repository( subdir='.', name='example' ):
-    ""
-    if not os.path.exists( subdir ):
-        os.makedirs( subdir )
-
-    cwd = os.getcwd()
-    os.chdir( subdir )
-
-    try:
-        if not name.endswith( '.git' ):
-            name += '.git'
-
-        Command( 'git init --bare', name ).run_timeout( 30 )
-
-        url = 'file://'+os.getcwd()+'/'+name
-
-    finally:
-        os.chdir( cwd )
-
-    return url
-
-
-def push_file_to_repo( url, filename, filecontents ):
-    ""
-    os.mkdir( 'addfiletemp' )
-    cwd = os.getcwd()
-    os.chdir( 'addfiletemp' )
-    try:
-        Command( 'git clone $url' ).run_timeout( 30 )
-
-        pL = os.listdir( '.' )
-        assert len( pL ) == 1
-        os.chdir( pL[0] )
-
-        util.writefile( filename, filecontents )
-
-        Command( 'git add $filename' ).run()
-        Command( 'git commit -m "push_file_to_repo '+time.ctime()+'"' ).run()
-        Command( 'git push origin master' ).run_timeout( 30 )
-
-    finally:
-        os.chdir( cwd )
-
-    shutil.rmtree( 'addfiletemp' )
-
-
-def push_new_branch_with_file( url, branchname, filename, filecontents ):
-    ""
-    os.mkdir( 'addfiletemp' )
-    cwd = os.getcwd()
-    os.chdir( 'addfiletemp' )
-    try:
-        Command( 'git clone $url' ).run_timeout( 30 )
-
-        pL = os.listdir( '.' )
-        assert len( pL ) == 1
-        os.chdir( pL[0] )
-
-        Command( 'git checkout -b $branchname' ).run()
-
-        util.writefile( filename, filecontents )
-
-        Command( 'git add $filename' ).run()
-        Command( 'git commit -m "push_new_branch_with_file ' + \
-                 time.ctime()+'"' ).run()
-        Command( 'git push -u origin $branchname' ).run_timeout( 30 )
-
-    finally:
-        os.chdir( cwd )
-
-    shutil.rmtree( 'addfiletemp' )
-
-
-def create_local_branch( local_directory, branchname ):
-    ""
-    cwd = os.getcwd()
-    os.chdir( local_directory )
-    try:
-        Command( 'git checkout -b $branchname' ).run()
-    finally:
-        os.chdir( cwd )
-
-
-def checkout_to_previous_sha1( directory ):
-    ""
-    cwd = os.getcwd()
-    os.chdir( directory )
-    try:
-        Command( 'git checkout HEAD^1' ).run()
-
-    finally:
-        os.chdir( cwd )
+            git.createRemoteOrphanBranch, 'topic', 'start it', 'readme.txt' )
 
 
 #######################################################################

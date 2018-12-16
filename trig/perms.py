@@ -227,7 +227,6 @@ def filegroup( path ):
     try:
         ent = grp.getgrgid( gid )
     except Exception:
-        raise  # magic
         return None
     return ent[0]
 
