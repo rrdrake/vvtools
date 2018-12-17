@@ -14,9 +14,11 @@ class ResultsHandler:
         ""
         self.git = gitinterface_obj
 
-    def setNamingScheme(self, epochdate=None, granularity='month'):
+    def setNamingScheme(self, subdir_suffix='',
+                              epochdate=None,
+                              granularity='month'):
         ""
-        bn,sb = branch_name_and_directory( epochdate, granularity )
+        bn,sb = branch_name_and_directory( subdir_suffix, epochdate, granularity )
 
         self.branch = bn
         self.subdir = sb
@@ -52,7 +54,9 @@ class ResultsHandler:
         self.git.push()
 
 
-def branch_name_and_directory( epochdate=None, granularity='month'):
+def branch_name_and_directory( subdir_suffix='',
+                               epochdate=None,
+                               granularity='month'):
     ""
     assert granularity == 'month'
 
@@ -63,10 +67,10 @@ def branch_name_and_directory( epochdate=None, granularity='month'):
     branch = time.strftime( "results_%Y_%m", tup )
     subdir = time.strftime( "%d_%H", tup )
 
+    subdir += subdir_suffix
+
     return branch, subdir
 
-
-#########################################################################
 
 def create_orphan_branch( git, branchname, resultsdir ):
     ""

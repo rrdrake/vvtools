@@ -121,9 +121,15 @@ class naming_schemes( unittest.TestCase ):
         assert dh in sb
 
         tm2 = tm1 - 60*24*60*60
-        bn2,sb2 = branch_name_and_directory( tm2 )
+        bn2,sb2 = branch_name_and_directory( epochdate=tm2 )
 
         assert bn2 < bn
+
+    def test_specify_subdirectory_suffix(self):
+        ""
+        bn,sb = branch_name_and_directory( subdir_suffix='.whatever' )
+        assert 'whatever' not in bn
+        assert sb.endswith( '.whatever' )
 
 
 #######################################################################
