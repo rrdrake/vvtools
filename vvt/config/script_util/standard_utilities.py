@@ -10,6 +10,7 @@ import random
 import time
 import re
 import glob
+import shutil
 
 from .deputils import save_test_data, read_test_data
 
