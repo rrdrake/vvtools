@@ -542,7 +542,10 @@ def write_gitlab_results( fp, result, testL, altname,
     hdr = '## Tests that '+result+' = '+str( len(testL) ) + '\n\n'
     fp.write( hdr )
 
-    if len(testL) <= maxtablesize:
+    if len(testL) == 0:
+        pass
+
+    elif len(testL) <= maxtablesize:
         write_gitlab_results_table( fp, result, testL, max_path_links )
 
     else:
@@ -558,12 +561,9 @@ def write_gitlab_results_table( fp, result, testL, max_path_links ):
     fp.write( '| Result | Date   | Time   | Path   |\n' + \
               '| ------ | ------ | -----: | :----- |\n' )
 
-    if len( testL ) > 0:
-        for i,tst in enumerate(testL):
-            add_link = ( i < max_path_links )
-            fp.write( format_gitlab_table_line( tst, add_link ) + '\n' )
-    else:
-        fp.write( '| None |   |   |   |\n' )
+    for i,tst in enumerate(testL):
+        add_link = ( i < max_path_links )
+        fp.write( format_gitlab_table_line( tst, add_link ) + '\n' )
 
     fp.write( '\n' )
 
@@ -641,6 +641,10 @@ def write_gitlab_formatted_file( fp, filename, include_content, label, max_KB ):
         buf = buf.replace( '<', '&lt;' )
         buf = buf.replace( '>', '&gt;' )
         buf = buf.replace( '"', '&quot;' )
+
+        if buf.startswith('#'):
+            buf = '\\'+buf
+        buf = buf.replace( '\n#', '\n\\#' )
 
     else:
         buf = '*** file not archived ***'

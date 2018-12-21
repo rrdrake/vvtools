@@ -15,9 +15,9 @@ import glob
 from os.path import getsize as getfsize
 
 try:
-  from StringIO import StringIO
+    from StringIO import StringIO
 except Exception:
-  from io import StringIO
+    from io import StringIO
 
 import vvtestutils as vtu
 import testutils as util
@@ -332,6 +332,19 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         line = grepforline( 'sdir/testD.np=4', fval ).rstrip()
         assert line.endswith( 'sdir/testD.np=4 |' )
 
+    def test_an_empty_test_list_will_not_write_a_table(self):
+        ""
+        tL = []
+
+        sio = StringIO()
+        resultswriter.write_gitlab_results( sio, 'fail', tL, 'nope.md', 2, 3 )
+        time.sleep(1)
+
+        val = sio.getvalue()
+        print3( val )
+        assert len( util.greplines( 'Tests that fail', val ) ) == 1
+        assert len( util.greplines( 'Result*Date*Time*Path', val ) ) == 0
+
     def test_file_meta_data_collection(self):
         ""
         util.writefile( 'subdir/zeebra.txt', "I am a zeebra.\n" * 20 )
@@ -398,6 +411,27 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         assert fn in val
         assert 'error reading file:' in val
         assert 'Traceback' in val
+
+    def test_write_gitlab_collapsable_file_that_contains_leading_hashes(self):
+        ""
+        util.writefile( 'file.txt', "# the first line\n" + \
+                                    "echo hello\n" + \
+                                    "\n" + \
+                                    "## a comment\n" + \
+                                    " # this hash should not be escaped\n" )
+        time.sleep(1)
+
+        sio = StringIO()
+        fn = os.path.abspath('file.txt')
+        resultswriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
+
+        val = sio.getvalue()
+        #print3( val )
+        assert "\\# the first line\n" + \
+               "echo hello\n" + \
+               "\n" + \
+               "\\## a comment\n" + \
+               " # this hash should not be escaped\n" in val
 
     def test_stream_file_contents_to_gitlab_collapsable_format(self):
         ""
