@@ -13,8 +13,7 @@ import time
 import pipes
 import shutil
 import tempfile
-
-from command import Command, CommandException
+import subprocess
 
 
 class GitInterfaceError( Exception ):
@@ -37,12 +36,13 @@ class GitInterface:
         if self.root:
             return self.root
 
-        try:
-            root = self.runout( 'rev-parse --show-toplevel' ).strip()
-        except CommandException:
+        x,root = self.runout( 'rev-parse --show-toplevel',
+                              raise_on_error=False )
+        if x != 0 or not root.strip():
             raise GitInterfaceError( 'could not determine root '
                                      '(are you in a Git repo?)' )
-        return root
+
+        return root.strip()
 
     def create(self, directory=None, bare=False):
         """
@@ -62,7 +62,7 @@ class GitInterface:
             cd = None
             root = os.getcwd()
 
-        Command( cmd ).run( chdir=cd )
+        runcmd( cmd, cd )
 
         self.root = root
 
@@ -122,11 +122,7 @@ class GitInterface:
         """
         loc = ( self.root if self.root else os.getcwd() )
 
-        try:
-            out = self.runout( 'branch' )
-        except CommandException:
-            raise GitInterfaceError(
-                    'could not determine current branch, LOCATION='+str(loc) )
+        x,out = self.runout( 'branch' )
 
         for line in out.splitlines():
             if line.startswith( '* (' ):
@@ -134,7 +130,7 @@ class GitInterface:
             elif line.startswith( '* ' ):
                 return line[2:].strip()
 
-        raise GitInterfaceError( 'no branches found, LOCATION='+str(loc) )
+        raise GitInterfaceError( 'no branches found, DIR='+str(loc) )
 
     def listBranches(self, remotes=False):
         ""
@@ -144,7 +140,9 @@ class GitInterface:
         if remotes:
             cmd += ' -r'
 
-        for line in self.runout( cmd ).splitlines():
+        x,out = self.runout( cmd )
+
+        for line in out.splitlines():
             if line.startswith( '* (' ):
                 pass
             elif line.startswith( '* ' ) or line.startswith( '  ' ):
@@ -170,7 +168,9 @@ class GitInterface:
 
         bL = []
 
-        for line in self.runout( 'ls-remote --heads', url ).splitlines():
+        x,out = self.runout( 'ls-remote --heads', url )
+
+        for line in out.strip().splitlines():
             lineL = line.strip().split( None, 1 )
             if len( lineL ) == 2:
                 if lineL[1].startswith( 'refs/heads/' ):
@@ -193,9 +193,9 @@ class GitInterface:
 
     def getRemoteURL(self):
         ""
-        try:
-            out = self.runout( 'config --get remote.origin.url' )
-        except CommandException:
+        x,out = self.runout( 'config --get remote.origin.url',
+                             raise_on_error=False )
+        if x != 0:
             return None
         return out.strip()
 
@@ -269,8 +269,8 @@ class GitInterface:
 
     def gitVersion(self):
         ""
-        out = Command( self.gitexe, '--version' ).run_output( echo='none' )
-        return [ int(s) for s in out.split()[2].split('.') ]
+        x,out = self.runout( '--version' )
+        return [ int(s) for s in out.strip().split()[2].split('.') ]
 
     def _full_clone(self, url, name, directory):
         ""
@@ -297,17 +297,28 @@ class GitInterface:
     def _fetch_then_checkout_branch(self, branchname):
         ""
         self.run( 'fetch origin' )
-        try:
-            self.run( 'checkout --track origin/'+branchname )
-        except CommandException:
-            try:
-                # try adding the branch in the fetch list
-                self.run( 'config --add remote.origin.fetch ' + \
-                                '+refs/heads/'+branchname + \
-                                ':refs/remotes/origin/'+branchname )
-                self.run( 'fetch origin' )
-                self.run( 'checkout --track origin/'+branchname )
-            except CommandException:
+
+        x,out = self.runout( 'checkout --track origin/'+branchname,
+                             raise_on_error=False )
+        if x != 0:
+            # try adding the branch in the fetch list
+            x,out2 = self.runout( 'config --add remote.origin.fetch ' + \
+                                  '+refs/heads/'+branchname + \
+                                  ':refs/remotes/origin/'+branchname,
+                                  raise_on_error=False )
+            out += out2
+
+            if x == 0:
+                x,out3 = self.runout( 'fetch origin', raise_on_error=False )
+                out += out3
+
+                if x == 0:
+                    x,out4 = self.runout( 'checkout --track origin/'+branchname,
+                                          raise_on_error=False )
+                    out += out4
+
+            if x != 0:
+                print3( out )
                 raise GitInterfaceError( 'branch appears on remote but ' + \
                                 'fetch plus checkout failed: '+branchname )
 
@@ -325,18 +336,25 @@ class GitInterface:
         if len( options ) > 0:
             raise GitInterfaceError( "unknown options: "+str(options) )
 
-    def run(self, arg0, *args, **kwargs):
+    def run(self, arg0, *args):
         ""
-        cmd = Command( self.gitexe + ' ' + ' '.join( (arg0,)+args ) )
+        cmd = self.gitexe + ' ' + ' '.join( (arg0,)+args )
+
         with set_environ( **self.envars ):
-            cmd.run( chdir=self.root )
+            x,out = runcmd( cmd, chdir=self.root, raise_on_error=True )
+
+        return x, out
 
     def runout(self, arg0, *args, **kwargs):
         ""
-        cmd = Command( self.gitexe + ' ' + ' '.join( (arg0,)+args ) )
+        roe = kwargs.pop( 'raise_on_error', True )
+
+        cmd = self.gitexe + ' ' + ' '.join( (arg0,)+args )
+
         with set_environ( **self.envars ):
-            out = cmd.run_output( chdir=self.root )
-        return out
+            x,out = runcmd( cmd, chdir=self.root, raise_on_error=roe )
+
+        return x,out
 
 
 ########################################################################
@@ -350,8 +368,9 @@ class change_directory:
 
     def __enter__(self):
         ""
-        assert os.path.isdir( self.directory )
-        os.chdir( self.directory )
+        if self.directory:
+            assert os.path.isdir( self.directory )
+            os.chdir( self.directory )
 
     def __exit__(self, type, value, traceback):
         ""
@@ -425,15 +444,50 @@ def copy_path_to_current_directory( filepath ):
 
 def create_repo_with_these_files( gitexe, message, pathL ):
     ""
-    Command( '$gitexe init' ).run()
+    runcmd( gitexe + ' init' )
 
     fL = []
     for pn in pathL:
         fn = copy_path_to_current_directory( pn )
-        fL.append( fn )
+        fL.append( pipes.quote(fn) )
 
-    cmd = Command( '$gitexe add' ).escape( *fL ).run()
-    cmd = Command( '$gitexe commit -m').escape( message ).run()
+    runcmd( gitexe + ' add ' + ' '.join( fL ) )
+    runcmd( gitexe + ' commit -m ' + pipes.quote( message ) )
+
+
+def runcmd( cmd, chdir=None, raise_on_error=True ):
+    ""
+    out = ''
+    x = 1
+
+    with change_directory( chdir ):
+
+        po = subprocess.Popen( cmd, shell=True, stdout=subprocess.PIPE,
+                                                stderr=subprocess.STDOUT )
+
+        sout,serr = po.communicate()
+        x = po.returncode
+
+        if sout != None:
+            out = _STRING_(sout)
+
+    if x != 0 and raise_on_error:
+        print3( cmd + '\n' + out )
+        raise GitInterfaceError( 'Command failed: '+cmd )
+
+    return x,out
+
+
+if sys.version_info[0] < 3:
+    def _STRING_(b): return b
+
+else:
+    bytes_type = type( ''.encode() )
+
+    def _STRING_(b):
+        if type(b) == bytes_type:
+            return b.decode()
+        return b
 
 
 def print3( *args ):

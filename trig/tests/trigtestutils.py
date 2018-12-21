@@ -97,7 +97,7 @@ def create_local_bare_repository( subdir='.', name='example' ):
         if not name.endswith( '.git' ):
             name += '.git'
 
-        util.runcmd( 'git init --bare '+name )
+        util.runcmd( 'git init --bare '+name, print_output=False )
 
         url = 'file://'+os.getcwd()+'/'+name
 
@@ -113,7 +113,7 @@ def push_file_to_repo( url, filename, filecontents ):
     cwd = os.getcwd()
     os.chdir( 'addfiletemp' )
     try:
-        util.runcmd( 'git clone '+url )
+        util.runcmd( 'git clone '+url, print_output=False )
 
         pL = os.listdir( '.' )
         assert len( pL ) == 1
@@ -121,9 +121,10 @@ def push_file_to_repo( url, filename, filecontents ):
 
         util.writefile( filename, filecontents )
 
-        util.runcmd( 'git add '+filename )
-        util.runcmd( 'git commit -m "push_file_to_repo '+time.ctime()+'"' )
-        util.runcmd( 'git push origin master' )
+        util.runcmd( 'git add '+filename, print_output=False )
+        util.runcmd( 'git commit -m "push_file_to_repo '+time.ctime()+'"',
+                     print_output=False )
+        util.runcmd( 'git push origin master', print_output=False )
 
     finally:
         os.chdir( cwd )
@@ -137,20 +138,21 @@ def push_new_branch_with_file( url, branchname, filename, filecontents ):
     cwd = os.getcwd()
     os.chdir( 'addfiletemp' )
     try:
-        util.runcmd( 'git clone '+url )
+        util.runcmd( 'git clone '+url, print_output=False )
 
         pL = os.listdir( '.' )
         assert len( pL ) == 1
         os.chdir( pL[0] )
 
-        util.runcmd( 'git checkout -b '+branchname )
+        util.runcmd( 'git checkout -b '+branchname, print_output=False )
 
         util.writefile( filename, filecontents )
 
-        util.runcmd( 'git add '+filename )
+        util.runcmd( 'git add '+filename, print_output=False )
         util.runcmd( 'git commit -m "push_new_branch_with_file ' + \
-                                                        time.ctime()+'"' )
-        util.runcmd( 'git push -u origin '+branchname )
+                                                        time.ctime()+'"',
+                      print_output=False )
+        util.runcmd( 'git push -u origin '+branchname, print_output=False )
 
     finally:
         os.chdir( cwd )
@@ -163,7 +165,7 @@ def create_local_branch( local_directory, branchname ):
     cwd = os.getcwd()
     os.chdir( local_directory )
     try:
-        util.runcmd( 'git checkout -b '+branchname )
+        util.runcmd( 'git checkout -b '+branchname, print_output=False )
     finally:
         os.chdir( cwd )
 
@@ -173,7 +175,7 @@ def checkout_to_previous_sha1( directory ):
     cwd = os.getcwd()
     os.chdir( directory )
     try:
-        util.runcmd( 'git checkout HEAD^1' )
+        util.runcmd( 'git checkout HEAD^1', print_output=False )
 
     finally:
         os.chdir( cwd )

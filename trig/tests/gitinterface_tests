@@ -24,8 +24,7 @@ from testutils import print3
 from gitinterface import GitInterfaceError, GitInterface
 from gitinterface import set_environ
 from gitinterface import copy_path_to_current_directory
-
-from command import Command, CommandException
+from gitinterface import runcmd
 
 
 class with_set_environ( unittest.TestCase ):
@@ -180,7 +179,7 @@ class create_and_clone( unittest.TestCase ):
         # default clone first; a checkout of the branch should succeed
         git = GitInterface()
         git.clone( url )
-        Command( 'git checkout topic' ).run( chdir='example' )
+        runcmd( 'git checkout topic', chdir='example' )
 
         shutil.rmtree( 'example' )
         time.sleep(1)
@@ -188,8 +187,8 @@ class create_and_clone( unittest.TestCase ):
         # clone with master only; a checkout of the branch should fail
         git = GitInterface()
         git.clone( url, branch='master' )
-        cmd = Command( 'git checkout topic' )
-        self.assertRaises( CommandException, cmd.run, chdir='example' )
+        self.assertRaises( GitInterfaceError,
+            runcmd, 'git checkout topic', chdir='example' )
 
     def test_clone_into_a_subdirectory(self):
         ""
@@ -364,7 +363,7 @@ class branches( unittest.TestCase ):
         time.sleep(1)
 
         os.chdir( 'arepo' )
-        Command( 'git init' ).run()
+        runcmd( 'git init' )
 
         git = GitInterface()
         self.assertRaises( GitInterfaceError, git.currentBranch )
@@ -612,7 +611,8 @@ class pulling( unittest.TestCase ):
         git1.commit( 'this will conflict' )
 
         # let this fail due to a conflict
-        Command( 'git pull' ).run( chdir='ex1', raise_on_error=False )
+        x,out = runcmd( 'git pull', chdir='ex1', raise_on_error=False )
+        assert x != 0
 
         # this should now fail because it is in the middle of a rebase operation
         self.assertRaises( GitInterfaceError, git1.pull )
