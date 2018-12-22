@@ -1,0 +1,238 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+from os.path import dirname
+from os.path import join as pjoin
+import time
+import unittest
+import glob
+import shlex
+import subprocess
+
+import trigtestutils as trigutil
+import testutils as util
+from testutils import print3
+
+runnerfile = pjoin( dirname(trigutil.testsrcdir), 'runner' )
+runnermod = util.create_module_from_filename( runnerfile )
+runnercmd = sys.executable+' '+runnerfile
+
+
+class help_page( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test( cleanout=False )
+
+    def test_smoke_test_of_help_page(self):
+        ""
+        x,out = util.runcmd( runnercmd+' -h' )
+        assert 'USAGE' in out
+
+        x,out = util.runcmd( runnercmd+' --help' )
+        assert 'USAGE' in out
+
+
+class LaunchRunner:
+
+    def __init__(self, runid, run_cmd, sleeprange=None, shell_prefix=None):
+        ""
+        cmd = runnercmd + ' --exclusive-id ' + runid
+
+        if sleeprange != None:
+            cmd += ' --sleep-range '+str(sleeprange)
+
+        cmd += ' ' + run_cmd
+
+        if shell_prefix != None:
+            cmd = shell_prefix + ' "'+cmd+'"'
+
+        print3( 'LaunchRunner:', cmd )
+        self.subp = subprocess.Popen( cmd, shell=True )
+
+    def waitOnCommand(self):
+        ""
+        return self.subp.wait()
+
+
+class function_is_command_id_running( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test( cleanout=False )
+
+    def test_get_process_table_smoke_test(self):
+        ""
+        pstab = runnermod.get_process_table_with_ps()
+
+        mypid = False
+        myscript = False
+
+        for pid,ppid,cmdL in pstab:
+            if os.getpid() == pid:
+                mypid = True
+            if 'runner_tests' in ' '.join( cmdL ):
+                myscript = True
+
+        assert mypid
+        assert myscript
+
+    def test_get_my_process_ancestry(self):
+        ""
+        pstab = runnermod.get_process_table_with_ps()
+        pidset = runnermod.get_my_process_ancestry( pstab )
+
+        assert len(pidset) > 1
+        assert os.getpid() in pidset
+        if not sys.platform.lower().startswith( 'win' ):
+            assert os.getppid() in pidset
+
+    def test_runner_command_id_match(self):
+        ""
+        cmdL = [ '/some/path/runner', '--exclusive-id', 'myid',
+                 '/my/command', '-v' ]
+
+        b = runnermod.runner_command_id_match( 'myid', cmdL )
+        assert b == True
+
+        b = runnermod.runner_command_id_match( 'myid2', cmdL )
+        assert b == False
+
+        cmdL = [ '/some/path/runner', '/my/command', '-v' ]
+
+        b = runnermod.runner_command_id_match( 'myid', cmdL )
+        assert b == False
+
+        cmdL = [ '/path/python',
+                 '/some/path/runner', '--exclusive-id', 'myid',
+                 '/my/command', '-v' ]
+
+        b = runnermod.runner_command_id_match( 'myid', cmdL )
+        assert b == True
+
+        b = runnermod.runner_command_id_match( 'myid2', cmdL )
+        assert b == False
+
+        cmdL = [ '/path/python', '-u',
+                 '/some/path/runner', '--exclusive-id', 'myid',
+                 '/my/command', '-v' ]
+
+        b = runnermod.runner_command_id_match( 'myid', cmdL )
+        assert b == True
+
+        b = runnermod.runner_command_id_match( 'myid2', cmdL )
+        assert b == False
+
+    def test_is_command_running_returns_true_if_command_is_running(self):
+        ""
+        runr = LaunchRunner( 'fancyid', 'sleep 10', sleeprange=2 )
+        time.sleep(4)
+
+        b1 = runnermod.is_command_id_running( 'fancyid', 2 )
+        b2 = runnermod.is_command_id_running( 'fancyid2', 2 )
+
+        runr.waitOnCommand()
+
+        assert b1 == True
+        assert b2 == False
+
+
+class exclusive_execution( unittest.TestCase ):
+
+    def setUp(self):
+        util.setup_test()
+
+    def test_command_will_run_with_exclusive_option(self):
+        ""
+        cmd = make_python_touch_command( 'myfile' )
+        runr = LaunchRunner( 'fancyid', cmd, sleeprange=2 )
+
+        runr.waitOnCommand()
+        time.sleep(1)
+
+        assert os.path.exists( 'myfile' )
+
+    def test_exclusive_command_run_under_shell_launch(self):
+        ""
+        runr = LaunchRunner( 'fancyid', 'touch myfile',
+                             sleeprange=2,
+                             shell_prefix='/bin/csh -c' )
+
+        runr.waitOnCommand()
+        time.sleep(1)
+
+        assert os.path.exists( 'myfile' )
+
+    def test_command_id_is_found_in_process_table(self):
+        ""
+        runr = LaunchRunner( 'fancyid', 'sleep 10', sleeprange=2 )
+        time.sleep(4)
+
+        b = runnermod.is_command_id_running( 'fancyid', 2 )
+
+        runr.waitOnCommand()
+
+        assert b == True
+
+    def test_command_id_check_robust_under_shell_launch(self):
+        ""
+        runr = LaunchRunner( 'fancyid', 'sleep 10',
+                             sleeprange=2,
+                             shell_prefix='/bin/csh -c' )
+        time.sleep(4)
+
+        b = runnermod.is_command_id_running( 'fancyid', 2 )
+
+        runr.waitOnCommand()
+
+        assert b == True
+
+    def test_second_execution_with_same_id_will_not_run(self):
+        """
+        The loop is to check probability of race condition.
+        """
+        nfail = 0
+
+        for i in range(10):
+
+            cmd1 = make_python_touch_command( 'file1' )
+            runr1 = LaunchRunner( 'fancyid', cmd1 )
+
+            cmd2 = make_python_touch_command( 'file2' )
+            runr2 = LaunchRunner( 'fancyid', cmd2 )
+
+            runr1.waitOnCommand()
+            runr2.waitOnCommand()
+
+            time.sleep(1)
+
+            x1 = os.path.exists( 'file1' )
+            x2 = os.path.exists( 'file2' )
+            if not ( x1 or x2 ) or ( x1 and x2 ):
+                nfail += 1
+
+            for f in glob.glob( 'file*' ):
+                os.remove( f )
+            time.sleep(1)
+
+        assert nfail < 4, 'expected race condition less than 40% of the time'
+
+
+def make_python_touch_command( filename ):
+    ""
+    absf = os.path.abspath(filename)
+    pycmds = "fp=open('"+absf+"','w');fp.close()"
+    cmd = sys.executable + ' -c "'+pycmds+'"'
+    return cmd
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
