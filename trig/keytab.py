@@ -15,7 +15,7 @@ help_string = """
 USAGE
     keytab.py [OPTIONS] {generate|init|destroy}
 
-    Keytab path: KEYTABPATH
+    Keytab search: KEYTABPATH
 
     generate : generates a new keytab file (must be run interactively)
     init     : initializes a Kerberos ticket using the keytab file
@@ -70,7 +70,8 @@ def main():
     optL,argL = getopt.getopt( sys.argv[1:], 'hq', ['help'] )
 
     if ('-h','') in optL or ('--help','') in optL:
-        s = help_string.replace( 'KEYTABPATH', keytabpath )
+        srch = get_keytab_search_paths()
+        s = help_string.replace( 'KEYTABPATH', ', '.join(srch) )
         sys.stdout.write(s)
         return
 
@@ -96,6 +97,24 @@ def main():
             sys.exit(1)
 
 
+def get_keytab_search_paths():
+    ""
+    usr = get_user_name()
+    pL = []
+    pL.append( os.path.expanduser( '~/.ssh/krb5keytab' ) )
+    pL.append( os.path.expanduser( '~/.'+usr+'.keytab' ) )
+    return pL
+
+
+def find_keytab( search_paths ):
+    ""
+    for ktpath in search_paths:
+        if os.path.exists( ktpath ):
+            return ktpath
+
+    raise Exception( 'could not find keytab file, tried ' + str(search_paths) )
+
+
 KTUTIL_INSTRUCTION_TEMPLATE = """
 Running ktutil to create keytab file.  Enter the following one at a time
 at the ktutil: prompts.
@@ -109,8 +128,11 @@ at the ktutil: prompts.
     exit
 """
 
+
 def generate_keytab():
     ""
+    keytabpath = get_keytab_search_paths()[0]
+
     delete_keytab_file( keytabpath )
 
     usr = get_user_name()
@@ -139,6 +161,8 @@ def init_ticket( echo="echo" ):
     to initialize it using the keytab file.  The KRB5CCNAME environment
     variable is set to the name of the cache file name.
     """
+    keytabpath = find_keytab( get_keytab_search_paths() )
+
     usr = get_user_name()
     tmpdir = tempfile.mkdtemp( prefix=usr+'_krb5tmp_' )
 
@@ -213,8 +237,6 @@ def print3( *args ):
 
 
 ################################################################
-
-keytabpath = '/home/' + get_user_name() + '/.ssh/krb5keytab'
 
 if __name__ == "__main__":
     main()

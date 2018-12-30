@@ -10,6 +10,8 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
+from os.path import dirname, abspath, expanduser
+from os.path import join as pjoin
 import time
 import stat
 import unittest
@@ -23,7 +25,7 @@ import keytab
 
 from command import Command
 
-ktfile = os.path.join( os.path.dirname(trigutil.testsrcdir), 'keytab.py' )
+ktfile = pjoin( dirname(trigutil.testsrcdir), 'keytab.py' )
 
 
 ######################################################################
@@ -35,11 +37,48 @@ class catchall( unittest.TestCase ):
         util.setup_test()
         os.environ[ 'COMMAND_DRYRUN' ] = ''
 
+    def tearDown(self):
+        ""
+        if 'COMMAND_DRYRUN' in os.environ:
+            del os.environ['COMMAND_DRYRUN']
+
     def test_man_page(self):
         ""
         os.environ.pop( 'COMMAND_DRYRUN' )
         Command( '$ktfile -h' ).run( raise_on_error=True )
         Command( '$ktfile --help' ).run( raise_on_error=True )
+
+    def test_getting_user_name(self):
+        ""
+        usr = keytab.get_user_name()
+        print3( 'user', usr )
+        assert usr and usr.strip() and usr == usr.strip()
+
+    def test_list_of_keytab_file_locations(self):
+        ""
+        paths = keytab.get_keytab_search_paths()
+
+        assert len( paths ) == 2
+        homedir = expanduser( '~' )
+        for p in paths:
+            assert p.startswith( homedir )
+
+    def test_first_keytab_file_location_is_in_ssh_directory(self):
+        ""
+        paths = keytab.get_keytab_search_paths()
+        assert paths[0].startswith( expanduser( '~/.ssh' ) )
+
+    def test_find_keytab_returns_first_existing_path(self):
+        ""
+        util.writefile( 'fakekeytab', 'fake contents' )
+        time.sleep(1)
+
+        path = keytab.find_keytab( [ abspath('blah'), abspath('fakekeytab') ] )
+        assert path == abspath('fakekeytab')
+
+    def test_find_keytab_fails_if_keytab_not_found(self):
+        ""
+        self.assertRaises( Exception, keytab.find_keytab, [ '/does/not/exist' ] )
 
     def test_generate_keytab(self):
         ""
@@ -98,7 +137,7 @@ class catchall( unittest.TestCase ):
 
         time.sleep(1)
         fname = util.readfile( 'init.log' ).strip()
-        assert os.path.exists( os.path.dirname(fname) )
+        assert os.path.exists( dirname(fname) )
 
         # have to set this manually to test (used in destroy_ticket() )
         os.environ['KRB5CCNAME'] = fname
@@ -110,7 +149,7 @@ class catchall( unittest.TestCase ):
         Command( ktfile+' destroy' ).run( raise_on_error=True )
 
         assert not os.path.exists( fname )
-        assert not os.path.exists( os.path.dirname(fname) )
+        assert not os.path.exists( dirname(fname) )
 
     def test_programmatic_init_ticket_followed_by_destroy_ticket(self):
         ""
@@ -119,7 +158,7 @@ class catchall( unittest.TestCase ):
         fname = keytab.init_ticket()
 
         time.sleep(1)
-        assert os.path.exists( os.path.dirname(fname) )
+        assert os.path.exists( dirname(fname) )
         assert os.environ['KRB5CCNAME'] == fname
         assert os.environ['PREVIOUS_KRB5CCNAME'] == 'fakevalue'
 
@@ -130,7 +169,7 @@ class catchall( unittest.TestCase ):
 
         time.sleep(1)
         assert not os.path.exists( fname )
-        assert not os.path.exists( os.path.dirname(fname) )
+        assert not os.path.exists( dirname(fname) )
         assert 'PREVIOUS_KRB5CCNAME' not in os.environ
         assert os.environ['KRB5CCNAME'] == 'fakevalue'
 
