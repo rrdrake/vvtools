@@ -7,7 +7,7 @@
 import os, sys
 import time
 
-from runcmd import runcmd
+from .runcmd import runcmd
 
 class BatchPBS:
 
@@ -26,6 +26,12 @@ class BatchPBS:
         if ppn <= 0: ppn = 1
         self.ppn = ppn
         self.variation = variation
+
+        self.runcmd = runcmd
+
+    def setRunCommand(self, run_function):
+        ""
+        self.runcmd = run_function
 
     def header(self, np, qtime, workdir, outfile):
         if np <= 0: np = 1
@@ -69,7 +75,7 @@ class BatchPBS:
         cmdL.append(fname)
         cmd = ' '.join( cmdL )
         
-        x, out = runcmd(cmdL, workdir)
+        x, out = self.runcmd(cmdL, workdir)
         
         # output should contain something like the following
         #    12345.ladmin1
@@ -109,7 +115,7 @@ class BatchPBS:
         """
         cmdL = ['qstat']
         cmd = ' '.join( cmdL )
-        x, out = runcmd(cmdL)
+        x, out = self.runcmd(cmdL)
         
         # create a dictionary with the results; maps job id to a status string
         stateD = {}

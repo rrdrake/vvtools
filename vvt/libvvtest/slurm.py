@@ -14,6 +14,11 @@ class BatchSLURM:
     def __init__(self, ppn, **kwargs):
         if ppn <= 0: ppn = 1
         self.ppn = ppn
+        self.runcmd = runcmd
+
+    def setRunCommand(self, run_function):
+        ""
+        self.runcmd = run_function
 
     def header(self, np, qtime, workdir, outfile):
         """
@@ -57,7 +62,7 @@ class BatchSLURM:
         cmdL.append(fname)
         cmd = ' '.join( cmdL )
         
-        x, out = runcmd( cmdL, workdir )
+        x, out = self.runcmd( cmdL, workdir )
         
         # output should contain something like the following
         #    sbatch: Submitted batch job 291041
@@ -68,7 +73,7 @@ class BatchSLURM:
             if len(L) > 3:
                 try:
                     jobid = int(L[3])
-                except:
+                except Exception:
                     if L[3]:
                         jobid = L[3]
                     else:
@@ -103,7 +108,7 @@ class BatchSLURM:
         """
         cmdL = ['squeue', '--noheader', '-o', '%i %t']
         cmd = ' '.join( cmdL )
-        x, out = runcmd(cmdL)
+        x, out = self.runcmd(cmdL)
         
         stateD = {}
         for jid in jobidL:
@@ -116,7 +121,7 @@ class BatchSLURM:
                 if len(L) > 0:
                     try:
                         jid = int(L[0])
-                    except:
+                    except Exception:
                         if L[0]:
                             jid = L[0]
                         else:

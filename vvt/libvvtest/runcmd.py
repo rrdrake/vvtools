@@ -28,7 +28,15 @@ def runcmd( cmdL, changedir=None ):
         buf = os.read(outRead,2048)
         if not buf:
             break
-        out += buf
+
+        if sys.version_info[0] < 3:
+            out += buf
+        else:
+            try:
+                out += buf.decode( 'ascii', errors='ignore' )
+            except Exception:
+                out += buf.decode( 'ascii' )
+
     os.close(outRead)
     (cpid, xs) = os.waitpid(pid,0)
     

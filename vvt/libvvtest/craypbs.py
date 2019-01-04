@@ -12,7 +12,7 @@ This batch handler was used on the Cray XE machines.  Most commands are MOAB
 but it has aspects of PBS.
 """
 
-from runcmd import runcmd
+from .runcmd import runcmd
 
 class BatchCrayPBS:
     """
@@ -23,6 +23,12 @@ class BatchCrayPBS:
         """
         if ppn <= 0: ppn = 1
         self.ppn = ppn
+
+        self.runcmd = runcmd
+
+    def setRunCommand(self, run_function):
+        ""
+        self.runcmd = run_function
 
     def header(self, np, qtime, workdir, outfile):
         """
@@ -65,7 +71,7 @@ class BatchCrayPBS:
         cmdL.append(fname)
         cmd = ' '.join( cmdL )
         
-        x, out = runcmd( cmdL, workdir )
+        x, out = self.runcmd( cmdL, workdir )
         
         # output should contain something like the following
         #    12345.ladmin1 or 12345.sdb
@@ -105,7 +111,7 @@ class BatchCrayPBS:
         """
         cmdL = ['showq']
         cmd = ' '.join( cmdL )
-        x, out = runcmd(cmdL)
+        x, out = self.runcmd(cmdL)
         
         stateD = {}
         for jid in jobidL:

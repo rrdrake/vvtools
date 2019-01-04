@@ -20,6 +20,23 @@ from testutils import print3
 
 class inlining_results_file_includes( vtu.vvtestTestCase ):
 
+    def test_specifying_platform_options(self):
+        ""
+        util.writefile( "testA.vvt", """
+            import time
+            time.sleep(1)
+            fp = open( 'testA.txt', 'w' ) ; fp.close()
+            """ )
+        time.sleep(1)
+
+        opts = '--platopt q=pickme --platopt walltime=1:30:00'
+
+        vrun = vtu.runvvtest( opts, batch=True )
+        vrun.assertCounts( total=1, npass=1 )
+        time.sleep(1)
+
+        assert len( glob.glob( 'TestResult*/testA/testA.txt' ) ) == 1
+
     def test_restarting_a_killed_batch_run_three_times(self):
         """
         If a batch run is killed before the result file includes are inlined,
