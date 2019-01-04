@@ -13,16 +13,16 @@ class Platform:
     """
     This class is .
     """
-    
+
     def __init__(self, vvtesthome, optdict):
-        
+        ""
         self.vvtesthome = vvtesthome
         self.optdict = optdict
-        
+
         self.maxprocs = 1
         self.nprocs = 0
         self.nfree = 0
-        
+
         self.platname = None
         self.cplrname = None
 
@@ -32,29 +32,29 @@ class Platform:
         self.attrs = {}
 
         self.batch = None
-    
+
     # ----------------------------------------------------------------
-    
+
     def getName(self):  return self.platname
     def getCompiler(self): return self.cplrname
     def getOptions(self): return self.optdict
     def getMaxProcs(self): return self.maxprocs
-    
+
     def display(self):
         s = "Platform " + self.platname
         if self.nprocs > 0:
             s += ", num procs = " + str(self.nprocs)
         s += ", max procs = " + str(self.maxprocs)
         print3( s )
-    
+
     def getEnvironment(self):
         """
         Returns a dictionary of environment variables and their values.
         """
         return self.envD
-    
+
     # ----------------------------------------------------------------
-    
+
     def setenv(self, name, value):
         """
         """
@@ -128,13 +128,13 @@ class Platform:
         hdr += '\n'
 
         return hdr
-    
+
     def getDefaultQsubLimit(self):
         """
         """
         n = self.attrs.get( 'maxsubs', 5 )
         return n
-    
+
     def Qsubmit(self, workdir, outfile, scriptname):
         """
         """
@@ -148,7 +148,7 @@ class Platform:
             print3( "Job script", scriptname, "submitted with id", jobid )
         
         return jobid
-    
+
     def Qquery(self, jobidL):
         """
         """
@@ -158,7 +158,7 @@ class Platform:
         return jobD
         
         return jobD
-    
+
     def initProcs(self, set_num, set_max):
         """
         Determines the number of processors and the maximum number for the
@@ -191,15 +191,15 @@ class Platform:
             self.nprocs = self.maxprocs
         else:
             self.nprocs = set_num
-        
+
         self.nfree = self.nprocs
-    
+
     def queryProcs(self, np):
         """
         """
         if np <= 0: np = 1
         return np <= self.nfree
-    
+
     def obtainProcs(self, np):
         """
         """
@@ -210,7 +210,7 @@ class Platform:
             self.nfree = 0
         else:
             self.nfree = max( 0, self.nfree - np )
-        
+
         job_info = JobInfo( np )
 
         pf = self.attrs.get( 'mpifile', '' )
@@ -227,13 +227,13 @@ class Platform:
             job_info.machinefile = ''
             for i in range(np):
                 job_info.machinefile += machine + '\n'
-        
+
         mpiopts = self.attrs.get( 'mpiopts', '' )
         if mpiopts:
             job_info.mpi_opts += ' ' + mpiopts
 
         return job_info
-    
+
     def giveProcs(self, job_info):
         """
         """
@@ -245,20 +245,20 @@ class Platform:
             self.nfree = 1
         else:
             self.nfree = min( self.nprocs, self.nfree + np )
-    
+
     # ----------------------------------------------------------------
-    
+
     def testingDirectory(self):
         """
         """
         if 'TESTING_DIRECTORY' in os.environ:
             return os.environ['TESTING_DIRECTORY']
-        
+
         elif 'testingdir' in self.attrs:
             return self.attrs['testingdir']
 
         return None
-    
+
     def which(self, prog):
         """
         """
@@ -345,7 +345,7 @@ def construct_Platform( toolsdir, optdict, **kwargs ):
             print3( 'construct_Platform C:', plat.platname, plat.cplrname )
             idplatform.debug = False
 
-    platopts = optdict.get( '--platopt', {} )
+    platopts = optdict.get( '--platopts', {} )
 
     q = platopts.get( 'queue', platopts.get( 'q', None ) )
     plat.setattr( 'queue', q )

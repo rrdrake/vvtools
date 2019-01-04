@@ -29,13 +29,28 @@ class inlining_results_file_includes( vtu.vvtestTestCase ):
             """ )
         time.sleep(1)
 
-        opts = '--platopt q=pickme --platopt walltime=1:30:00'
+        opts = '--platopt q=pickme --platopt walltime=1:30:00 --platopt PT=abc'
 
         vrun = vtu.runvvtest( opts, batch=True )
         vrun.assertCounts( total=1, npass=1 )
         time.sleep(1)
 
         assert len( glob.glob( 'TestResult*/testA/testA.txt' ) ) == 1
+
+        lines = util.grepfiles( 'np = 1', 'TestResult*/batchset*/qbat.*' )
+        assert len( lines ) == 1
+
+        lines = util.grepfiles( 'qtime =', 'TestResult*/batchset*/qbat.*' )
+        assert len( lines ) == 1
+        assert lines[0].split( 'qtime =', 1 )[1].strip() == '1:30:00'
+
+        lines = util.grepfiles( 'queue = pickme',
+                                'TestResult*/batchset*/qbat-out.*' )
+        assert len( lines ) == 1
+
+        lines = util.grepfiles( 'account = abc',
+                                'TestResult*/batchset*/qbat-out.*' )
+        assert len( lines ) == 1
 
     def test_restarting_a_killed_batch_run_three_times(self):
         """

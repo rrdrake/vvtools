@@ -20,6 +20,10 @@ class ProcessBatch:
         """
         """
         hdr = '\n' + \
+              '# np = '+str(np) + '\n' + \
+              '# qtime = '+str(qtime) + '\n' + \
+              '# workdir = '+str(workdir) + '\n' + \
+              '# outfile = '+str(outfile) + '\n\n' + \
               'cd '+workdir + ' || exit 1\n'
         
         return hdr
@@ -36,16 +40,19 @@ class ProcessBatch:
         """
         sys.stdout.flush()
         sys.stderr.flush()
-        
+
         jobid = os.fork()
-        
+
         if jobid == 0:
             os.chdir(workdir)
-            fpout = open( outfile, 'wb' )
+            fpout = open( outfile, 'w' )
             os.dup2( fpout.fileno(), sys.stdout.fileno() )
             os.dup2( fpout.fileno(), sys.stderr.fileno() )
+            sys.stdout.write( 'queue = '+str(queue) + '\n' + \
+                              'account = '+str(account) + '\n\n' )
+            sys.stdout.flush()
             os.execv( '/bin/csh', ['/bin/csh', '-f', fname] )
-        
+
         cmd = '/bin/csh -f ' + fname + ' >& ' + outfile
         out = '[forked process '+str(jobid)+']'
 
