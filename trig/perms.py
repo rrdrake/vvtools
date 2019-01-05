@@ -15,30 +15,33 @@ import grp
 
 help_string = """
 USAGE:
-    perms.py [OPTIONS] file1 [ file2 ... ]
+    perms.py [OPTIONS] [ path [ path ... ]
 
 SYNOPSIS:
-    This script sets file permissions and file group.  Its main use is as a
-python module for file & directory manipulation utilities.  The command line
-interface is similar in functionality to the shell commands chmod and chgrp.
+    This script sets file and directory permissions and group.  Its main use
+is as a python module for file & directory manipulation utilities.  The command
+line interface is similar in functionality to the shell commands chmod and
+chgrp.
 
-    Operations are specified using the -p option, such as
+If a 'path' is not given, the current working directory is assumed.  Operations
+are specified using the -p option, such as
 
         o=-     : set world permissions to none
         g=r-x   : set group to read, no write, execute
-        g+rx    : add read & execute to group
+        g+rX    : add read to group, add execute to group if owner has execute
         o-w     : remove write to world
         u+rw    : add read & write to owner
+        wg-name : set the group name on the file or directory
 
-    If the specification does not start with one of u=, g=, o=, u+, g+, o+, u-,
-g-, or o-, then it is assumed to be a group name, and the file(s) group is set.
+If the specification does not start with one of u=, g=, o=, u+, g+, o+, u-, g-,
+or o-, then it is assumed to be a group name, and the group is set on the path.
 
 OPTIONS:
     -h, --help : this help
     -p <spec>  : permission specification for files and directories
     -f <spec>  : permission specification for files
     -d <spec>  : permission specification for directories
-    -R         : apply permissions recursively
+    -R         : apply permissions recursively; DEPRECATED (now the default)
 
 Note that the -p, -f, and -d arguments may be repeated.
 """
@@ -64,22 +67,16 @@ def main():
     fspecs = optD.get( '-f', [] )
     dspecs = optD.get( '-d', [] )
 
-    if len(pspecs) + len(fspecs) + len(dspecs) > 0 and len(argL) > 0:
+    if len(pspecs) + len(fspecs) + len(dspecs) > 0:
 
-        if '-R' in optD:
-            for path in argL:
-                chmod_recurse( path, pspecs+fspecs, pspecs+dspecs )
+        if len(argL) == 0:
+            argL = ['.']
 
-        else:
-            for path in argL:
-                if os.path.islink( path ):
-                    pass
-                elif os.path.isdir( path ):
-                    apply_chmod( path, *pspecs )
-                    apply_chmod( path, *dspecs )
-                else:
-                    apply_chmod( path, *pspecs )
-                    apply_chmod( path, *fspecs )
+        for path in argL:
+            apply_itemized_chmod( path,
+                                  pspecs+fspecs,
+                                  pspecs+dspecs,
+                                  recurse=True )
 
 
 ####################################################################
@@ -190,9 +187,13 @@ def change_filemode( fmode, spec, *more_specs ):
             mask = owner_mask
             bits = owner_bits[what]
         elif who == 'g':
+            if 'X' in what:
+                what = replace_conditional_execute( what, fmode )
             mask = group_mask
             bits = group_bits[what]
         else:
+            if 'X' in what:
+                what = replace_conditional_execute( what, fmode )
             mask = world_mask
             bits = world_bits[what]
 
@@ -201,6 +202,18 @@ def change_filemode( fmode, spec, *more_specs ):
         else:           fmode = fmode & ( ~(bits) )
 
     return fmode
+
+
+def replace_conditional_execute( what, fmode ):
+    ""
+    if permission( fmode, 'owner x' ):
+        what = what.replace( 'X', 'x' )
+    elif '-' in what:
+        what = what.replace( 'X', '-' )
+    else:
+        what = what.replace( 'X', '' )
+
+    return what
 
 
 def fileowner( path ):
@@ -270,6 +283,7 @@ def apply_chmod( path, *spec ):
     Examples of values for 'spec',
 
         u+x : file mode setting to add execute for owner
+        g=rX : set read for group and execute if execute for owner
         wg-alegra : change file group to "wg-alegra"
     """
     if spec:
@@ -285,7 +299,13 @@ def apply_chmod( path, *spec ):
             os.chmod( path, change_filemode( filemode( path ), *mL ) )
 
 
-def chmod_recurse( path, filespecs=[], dirspecs=[], setgroup=None):
+def chmod_recurse( path, filespecs=[], dirspecs=[], setgroup=None ):
+    ""
+    apply_itemized_chmod( path, filespecs, dirspecs, setgroup, recurse=True )
+
+
+def apply_itemized_chmod( path, filespecs=[], dirspecs=[],
+                          setgroup=None, recurse=True ):
     """
     Applies 'filespecs' to files and 'dirspecs' to directories.  Each spec
     is the same as for change_filemode(), such as
@@ -294,19 +314,23 @@ def chmod_recurse( path, filespecs=[], dirspecs=[], setgroup=None):
         g-w   : remove write for group
         o=--- : set other to no read, no write, no execute
 
-    Recurses into directories.  Sets the file group if 'setgroup' is given.
-    Ignores soft links.
+    If 'recurse' is true, then recurses into directories.  Sets the file group
+    if 'setgroup' is given.  Ignores soft links.
     """
     if os.path.islink( path ):
         pass
+
     elif os.path.isdir( path ):
         if setgroup:
             change_group( path, setgroup )
         if dirspecs:
             apply_chmod( path, *dirspecs )
-        for f in os.listdir( path ):
-            fp = os.path.join( path, f )
-            chmod_recurse( fp, filespecs, dirspecs, setgroup )
+
+        if recurse:
+            for f in os.listdir( path ):
+                fp = os.path.join( path, f )
+                apply_itemized_chmod( fp, filespecs, dirspecs, setgroup, recurse )
+
     else:
         if filespecs:
             apply_chmod( path, *filespecs )

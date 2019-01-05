@@ -10,6 +10,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
+from os.path import dirname
 import time
 import subprocess as sp
 import unittest
@@ -21,11 +22,8 @@ from testutils import print3
 # this is the module we are testing
 import perms
 
-
-# default the local and remote python to the current running python
-localpy = sys.executable
-
-srcdir = os.path.dirname( trigutil.testsrcdir )
+srcdir = dirname( trigutil.testsrcdir )
+permscmd = sys.executable+' '+srcdir+'/perms.py'
 
 
 #######################################################################
@@ -261,6 +259,54 @@ class catchall( unittest.TestCase ):
         assert not perms.permission( m, 'world r-x' )
         assert not perms.permission( m, 'world r--' )
 
+    def test_change_filemode_if_owner_has_execute_bit_set(self):
+        ""
+        util.writefile( 'afile', 'contents' )
+        util.writefile( 'bfile', 'contents' )
+        time.sleep(1)
+        assert sp.call( 'chmod 0700 afile', shell=True ) == 0
+        assert sp.call( 'chmod 0600 bfile', shell=True ) == 0
+        time.sleep(1)
+
+        fma = perms.filemode( 'afile' )
+        fmb = perms.filemode( 'bfile' )
+
+        ma = perms.change_filemode( fma, 'g=rX' )
+        assert     perms.permission( ma, 'group r' )
+        assert not perms.permission( ma, 'group w' )
+        assert     perms.permission( ma, 'group x' )
+        mb = perms.change_filemode( fmb, 'g=rX' )
+        assert     perms.permission( mb, 'group r' )
+        assert not perms.permission( mb, 'group w' )
+        assert not perms.permission( mb, 'group x' )
+
+        ma = perms.change_filemode( fma, 'g=r-X' )
+        assert     perms.permission( ma, 'group r' )
+        assert not perms.permission( ma, 'group w' )
+        assert     perms.permission( ma, 'group x' )
+        mb = perms.change_filemode( fmb, 'g=r-X' )
+        assert     perms.permission( mb, 'group r' )
+        assert not perms.permission( mb, 'group w' )
+        assert not perms.permission( mb, 'group x' )
+
+        ma = perms.change_filemode( fma, 'o=rX' )
+        assert     perms.permission( ma, 'world r' )
+        assert not perms.permission( ma, 'world w' )
+        assert     perms.permission( ma, 'world x' )
+        mb = perms.change_filemode( fmb, 'o=rX' )
+        assert     perms.permission( mb, 'world r' )
+        assert not perms.permission( mb, 'world w' )
+        assert not perms.permission( mb, 'world x' )
+
+        ma = perms.change_filemode( fma, 'o=r-X' )
+        assert     perms.permission( ma, 'world r' )
+        assert not perms.permission( ma, 'world w' )
+        assert     perms.permission( ma, 'world x' )
+        mb = perms.change_filemode( fmb, 'o=r-X' )
+        assert     perms.permission( mb, 'world r' )
+        assert not perms.permission( mb, 'world w' )
+        assert not perms.permission( mb, 'world x' )
+
     def test_apply_chmod_with_single_specification(self):
         ""
         # determine a group name to test with
@@ -292,21 +338,21 @@ class catchall( unittest.TestCase ):
         time.sleep(1)
         assert grp == perms.filegroup( 'afile' )
 
-        util.runcmd( localpy+' '+srcdir+'/perms.py -f g=r-x afile' )
+        util.runcmd( permscmd+' -f g=r-x afile' )
         time.sleep(1)
         assert perms.permission( 'afile', 'group r-x' ) == True
 
         os.mkdir( 'adir' )
         time.sleep(1)
-        util.runcmd( localpy+' '+srcdir+'/perms.py -d g=--x adir' )
+        util.runcmd( permscmd+' -d g=--x adir' )
         time.sleep(1)
         assert perms.permission( 'adir', 'group --x' ) == True
 
-        util.runcmd( localpy+' '+srcdir+'/perms.py -p g=-w- afile' )
+        util.runcmd( permscmd+' -p g=-w- afile' )
         time.sleep(1)
         assert perms.permission( 'afile', 'group -w-' ) == True
 
-        util.runcmd( localpy+' '+srcdir+'/perms.py -p g=-wx adir' )
+        util.runcmd( permscmd+' -p g=-wx adir' )
         time.sleep(1)
         assert perms.permission( 'adir', 'group -wx' ) == True
 
@@ -356,8 +402,8 @@ class catchall( unittest.TestCase ):
             sys.stdout.write( 'success'+os.linesep )
             """ )
 
-        x,out = util.runcmd( localpy+' lcl.py' )
-        #os.system( localpy+' lcl.py' )
+        x,out = util.runcmd( sys.executable+' lcl.py' )
+        #os.system( sys.executable+' lcl.py' )
 
         assert len( util.greplines( 'success', out ) ) == 1
 
@@ -387,8 +433,7 @@ class catchall( unittest.TestCase ):
         assert perms.permission( 'subdir/bfile', 'group rw-' ) == True
         assert perms.permission( 'subdir/bfile', 'world r--' ) == True
 
-        util.runcmd( localpy+' '+srcdir+'/perms.py -R ' + \
-                      '-p g=--- -f g+w -d g+x subdir' )
+        util.runcmd( permscmd+' -p g=--- -f g+w -d g+x subdir' )
         time.sleep(1)
         assert perms.permission( 'subdir', 'group --x' ) == True
         assert perms.permission( 'subdir/afile', 'group -w-' ) == True
@@ -478,6 +523,20 @@ class catchall( unittest.TestCase ):
         assert grp == perms.filegroup( 'subdir/afile' )
         assert grp == perms.filegroup( 'subdir' )
         assert grp == perms.filegroup( 'subdir/bfile' )
+
+    def test_command_line_path_defaults_to_current_working_directory(self):
+        ""
+        util.writefile( 'subdir/afile', 'contents' )
+        util.writefile( 'subdir/bfile', 'contents' )
+        time.sleep(1)
+        assert sp.call( 'chmod -R go-rwx subdir', shell=True ) == 0
+        time.sleep(1)
+
+        util.runcmd( permscmd+' -p g=r-X -p o+rX', chdir='subdir' )
+        time.sleep(1)
+        assert perms.permission( 'subdir', 'group r-x' ) == True
+        assert perms.permission( 'subdir/afile', 'group r--' ) == True
+        assert perms.permission( 'subdir/bfile', 'group r--' ) == True
 
 
 #######################################################################

@@ -374,7 +374,7 @@ def open_log_file_for_write( logpath, jobfile, group ):
     os.mkdir( joblogdir )
 
     if group:
-        perms.apply_chmod( joblogdir, group, 'g+rx' )
+        perms.apply_chmod( joblogdir, group, 'g+rX' )
 
     os.chdir( joblogdir )
 

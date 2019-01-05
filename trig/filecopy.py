@@ -43,7 +43,7 @@ OPTIONS:
                              examples:
                                 o=-     : set world permissions to none
                                 g=r-x   : set group to read, no write, execute
-                                g+rx    : add read & execute to group
+                                g+rX    : add read & conditional execute to group
                                 o-w     : remove write to world
                                 u+x     : add execute to owner
     --dperms <spec>        : same as --fperms except applied only to
