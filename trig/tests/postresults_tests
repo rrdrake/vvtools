@@ -1,0 +1,136 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+from os.path import dirname, abspath
+from os.path import join as pjoin
+import time
+import unittest
+
+import trigtestutils as trigutil
+import testutils as util
+from testutils import print3
+
+trigdir = dirname( trigutil.testsrcdir )
+postmod = util.create_module_from_filename( trigdir+'/postresults' )
+
+postcmd = sys.executable + ' ' + trigdir+'/postresults'
+
+
+class the_tests( unittest.TestCase ):
+
+    def setUp(self):
+        ""
+        util.setup_test()
+
+        self.url = trigutil.create_local_bare_repository()
+        trigutil.push_file_to_repo( self.url, 'afile.txt', 'file contents' )
+        time.sleep(1)
+
+    def test_clone_target_repo(self):
+        ""
+        pst = postmod.Poster( self.url )
+        localdir = pst.cloneRepo()
+
+        assert os.path.isdir( localdir )
+        assert os.path.isfile( localdir+'/.git/config' )
+        assert os.path.samefile( os.getcwd(), dirname( localdir ) )
+        assert os.path.isfile( localdir+'/afile.txt' )
+
+    def test_create_handler_and_results_directory(self):
+        ""
+        pst = postmod.Poster( self.url )
+        pst.cloneRepo()
+        rdir = pst.createHandler( 'mysuffix' )
+
+        assert os.path.isdir( rdir )
+        assert rdir.endswith( '.mysuffix' )
+
+    def test_push_result_files_and_cleanup(self):
+        ""
+        pst = postmod.Poster( self.url )
+        localdir = pst.cloneRepo()
+        rdir = pst.createHandler( 'mysuffix' )
+
+        util.writefile( rdir+'/results.txt', 'everything passes - booya' )
+        time.sleep(1)
+
+        branch = pst.push( 'add results' )
+        pst.cleanup()
+
+        util.runcmd( 'git clone '+self.url+' checkit' )
+        util.runcmd( 'git checkout '+branch, chdir='checkit' )
+        assert len( util.findfiles( 'results.txt', 'checkit' ) ) == 1
+
+        assert not os.path.exists( localdir )
+
+    def test_command_line_help(self):
+        ""
+        x,out = util.runcmd( postcmd+' -h' )
+        assert 'USAGE' in out
+
+        x,out = util.runcmd( postcmd+' --help' )
+        assert 'USAGE' in out
+
+    def test_command_line_workflow(self):
+        ""
+        os.mkdir( 'testarea' )
+
+        util.writescript( 'fakevvtest', """
+            #!"""+sys.executable+"""
+            import os, sys, getopt
+
+            assert os.path.samefile( os.getcwd(),
+                                     '"""+abspath('testarea')+"""' )
+
+            optL,argL = getopt.getopt( sys.argv[1:], 'i', ['sort=','gitlab='] )
+
+            assert ('-i','') in optL
+            for n,v in optL:
+                if n == '--gitlab':
+                    loc = v
+
+            fp = open( loc+'/fake_results.txt', 'w' )
+            fp.write( 'some results'+os.linesep )
+            fp.close()
+            """ )
+
+        time.sleep(1)
+
+        cmd = postcmd+' --gitlab '+self.url + \
+                ' --vvtest '+abspath('fakevvtest') + \
+                ' --message "special commit message"' + \
+                ' testarea'
+        util.runcmd( cmd )
+
+        time.sleep(1)
+        util.runcmd( 'git clone '+self.url+' checkit' )
+        branch = find_non_master_branch( 'checkit' )
+        util.runcmd( 'git checkout '+branch, chdir='checkit' )
+        assert len( util.grepfiles( 'some results', 'checkit/*/*.txt' ) ) == 1
+
+
+def find_non_master_branch( repodir ):
+    ""
+    x,out = util.runcmd( 'git branch -r', chdir=repodir )
+
+    branch = None
+    for line in out.splitlines():
+        if not line.endswith('/master'):
+            branch = line.split()[-1].split('/')[1]
+
+    assert branch
+    return branch
+
+
+#######################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
