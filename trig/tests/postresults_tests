@@ -10,7 +10,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
-from os.path import dirname, abspath
+from os.path import dirname, abspath, basename
 from os.path import join as pjoin
 import time
 import unittest
@@ -108,6 +108,7 @@ class the_tests( unittest.TestCase ):
         cmd = postcmd+' --gitlab '+self.url + \
                 ' --vvtest '+abspath('fakevvtest') + \
                 ' --message "special commit message"' + \
+                ' --suffix special_results' + \
                 ' testarea'
         util.runcmd( cmd )
 
@@ -115,7 +116,11 @@ class the_tests( unittest.TestCase ):
         util.runcmd( 'git clone '+self.url+' checkit' )
         branch = find_non_master_branch( 'checkit' )
         util.runcmd( 'git checkout '+branch, chdir='checkit' )
-        assert len( util.grepfiles( 'some results', 'checkit/*/*.txt' ) ) == 1
+
+        fn = util.globfile( 'checkit/*/*.txt' )
+        assert os.path.split(fn)[1] == 'fake_results.txt'
+        subdir = basename( dirname( fn ) )
+        assert subdir.endswith( '.special_results' )
 
 
 def find_non_master_branch( repodir ):
