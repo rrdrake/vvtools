@@ -374,6 +374,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         ""
         util.writefile( 'file.txt', """
             Text with a < and a > and a & and some "quotes" too.
+            ```
             This is line two.
             """ )
         time.sleep(1)
@@ -387,7 +388,8 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         assert len( util.greplines( '<code>label', val ) ) == 1
         assert fn not in val
         assert 'Text with a' in val
-        assert '< and a > and a & and some "quotes"' not in val
+        assert '< and a > and a & and some "quotes"' in val
+        assert val.count( '```' ) == 2 and "'''" in val
 
         sio = StringIO()
         fn = os.path.abspath('file.exo')
@@ -412,13 +414,11 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         assert 'error reading file:' in val
         assert 'Traceback' in val
 
-    def test_write_gitlab_collapsable_file_that_contains_leading_hashes(self):
+    def test_write_gitlab_collapsable_file_with_leading_backticks(self):
         ""
-        util.writefile( 'file.txt', "# the first line\n" + \
-                                    "echo hello\n" + \
-                                    "\n" + \
-                                    "## a comment\n" + \
-                                    " # this hash should not be escaped\n" )
+        util.writefile( 'file.txt', """```
+            Another line.
+            """ )
         time.sleep(1)
 
         sio = StringIO()
@@ -427,11 +427,8 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
         val = sio.getvalue()
         #print3( val )
-        assert "\\# the first line\n" + \
-               "echo hello\n" + \
-               "\n" + \
-               "\\## a comment\n" + \
-               " # this hash should not be escaped\n" in val
+        assert 'Another line' in val
+        assert val.count( '```' ) == 2 and val.count( "'''" ) == 1
 
     def test_stream_file_contents_to_gitlab_collapsable_format(self):
         ""

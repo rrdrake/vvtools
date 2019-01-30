@@ -628,7 +628,8 @@ def write_gitlab_formatted_file( fp, filename, include_content, label, max_KB ):
     ""
     fp.write( '<details>\n' + \
               '<summary><code>'+label+'</code></summary>\n' + \
-              '<pre>\n' )
+              '\n' + \
+              '```\n' )
 
     if include_content:
         try:
@@ -637,21 +638,20 @@ def write_gitlab_formatted_file( fp, filename, include_content, label, max_KB ):
             xs,tb = capture_traceback( sys.exc_info() )
             buf = '*** error reading file: '+str(filename)+'\n' + tb
 
-        buf = buf.replace( '&', '&amp;' )
-        buf = buf.replace( '<', '&lt;' )
-        buf = buf.replace( '>', '&gt;' )
-        buf = buf.replace( '"', '&quot;' )
-
-        if buf.startswith('#'):
-            buf = '\\'+buf
-        buf = buf.replace( '\n#', '\n\\#' )
+        if buf.startswith( '```' ):
+            buf = buf.replace( '```', "'''", 1 )
+        buf = buf.replace( '\n```', "\n'''" )
 
     else:
         buf = '*** file not archived ***'
 
     fp.write( buf )
 
-    fp.write( '</pre>\n' + \
+    if not buf.endswith( '\n' ):
+        fp.write( '\n' )
+
+    fp.write( '```\n' + \
+              '\n' + \
               '</details>\n' )
 
 
