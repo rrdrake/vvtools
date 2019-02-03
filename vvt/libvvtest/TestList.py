@@ -224,123 +224,30 @@ class TestList:
         """
         self.active = {}
 
-        self._create_parameterize_analyze_group_map()
+        rebuild_parameterize_analyze_group_map( self.tspecs, self.groups )
 
-        self._apply_core_filters( filter_dir, analyze_only, baseline )
+        rmD = apply_core_filters( self.tspecs, self.rtconfig, filter_dir,
+                                  analyze_only, baseline, self.active )
+        self._remove_tests( rmD )
 
         rtsum = self.rtconfig.getAttr( 'runtime_sum', None )
         if rtsum != None:
-            self._filter_by_cummulative_runtime( rtsum )
+            rmD = filter_by_cummulative_runtime( self.active, rtsum )
+            self._remove_tests( rmD )
 
         if prune:
-            pruneL, cntmax = self._prune_test_groups( maxprocs )
+            pruneL = self._prune_test_groups()
+
+            rmD, cntmax = get_tests_exceeding_platform_resources( self.active, maxprocs )
+            self._remove_tests( rmD )
+
         else:
             pruneL = []
             cntmax = 0
 
         return pruneL, cntmax
 
-    def _apply_core_filters(self, filter_dir, analyze_only, baseline):
-        ""
-        subdir = None
-        if filter_dir != None:
-          subdir = os.path.normpath( filter_dir )
-          if subdir == '' or subdir == '.':
-            subdir = None
-
-        rmD = {}
-        for xdir,t in self.tspecs.items():
-
-            # TODO: is it possible that the filter apply before refresh could
-            #       miss a test that changed since last time and now should
-            #       be included !!
-            keep = self._apply_filters( xdir, t, subdir, analyze_only )
-
-            if keep:
-                if not self._passes_runtime_constraints( t ):
-                    keep = False
-                    rmD[ xdir ] = t
-
-            if keep:
-                self._check_add_to_active( xdir, t, baseline )
-
-        # remove tests that do not meet runtime requirements
-        self._remove_tests( rmD )
-
-    def _apply_filters(self, xdir, tspec, subdir, analyze_only):
-        """
-        """
-        if self.rtconfig.getAttr('include_all',0):
-            return True
-        
-        kwL = tspec.getResultsKeywords() + tspec.getKeywords()
-        if not self.rtconfig.satisfies_keywords( kwL ):
-            return False
-        
-        if subdir != None and subdir != xdir and not is_subdir( subdir, xdir ):
-            return False
-        
-        # want child tests to run with the "analyze only" option ?
-        # if yes, then comment this out; if no, then uncomment it
-        #if analyze_only and tspec.getParent() != None:
-        #  return 0
-        
-        if not self.rtconfig.evaluate_parameters( tspec.getParameters() ):
-            return False
-
-        if not self.rtconfig.getAttr( 'include_tdd', False ) and \
-           tspec.hasAttr( 'TDD' ):
-            return False
-
-        return True
-
-    def _passes_runtime_constraints(self, tspec):
-        ""
-        tm = testruntime( tspec )
-        if tm != None and not self.rtconfig.evaluate_runtime( tm ):
-            return False
-        return True
-
-    def _check_add_to_active(self, xdir, tspec, baseline):
-        ""
-        if 'file' in tspec.getOrigin():
-            self.active[ xdir ] = tspec
-        else:
-            # read from test source, which double checks filtering
-            keep = TestSpecCreator.refreshTest( tspec, self.rtconfig )
-            if baseline and not tspec.hasBaseline():
-                keep = False
-            if keep:
-                self.active[ xdir ] = tspec
-
-    def _filter_by_cummulative_runtime(self, rtsum):
-        ""
-        # first, generate list with times
-        rmD = {}
-        tL = []
-        for xdir,t in self.active.items():
-            tm = testruntime(t)
-            if tm == None: tm = 0
-            tL.append( (tm,xdir,t) )
-        tL.sort()
-        # accumulate tests until allowed runtime is exceeded
-        tsum = 0.
-        i = 0 ; n = len(tL)
-        while i < n:
-            tm,xdir,t = tL[i]
-            tsum += tm
-            if tsum > rtsum:
-                break
-            i += 1
-        # put the rest of the tests in the remove dict
-        while i < n:
-            tm,xdir,t = tL[i]
-            rmD[xdir] = t
-            i += 1
-        tL = None
-        self._remove_tests( rmD )
-
-    def _prune_test_groups(self, maxprocs):
+    def _prune_test_groups(self):
         ""
         pruneL = []
 
@@ -361,20 +268,7 @@ class TestList:
                     pt = self.active.pop( pxdir )
                     pruneL.append( (pt,t) )
 
-        # Remove tests that exceed the platform resources (num processors).
-        # For execute/analyze, if an execute test exceeds the resources
-        # then the entire test set is removed.
-        rmD = {}
-        cntmax = 0
-        for xdir,t in self.active.items():
-            np = int( t.getParameters().get( 'np', 1 ) )
-            assert maxprocs != None
-            if np > maxprocs:
-                rmD[xdir] = t
-                cntmax += 1
-        self._remove_tests( rmD )
-
-        return pruneL, cntmax
+        return pruneL
 
     def _remove_tests(self, removeD):
         """
@@ -404,23 +298,6 @@ class TestList:
                 # it was there previously
                 if xdir in self.tspecs and 'string' not in t.getOrigin():
                     self.tspecs.pop( xdir )
-
-    def _create_parameterize_analyze_group_map(self):
-        ""
-        self.groups.clear()
-
-        for xdir,t in self.tspecs.items():
-
-            # this key is common to each test in a parameterize/analyze
-            # test group (including the analyze test)
-            key = ( t.getFilepath(), t.getName() )
-
-            L = self.groups.get( key, None )
-            if L == None:
-                L = []
-                self.groups[ key ] = L
-
-            L.append( t )
 
     def markTestsWithDependents(self):
         ""
@@ -808,6 +685,153 @@ class TestList:
         del L[i]
         if len(L) == 0:
             self.xtlist.pop( np )
+
+
+def rebuild_parameterize_analyze_group_map( tspecs, groupdict ):
+    ""
+    groupdict.clear()
+
+    for xdir,t in tspecs.items():
+
+        # this key is common to each test in a parameterize/analyze
+        # test group (including the analyze test)
+        key = ( t.getFilepath(), t.getName() )
+
+        L = groupdict.get( key, None )
+        if L == None:
+            L = []
+            groupdict[ key ] = L
+
+        L.append( t )
+
+
+def apply_runtime_config_filters( rtconfig, xdir, tspec, subdir, analyze_only ):
+    """
+    """
+    if rtconfig.getAttr('include_all',0):
+        return True
+
+    kwL = tspec.getResultsKeywords() + tspec.getKeywords()
+    if not rtconfig.satisfies_keywords( kwL ):
+        return False
+
+    if subdir != None and subdir != xdir and not is_subdir( subdir, xdir ):
+        return False
+
+    # want child tests to run with the "analyze only" option ?
+    # if yes, then comment this out; if no, then uncomment it
+    #if analyze_only and tspec.getParent() != None:
+    #  return 0
+
+    if not rtconfig.evaluate_parameters( tspec.getParameters() ):
+        return False
+
+    if not rtconfig.getAttr( 'include_tdd', False ) and \
+       tspec.hasAttr( 'TDD' ):
+        return False
+
+    return True
+
+
+def check_add_to_active( rtconfig, xdir, tspec, baseline, activedict ):
+    ""
+    if 'file' in tspec.getOrigin():
+        activedict[ xdir ] = tspec
+
+    else:
+        # read from test source, which double checks filtering
+        keep = TestSpecCreator.refreshTest( tspec, rtconfig )
+
+        if baseline and not tspec.hasBaseline():
+            keep = False
+
+        if keep:
+            activedict[ xdir ] = tspec
+
+
+def passes_runtime_constraints( rtconfig, tspec ):
+    ""
+    tm = testruntime( tspec )
+    if tm != None and not rtconfig.evaluate_runtime( tm ):
+        return False
+    return True
+
+
+def apply_core_filters( tspecs, rtconfig, filter_dir,
+                        analyze_only, baseline, activedict ):
+    ""
+    subdir = None
+    if filter_dir != None:
+        subdir = os.path.normpath( filter_dir )
+        if subdir == '' or subdir == '.':
+            subdir = None
+
+    rmD = {}
+    for xdir,t in tspecs.items():
+
+        # TODO: is it possible that the filter apply before refresh could
+        #       miss a test that changed since last time and now should
+        #       be included !!
+        keep = apply_runtime_config_filters( rtconfig, xdir, t, subdir, analyze_only )
+
+        if keep:
+            if not passes_runtime_constraints( rtconfig, t ):
+                keep = False
+                rmD[ xdir ] = t
+
+        if keep:
+            check_add_to_active( rtconfig, xdir, t, baseline, activedict )
+
+    return rmD
+
+
+def filter_by_cummulative_runtime( activedict, rtsum ):
+    ""
+    rmD = {}
+
+    # first, generate list with times
+    tL = []
+    for xdir,t in activedict.items():
+        tm = testruntime(t)
+        if tm == None: tm = 0
+        tL.append( (tm,xdir,t) )
+    tL.sort()
+
+    # accumulate tests until allowed runtime is exceeded
+    tsum = 0.
+    i = 0 ; n = len(tL)
+    while i < n:
+        tm,xdir,t = tL[i]
+        tsum += tm
+        if tsum > rtsum:
+            break
+        i += 1
+
+    # put the rest of the tests in the remove dict
+    while i < n:
+        tm,xdir,t = tL[i]
+        rmD[xdir] = t
+        i += 1
+    tL = None
+
+    return rmD
+
+
+def get_tests_exceeding_platform_resources( activedict, maxprocs ):
+    ""
+    # Remove tests that exceed the platform resources (num processors).
+    # For execute/analyze, if an execute test exceeds the resources
+    # then the entire test set is removed.
+    rmD = {}
+    cntmax = 0
+    for xdir,t in activedict.items():
+        np = int( t.getParameters().get( 'np', 1 ) )
+        assert maxprocs != None
+        if np > maxprocs:
+            rmD[xdir] = t
+            cntmax += 1
+
+    return rmD, cntmax
 
 
 def is_subdir(parent_dir, subdir):
