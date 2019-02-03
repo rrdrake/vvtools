@@ -264,6 +264,59 @@ class restart_tests( vtu.vvtestTestCase ):
             vrun.assertCounts( total=1, npass=1 )
             assert os.path.exists( afile )
 
+    def test_a_previously_notrun_test_can_be_run_outside_of_TestResults(self):
+        ""
+        util.writefile( "testA.vvt", """
+            raise Exception( 'fake exception' )
+            """ )
+        util.writefile( "testB.vvt", """
+            #VVT: depends on : testA
+            pass
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=2, fail=1, notrun=1 )
+
+        util.writefile( 'testA.vvt', """
+            pass
+            """ )
+        time.sleep(1)
+
+        td = util.globfile( 'TestResults*/testA' )
+        vrun = vtu.runvvtest( '-R', chdir=td )
+        vrun.assertCounts( total=1, npass=1 )
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
+
+    def magic_test_a_previously_notrun_test_can_be_run_inside_of_TestResults(self):
+        ""
+        util.writefile( "testA.vvt", """
+            raise Exception( 'fake exception' )
+            """ )
+        util.writefile( "testB.vvt", """
+            #VVT: depends on : testA
+            pass
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=2, fail=1, notrun=1 )
+
+        util.writefile( 'testA.vvt', """
+            pass
+            """ )
+        time.sleep(1)
+
+        td = util.globfile( 'TestResults*/testA' )
+        vrun = vtu.runvvtest( '-R', chdir=td )
+        vrun.assertCounts( total=1, npass=1 )
+
+        td = util.globfile( 'TestResults*/testB' )
+        vrun = vtu.runvvtest( chdir=td )
+        vrun.assertCounts( total=1, npass=1 )
+
 
 ########################################################################
 

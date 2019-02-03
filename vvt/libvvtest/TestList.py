@@ -22,8 +22,6 @@ class TestList:
     file and to read from a test XML file.
     """
 
-    version = '32'
-
     def __init__(self, filename, runtime_config=None):
         ""
         if filename:
@@ -134,6 +132,7 @@ class TestList:
 
     def readTestListIfNoTestResults(self):
         ""
+        # magic: to always read the testlist, make this unconditional
         if len( self.getResultsFilenames() ) == 0:
             self.readTestList()
 
@@ -227,6 +226,22 @@ class TestList:
 
         self._create_parameterize_analyze_group_map()
 
+        self._apply_core_filters( filter_dir, analyze_only, baseline )
+
+        rtsum = self.rtconfig.getAttr( 'runtime_sum', None )
+        if rtsum != None:
+            self._filter_by_cummulative_runtime( rtsum )
+
+        if prune:
+            pruneL, cntmax = self._prune_test_groups( maxprocs )
+        else:
+            pruneL = []
+            cntmax = 0
+
+        return pruneL, cntmax
+
+    def _apply_core_filters(self, filter_dir, analyze_only, baseline):
+        ""
         subdir = None
         if filter_dir != None:
           subdir = os.path.normpath( filter_dir )
@@ -242,90 +257,15 @@ class TestList:
             keep = self._apply_filters( xdir, t, subdir, analyze_only )
 
             if keep:
-                # apply runtime filtering
-                tm = testruntime(t)
-                if tm != None and not self.rtconfig.evaluate_runtime( tm ):
+                if not self._passes_runtime_constraints( t ):
                     keep = False
                     rmD[ xdir ] = t
 
             if keep:
-                if 'file' in t.getOrigin():
-                    self.active[ xdir ] = t
-                else:
-                    # read from test source, which double checks filtering
-                    keep = TestSpecCreator.refreshTest( t, self.rtconfig )
-                    if baseline and not t.hasBaseline():
-                        keep = False
-                    if keep:
-                        self.active[ xdir ] = t
+                self._check_add_to_active( xdir, t, baseline )
 
         # remove tests that do not meet runtime requirements
         self._remove_tests( rmD )
-
-        rtsum = self.rtconfig.getAttr( 'runtime_sum', None )
-        if rtsum != None:
-            # filter by cummulative runtime; first, generate list with times
-            rmD.clear()
-            tL = []
-            for xdir,t in self.active.items():
-                tm = testruntime(t)
-                if tm == None: tm = 0
-                tL.append( (tm,xdir,t) )
-            tL.sort()
-            # accumulate tests until allowed runtime is exceeded
-            tsum = 0.
-            i = 0 ; n = len(tL)
-            while i < n:
-                tm,xdir,t = tL[i]
-                tsum += tm
-                if tsum > rtsum:
-                    break
-                i += 1
-            # put the rest of the tests in the remove dict
-            while i < n:
-                tm,xdir,t = tL[i]
-                rmD[xdir] = t
-                i += 1
-            tL = None
-            self._remove_tests( rmD )
-
-        pruneL = []
-        cntmax = 0
-        if prune:
-            
-            # remove analyze tests from the active set if they have inactive
-            # children that have a bad result
-            for xdir,t in self.tspecs.items():
-
-                pxdir = self._find_group_analyze_test( t )
-
-                # does this test have a parent and is this test inactive
-                if pxdir != None and xdir not in self.active:
-
-                    # is the parent active and does the child have a bad result
-                    if pxdir in self.active and \
-                          ( t.getAttr('state') != 'done' or \
-                            t.getAttr('result') not in ['pass','diff'] ):
-                        # remove the parent from the active set
-                        pt = self.active.pop( pxdir )
-                        pruneL.append( (pt,t) )
-
-            # Remove tests that exceed the platform resources (num processors).
-            # For execute/analyze, if an execute test exceeds the resources
-            # then the entire test set is removed.
-            rmD.clear()
-            cntmax = 0
-            for xdir,t in self.active.items():
-                np = int( t.getParameters().get( 'np', 1 ) )
-                assert maxprocs != None
-                if np > maxprocs:
-                    rmD[xdir] = t
-                    cntmax += 1
-            self._remove_tests( rmD )
-
-        rmD = None
-
-        return pruneL, cntmax
 
     def _apply_filters(self, xdir, tspec, subdir, analyze_only):
         """
@@ -353,6 +293,88 @@ class TestList:
             return False
 
         return True
+
+    def _passes_runtime_constraints(self, tspec):
+        ""
+        tm = testruntime( tspec )
+        if tm != None and not self.rtconfig.evaluate_runtime( tm ):
+            return False
+        return True
+
+    def _check_add_to_active(self, xdir, tspec, baseline):
+        ""
+        if 'file' in tspec.getOrigin():
+            self.active[ xdir ] = tspec
+        else:
+            # read from test source, which double checks filtering
+            keep = TestSpecCreator.refreshTest( tspec, self.rtconfig )
+            if baseline and not tspec.hasBaseline():
+                keep = False
+            if keep:
+                self.active[ xdir ] = tspec
+
+    def _filter_by_cummulative_runtime(self, rtsum):
+        ""
+        # first, generate list with times
+        rmD = {}
+        tL = []
+        for xdir,t in self.active.items():
+            tm = testruntime(t)
+            if tm == None: tm = 0
+            tL.append( (tm,xdir,t) )
+        tL.sort()
+        # accumulate tests until allowed runtime is exceeded
+        tsum = 0.
+        i = 0 ; n = len(tL)
+        while i < n:
+            tm,xdir,t = tL[i]
+            tsum += tm
+            if tsum > rtsum:
+                break
+            i += 1
+        # put the rest of the tests in the remove dict
+        while i < n:
+            tm,xdir,t = tL[i]
+            rmD[xdir] = t
+            i += 1
+        tL = None
+        self._remove_tests( rmD )
+
+    def _prune_test_groups(self, maxprocs):
+        ""
+        pruneL = []
+
+        # remove analyze tests from the active set if they have inactive
+        # children that have a bad result
+        for xdir,t in self.tspecs.items():
+
+            pxdir = self._find_group_analyze_test( t )
+
+            # does this test have a parent and is this test inactive
+            if pxdir != None and xdir not in self.active:
+
+                # is the parent active and does the child have a bad result
+                if pxdir in self.active and \
+                      ( t.getAttr('state') != 'done' or \
+                        t.getAttr('result') not in ['pass','diff'] ):
+                    # remove the parent from the active set
+                    pt = self.active.pop( pxdir )
+                    pruneL.append( (pt,t) )
+
+        # Remove tests that exceed the platform resources (num processors).
+        # For execute/analyze, if an execute test exceeds the resources
+        # then the entire test set is removed.
+        rmD = {}
+        cntmax = 0
+        for xdir,t in self.active.items():
+            np = int( t.getParameters().get( 'np', 1 ) )
+            assert maxprocs != None
+            if np > maxprocs:
+                rmD[xdir] = t
+                cntmax += 1
+        self._remove_tests( rmD )
+
+        return pruneL, cntmax
 
     def _remove_tests(self, removeD):
         """
