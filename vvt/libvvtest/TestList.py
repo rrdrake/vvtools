@@ -36,7 +36,7 @@ class TestList:
         self.datestamp = None
         self.finish = None
 
-        self.groups = TestGroups()
+        self.groups = ParameterizeAnalyzeGroups()
 
         self.tspecs = {}  # TestSpec xdir -> TestSpec object
         self.active = {}  # TestSpec xdir -> TestSpec object
@@ -236,7 +236,8 @@ class TestList:
             self._remove_tests( rmD )
 
         if prune:
-            pruneL = self._prune_test_groups()
+            pruneL = prune_parameterize_analyze_groups(
+                                    self.tspecs, self.groups, self.active )
 
             rmD, cntmax = get_tests_exceeding_platform_resources( self.active, maxprocs )
             self._remove_tests( rmD )
@@ -247,29 +248,6 @@ class TestList:
 
         return pruneL, cntmax
 
-    def _prune_test_groups(self):
-        ""
-        pruneL = []
-
-        # remove analyze tests from the active set if they have inactive
-        # children that have a bad result
-        for xdir,t in self.tspecs.items():
-
-            pxdir = self._find_group_analyze_test( t )
-
-            # does this test have a parent and is this test inactive
-            if pxdir != None and xdir not in self.active:
-
-                # is the parent active and does the child have a bad result
-                if pxdir in self.active and \
-                      ( t.getAttr('state') != 'done' or \
-                        t.getAttr('result') not in ['pass','diff'] ):
-                    # remove the parent from the active set
-                    pt = self.active.pop( pxdir )
-                    pruneL.append( (pt,t) )
-
-        return pruneL
-
     def _remove_tests(self, removeD):
         """
         The 'removeD' should be a dict mapping xdir to TestSpec.  Those tests
@@ -279,11 +257,7 @@ class TestList:
         """
         for xdir,t in removeD.items():
 
-            grpL = self.groups.getGroupList( t )
-
-            if not self._test_group_has_analyze( grpL ):
-                # not a parameterize/analyze test, so just remove the test
-                grpL = [ t ]
+            grpL = self.groups.getAnalyzeGroup( t, [t] )
 
             for grpt in grpL:
 
@@ -302,23 +276,6 @@ class TestList:
         for tx in self.getTestExecList():
             if tx.hasDependent():
                 tx.atest.setAttr( 'hasdependent', True )
-
-    def _test_group_has_analyze(self, grpL):
-        ""
-        for t in grpL:
-            if t.isAnalyze():
-                return True
-        return False
-
-    def _find_group_analyze_test(self, testobj):
-        ""
-        grpL = self.groups.getGroupList( testobj )
-
-        for t in grpL:
-            if t != testobj and t.isAnalyze():
-                return t.getExecuteDirectory()
-
-        return None
 
     def getActiveTests(self, sorting=''):
         """
@@ -520,14 +477,14 @@ class TestList:
         add dependencies of analyze tests to TestExec objects
         """
         for xt in self.getTestExecList():
-            analyze_xdir = self._find_group_analyze_test( xt.atest )
+            analyze_xdir = self.groups.getAnalyzeExecuteDirectory( xt.atest )
             if analyze_xdir != None:
                 # this test has an analyze dependent
                 analyze_xt = xdir2testexec.get( analyze_xdir, None )
                 if analyze_xt != None:
                     connect_dependency( analyze_xt, xt )
             elif xt.atest.isAnalyze():
-                grpL = self.groups.getGroupList( xt.atest, None )
+                grpL = self.groups.getGroup( xt.atest )
                 for gt in grpL:
                     if not gt.isAnalyze():
                         connect_dependency( xt, gt )
@@ -811,6 +768,30 @@ def get_tests_exceeding_platform_resources( activedict, maxprocs ):
     return rmD, cntmax
 
 
+def prune_parameterize_analyze_groups( tspecs, groups, active ):
+    ""
+    pruneL = []
+
+    # remove analyze tests from the active set if they have inactive
+    # children that have a bad result
+    for xdir,t in tspecs.items():
+
+        pxdir = groups.getAnalyzeExecuteDirectory( t )
+
+        # does this test have a parent and is this test inactive
+        if pxdir != None and xdir not in active:
+
+            # is the parent active and does the child have a bad result
+            if pxdir in active and \
+                  ( t.getAttr('state') != 'done' or \
+                    t.getAttr('result') not in ['pass','diff'] ):
+                # remove the parent from the active set
+                pt = active.pop( pxdir )
+                pruneL.append( (pt,t) )
+
+    return pruneL
+
+
 def is_subdir(parent_dir, subdir):
     """
     TODO: test for relative paths
@@ -841,20 +822,36 @@ def testruntime( testobj ):
     return tm
 
 
-class TestGroups:
+class ParameterizeAnalyzeGroups:
 
     def __init__(self):
         ""
         self.groupmap = {}  # (test filepath, test name) -> list of TestSpec
 
-    def getGroupList(self, tspec, *default):
+    def getGroup(self, tspec):
         ""
         key = ( tspec.getFilepath(), tspec.getName() )
-
-        if len(default) > 0:
-            return self.groupmap.get( key, default[0] )
-
         return self.groupmap[key]
+
+    def getAnalyzeGroup(self, tspec, *default):
+        ""
+        grpL = self.getGroup( tspec )
+
+        for t in grpL:
+            if t.isAnalyze():
+                return grpL
+
+        return default[0]
+
+    def getAnalyzeExecuteDirectory(self, tspec):
+        ""
+        grpL = self.getGroup( tspec )
+
+        for t in grpL:
+            if t != tspec and t.isAnalyze():
+                return t.getExecuteDirectory()
+
+        return None
 
     def rebuild(self, tspecs):
         ""
