@@ -36,7 +36,7 @@ class TestList:
         self.datestamp = None
         self.finish = None
 
-        self.groups = {}  # (test filepath, test name) -> list of TestSpec
+        self.groups = TestGroups()
 
         self.tspecs = {}  # TestSpec xdir -> TestSpec object
         self.active = {}  # TestSpec xdir -> TestSpec object
@@ -224,7 +224,7 @@ class TestList:
         """
         self.active = {}
 
-        rebuild_parameterize_analyze_group_map( self.tspecs, self.groups )
+        self.groups.rebuild( self.tspecs )
 
         rmD = apply_core_filters( self.tspecs, self.rtconfig, filter_dir,
                                   analyze_only, baseline, self.active )
@@ -279,9 +279,7 @@ class TestList:
         """
         for xdir,t in removeD.items():
 
-            key = ( t.getFilepath(), t.getName() )
-
-            grpL = self.groups[key]
+            grpL = self.groups.getGroupList( t )
 
             if not self._test_group_has_analyze( grpL ):
                 # not a parameterize/analyze test, so just remove the test
@@ -314,9 +312,7 @@ class TestList:
 
     def _find_group_analyze_test(self, testobj):
         ""
-        key = ( testobj.getFilepath(), testobj.getName() )
-
-        grpL = self.groups[key]
+        grpL = self.groups.getGroupList( testobj )
 
         for t in grpL:
             if t != testobj and t.isAnalyze():
@@ -531,8 +527,7 @@ class TestList:
                 if analyze_xt != None:
                     connect_dependency( analyze_xt, xt )
             elif xt.atest.isAnalyze():
-                key = ( xt.atest.getFilepath(), xt.atest.getName() )
-                grpL = self.groups.get( key, None )
+                grpL = self.groups.getGroupList( xt.atest, None )
                 for gt in grpL:
                     if not gt.isAnalyze():
                         connect_dependency( xt, gt )
@@ -685,24 +680,6 @@ class TestList:
         del L[i]
         if len(L) == 0:
             self.xtlist.pop( np )
-
-
-def rebuild_parameterize_analyze_group_map( tspecs, groupdict ):
-    ""
-    groupdict.clear()
-
-    for xdir,t in tspecs.items():
-
-        # this key is common to each test in a parameterize/analyze
-        # test group (including the analyze test)
-        key = ( t.getFilepath(), t.getName() )
-
-        L = groupdict.get( key, None )
-        if L == None:
-            L = []
-            groupdict[ key ] = L
-
-        L.append( t )
 
 
 def apply_runtime_config_filters( rtconfig, xdir, tspec, subdir, analyze_only ):
@@ -862,6 +839,39 @@ def testruntime( testobj ):
     if tm == None or tm < 0:
         tm = testobj.getAttr( 'runtime', None )
     return tm
+
+
+class TestGroups:
+
+    def __init__(self):
+        ""
+        self.groupmap = {}  # (test filepath, test name) -> list of TestSpec
+
+    def getGroupList(self, tspec, *default):
+        ""
+        key = ( tspec.getFilepath(), tspec.getName() )
+
+        if len(default) > 0:
+            return self.groupmap.get( key, default[0] )
+
+        return self.groupmap[key]
+
+    def rebuild(self, tspecs):
+        ""
+        self.groupmap.clear()
+
+        for xdir,t in tspecs.items():
+
+            # this key is common to each test in a parameterize/analyze
+            # test group (including the analyze test)
+            key = ( t.getFilepath(), t.getName() )
+
+            L = self.groupmap.get( key, None )
+            if L == None:
+                L = []
+                self.groupmap[ key ] = L
+
+            L.append( t )
 
 
 def find_tests_by_execute_directory_match( xdir, pattern, xdir_list ):
