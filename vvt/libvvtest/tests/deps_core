@@ -16,7 +16,7 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
-import libvvtest.TestSpecCreator as creator
+from libvvtest.TestList import createTestObjects
 from libvvtest.RuntimeConfig import RuntimeConfig
 from libvvtest.TestList import find_tests_by_execute_directory_match
 from libvvtest.TestSpec import TestSpec
@@ -37,12 +37,12 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         nofltr = RuntimeConfig()
 
-        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+        tL = createTestObjects( '.', 'testX.py.vvt', None, nofltr )
         assert len(tL) == 1
         assert_dependencies( tL[0], 'testY' )
         assert get_depencency_expr( tL[0], 'testY' ) == None
 
-        tL = creator.createTestObjects( '.', 'testA.py.vvt', None, nofltr )
+        tL = createTestObjects( '.', 'testA.py.vvt', None, nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testC', 'testB' )
@@ -61,7 +61,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         nofltr = RuntimeConfig()
 
-        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+        tL = createTestObjects( '.', 'testX.py.vvt', None, nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testY', 'testZ' )
@@ -72,7 +72,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
             assert not wx.evaluate( lambda word: word == "diff" )
             assert wx.evaluate( lambda word: word == "fail" )
 
-        tL = creator.createTestObjects( '.', 'testA.py.vvt', None, nofltr )
+        tL = createTestObjects( '.', 'testA.py.vvt', None, nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testB' )
@@ -91,7 +91,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         nofltr = RuntimeConfig()
 
-        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+        tL = createTestObjects( '.', 'testX.py.vvt', None, nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testY', 'testZ' )
@@ -112,7 +112,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         nofltr = RuntimeConfig()
 
-        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+        tL = createTestObjects( '.', 'testX.py.vvt', None, nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testB', 'testW', 'testY', 'testZ' )
@@ -140,7 +140,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         fltr = RuntimeConfig( platform_name='XBox' )
 
-        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, fltr )
+        tL = createTestObjects( '.', 'testX.py.vvt', None, fltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testY' )
@@ -152,7 +152,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         fltr = RuntimeConfig( platform_name='PlayStation' )
 
-        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, fltr )
+        tL = createTestObjects( '.', 'testX.py.vvt', None, fltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testZ' )
