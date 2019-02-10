@@ -15,6 +15,7 @@ from . import TestSpecCreator
 from . import CommonSpec
 from . import testlistio
 from . import FilterExpressions
+from .TestSpecError import TestSpecError
 
 
 class TestList:
@@ -225,6 +226,8 @@ class TestList:
         """
         self.active = {}
 
+        #self.tspecs = apply_pre_core_filters( self.tspecs, self.rtconfig )
+
         self.groups.rebuild( self.tspecs )
 
         rmD = apply_core_filters( self.tspecs, self.rtconfig, filter_dir,
@@ -336,7 +339,7 @@ class TestList:
         bdir = os.path.normpath( os.path.abspath(base_directory) )
         for root,dirs,files in os.walk( bdir ):
             self._scan_recurse( bdir, force_params, root, dirs, files )
-    
+
     def _scan_recurse(self, basedir, force_params, d, dirs, files):
         """
         This function is given to os.walk to recursively scan a directory
@@ -344,7 +347,7 @@ class TestList:
         sent to the os.walk function.
         """
         d = os.path.normpath(d)
-        
+
         if basedir == d:
           reldir = '.'
         else:
@@ -392,20 +395,20 @@ class TestList:
         assert relfile
         assert os.path.isabs( basepath )
         assert not os.path.isabs( relfile )
-        
+
         basepath = os.path.normpath( basepath )
         relfile  = os.path.normpath( relfile )
-        
+
         assert relfile
-        
+
         try:
           testL = createTestObjects(
                         basepath, relfile, force_params, self.rtconfig )
-        except TestSpecCreator.TestSpecError:
+        except TestSpecError:
           print3( "*** skipping file " + os.path.join( basepath, relfile ) + \
                   ": " + str( sys.exc_info()[1] ) )
           testL = []
-        
+
         for t in testL:
             # this new test is ignored if it was already read from source
             # (or a different test source but the same relative path from root)
@@ -945,8 +948,8 @@ def createTestObjects( rootpath, relpath, force_params, rtconfig ):
         line parameter expressions must be passed along in batch queue mode.
 
     """
-    evaluator = ExpressionEvaluator( rtconfig.platformName(),
-                                     rtconfig.getOptionList() )
+    evaluator = TestSpecCreator.ExpressionEvaluator( rtconfig.platformName(),
+                                                     rtconfig.getOptionList() )
 
     tests = TestSpecCreator.create_unfiltered_testlist( rootpath, relpath,
                                         force_params, evaluator )
@@ -966,6 +969,30 @@ def createTestObjects( rootpath, relpath, force_params, rtconfig ):
     return tL
 
 
+def apply_pre_core_filters( tspec_map, rtconfig ):
+    ""
+    print ( 'magic: before', tspec_map )
+    new_map = {}
+    # new_map.update( tspec_map )  # magic
+    # return new_map               # magic
+
+    include_all = rtconfig.getAttr( 'include_all', False )
+
+    for xdir,tspec in tspec_map.items():
+
+        if tspec.isAnalyze():
+            # if analyze test, filter the parameter set to the parameters
+            # that would be included
+            paramset = tspec.getParameterSet()
+            paramset.applyParamFilter( rtconfig.evaluate_parameters )
+
+        if include_all or test_is_active( tspec, rtconfig ):
+            new_map[ xdir ] = tspec
+
+    print ( 'magic: after', new_map )
+    return new_map
+
+
 def refreshTest( testobj, rtconfig ):
     """
     Parses the test source file and resets the settings for the given test.
@@ -977,8 +1004,8 @@ def refreshTest( testobj, rtconfig ):
     
     Returns false if any of the filtering would exclude this test.
     """
-    evaluator = ExpressionEvaluator( rtconfig.platformName(),
-                                     rtconfig.getOptionList() )
+    evaluator = TestSpecCreator.ExpressionEvaluator( rtconfig.platformName(),
+                                                     rtconfig.getOptionList() )
 
     TestSpecCreator.reparse_test_object( testobj, evaluator )
 
@@ -1040,44 +1067,6 @@ class PlatformEvaluator:
             if not wx.evaluate( lambda tok: tok == plat_name ):
                 return False
         return True
-
-
-class ExpressionEvaluator:
-    """
-    Script test headers or attributes in test XML can specify a word
-    expression that must be evaluated during test parsing.  This class caches
-    the current platform name and command line option list, and provides
-    functions to evaluate platform and option expressions.
-    """
-
-    def __init__(self, platname, option_list):
-        self.platname = platname
-        self.option_list = option_list
-
-    def getPlatformName(self):
-        ""
-        return self.platname
-
-    def evaluate_platform_expr(self, expr):
-        """
-        Evaluate the given expression against the current platform name.
-        """
-        wx = FilterExpressions.WordExpression(expr)
-        return wx.evaluate( self._equals_platform )
-
-    def _equals_platform(self, platname):
-        ""
-        if self.platname != None:
-          return platname == self.platname
-        return True
-
-    def evaluate_option_expr(self, word_expr):
-        """
-        Evaluate the given expression against the list of command line options.
-        """
-        #wx = WordExpression(expr)
-        #opL = self.attrs.get( 'option_list', [] )
-        return word_expr.evaluate( self.option_list.count )
 
 
 ###########################################################################

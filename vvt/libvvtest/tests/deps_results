@@ -27,13 +27,13 @@ class dependency_result_expressions( vtu.vvtestTestCase ):
     def test_by_default_failed_dependencies_stop_execution(self):
         ""
         util.writescript( 'testX.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: depends on : testY
             import os, sys, time
             sys.stdout.write( 'time='+str(time.time())+os.linesep )
             """ )
         util.writescript( 'testY.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import os, sys, time
             raise Exception( 'fake exception' )
             """ )
@@ -51,13 +51,13 @@ class dependency_result_expressions( vtu.vvtestTestCase ):
     def test_allow_dependent_to_run_even_if_dependency_fails(self):
         ""
         util.writescript( 'testX.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: depends on (result="pass or diff or fail"): testY
             import os, sys, time
             sys.stdout.write( 'time='+str(time.time())+os.linesep )
             """ )
         util.writescript( 'testY.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import os, sys, time
             raise Exception( 'fake exception' )
             """ )
@@ -76,13 +76,13 @@ class dependency_result_expressions( vtu.vvtestTestCase ):
     def test_use_wildcard_value_to_ignore_dependency_result(self):
         ""
         util.writescript( 'testX.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: depends on (result="*"): testY
             import os, sys, time
             sys.stdout.write( 'time='+str(time.time())+os.linesep )
             """ )
         util.writescript( 'testY.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import os, sys, time
             raise Exception( 'fake exception' )
             """ )

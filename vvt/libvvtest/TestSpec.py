@@ -5,7 +5,6 @@
 # Government retains certain rights in this software.
 
 import os
-import types
 
 results_keywords = [ 'notrun', 'notdone',
                      'fail', 'diff', 'pass',

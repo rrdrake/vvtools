@@ -17,6 +17,42 @@ from .ScriptReader import ScriptReader, check_parse_attributes_section
 from .TestSpecError import TestSpecError
 
 
+class ExpressionEvaluator:
+    """
+    Script test headers or attributes in test XML can specify a word
+    expression that must be evaluated during test parsing.  This class caches
+    the current platform name and command line option list, and provides
+    functions to evaluate platform and option expressions.
+    """
+
+    def __init__(self, platname, option_list):
+        self.platname = platname
+        self.option_list = option_list
+
+    def getPlatformName(self):
+        ""
+        return self.platname
+
+    def evaluate_platform_expr(self, expr):
+        """
+        Evaluate the given expression against the current platform name.
+        """
+        wx = FilterExpressions.WordExpression(expr)
+        return wx.evaluate( self._equals_platform )
+
+    def _equals_platform(self, platname):
+        ""
+        if self.platname != None:
+          return platname == self.platname
+        return True
+
+    def evaluate_option_expr(self, word_expr):
+        """
+        Evaluate the given expression against the list of command line options.
+        """
+        return word_expr.evaluate( self.option_list.count )
+
+
 def create_unfiltered_testlist( rootpath, relpath, force_params, evaluator ):
     """
     Can use a (nested) rtest element to cause another test to be defined.

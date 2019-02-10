@@ -8,11 +8,14 @@ import os, sys
 import re
 import fnmatch
 
-if __name__ == "__main__":
-    import TestSpec
-else:
-    from . import TestSpec
-
+try:
+  from TestSpec import results_keywords
+except ImportError:
+  from .TestSpec import results_keywords
+# if __name__ == "__main__":
+#     import TestSpec
+# else:
+#     from . import TestSpec
 
 alphanum_chars = 'abcdefghijklmnopqrstuvwxyz' + \
                  'ABCDEFGHIJKLMNOPQRSTUVWXYZ' + \
@@ -76,7 +79,7 @@ class WordExpression:
           
           if type(expr) == type([]):
             # convert from k-format
-            S = '' ; altS = ''
+            S = '' ; altS = ''  # magic: altS and altL can be removed
             for grp in expr:
               L = [] ; altL = []
               for k in grp.split('/'):
@@ -87,7 +90,7 @@ class WordExpression:
                   if bang: bang = ''  # two bangs in a row cancel out
                   else: bang = 'not '
                 if k and allowableKeyword(k):
-                  if k in TestSpec.results_keywords:
+                  if k in results_keywords:
                     self.has_results_keywords = 1
                   else:
                     altL.append( bang + k )
