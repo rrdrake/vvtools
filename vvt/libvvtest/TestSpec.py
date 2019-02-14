@@ -80,17 +80,11 @@ class TestSpec:
         """
         return []+self.origin
 
-    def getKeywords(self, result_attrs=False):
+    def getKeywords(self):
         """
-        Returns the list of keyword strings.  If 'result_attrs' is true, the
-        attribute values for "state" and "result" are included if they exist.
+        Returns the list of keyword strings.
         """
-        # magic: can the result_attrs boolean be removed here??
-        kL = list( self.keywords )
-        if result_attrs:
-          if 'state' in self.attrs: kL.append( self.attrs['state'] )
-          if 'result' in self.attrs: kL.append( self.attrs['result'] )
-        return kL
+        return list( self.keywords )
     
     def hasKeyword(self, keyword):
         """

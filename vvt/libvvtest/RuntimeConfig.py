@@ -90,7 +90,7 @@ class RuntimeConfig:
         if pexpr != None:
           self.attrs['platform_expr'] = pexpr
         elif pname != None:
-          self.attrs['platform_expr'] = FilterExpressions.WordExpression( [pname] )
+          self.attrs['platform_expr'] = FilterExpressions.WordExpression( pname )
         else:
           self.attrs['platform_expr'] = FilterExpressions.WordExpression()
     

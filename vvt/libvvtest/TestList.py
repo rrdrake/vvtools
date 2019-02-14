@@ -1035,7 +1035,8 @@ def test_is_active( testobj, rtconfig ):
         if not rtconfig.evaluate_option_expr( opexpr ):
             return False
 
-    if not rtconfig.satisfies_keywords( testobj.getKeywords(True) ):
+    if not rtconfig.satisfies_keywords( testobj.getKeywords() +
+                                        testobj.getResultsKeywords() ):
         return False
 
     if not rtconfig.getAttr( 'include_tdd', False ) and \
