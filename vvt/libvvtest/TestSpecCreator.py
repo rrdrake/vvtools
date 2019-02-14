@@ -1632,9 +1632,3 @@ def allowableVariable(s):
       if c not in alphanum_chars_dict:
         return 0
     return 1
-
-def extract_keywords( expr ):
-    """
-    """
-    wx = FilterExpressions.WordExpression( expr )
-    return wx.getWordList()

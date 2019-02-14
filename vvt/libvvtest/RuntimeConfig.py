@@ -71,13 +71,13 @@ class RuntimeConfig:
         ""
         return self.attrs.get( 'option_list', [] )
 
-    def satisfies_keywords(self, keyword_list):
+    def satisfies_keywords(self, keyword_list, include_results=True):
         """
         """
         if 'keyword_expr' in self.attrs:
-          expr = self.attrs['keyword_expr']
-          return expr.evaluate( keyword_list.count )
-        return 1
+            expr = self.attrs['keyword_expr']
+            return expr.evaluate( keyword_list.count, include_results )
+        return True
 
     def evaluate_parameters(self, paramD):
         pf = self.attrs.get( 'param_filter', None )
@@ -90,7 +90,7 @@ class RuntimeConfig:
         if pexpr != None:
           self.attrs['platform_expr'] = pexpr
         elif pname != None:
-          self.attrs['platform_expr'] = FilterExpressions.WordExpression( pname )
+          self.attrs['platform_expr'] = FilterExpressions.WordExpression( [pname] )
         else:
           self.attrs['platform_expr'] = FilterExpressions.WordExpression()
     

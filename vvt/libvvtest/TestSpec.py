@@ -85,6 +85,7 @@ class TestSpec:
         Returns the list of keyword strings.  If 'result_attrs' is true, the
         attribute values for "state" and "result" are included if they exist.
         """
+        # magic: can the result_attrs boolean be removed here??
         kL = list( self.keywords )
         if result_attrs:
           if 'state' in self.attrs: kL.append( self.attrs['state'] )

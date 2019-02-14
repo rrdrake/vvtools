@@ -12,10 +12,7 @@ try:
   from TestSpec import results_keywords
 except ImportError:
   from .TestSpec import results_keywords
-# if __name__ == "__main__":
-#     import TestSpec
-# else:
-#     from . import TestSpec
+
 
 alphanum_chars = 'abcdefghijklmnopqrstuvwxyz' + \
                  'ABCDEFGHIJKLMNOPQRSTUVWXYZ' + \
@@ -48,23 +45,24 @@ class WordExpression:
     The initial string is parsed during construction then later evaluated
     with the evaluate() method.  Each word is evaluated to true or false
     based on an evaluator function given to the evaluate() method.
+
+    Without an expression (a None), the evaluate method will always return
+    True, while an empty string for an expression will always evaluate to
+    False.
     """
     
     def __init__(self, expr=None):
-        """
-        Throws a ValueError if the first argument is an invalid expression.
-        """
+        ""
         self.expr = None
 
-        self.wordL = []   # list of the words in the expression
-        
-        self.has_results_keywords = 0
+        self.words = set()   # the words in the expression
         
         self.evalexpr = None
         self.nr_evalexpr = None
+
         if expr != None:
-          self.append(expr)
-    
+            self.append( expr )
+
     def append(self, expr, operator='or'):
         """
         Appends the given expression string using an 'and' or 'or' operator.
@@ -73,100 +71,64 @@ class WordExpression:
         command line such as "-k key1/key2 -k !key3".
         """
         if operator not in ['or','and']:
-          raise ValueError( "the 'operator' argument must be 'or' or 'and'" )
-        
-        if expr != None:
-          
-          if type(expr) == type([]):
-            # convert from k-format
-            S = '' ; altS = ''  # magic: altS and altL can be removed
-            for grp in expr:
-              L = [] ; altL = []
-              for k in grp.split('/'):
-                k = k.strip()
-                bang = ''
-                while k[:1] == '!':
-                  k = k[1:].strip()
-                  if bang: bang = ''  # two bangs in a row cancel out
-                  else: bang = 'not '
-                if k and allowableKeyword(k):
-                  if k in results_keywords:
-                    self.has_results_keywords = 1
-                  else:
-                    altL.append( bang + k )
-                  L.append( bang + k )
-                else:
-                  raise ValueError( 'invalid word: "'+str(k)+'"' )
-              if len(L) > 0:
-                if S: S += ' and '
-                S += '( ' + ' or '.join(L) + ' )'
-              if len(altL) > 0:
-                if altS: altS += ' and '
-                altS += '( ' + ' or '.join(altL) + ' )'
-            expr = ' '.join( S.split() )
-          
-          else:
-            expr = ' '.join( expr.split() )
-          
-          # note that empty expressions or subexpressions evaluate to false;
-          # however, for non-results expressions or subexpressions they
-          # are ignored
-          
-          if operator == 'or':
-            if self.expr and expr:
-              if len(expr.split()) == 1:
-                expr = self.expr+' or '+expr
-              else:
-                expr = self.expr+' or ('+expr+')'
-            elif self.expr:
-              expr = self.expr
-          else:
-            if self.expr and expr:
-              if len(expr.split()) == 1:
-                expr = self.expr+' and '+expr
-              else:
-                expr = self.expr+' and ('+expr+')'
-            elif self.expr != None:
-              # empty expressions evaluate to false so no point in
-              # combining the two expressions
-              expr = ''
+            raise ValueError( "the 'operator' argument must be 'or' or 'and'" )
 
-          # parse both expressions
-          self.expr = expr
-          self.evalexpr = self._parse( expr, self.wordL )
-    
+        if expr != None:
+
+            if type(expr) == type([]):
+                # magic: assert 0  # only origin for list form is command line
+                expr = convert_from_k_format( expr )
+            else:
+                expr = expr.strip()
+
+            if self.expr != None:
+                expr = combine_two_expressions( self.expr, expr, operator )
+
+            self.expr = expr
+
+            self.evalexpr = parse_word_expression( self.expr, self.words )
+            self.nr_evalexpr = parse_non_results_expression( self.expr )
+
     def getWordList(self):
         """
         Returns a list containing the words in the current expression.
         """
-        return [] + self.wordL
+        return list( self.words )
 
     def containsResultsKeywords(self):
-        """
-        """
-        return self.has_results_keywords
-    
+        ""
+        return len( set( results_keywords ).intersection( self.words ) ) > 0
+
     def keywordEvaluate(self, keyword_list):
         """
         Returns the evaluation of the expression against a simple keyword list.
         """
         return self.evaluate( lambda k: k in keyword_list )
-    
-    def evaluate(self, evaluator_func):
+
+    def evaluate(self, evaluator_func, include_results=True):
         """
         Evaluates the expression from left to right using the given
-        'evaluator_func' to evaluate each value string.  If the original
+        'evaluator_func' to evaluate True/False of each word.  If the original
         expression string is empty, false is returned.  If no expression was
         set in this object, true is returned.
+
+        If 'include_results' is False, the original expression is stripped
+        of results keywords and the resulting expression is evaluated.
         """
-        if self.evalexpr == None: return 1
-        if not self.expr: return 0
-        
+        if include_results:
+            evex = self.evalexpr
+        else:
+            evex = self.nr_evalexpr
+
+        if evex == None:
+            return True
+
         def evalfunc(tok):
-          if evaluator_func(tok): return 1
-          return 0
-        r = eval( self.evalexpr )
-        
+            if evaluator_func(tok): return True
+            return False
+
+        r = eval( evex )
+
         return r
 
     def __repr__(self):
@@ -174,46 +136,231 @@ class WordExpression:
         return 'WordExpression="' + self.expr + '"'
     
     def __str__(self): return self.__repr__()
-    
-    def _parse(self, expr, wordL):
-        """
-        Throws a ValueError if the string is an invalid expression.
-        Returns the final expression string (which may be modified from the
-        original).
-        """
-        if len(wordL) > 0: del wordL[:]
-        if expr:
-          
-          L1 = []
-          for tok1 in expr.split():
-            L2 = []
-            for tok2 in tok1.split('('):
-              L3 = []
-              for tok3 in tok2.split(')'):
-                if tok3 in ['','(',')','not','and','or']:
-                  L3.append(tok3)
+
+
+def combine_two_expressions( expr1, expr2, operator ):
+    ""
+    if operator == 'or':
+
+        if expr1 and expr2:
+            expr = expr1 + ' or ' + conditional_paren_wrap( expr2 )
+        elif expr1:
+            expr = expr1
+        else:
+            expr = expr2
+
+    else:
+        if expr1 and expr2:
+            expr = expr1 + ' and ' + conditional_paren_wrap( expr2 )
+        else:
+            # one expression is empty, which is always false,
+            # so replace the whole thing with an empty expr
+            expr = ''
+
+    return expr
+
+
+def conditional_paren_wrap( expr ):
+    ""
+    if ' ' in expr:
+        return '( '+expr+' )'
+    return expr
+
+
+def parse_word_expression( expr, wordset=None ):
+    """
+    Throws a ValueError if the string is an invalid expression.
+    Returns the final expression string (which may be modified from the
+    original).
+    """
+    if wordset != None:
+        wordset.clear()
+
+    toklist = separate_expression_into_tokens( expr )
+    evalexpr = convert_token_list_into_eval_string( toklist )
+
+    if wordset != None:
+        add_words_to_set( toklist, wordset )
+
+    def evalfunc(tok):
+        return True
+    try:
+        # evaluate the expression to test validity
+        v = eval( evalexpr )
+        assert type(v) == type(False)
+    except Exception:
+        raise ValueError( 'invalid option expression: "' + expr + '"' )
+
+    return evalexpr
+
+
+def parse_non_results_expression( expr ):
+    ""
+    nrmod = NonResultsExpressionModifier( expr )
+    toklist = nrmod.getNonResultsTokenList()
+
+    if len( toklist ) == 0:
+        return None
+
+    else:
+        evalexpr = convert_token_list_into_eval_string( toklist )
+        return evalexpr
+
+
+class NonResultsExpressionModifier:
+
+    def __init__(self, expr):
+        ""
+        self.toklist = separate_expression_into_tokens( expr )
+        self.toki = 0
+
+        self.nonresults_toklist = self.parse_subexpr()
+
+        trim_leading_binary_operator( self.nonresults_toklist )
+
+    def getNonResultsTokenList(self):
+        ""
+        return self.nonresults_toklist
+
+    def parse_subexpr(self):
+        ""
+        toklist = []
+        oplist = []
+
+        while self.toki < len( self.toklist ):
+
+            tok = self.toklist[ self.toki ]
+            self.toki += 1
+
+            if tok in _OPERATOR_LIST:
+                if tok == ')':
+                    break
+                elif tok == '(':
+                    sublist = self.parse_subexpr()
+                    if sublist:
+                        append_sublist( toklist, oplist, sublist )
+                    oplist = []
                 else:
-                  wordL.append( tok3 )
-                  L3.append( '(evalfunc("'+tok3+'")==1)' )
-              L2.append( ')'.join( L3 ) )
-            L1.append( '('.join( L2 ) )
-          
-          if len(L1) == 0:
-            raise ValueError( 'invalid option expression: <empty expression>' )
-          
-          s = ' '.join( L1 )
-          
-          # evaluate the expression to test validity
-          try:
-            def evalfunc(tok): return 1
-            v = eval( s )
-            assert type(v) == type(False)
-          except Exception:
-            raise ValueError( 'invalid option expression: "' + expr + '"' )
-          
-          expr = s
-        
-        return expr
+                    oplist.append( tok )
+
+            elif tok in results_keywords:
+                oplist = []
+
+            else:
+                append_token( toklist, oplist, tok )
+                oplist = []
+
+        return toklist
+
+
+def trim_leading_binary_operator( toklist ):
+    ""
+    if toklist:
+        if toklist[0] == 'and' or toklist[0] == 'or':
+            toklist.pop( 0 )
+
+
+def append_sublist( toklist, oplist, sublist ):
+    ""
+    append_operator( toklist, oplist )
+
+    if oplist and len( sublist ) > 1:
+        sublist = ['(']+sublist+[')']
+
+    toklist.extend( sublist )
+
+
+def append_token( toklist, oplist, tok ):
+    ""
+    append_operator( toklist, oplist )
+    toklist.append( tok )
+
+
+def append_operator( toklist, oplist ):
+    ""
+    if oplist:
+        toklist.extend( oplist )
+
+
+_OPERATOR_LIST = ['(',')','not','and','or']
+
+def convert_token_list_into_eval_string( toklist ):
+    ""
+    modified_toklist = []
+
+    for tok in toklist:
+        if tok in _OPERATOR_LIST:
+            modified_toklist.append( tok )
+        elif tok:
+            modified_toklist.append( '(evalfunc("'+tok+'")==True)' )
+        else:
+            modified_toklist.append( 'False' )
+
+    return ' '.join( modified_toklist )
+
+
+def add_words_to_set( toklist, wordset ):
+    ""
+    for tok in toklist:
+        if tok and tok not in _OPERATOR_LIST:
+            wordset.add( tok )
+
+
+def separate_expression_into_tokens( expr ):
+    ""
+    toklist = []
+
+    if expr.strip():
+
+        for whitetok in expr.strip().split():
+            for lptok in split_but_retain_separator( whitetok, '(' ):
+                for rptok in split_but_retain_separator( lptok, ')' ):
+                    rptok = rptok.strip()
+                    if rptok:
+                        toklist.append( rptok )
+
+    else:
+        toklist.append( '' )
+
+    return toklist
+
+
+def split_but_retain_separator( expr, separator ):
+    ""
+    seplist = []
+
+    splitlist = list( expr.split( separator ) )
+    last_token = len(splitlist) - 1
+
+    for i,tok in enumerate( splitlist ):
+        seplist.append( tok )
+        if i < last_token:
+            seplist.append( separator )
+
+    return seplist
+
+
+def convert_from_k_format( expr_list ):
+    ""
+    S = ''
+    for grp in expr_list:
+        L = []
+        for k in grp.split('/'):
+            k = k.strip()
+            bang = ''
+            while k[:1] == '!':
+                k = k[1:].strip()
+                if bang: bang = ''  # two bangs in a row cancel out
+                else: bang = 'not '
+            if k and allowableKeyword(k):
+                L.append( bang + k )
+            else:
+                raise ValueError( 'invalid word: "'+str(k)+'"' )
+        if len(L) > 0:
+            if S: S += ' and '
+            S += '( ' + ' or '.join(L) + ' )'
+    
+    return ' '.join( S.split() )
 
 
 ##############################################################################
