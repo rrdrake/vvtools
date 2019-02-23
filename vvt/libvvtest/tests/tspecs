@@ -18,7 +18,7 @@ import testutils as util
 from testutils import print3
 
 import libvvtest.TestSpec as TestSpec
-from libvvtest.TestList import createTestObjects, refreshTest
+from libvvtest.TestList import createTestObjects, refreshTest, PlatformEvaluator
 from libvvtest.TestSpecError import TestSpecError
 import libvvtest.FilterExpressions as FilterExpressions
 from libvvtest.RuntimeConfig import RuntimeConfig
@@ -434,20 +434,16 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <include platforms="some/value"/>
             </rtest>""" )
 
-        try:
-          createTestObjects( '.', 'bad10.xml', None, nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError,
+                createTestObjects, '.', 'bad10.xml', None, nofltr )
 
         util.writefile( 'bad11.xml', """
             <rtest name="atest">
               <include platforms="" parameters="some value"/>
             </rtest>""" )
 
-        try:
-          createTestObjects( '.', 'bad11.xml', None, nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError,
+                createTestObjects, '.', 'bad11.xml', None, nofltr )
 
         util.writefile( 'bad12.xml', """
             <rtest name="atest">
@@ -455,10 +451,8 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <include platforms="" parameters="some=value =value"/>
             </rtest>""" )
 
-        try:
-          createTestObjects( '.', 'bad12.xml', None, nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError,
+                createTestObjects, '.', 'bad12.xml', None, nofltr )
 
         util.writefile( 'ok7.xml', """
             <rtest name="atest">
@@ -472,142 +466,91 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <include platform=""/>
             </rtest>""" )
 
-        tL = createTestObjects( '.', 'ok8.xml', None, RuntimeConfig() )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='Dummy' )
-        tL = createTestObjects( '.', 'ok8.xml', None, uf )
-        assert len(tL) == 0
+        create_test_and_eval_platform_expr( 'ok8.xml', None, True )
+        create_test_and_eval_platform_expr( 'ok8.xml', 'Dummy', False )
 
         util.writefile( 'ok8a.xml', """
             <rtest name="atest">
               <include platforms=""/>
             </rtest>""" )
 
-        tL = createTestObjects( '.', 'ok8a.xml', None, RuntimeConfig() )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='Dummy' )
-        tL = createTestObjects( '.', 'ok8a.xml', None, uf )
-        assert len(tL) == 0
+        create_test_and_eval_platform_expr( 'ok8a.xml', None, True )
+        create_test_and_eval_platform_expr( 'ok8a.xml', 'Dummy', False )
 
         util.writefile( 'ok8b.xml', """
             <rtest name="atest">
               <include platform=""/>
             </rtest>""" )
 
-        tL = createTestObjects( '.', 'ok8b.xml', None, RuntimeConfig() )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='Dummy' )
-        tL = createTestObjects( '.', 'ok8b.xml', None, uf )
-        assert len(tL) == 0
+        create_test_and_eval_platform_expr( 'ok8b.xml', None, True )
+        create_test_and_eval_platform_expr( 'ok8b.xml', 'Dummy', False )
 
         util.writefile( 'ok9.xml', """
             <rtest name="atest">
               <include platform="something"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='something' )
-        tL = createTestObjects( '.', 'ok9.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='somethingelse' )
-        tL = createTestObjects( '.', 'ok9.xml', None, uf )
-        assert len(tL) == 0
+        create_test_and_eval_platform_expr( 'ok9.xml', 'something', True )
+        create_test_and_eval_platform_expr( 'ok9.xml', 'somethingelse', False )
 
         util.writefile( 'ok9a.xml', """
             <rtest name="atest">
               <include platforms="something"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='something' )
-        tL = createTestObjects( '.', 'ok9a.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='somethingelse' )
-        tL = createTestObjects( '.', 'ok9a.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( platform_name='something',
-                            set_platform_expr=self.expr('!something') )
-        tL = createTestObjects( '.', 'ok9a.xml', None, uf )
-        assert len(tL) == 0
+        create_test_and_eval_platform_expr( 'ok9a.xml', 'something', True )
+        create_test_and_eval_platform_expr( 'ok9a.xml', 'somethingelse', False )
+        create_test_and_eval_platform_expr( 'ok9a.xml', 'something', False,
+                                        platform_expr=self.expr('!something') )
 
         util.writefile( 'ok10.xml', """
             <rtest name="atest">
               <include platform="something or IRIX"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='something' )
-        tL = createTestObjects( '.', 'ok10.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='IRIX' )
-        tL = createTestObjects( '.', 'ok10.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='somethingelse' )
-        tL = createTestObjects( '.', 'ok10.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( platform_name='Linux',
-                            set_platform_expr=self.expr('IRIX','!SunOS') )
-        tL = createTestObjects( '.', 'ok10.xml', None, uf )
-        assert len(tL) == 1
+        create_test_and_eval_platform_expr( 'ok10.xml', 'something', True )
+        create_test_and_eval_platform_expr( 'ok10.xml', 'IRIX', True )
+        create_test_and_eval_platform_expr( 'ok10.xml', 'somethingelse', False )
+        create_test_and_eval_platform_expr( 'ok10.xml', 'Linux', True,
+                                        platform_expr=self.expr('IRIX','!SunOS') )
 
         util.writefile( 'ok10a.xml', """
             <rtest name="atest">
               <include platforms="something or IRIX"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='something' )
-        tL = createTestObjects( '.', 'ok10a.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='IRIX' )
-        tL = createTestObjects( '.', 'ok10a.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='somethingelse' )
-        tL = createTestObjects( '.', 'ok10a.xml', None, uf )
-        assert len(tL) == 0
+        create_test_and_eval_platform_expr( 'ok10a.xml', 'something', True )
+        create_test_and_eval_platform_expr( 'ok10a.xml', 'IRIX', True )
+        create_test_and_eval_platform_expr( 'ok10a.xml', 'somethingelse', False )
 
         util.writefile( 'ok11.xml', """
             <rtest name="atest">
               <include platforms="not ( something or IRIX )"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='something' )
-        tL = createTestObjects( '.', 'ok11.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( platform_name='IRIX' )
-        tL = createTestObjects( '.', 'ok11.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( platform_name='somethingelse' )
-        tL = createTestObjects( '.', 'ok11.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='Linux',
-                            set_platform_expr=self.expr('Linux','!IRIX') )
-        tL = createTestObjects( '.', 'ok11.xml', None, uf )
-        assert len(tL) == 1
+        create_test_and_eval_platform_expr( 'ok11.xml', 'something', False )
+        create_test_and_eval_platform_expr( 'ok11.xml', 'IRIX', False )
+        create_test_and_eval_platform_expr( 'ok11.xml', 'somethingelse', True )
+        create_test_and_eval_platform_expr( 'ok11.xml', 'Linux', True,
+                                platform_expr=self.expr('Linux','!IRIX') )
 
         util.writefile( 'ok11a.xml', """
             <rtest name="atest">
               <include platforms="not something and not IRIX"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='something' )
-        tL = createTestObjects( '.', 'ok11a.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( platform_name='IRIX' )
-        tL = createTestObjects( '.', 'ok11a.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( platform_name='somethingelse' )
-        tL = createTestObjects( '.', 'ok11a.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='Linux',
-                            set_platform_expr=self.expr('SunOS','!IRIX') )
-        tL = createTestObjects( '.', 'ok11a.xml', None, uf )
-        assert len(tL) == 1
+        create_test_and_eval_platform_expr( 'ok11a.xml', 'something', False )
+        create_test_and_eval_platform_expr( 'ok11a.xml', 'IRIX', False )
+        create_test_and_eval_platform_expr( 'ok11a.xml', 'somethingelse', True )
+        create_test_and_eval_platform_expr( 'ok11a.xml', 'Linux', True,
+                                platform_expr=self.expr('SunOS','!IRIX') )
 
         util.writefile( 'ok12.xml', """
             <rtest name="atest">
               <include platforms="not dummy"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='anything' )
-        tL = createTestObjects( '.', 'ok12.xml', None, uf )
-        assert len(tL) == 1
+        create_test_and_eval_platform_expr( 'ok12.xml', 'anything', True )
 
         util.writefile( 'ok13.xml', """
             <rtest name="atest">
@@ -615,15 +558,9 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <include platforms="not theother"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='something' )
-        tL = createTestObjects( '.', 'ok13.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='IRIX' )
-        tL = createTestObjects( '.', 'ok13.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='theother' )
-        tL = createTestObjects( '.', 'ok13.xml', None, uf )
-        assert len(tL) == 0
+        create_test_and_eval_platform_expr( 'ok13.xml', 'something', True )
+        create_test_and_eval_platform_expr( 'ok13.xml', 'IRIX', True )
+        create_test_and_eval_platform_expr( 'ok13.xml', 'theother', False )
 
         util.writefile( 'ok13a.xml', """
             <rtest name="atest">
@@ -631,15 +568,9 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <include platforms="not theother"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='something' )
-        tL = createTestObjects( '.', 'ok13a.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='IRIX' )
-        tL = createTestObjects( '.', 'ok13a.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='theother' )
-        tL = createTestObjects( '.', 'ok13a.xml', None, uf )
-        assert len(tL) == 0
+        create_test_and_eval_platform_expr( 'ok13a.xml', 'something', True )
+        create_test_and_eval_platform_expr( 'ok13a.xml', 'IRIX', True )
+        create_test_and_eval_platform_expr( 'ok13a.xml', 'theother', False )
 
         util.writefile( 'ok14.xml', """
             <rtest name="atest">
@@ -647,15 +578,9 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <include platforms="not IRIX"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='something' )
-        tL = createTestObjects( '.', 'ok14.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='IRIX' )
-        tL = createTestObjects( '.', 'ok14.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( platform_name='theother' )
-        tL = createTestObjects( '.', 'ok14.xml', None, uf )
-        assert len(tL) == 0
+        create_test_and_eval_platform_expr( 'ok14.xml', 'something', True )
+        create_test_and_eval_platform_expr( 'ok14.xml', 'IRIX', False )
+        create_test_and_eval_platform_expr( 'ok14.xml', 'theother', False )
 
         util.writefile( 'ok14a.xml', """
             <rtest name="atest">
@@ -663,88 +588,70 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <include platforms="not IRIX"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='something' )
-        tL = createTestObjects( '.', 'ok14a.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( platform_name='IRIX' )
-        tL = createTestObjects( '.', 'ok14a.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( platform_name='theother' )
-        tL = createTestObjects( '.', 'ok14a.xml', None, uf )
-        assert len(tL) == 0
+        create_test_and_eval_platform_expr( 'ok14a.xml', 'something', True )
+        create_test_and_eval_platform_expr( 'ok14a.xml', 'IRIX', False )
+        create_test_and_eval_platform_expr( 'ok14a.xml', 'theother', False )
 
         util.writefile( 'ok14b.xml', """
             <rtest name="atest">
               <include options=""/>
             </rtest>""" )
 
-        uf = RuntimeConfig( option_list=[], platform_name='something' )
-        tL = createTestObjects( '.', 'ok14b.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( option_list=['opt'], platform_name='something' )
-        tL = createTestObjects( '.', 'ok14b.xml', None, uf )
-        assert len(tL) == 1
+        create_test_and_eval_platform_expr( 'ok14b.xml', 'something', True,
+                                            option_list=[] )
+        create_test_and_eval_platform_expr( 'ok14b.xml', 'something', True,
+                                            option_list=['opt'] )
 
         util.writefile( 'ok14c.xml', """
             <rtest name="atest">
               <include options="opt"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( option_list=[], platform_name='something' )
-        tL = createTestObjects( '.', 'ok14c.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( option_list=['opt'], platform_name='something' )
-        tL = createTestObjects( '.', 'ok14c.xml', None, uf )
-        assert len(tL) == 1
+        create_test_and_eval_platform_expr( 'ok14c.xml', 'something', False,
+                                            option_list=[] )
+        create_test_and_eval_platform_expr( 'ok14c.xml', 'something', True,
+                                            option_list=['opt'] )
 
         util.writefile( 'ok14d.xml', """
             <rtest name="atest">
               <include option="opt or pop"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( option_list=[], platform_name='something' )
-        tL = createTestObjects( '.', 'ok14d.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( option_list=['opt'], platform_name='something' )
-        tL = createTestObjects( '.', 'ok14d.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( option_list=['pop'], platform_name='something' )
-        tL = createTestObjects( '.', 'ok14d.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( option_list=['opt','pop'], platform_name='something' )
-        tL = createTestObjects( '.', 'ok14d.xml', None, uf )
-        assert len(tL) == 1
+        create_test_and_eval_platform_expr( 'ok14d.xml', 'something', False,
+                                            option_list=[] )
+        create_test_and_eval_platform_expr( 'ok14d.xml', 'something', True,
+                                            option_list=['opt'] )
+        create_test_and_eval_platform_expr( 'ok14d.xml', 'something', True,
+                                            option_list=['pop'] )
+        create_test_and_eval_platform_expr( 'ok14d.xml', 'something', True,
+                                            option_list=['opt','pop'] )
 
         util.writefile( 'ok14e.xml', """
             <rtest name="atest">
               <include platforms="PLAT" options=""/>
             </rtest>""" )
 
-        uf = RuntimeConfig( option_list=[], platform_name='something' )
-        tL = createTestObjects( '.', 'ok14e.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( option_list=[], platform_name='PLAT' )
-        tL = createTestObjects( '.', 'ok14e.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( option_list=['opt'], platform_name='PLAT' )
-        tL = createTestObjects( '.', 'ok14e.xml', None, uf )
-        assert len(tL) == 1
+        create_test_and_eval_platform_expr( 'ok14e.xml', 'something', False,
+                                            option_list=[] )
+        create_test_and_eval_platform_expr( 'ok14e.xml', 'PLAT', True,
+                                            option_list=[] )
+        create_test_and_eval_platform_expr( 'ok14e.xml', 'PLAT', True,
+                                            option_list=['opt'] )
 
         util.writefile( 'ok14f.xml', """
             <rtest name="atest">
               <include platforms="PLAT" options="opt"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( option_list=[], platform_name='something' )
-        tL = createTestObjects( '.', 'ok14f.xml', None, uf )
-        assert len(tL) == 0  # the options is false
-        uf = RuntimeConfig( option_list=['opt'], platform_name='something' )
-        tL = createTestObjects( '.', 'ok14f.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( option_list=['opt'], platform_name='PLAT' )
-        tL = createTestObjects( '.', 'ok14f.xml', None, uf )
-        assert len(tL) == 1
+        create_test_and_eval_platform_expr( 'ok14f.xml', 'something', False,
+                                            option_list=[] )
+        create_test_and_eval_platform_expr( 'ok14f.xml', 'something', False,
+                                            option_list=['opt'] )
+        create_test_and_eval_platform_expr( 'ok14f.xml', 'PLAT', True,
+                                            option_list=['opt'] )
 
+    def test_parameterize_with_platform_filtering(self):
+        ""
         util.writefile( 'ok15.xml', """
             <rtest name="atest">
               <parameterize platforms="not IRIX" np="1 4"/>
@@ -1343,21 +1250,11 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <include options="2D and ( tridev or tri8 )"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( option_list=[] )
-        tL = createTestObjects( '.', 'ok35.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( option_list=['2D','tridev'] )
-        tL = createTestObjects( '.', 'ok35.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( option_list=['2D','tri8'] )
-        tL = createTestObjects( '.', 'ok35.xml', None, uf )
-        assert len(tL) == 1
-        uf = RuntimeConfig( option_list=['3D','tri8'] )
-        tL = createTestObjects( '.', 'ok35.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( option_list=['tri8','2D','tridev'] )
-        tL = createTestObjects( '.', 'ok35.xml', None, uf )
-        assert len(tL) == 1
+        create_and_eval_option_expr( 'ok35.xml', [], False )
+        create_and_eval_option_expr( 'ok35.xml', ['2D','tridev'], True )
+        create_and_eval_option_expr( 'ok35.xml', ['2D','tri8'], True )
+        create_and_eval_option_expr( 'ok35.xml', ['3D','tri8'], False )
+        create_and_eval_option_expr( 'ok35.xml', ['tri8','2D','tridev'], True )
 
     def test_parameterize_analyze_combinations(self):
         ""
@@ -1368,9 +1265,8 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <analyze>echo "hello from analyze"</analyze>
             </rtest>""" )
 
-        try: tL = createTestObjects( '.', 'ok38.xml', None, nofltr )
-        except: pass
-        else: raise Exception( 'expected an exception' )
+        self.assertRaises( Exception,
+                createTestObjects, '.', 'ok38.xml', None, nofltr )
 
         util.writefile( 'ok39.xml', """
             <rtest name="atest">
@@ -1425,51 +1321,28 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <link_files> regexfile.txt </link_files>
             </rtest>""" )
 
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('One') )
-        tL = createTestObjects( '.', 'ok46.xml', None, uf )
-        assert len(tL) == 2
-        print3( tL[0] )
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('three') )
-        tL = createTestObjects( '.', 'ok46.xml', None, uf )
-        assert len(tL) == 2
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('line two') )
-        tL = createTestObjects( '.', 'ok46.xml', None, uf )
-        assert len(tL) == 2
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('line one') )
-        tL = createTestObjects( '.', 'ok46.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('LINE *THEN') )
-        tL = createTestObjects( '.', 'ok46.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('LINE .*THEN') )
-        tL = createTestObjects( '.', 'ok46.xml', None, uf )
-        assert len(tL) == 2
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('line $') )
-        tL = createTestObjects( '.', 'ok46.xml', None, uf )
-        assert len(tL) == 2
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('line$') )
-        tL = createTestObjects( '.', 'ok46.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( search_file_globs=['*.nun','*.txt'],
-                            search_regexes=self.regexes('LINE .*THEN') )
-        tL = createTestObjects( '.', 'ok46.xml', None, uf )
-        assert len(tL) == 2
-        uf = RuntimeConfig( search_file_globs=['*.nun','*.two'],
-                            search_regexes=self.regexes('LINE .*THEN') )
-        tL = createTestObjects( '.', 'ok46.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('nomatch','LINE .*THEN') )
-        tL = createTestObjects( '.', 'ok46.xml', None, uf )
-        assert len(tL) == 2
+        create_and_search_files( 'ok46.xml', ['*.txt'],
+                                 self.regexes('One'), 2 )
+        create_and_search_files( 'ok46.xml', ['*.txt'],
+                                 self.regexes('three'), 2 )
+        create_and_search_files( 'ok46.xml', ['*.txt'],
+                                 self.regexes('line two'), 2 )
+        create_and_search_files( 'ok46.xml', ['*.txt'],
+                                 self.regexes('line one'), 0 )
+        create_and_search_files( 'ok46.xml', ['*.txt'],
+                                 self.regexes('LINE *THEN'), 0 )
+        create_and_search_files( 'ok46.xml', ['*.txt'],
+                                 self.regexes('LINE .*THEN'), 2 )
+        create_and_search_files( 'ok46.xml', ['*.txt'],
+                                 self.regexes('line $'), 2 )
+        create_and_search_files( 'ok46.xml', ['*.txt'],
+                                 self.regexes('line$'), 0 )
+        create_and_search_files( 'ok46.xml', ['*.nun','*.txt'],
+                                 self.regexes('LINE .*THEN'), 2 )
+        create_and_search_files( 'ok46.xml', ['*.nun','*.two'],
+                                 self.regexes('LINE .*THEN'), 0 )
+        create_and_search_files( 'ok46.xml', ['*.txt'],
+                                 self.regexes('nomatch','LINE .*THEN'), 2 )
 
         util.writefile( 'ok47.xml', """
             <rtest name="atest">
@@ -1477,51 +1350,28 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <copy_files> regexfile.txt </copy_files>
             </rtest>""" )
 
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('One') )
-        tL = createTestObjects( '.', 'ok47.xml', None, uf )
-        assert len(tL) == 2
-        print3( tL[0] )
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('three') )
-        tL = createTestObjects( '.', 'ok47.xml', None, uf )
-        assert len(tL) == 2
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('line two') )
-        tL = createTestObjects( '.', 'ok47.xml', None, uf )
-        assert len(tL) == 2
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('line one') )
-        tL = createTestObjects( '.', 'ok47.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('LINE *THEN') )
-        tL = createTestObjects( '.', 'ok47.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('LINE .*THEN') )
-        tL = createTestObjects( '.', 'ok47.xml', None, uf )
-        assert len(tL) == 2
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('line $') )
-        tL = createTestObjects( '.', 'ok47.xml', None, uf )
-        assert len(tL) == 2
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('line$') )
-        tL = createTestObjects( '.', 'ok47.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( search_file_globs=['*.nun','*.txt'],
-                            search_regexes=self.regexes('LINE .*THEN') )
-        tL = createTestObjects( '.', 'ok47.xml', None, uf )
-        assert len(tL) == 2
-        uf = RuntimeConfig( search_file_globs=['*.nun','*.two'],
-                            search_regexes=self.regexes('LINE .*THEN') )
-        tL = createTestObjects( '.', 'ok47.xml', None, uf )
-        assert len(tL) == 0
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('nomatch','LINE .*THEN') )
-        tL = createTestObjects( '.', 'ok47.xml', None, uf )
-        assert len(tL) == 2
+        create_and_search_files( 'ok47.xml', ['*.txt'],
+                                 self.regexes('One'), 2 )
+        create_and_search_files( 'ok47.xml', ['*.txt'],
+                                 self.regexes('three'), 2 )
+        create_and_search_files( 'ok47.xml', ['*.txt'],
+                                 self.regexes('line two'), 2 )
+        create_and_search_files( 'ok47.xml', ['*.txt'],
+                                 self.regexes('line one'), 0 )
+        create_and_search_files( 'ok47.xml', ['*.txt'],
+                                 self.regexes('LINE *THEN'), 0 )
+        create_and_search_files( 'ok47.xml', ['*.txt'],
+                                 self.regexes('LINE .*THEN'), 2 )
+        create_and_search_files( 'ok47.xml', ['*.txt'],
+                                 self.regexes('line $'), 2 )
+        create_and_search_files( 'ok47.xml', ['*.txt'],
+                                 self.regexes('line$'), 0 )
+        create_and_search_files( 'ok47.xml', ['*.nun','*.txt'],
+                                 self.regexes('LINE .*THEN'), 2 )
+        create_and_search_files( 'ok47.xml', ['*.nun','*.two'],
+                                 self.regexes('LINE .*THEN'), 0 )
+        create_and_search_files( 'ok47.xml', ['*.txt'],
+                                 self.regexes('nomatch','LINE .*THEN'), 2 )
 
         util.writefile( 'ok48.xml', """
             <rtest name="atest">
@@ -1529,10 +1379,8 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <copy_files> noexist.txt </copy_files>
             </rtest>""" )
 
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('One') )
-        tL = createTestObjects( '.', 'ok48.xml', None, uf )
-        assert len(tL) == 0
+        create_and_search_files( 'ok48.xml', ['*.txt'],
+                                 self.regexes('One'), 0 )
 
         util.writefile( 'ok49.xml', """
             <rtest name="regexfile">
@@ -1540,11 +1388,8 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <copy_files> $NAME.txt </copy_files>
             </rtest>""" )
 
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('One') )
-        tL = createTestObjects( '.', 'ok49.xml', None, uf )
-        assert len(tL) == 2
-        print3( tL[0] )
+        create_and_search_files( 'ok49.xml', ['*.txt'],
+                                 self.regexes('One'), 2 )
 
         util.writefile( 'ok50.xml', """
             <rtest name="regex">
@@ -1552,11 +1397,8 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <copy_files> ${NAME}file.txt </copy_files>
             </rtest>""" )
 
-        uf = RuntimeConfig( search_file_globs=['*.txt'],
-                            search_regexes=self.regexes('One') )
-        tL = createTestObjects( '.', 'ok50.xml', None, uf )
-        assert len(tL) == 2
-        print3( tL[0] )
+        create_and_search_files( 'ok50.xml', ['*.txt'],
+                                 self.regexes('One'), 2 )
 
     def test_file_globbing_and_source_file_specification(self):
         ""
@@ -1645,6 +1487,60 @@ def paramGather(testL):
         pL.append( '.'.join(tmp) )
     pL.sort()
     return pL
+
+
+def create_and_eval_option_expr( filename, options, boolean_result ):
+    ""
+    rtcfg = RuntimeConfig( option_list=options )
+    tL = createTestObjects( '.', filename, None, rtcfg )
+    assert len(tL) == 1
+    exprL = tL[0].getOptionEnableExpressions()
+    assert len(exprL) == 1
+    assert rtcfg.evaluate_option_expr( exprL[0] ) == boolean_result
+
+
+def create_test_and_eval_platform_expr( filename, platname, boolean_result,
+                                        platform_expr=None,
+                                        option_list=None ):
+    ""
+    rtcfg = RuntimeConfig( platform_name=platname,
+                           set_platform_expr=platform_expr,
+                           option_list=option_list )
+    tL = createTestObjects( '.', filename, None, rtcfg )
+
+    exprL = tL[0].getPlatformEnableExpressions()
+    pev = PlatformEvaluator( exprL )
+    pval = rtcfg.evaluate_platform_include( pev.satisfies_platform )
+
+    if option_list != None:
+        exprL = tL[0].getOptionEnableExpressions()
+        if len( exprL ) == 1:
+            oval = rtcfg.evaluate_option_expr( exprL[0] )
+        else:
+            assert len(exprL) == 0
+            oval = True
+
+        assert ( pval and oval ) == boolean_result
+
+    else:
+        assert pval == boolean_result
+
+
+def create_and_search_files( filename, globlist, regexes, test_count ):
+    ""
+    rtcfg = RuntimeConfig( search_file_globs=globlist,
+                           search_regexes=regexes )
+
+    tL = createTestObjects( '.', filename, None, rtcfg )
+
+    cnt = 0
+
+    for tspec in tL:
+        if rtcfg.file_search( tspec ):
+            cnt += 1
+
+    assert cnt == test_count
+
 
 #####################################################################
 

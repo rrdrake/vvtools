@@ -97,13 +97,16 @@ class TestSpec:
         Returns the keyword or keywords indicating the run state of the test.
         """
         state = self.getAttr('state',None)
-        if state != None:
-          if state == "notrun": return ["notrun"]
-          if state == "notdone": return ["notdone","running"]
+        if state == None:
+            return ['notrun']
+        else:
+            if state == "notrun": return ["notrun"]
+            if state == "notdone": return ["notdone","running"]
+
         result = self.getAttr('result',None)
         if result != None:
-          if result == "timeout": return ["timeout","fail"]
-          return [result]
+            if result == "timeout": return ["timeout","fail"]
+            return [result]
         return []
     
     def getParameters(self):
@@ -331,11 +334,6 @@ class TestSpec:
         # initial execute directory; recomputed by setParameters()
         self.xdir = os.path.normpath( \
                         os.path.join( os.path.dirname(filepath), name ) )
-
-        # set the default attributes
-        self.attrs[ 'state' ] = 'notrun'
-        self.attrs[ 'xtime' ] = -1
-        self.attrs[ 'xdate' ] = -1
 
         # always add the test specification file to the linked file list
         self.lnfiles.append( (os.path.basename(self.filepath),None) )

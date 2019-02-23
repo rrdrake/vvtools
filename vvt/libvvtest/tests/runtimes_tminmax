@@ -216,8 +216,9 @@ class runtimes_and_tmin_tmax( vtu.vvtestTestCase ):
             vrun.assertCounts( total=6, npass=6 )
 
             vrun = vtu.runvvtest( '-R --tmin 3 tests', batch=batch )
-            vrun.assertCounts( total=1, npass=1 )
-            assert vrun.getTestIds() == [ 'CC' ]
+            vrun.assertCounts( total=3, npass=3 )
+            assert vrun.getTestIds() == \
+                        [ 'BB.planet=mars', 'BB.planet=venus', 'CC' ]
 
             # check that the test list in TestResults.* directory has old results
             vrun = vtu.runvvtest( '-i', chdir=tdir )

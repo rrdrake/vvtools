@@ -275,7 +275,7 @@ def XstatusString( t, test_dir, cwd ):
     ref = ensure_TestSpec( t )
     s = "%-20s " % ref.getName()
 
-    state = ref.getAttr('state')
+    state = ref.getAttr('state','notrun')  # magic: ugly: default "notrun"
     if state != "notrun":
 
         if state == "done":
@@ -326,7 +326,8 @@ def XstatusResult(t):
     ""
     ref = ensure_TestSpec( t )
 
-    state = ref.getAttr('state')
+    # magic: ugly here is state defaults to "notrun"
+    state = ref.getAttr('state','notrun')
     if state == "notrun" or state == "notdone":
         return state
 

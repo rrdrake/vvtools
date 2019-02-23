@@ -17,6 +17,8 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
+from libvvtest.RuntimeConfig import RuntimeConfig
+
 
 class filter_and_num_processors( vtu.vvtestTestCase ):
 
@@ -202,6 +204,20 @@ class filter_and_num_processors( vtu.vvtestTestCase ):
 
             assert vrun.countTestLines( 'btest.np=1' ) == 1
             assert vrun.countTestLines( 'btest.np=2' ) == 1
+
+    def test_the_maxprocs_field_in_RuntimeConfig(self):
+        ""
+        rtconfig = RuntimeConfig()
+        assert rtconfig.evaluate_maxprocs( 1 )
+
+        rtconfig = RuntimeConfig( maxprocs=5 )
+        assert     rtconfig.evaluate_maxprocs( 5 )
+        assert not rtconfig.evaluate_maxprocs( 6 )
+
+        rtconfig = RuntimeConfig()
+        rtconfig.setAttr( 'maxprocs', 5 )
+        assert     rtconfig.evaluate_maxprocs( 5 )
+        assert not rtconfig.evaluate_maxprocs( 6 )
 
 
 ########################################################################

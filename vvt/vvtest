@@ -312,7 +312,8 @@ def construct_RuntimeConfig( plat, opts, optD ):
                   search_regexes=optD['search_regexes'],
                   include_tdd=( opts.include_tdd == True ),
                   runtime_range=[ opts.tmin, opts.tmax ],
-                  runtime_sum=opts.tsum )
+                  runtime_sum=opts.tsum,
+                  maxprocs=plat.getMaxProcs() )
 
     if opts.qsub_id != None:
         rtconfig.setAttr( 'include_all', True )
@@ -352,25 +353,23 @@ def construct_info_test_list( opts, optD, rtdata, scan_dirs ):
         tlist = TestList.TestList( tfile, rtconfig )
         tlist.readTestList()
         tlist.readTestResults()
-        tlist.loadAndFilter( plat.getMaxProcs(),
-                             filter_dir=rtdata.getFilterPath() )
+        tlist.determineActiveTests( filter_dir=rtdata.getFilterPath() )
 
     elif os.path.exists( test_dir ):
         tfile = os.path.join( test_dir, testlist_name )
         tlist = TestList.TestList( tfile, rtconfig )
         tlist.readTestList()
         tlist.readTestResults()
-        tlist.loadAndFilter( plat.getMaxProcs() )
+        tlist.determineActiveTests()
 
     elif opts.keys or opts.files:
         tlist = TestList.TestList( None, rtconfig )
         scan_test_source_directories( tlist, scan_dirs, optD['param_dict'] )
-        tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
+        tlist.determineActiveTests()
 
     else:
         print3( "*** warning: previous TestResults directory not found" )
         tlist = TestList.TestList( None, rtconfig )
-        tlist.loadAndFilter( plat.getMaxProcs(), prune=True )
 
     return tlist
 
@@ -401,6 +400,7 @@ def generateTestList( opts, optD, dirs, rtdata ):
     config = rtdata.getConfiguration()
     plat = rtdata.getPlatformObject()
     testsubdir = rtdata.getTestSubdir()
+    perms = rtdata.getPermissionsObject()
 
     test_dir = os.path.abspath( testsubdir )
 
@@ -413,20 +413,17 @@ def generateTestList( opts, optD, dirs, rtdata ):
     loadRunTimes( tlist, plat,
                   opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
 
-    tlist.loadAndFilter( plat.getMaxProcs() )
-    
-    perms = rtdata.getPermissionsObject()
-    
-    createTestDir( testsubdir, perms, opts.dash_M )
-    writeCommandInfo( opts, optD, rtdata, test_dir, plat, perms )
+    tlist.applyPermanentFilters()
 
     rtdata.getResultsWriter().prerun( tlist, short=False )
 
-    tlist.createTestExecs( test_dir, plat, config, perms )
+    createTestDir( testsubdir, perms, opts.dash_M )
+    writeCommandInfo( opts, optD, rtdata, test_dir, plat, perms )
 
     tlist.stringFileWrite()
-
     perms.set( os.path.abspath( tfile ) )
+
+    tlist.createTestExecs( test_dir, plat, config, perms )
     
     print3( "Test directory:", testsubdir )
 
@@ -447,8 +444,8 @@ def extractTestFiles( opts, optD, dirs, target_dir, rtdata ):
     loadRunTimes( tlist, plat,
                   opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
 
-    tlist.loadAndFilter( plat.getMaxProcs() )
-    
+    tlist.applyPermanentFilters()
+
     if not os.path.isabs(target_dir):
       target_dir = os.path.abspath(target_dir)
     if not os.path.exists(target_dir):
@@ -804,7 +801,9 @@ def load_filter_and_prune_test_list( test_dir, tlist, plat, filter_dir,
                                          filter_dir=filter_dir,
                                          analyze_only=optanalyze,
                                          prune=True )
-    
+
+    # **** magic **** get this info to user
+
     if len(pruneL) > 0:
         print3()
         for pt,ct in pruneL:
@@ -854,6 +853,14 @@ def runTests( opts, optD, rtdata, dirs ):
 
     scan_test_source_directories( tlist, dirs, optD['param_dict'] )
 
+    tlist.readTestList()
+
+    loadRunTimes( tlist, plat,
+                  opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
+
+    tlist.applyPermanentFilters()
+    #load_filter_and_prune_test_list( test_dir, tlist, plat, None, opts.analyze )
+
     # save the test list in the TestResults directory
     tlist.stringFileWrite()
     perms.set( os.path.abspath( tfile ) )
@@ -861,10 +868,7 @@ def runTests( opts, optD, rtdata, dirs ):
     tlist.readTestResults()
     tlist.ensureInlinedTestResultIncludes()
 
-    loadRunTimes( tlist, plat,
-                  opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
-
-    load_filter_and_prune_test_list( test_dir, tlist, plat, None, opts.analyze )
+    tlist.determineActiveTests()
 
     results_writer = rtdata.getResultsWriter()
 
@@ -1016,9 +1020,13 @@ def executeTestList( opts, optD,
     for tx in tL:
         deptx = tx.getBlockingDependency()
         assert tx.hasDependency() and deptx != None
+        if isinstance( deptx, TestExec.TestExec ):
+            xdir = deptx.atest.getExecuteDirectory()
+        else:
+            xdir = deptx.getExecuteDirectory()
         print3( '*** Warning: analyze test skipped for "' + \
                 tx.atest.getExecuteDirectory() + \
-                '" due to dependency "' + deptx.atest.getExecuteDirectory() + '"' )
+                '" due to dependency "' + xdir + '"' )
 
     print3()
     results_writer.postrun( tlist )
@@ -1125,9 +1133,13 @@ def batchTestList( opts, optD, rtdata,
               ' '.join(NF) )
     for tx,deptx in nrL:
         assert tx.hasDependency() and deptx != None
+        if isinstance( deptx, TestExec.TestExec ):
+            xdir = deptx.atest.getExecuteDirectory()
+        else:
+            xdir = deptx.getExecuteDirectory()
         print3( '*** Warning: analyze test skipped for "' + \
                 tx.atest.getExecuteDirectory() + \
-                '" due to dependency "' + deptx.atest.getExecuteDirectory() + '"' )
+                '" due to dependency "' + xdir + '"' )
 
     print3()
     results_writer.postrun( tlist )
@@ -1498,7 +1510,7 @@ def restartTests( opts, optD, rtdata ):
 
     tlist = TestList.TestList( tfile, rtconfig )
 
-    tlist.readTestListIfNoTestResults()
+    tlist.readTestList()
     tlist.readTestResults()
     tlist.ensureInlinedTestResultIncludes()
 
@@ -1510,7 +1522,8 @@ def restartTests( opts, optD, rtdata ):
 
     reld = rtdata.getFilterPath()
 
-    load_filter_and_prune_test_list( test_dir, tlist, plat, reld, opts.analyze )
+    #load_filter_and_prune_test_list( test_dir, tlist, plat, reld, opts.analyze )
+    tlist.determineActiveTests( filter_dir=reld )
 
     perms = rtdata.getPermissionsObject()
 
@@ -1559,7 +1572,7 @@ def baselineTests( opts, optD, rtdata ):
 
     tlist = TestList.TestList( tfile, rtconfig )
 
-    tlist.readTestListIfNoTestResults()
+    tlist.readTestList()
     tlist.readTestResults()
     tlist.ensureInlinedTestResultIncludes()
 
@@ -1568,9 +1581,8 @@ def baselineTests( opts, optD, rtdata ):
     if not keyword_expr.containsResultsKeywords():
         keyword_expr.append( ['diff'], 'and' )
 
-    tlist.loadAndFilter( plat.getMaxProcs(),
-                         filter_dir=rtdata.getFilterPath(),
-                         baseline=True )
+    tlist.determineActiveTests( filter_dir=rtdata.getFilterPath(),
+                                baseline=True )
 
     if len(tlist.active) > 0:
 

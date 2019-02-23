@@ -212,18 +212,21 @@ class TestExec:
         for tx,pat,expr in self.deps:
 
             if isinstance( tx, TestExec ):
+                ref = tx.atest
+            else:
+                ref = tx
 
-                if tx.atest.getAttr('state') != 'done':
+            if ref.getAttr('state') != 'done':
+                return tx
+
+            result = ref.getAttr('result')
+
+            if expr == None:
+                if result not in ['pass','diff']:
                     return tx
 
-                result = tx.atest.getAttr('result')
-
-                if expr == None:
-                    if result not in ['pass','diff']:
-                        return tx
-
-                elif not expr.evaluate( lambda word: word == result ):
-                    return tx
+            elif not expr.evaluate( lambda word: word == result ):
+                return tx
 
         return None
 

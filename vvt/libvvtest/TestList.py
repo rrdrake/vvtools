@@ -123,20 +123,17 @@ class TestList:
         ""
         assert self.filename
 
-        self.tspecs.clear()
+        if os.path.exists( self.filename ):
 
-        tlr = testlistio.TestListReader( self.filename )
-        tlr.read()
+            tlr = testlistio.TestListReader( self.filename )
+            tlr.read()
 
-        self.results_suffix = tlr.getAttr( 'results_suffix', None )
+            self.results_suffix = tlr.getAttr( 'results_suffix', None )
 
-        self.tspecs.update( tlr.getTests() )
-
-    def readTestListIfNoTestResults(self):
-        ""
-        # magic: to always read the testlist, make this unconditional
-        if len( self.getResultsFilenames() ) == 0:
-            self.readTestList()
+            #magic self.tspecs.update( tlr.getTests() )
+            for xdir,tspec in tlr.getTests().items():
+                if xdir not in self.tspecs:
+                    self.tspecs[ xdir ] = tspec
 
     def readTestResults(self, resultsfilename=None):
         ""
@@ -165,11 +162,14 @@ class TestList:
             for xdir,tspec in tlr.getTests().items():
 
                 t = self.tspecs.get( xdir, None )
-                if t == None:
-                    self.tspecs[ xdir ] = tspec
-                else:
+                if t != None:
                     for k,v in tspec.getAttrs().items():
                         t.setAttr( k, v )
+                # if t == None:
+                #     self.tspecs[ xdir ] = tspec
+                # else:
+                #     for k,v in tspec.getAttrs().items():
+                #         t.setAttr( k, v )
 
     def ensureInlinedTestResultIncludes(self):
         ""
@@ -210,70 +210,33 @@ class TestList:
         """
         return self.tspecs.values()
 
-    def loadAndFilter(self, maxprocs, filter_dir=None,
-                            analyze_only=0, prune=False,
-                            baseline=False ):
-        """
-        Creates the active test list using the scanned tests and the tests
-        read in from a test list file.  A subdirectory filter is applied and
-        the filter given in the constructor.
-
-        If 'prune' is true, then analyze tests are filtered out if they have
-        inactive children that did not pass/diff in a previous run.
-
-        Returns a list of (analyze test, child test) for analyze tests that
-        were pruned.  The second item is the child that did not pass/diff.
-        """
-        self.active = {}
-
-        #self.tspecs = apply_pre_core_filters( self.tspecs, self.rtconfig )
-
+    def applyPermanentFilters(self):
+        ""
+        # magic: this smells (when should groups get rebuilt??)
         self.groups.rebuild( self.tspecs )
 
-        rmD = apply_core_filters( self.tspecs, self.rtconfig, filter_dir,
-                                  analyze_only, baseline, self.active )
-        self._remove_tests( rmD )
+        apply_permanent_filters( self.tspecs, self.groups, self.rtconfig )
 
-        rtsum = self.rtconfig.getAttr( 'runtime_sum', None )
-        if rtsum != None:
-            rmD = filter_by_cummulative_runtime( self.active, rtsum )
-            self._remove_tests( rmD )
+        # magic: this smells (would be fixed by marking the tests)
+        self.active.clear()
+        self.active.update( self.tspecs )
 
-        if prune:
-            pruneL = prune_parameterize_analyze_groups(
-                                    self.tspecs, self.groups, self.active )
+    def determineActiveTests(self, filter_dir=None,
+                                   analyze_only=False,
+                                   baseline=False):
+        ""
+        self.active.clear()
 
-            rmD, cntmax = get_tests_exceeding_platform_resources( self.active, maxprocs )
-            self._remove_tests( rmD )
+        subdir = None
+        if filter_dir != None:
+            subdir = os.path.normpath( filter_dir )
+            if subdir == '' or subdir == '.':
+                subdir = None
 
-        else:
-            pruneL = []
-            cntmax = 0
+        self.active = apply_runtime_filters( self.tspecs, self.rtconfig, subdir,
+                                             analyze_only, baseline )
 
-        return pruneL, cntmax
-
-    def _remove_tests(self, removeD):
-        """
-        The 'removeD' should be a dict mapping xdir to TestSpec.  Those tests
-        will be removed from the self.tspecs and self.active sets.  If any test
-        to be removed is part of a parameterize/analyze group, then the entire
-        group is removed.
-        """
-        for xdir,t in removeD.items():
-
-            grpL = self.groups.getAnalyzeGroup( t, [t] )
-
-            for grpt in grpL:
-
-                xdir = grpt.getExecuteDirectory()
-
-                if xdir in self.active:
-                    self.active.pop( xdir )
-
-                # don't remove a test from the TestResults test list if
-                # it was there previously
-                if xdir in self.tspecs and 'string' not in t.getOrigin():
-                    self.tspecs.pop( xdir )
+        self.groups.rebuild( self.tspecs )
 
     def markTestsWithDependents(self):
         ""
@@ -306,7 +269,7 @@ class TestList:
                     elif c == 'x':
                         L.append( t.getExecuteDirectory() )
                     elif c == 't':
-                        tm = testruntime(t)
+                        tm = get_test_runtime(t)
                         if tm == None: tm = 0
                         L.append( tm )
                     elif c == 'd':
@@ -414,19 +377,23 @@ class TestList:
             # (or a different test source but the same relative path from root)
             xdir = t.getExecuteDirectory()
 
-            t2 = self.tspecs.get( xdir, None )
-            if t2 == None:
+            # magic: this is where a warning about the same xdir would be generated
+            if xdir not in self.tspecs:
                 self.tspecs[xdir] = t
-            elif 'file' in t2.getOrigin():
-                # this new test is ignored because there is a previous test
-                # (generated from a file) with the same execute directory
-                pass
-            else:
-                # existing test was read from a test list file; use the new
-                # test instance but take on the attributes from the previous
-                for n,v in t2.getAttrs().items():
-                    t.setAttr(n,v)
-                self.tspecs[xdir] = t
+
+            # t2 = self.tspecs.get( xdir, None )
+            # if t2 == None:
+            #     self.tspecs[xdir] = t
+            # elif 'file' in t2.getOrigin():
+            #     # this new test is ignored because there is a previous test
+            #     # (generated from a file) with the same execute directory
+            #     pass
+            # else:
+            #     # existing test was read from a test list file; use the new
+            #     # test instance but take on the attributes from the previous
+            #     for n,v in t2.getAttrs().items():
+            #         t.setAttr(n,v)
+            #     self.tspecs[xdir] = t
 
     def addTest(self, t):
         """
@@ -521,7 +488,7 @@ class TestList:
             sortL = []
             for tx in L:
                 t = tx.atest
-                tm = testruntime(t)
+                tm = get_test_runtime(t)
                 if tm == None: tm = 0
                 sortL.append( (tm,tx) )
             sortL.sort()
@@ -643,86 +610,6 @@ class TestList:
             self.xtlist.pop( np )
 
 
-def apply_runtime_config_filters( rtconfig, xdir, tspec, subdir, analyze_only ):
-    """
-    """
-    if rtconfig.getAttr('include_all',0):
-        return True
-
-    kwL = tspec.getResultsKeywords() + tspec.getKeywords()
-    if not rtconfig.satisfies_keywords( kwL ):
-        return False
-
-    if subdir != None and subdir != xdir and not is_subdir( subdir, xdir ):
-        return False
-
-    # want child tests to run with the "analyze only" option ?
-    # if yes, then comment this out; if no, then uncomment it
-    #if analyze_only and tspec.getParent() != None:
-    #  return 0
-
-    if not rtconfig.evaluate_parameters( tspec.getParameters() ):
-        return False
-
-    if not rtconfig.getAttr( 'include_tdd', False ) and \
-       tspec.hasAttr( 'TDD' ):
-        return False
-
-    return True
-
-
-def check_add_to_active( rtconfig, xdir, tspec, baseline, activedict ):
-    ""
-    if 'file' in tspec.getOrigin():
-        activedict[ xdir ] = tspec
-
-    else:
-        # read from test source, which double checks filtering
-        keep = refreshTest( tspec, rtconfig )
-
-        if baseline and not tspec.hasBaseline():
-            keep = False
-
-        if keep:
-            activedict[ xdir ] = tspec
-
-
-def passes_runtime_constraints( rtconfig, tspec ):
-    ""
-    tm = testruntime( tspec )
-    if tm != None and not rtconfig.evaluate_runtime( tm ):
-        return False
-    return True
-
-
-def apply_core_filters( tspecs, rtconfig, filter_dir,
-                        analyze_only, baseline, activedict ):
-    ""
-    subdir = None
-    if filter_dir != None:
-        subdir = os.path.normpath( filter_dir )
-        if subdir == '' or subdir == '.':
-            subdir = None
-
-    rmD = {}
-    for xdir,t in tspecs.items():
-
-        # TODO: is it possible that the filter apply before refresh could
-        #       miss a test that changed since last time and now should
-        #       be included !!
-        keep = apply_runtime_config_filters( rtconfig, xdir, t, subdir, analyze_only )
-
-        if keep:
-            if not passes_runtime_constraints( rtconfig, t ):
-                keep = False
-                rmD[ xdir ] = t
-
-        if keep:
-            check_add_to_active( rtconfig, xdir, t, baseline, activedict )
-
-    return rmD
-
-
 def filter_by_cummulative_runtime( activedict, rtsum ):
     ""
     rmD = {}
@@ -730,7 +617,7 @@ def filter_by_cummulative_runtime( activedict, rtsum ):
     # first, generate list with times
     tL = []
     for xdir,t in activedict.items():
-        tm = testruntime(t)
+        tm = get_test_runtime(t)
         if tm == None: tm = 0
         tL.append( (tm,xdir,t) )
     tL.sort()
@@ -755,47 +642,6 @@ def filter_by_cummulative_runtime( activedict, rtsum ):
     return rmD
 
 
-def get_tests_exceeding_platform_resources( activedict, maxprocs ):
-    ""
-    # Remove tests that exceed the platform resources (num processors).
-    # For execute/analyze, if an execute test exceeds the resources
-    # then the entire test set is removed.
-    rmD = {}
-    cntmax = 0
-    for xdir,t in activedict.items():
-        np = int( t.getParameters().get( 'np', 1 ) )
-        assert maxprocs != None
-        if np > maxprocs:
-            rmD[xdir] = t
-            cntmax += 1
-
-    return rmD, cntmax
-
-
-def prune_parameterize_analyze_groups( tspecs, groups, active ):
-    ""
-    pruneL = []
-
-    # remove analyze tests from the active set if they have inactive
-    # children that have a bad result
-    for xdir,t in tspecs.items():
-
-        pxdir = groups.getAnalyzeExecuteDirectory( t )
-
-        # does this test have a parent and is this test inactive
-        if pxdir != None and xdir not in active:
-
-            # is the parent active and does the child have a bad result
-            if pxdir in active and \
-                  ( t.getAttr('state') != 'done' or \
-                    t.getAttr('result') not in ['pass','diff'] ):
-                # remove the parent from the active set
-                pt = active.pop( pxdir )
-                pruneL.append( (pt,t) )
-
-    return pruneL
-
-
 def is_subdir(parent_dir, subdir):
     """
     TODO: test for relative paths
@@ -815,7 +661,7 @@ def check_make_directory_containing_file( filename ):
             os.mkdir( d )
 
 
-def testruntime( testobj ):
+def get_test_runtime( testobj ):
     """
     Get and return the test 'xtime'.  If that was not set, then get the
     'runtime'.  If neither are set, then return None.
@@ -954,43 +800,131 @@ def createTestObjects( rootpath, relpath, force_params, rtconfig ):
     tests = TestSpecCreator.create_unfiltered_testlist( rootpath, relpath,
                                         force_params, evaluator )
 
-    tL = []
-    for t in tests:
-
-        if t.isAnalyze():
-            # if analyze test, filter the parameter set to the parameters
-            # that would be included
-            paramset = t.getParameterSet()
-            paramset.applyParamFilter( rtconfig.evaluate_parameters )
-
-        if test_is_active( t, rtconfig ):
-            tL.append( t )
-
-    return tL
+    return tests
 
 
-def apply_pre_core_filters( tspec_map, rtconfig ):
+def apply_permanent_filters( tspec_map, groups, rtconfig ):
     ""
-    print ( 'magic: before', tspec_map )
+    filt = TestFilter( rtconfig )
+
     new_map = {}
-    # new_map.update( tspec_map )  # magic
-    # return new_map               # magic
+    rm_groups = []
 
     include_all = rtconfig.getAttr( 'include_all', False )
 
     for xdir,tspec in tspec_map.items():
 
         if tspec.isAnalyze():
-            # if analyze test, filter the parameter set to the parameters
-            # that would be included
+            # align the analyze parameter set with its parameterized tests
             paramset = tspec.getParameterSet()
             paramset.applyParamFilter( rtconfig.evaluate_parameters )
 
-        if include_all or test_is_active( tspec, rtconfig ):
+        if include_all:
             new_map[ xdir ] = tspec
 
-    print ( 'magic: after', new_map )
-    return new_map
+        elif filt.checkParameters( tspec ):
+
+            keep = ( filt.checkPlatform( tspec ) and \
+                     filt.checkOptions( tspec ) and \
+                     filt.checkKeywords( tspec, results_keywords=False ) and \
+                     filt.checkTDD( tspec ) and \
+                     filt.checkFileSearch( tspec ) and \
+                     filt.checkMaxProcessors( tspec ) and \
+                     filt.checkRuntime( tspec ) )
+
+            if keep:
+                new_map[ xdir ] = tspec
+            else:
+                analyze_xdir = groups.getAnalyzeExecuteDirectory( tspec )
+                if analyze_xdir:
+                    analyze_tspec = tspec_map.get( analyze_xdir, None )
+                    if analyze_tspec:
+                        rm_groups.append( analyze_tspec )
+
+    for analyze_tspec in rm_groups:
+        for tspec in groups.getGroup( analyze_tspec ):
+            new_map.pop( tspec.getExecuteDirectory(), None )
+
+    rtsum = rtconfig.getAttr( 'runtime_sum', None )
+    if not include_all and rtsum != None:
+        apply_cummulative_runtime_filter( new_map, rtsum, groups )
+
+    tspec_map.clear()
+    tspec_map.update( new_map )
+
+
+def apply_runtime_filters( tspec_map, rtconfig, subdir,
+                           analyze_only, baseline ):
+    ""
+    filt = TestFilter( rtconfig )
+
+    include_all = rtconfig.getAttr( 'include_all', False )
+
+    active = {}
+
+    for xdir,tspec in tspec_map.items():
+
+
+        keep = True
+
+        if not include_all:
+
+            if subdir and subdir != xdir and not is_subdir( subdir, xdir ):
+                keep = False
+
+            if keep:
+                keep = ( filt.checkPlatform( tspec ) and \
+                         filt.checkOptions( tspec ) and \
+                         filt.checkKeywords( tspec, results_keywords=True ) and \
+                         filt.checkTDD( tspec ) and \
+                         filt.checkFileSearch( tspec ) and \
+                         filt.checkParameters( tspec ) and \
+                         filt.checkMaxProcessors( tspec ) and \
+                         filt.checkRuntime( tspec ) )
+
+        if keep and 'file' not in tspec.getOrigin():
+            # magic: this smells (use the 'status' field??)
+            # plus, how to avoid refresh just for vvtest -i ??
+            refreshTest( tspec, rtconfig )
+
+        if keep:
+            # magic: an ugly thing here is the baseline script is only loaded
+            #        after a refresh, so this test has to be after
+            if baseline and not tspec.hasBaseline():
+                keep = False
+
+        if keep:
+            active[ xdir ] = tspec
+
+    rtsum = rtconfig.getAttr( 'runtime_sum', None )
+    if not include_all and rtsum != None:
+        apply_cummulative_runtime_filter( active, rtsum )
+
+    return active
+
+
+def apply_cummulative_runtime_filter( active, rtsum, groups=None ):
+    ""
+    if groups == None:
+        groups = ParameterizeAnalyzeGroups()
+        groups.rebuild( active )
+
+    rmD = filter_by_cummulative_runtime( active, rtsum )
+
+    rm_groups = []
+    for xdir,tspec in rmD.items():
+
+        analyze_xdir = groups.getAnalyzeExecuteDirectory( tspec )
+        if analyze_xdir:
+            analyze_tspec = active.get( analyze_xdir, None )
+            if analyze_tspec:
+                rm_groups.append( analyze_tspec )
+
+        active.pop( xdir, None )
+
+    for analyze_tspec in rm_groups:
+        for tspec in groups.getGroup( analyze_tspec ):
+            active.pop( tspec.getExecuteDirectory(), None )
 
 
 def refreshTest( testobj, rtconfig ):
@@ -1015,41 +949,62 @@ def refreshTest( testobj, rtconfig ):
         paramset = testobj.getParameterSet()
         paramset.applyParamFilter( rtconfig.evaluate_parameters )
 
-    keep = True
-    filt = not rtconfig.getAttr( 'include_all', False )
-    if filt and not test_is_active( testobj, rtconfig ):
-        keep = False
 
-    return keep
+class TestFilter:
 
+    def __init__(self, rtconfig):
+        ""
+        self.rtconfig = rtconfig
 
-def test_is_active( testobj, rtconfig ):
-    """
-    Uses the given filter to test whether the test is active (enabled).
-    """
-    pev = PlatformEvaluator( testobj.getPlatformEnableExpressions() )
-    if not rtconfig.evaluate_platform_include( pev.satisfies_platform ):
-        return False
+    def checkPlatform(self, tspec):
+        ""
+        pev = PlatformEvaluator( tspec.getPlatformEnableExpressions() )
+        ok = self.rtconfig.evaluate_platform_include( pev.satisfies_platform )
+        return ok
 
-    for opexpr in testobj.getOptionEnableExpressions():
-        if not rtconfig.evaluate_option_expr( opexpr ):
+    def checkOptions(self, tspec):
+        ""
+        for opexpr in tspec.getOptionEnableExpressions():
+            if not self.rtconfig.evaluate_option_expr( opexpr ):
+                return False
+        return True
+
+    def checkKeywords(self, tspec, results_keywords=True):
+        ""
+        kwlist = tspec.getKeywords() + tspec.getResultsKeywords()
+        ok = self.rtconfig.satisfies_keywords( kwlist, results_keywords )
+        return ok
+
+    def checkTDD(self, tspec):
+        ""
+        if self.rtconfig.getAttr( 'include_tdd', False ):
+            ok = True
+        else:
+            ok = ( 'TDD' not in tspec.getKeywords() )
+        return ok
+
+    def checkParameters(self, tspec):
+        ""
+        ok = self.rtconfig.evaluate_parameters( tspec.getParameters() )
+        return ok
+
+    def checkFileSearch(self, tspec):
+        ""
+        ok = self.rtconfig.file_search( tspec )
+        return ok
+
+    def checkMaxProcessors(self, tspec):
+        ""
+        np = int( tspec.getParameters().get( 'np', 1 ) )
+        ok = self.rtconfig.evaluate_maxprocs( np )
+        return ok
+
+    def checkRuntime(self, tspec):
+        ""
+        tm = get_test_runtime( tspec )
+        if tm != None and not self.rtconfig.evaluate_runtime( tm ):
             return False
-
-    if not rtconfig.satisfies_keywords( testobj.getKeywords() +
-                                        testobj.getResultsKeywords() ):
-        return False
-
-    if not rtconfig.getAttr( 'include_tdd', False ) and \
-       'TDD' in testobj.getKeywords():
-        return False
-
-    if not rtconfig.evaluate_parameters( testobj.getParameters() ):
-        return False
-
-    if not rtconfig.file_search( testobj ):
-        return False
-
-    return True
+        return True
 
 
 class PlatformEvaluator:

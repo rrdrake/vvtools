@@ -31,6 +31,7 @@ class RuntimeConfig:
        'include_all',      # boolean to turn off test inclusion filtering
        'runtime_range',    # [ minimum runtime, maximum runtime ]
        'runtime_sum',      # maximum accumulated runtime
+       'maxprocs',         # maximum number of processors, np
     ]
     
     def __init__(self, **kwargs ):
@@ -173,6 +174,15 @@ class RuntimeConfig:
         if mn != None and test_runtime < mn:
             return False
         if mx != None and test_runtime > mx:
+            return False
+
+        return True
+
+    def evaluate_maxprocs(self, test_np):
+        ""
+        maxprocs = self.attrs.get( 'maxprocs', None )
+
+        if maxprocs != None and test_np > maxprocs:
             return False
 
         return True
