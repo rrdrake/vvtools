@@ -115,6 +115,9 @@ def create_unfiltered_testlist( rootpath, relpath, force_params, evaluator ):
     else:
         raise Exception( "invalid file extension: "+ext )
 
+    for tspec in tL:
+        tspec.setConstructionCompleted()
+
     return tL
 
 
@@ -130,14 +133,14 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
     testL = []
 
     if numparams == 0:
-        t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
+        t = TestSpec.TestSpec( tname, rootpath, relpath )
         testL.append(t)
 
     else:
         # take a cartesian product of all the parameter values
         for pdict in paramset.getInstances():
             # create the test and add to test list
-            t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
+            t = TestSpec.TestSpec( tname, rootpath, relpath )
             t.setParameters( pdict )
             testL.append(t)
 
@@ -184,14 +187,14 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
     testL = []
 
     if numparams == 0:
-        t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
+        t = TestSpec.TestSpec( tname, rootpath, relpath )
         testL.append(t)
 
     else:
         # take a cartesian product of all the parameter values
         for pdict in paramset.getInstances():
             # create the test and add to test list
-            t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
+            t = TestSpec.TestSpec( tname, rootpath, relpath )
             t.setParameters( pdict )
             testL.append(t)
     
@@ -305,7 +308,7 @@ def reparse_test_object( testobj, evaluator ):
     else:
         raise Exception( "invalid file extension: "+ext )
 
-    testobj.addOrigin( 'file' )  # mark test as refreshed
+    testobj.setConstructionCompleted()
 
 
 ##########################################################################

@@ -308,8 +308,8 @@ def string_to_test( strid ):
     name = testdict['name']
     root = testdict['root']
     path = testdict['path']
-    
-    tspec = TestSpec.TestSpec( name, root, path, "string" )
+
+    tspec = TestSpec.TestSpec( name, root, path )
 
     tspec.setParameters( testdict['params'] )
     tspec.setKeywords( testdict['keywords'] )

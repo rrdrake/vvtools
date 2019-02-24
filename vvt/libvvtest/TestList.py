@@ -312,10 +312,10 @@ class TestList:
         d = os.path.normpath(d)
 
         if basedir == d:
-          reldir = '.'
+            reldir = '.'
         else:
-          assert basedir+os.sep == d[:len(basedir)+1]
-          reldir = d[len(basedir)+1:]
+            assert basedir+os.sep == d[:len(basedir)+1]
+            reldir = d[len(basedir)+1:]
 
         # scan files with extension "xml" or "vvt"; soft links to directories
         # are skipped by os.walk so special handling is performed
@@ -418,25 +418,25 @@ class TestList:
         """
         """
         self.xtlist = {}
-        
+
         xtD = {}
         for t in self.active.values():
 
-          assert 'file' in t.getOrigin()
+            assert t.constructionCompleted()
 
-          xt = TestExec.TestExec( t, perms )
+            xt = TestExec.TestExec( t, perms )
 
-          if t.getAttr( 'hasdependent', False ):
-              xt.setHasDependent()
+            if t.getAttr( 'hasdependent', False ):
+                xt.setHasDependent()
 
-          np = int( t.getParameters().get('np', 0) )
-          if np in self.xtlist:
-            self.xtlist[np].append(xt)
-          else:
-            self.xtlist[np] = [xt]
-          
-          xtD[ t.getExecuteDirectory() ] = xt
-        
+            np = int( t.getParameters().get('np', 0) )
+            if np in self.xtlist:
+                self.xtlist[np].append(xt)
+            else:
+                self.xtlist[np] = [xt]
+
+            xtD[ t.getExecuteDirectory() ] = xt
+
         # sort tests longest running first; 
         self.sortTestExecList()
 
@@ -882,7 +882,7 @@ def apply_runtime_filters( tspec_map, rtconfig, subdir,
                          filt.checkMaxProcessors( tspec ) and \
                          filt.checkRuntime( tspec ) )
 
-        if keep and 'file' not in tspec.getOrigin():
+        if keep and not tspec.constructionCompleted():
             # magic: this smells (use the 'status' field??)
             # plus, how to avoid refresh just for vvtest -i ??
             refreshTest( tspec, rtconfig )

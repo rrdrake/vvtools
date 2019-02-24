@@ -70,16 +70,6 @@ class TestSpec:
         else:
             return 'script'
 
-    def getOrigin(self):
-        """
-        Returns a list of origin strings.  If the list is empty, only the
-        constructor was called.  Origin strings:
-            "file"   : this object was constructed or refreshed from test source
-            "string" : this object was constructed using a string
-            "copy"   : this object is a copy of another object
-        """
-        return []+self.origin
-
     def getKeywords(self):
         """
         Returns the list of keyword strings.
@@ -294,7 +284,7 @@ class TestSpec:
     
     ##########################################################
     
-    def __init__(self, name, rootpath, filepath, origin=None):
+    def __init__(self, name, rootpath, filepath):
         """
         A test object always needs a root path and file path, where the file
         path must be a relative path name.
@@ -303,9 +293,7 @@ class TestSpec:
 
         self.data = {}
 
-        self.origin = []  # strings, such as "file", "string", "copy"
-        if origin:
-            self.origin.append( origin )
+        self.ctor_done = False
 
         self.name = name
         self.rootpath = rootpath
@@ -357,6 +345,14 @@ class TestSpec:
     def __repr__(self):
         return 'TestSpec(name=' + str(self.name) + ', xdir=' + self.xdir + ')'
 
+    def setConstructionCompleted(self):
+        ""
+        self.ctor_done = True
+
+    def constructionCompleted(self):
+        ""
+        return self.ctor_done
+
     def addDataNameIfNeededAndReturnValue(self, name, data_type):
         ""
         if name not in self.data:
@@ -366,13 +362,6 @@ class TestSpec:
     ##########################################################
     
     # construction methods
-
-    def addOrigin(self, origin):
-        """
-        Appends an origin string to the orgin list for this object.
-        """
-        assert origin
-        self.origin.append( origin )
 
     def addEnablePlatformExpression(self, word_expression):
         ""
@@ -535,7 +524,7 @@ class TestSpec:
         except the parameters.  The new test instance is returned.
         """
         ts = TestSpec( self.name, self.rootpath, self.filepath )
-        ts.origin = self.origin + ["copy"]
+        ts.ctor_done = self.ctor_done
         ts.keywords = set( self.keywords )
         ts.setParameters({})  # skip ts.params
         ts.analyze_spec = self.analyze_spec
