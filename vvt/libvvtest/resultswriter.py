@@ -372,6 +372,7 @@ def write_JUnit_file( testL, test_dir, filename, datestr ):
             '<testsuites>\n' + \
             '<testsuite name="vvtest"' + \
                       ' tests="'+str(npass+nwarn+nfail)+'"' + \
+                      ' errors="0"' + \
                       ' skipped="'+str(nwarn)+'"' + \
                       ' failures="'+str(nfail)+'"' + \
                       ' time="'+str(tsum)+'"' + \
