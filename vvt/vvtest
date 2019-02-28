@@ -100,7 +100,8 @@ def main():
     rtdata.setRuntimeConfig( opts, optD )
 
     if opts.dash_i or opts.keys or opts.files:
-        print_info_mode( opts, optD, rtdata, dirs )
+        mode = InformationMode( opts, optD, rtdata )
+        mode.run( dirs )
 
     elif opts.dash_g:
         generateTestList( opts, optD, dirs, rtdata )
@@ -328,58 +329,100 @@ def construct_RuntimeConfig( plat, opts, optD ):
     return rtconfig
 
 
-def print_info_mode( opts, optD, rtdata, scan_dirs ):
-    ""
-    plat = rtdata.getPlatformObject()
+class InformationMode:
 
-    tlist = construct_info_test_list( opts, optD, rtdata, scan_dirs )
+    def __init__(self, opts, optD, rtdata):
+        ""
+        self.opts = opts
+        self.optD = optD
+        self.rtdata = rtdata
 
-    test_dir = rtdata.getTestResultsDir()
+    def run(self, scan_dirs):
+        ""
+        # always include tdd in info mode
+        self.rtdata.getRuntimeConfig().setAttr( 'include_tdd', True )
 
-    if opts.keys or opts.files:
-        keywordInformation( tlist, opts.keys, opts.files )
+        plat = self.rtdata.getPlatformObject()
 
-    elif opts.save_results:
-        saveResults( opts, optD, tlist, plat, test_dir )
+        tlist = self.loadTestList( scan_dirs )
 
-    else:
-        rtdata.getResultsWriter().info( tlist )
+        test_dir = self.rtdata.getTestResultsDir()
 
+        if self.opts.keys:
+            self.printKeywordUnion( tlist )
 
-def construct_info_test_list( opts, optD, rtdata, scan_dirs ):
-    ""
-    rtconfig = rtdata.getRuntimeConfig()
-    plat = rtdata.getPlatformObject()
-    test_dir = rtdata.getTestResultsDir()
-    statushandler = rtdata.getTestStatusHandler()
+        elif self.opts.files:
+            self.printTestFiles( tlist )
 
-    # always include tdd in info mode
-    rtconfig.setAttr( 'include_tdd', True )
+        elif self.opts.save_results:
+            saveResults( self.opts, self.optD, tlist, plat, test_dir )
 
-    if rtdata.isRestartMode():
+        else:
+            self.rtdata.getResultsWriter().info( tlist )
+
+    def loadTestList(self, scan_dirs):
+        ""
+        test_dir = self.rtdata.getTestResultsDir()
+
+        tlist = self.createTestList()
+
+        if self.rtdata.isRestartMode():
+            tlist.readTestList()
+            tlist.readTestResults()
+
+        elif self.opts.keys or self.opts.files:
+            scan_test_source_directories( tlist, scan_dirs,
+                                          self.optD['param_dict'] )
+
+        elif os.path.exists( test_dir ):
+            tlist.readTestList()
+            tlist.readTestResults()
+
+        tlist.determineActiveTests( filter_dir=self.rtdata.getFilterPath() )
+
+        return tlist
+
+    def createTestList(self):
+        ""
+        rtconfig = self.rtdata.getRuntimeConfig()
+        statushandler = self.rtdata.getTestStatusHandler()
+        test_dir = self.rtdata.getTestResultsDir()
+
         tfile = os.path.join( test_dir, testlist_name )
-        tlist = TestList.TestList( statushandler, tfile, rtconfig )
-        tlist.readTestList()
-        tlist.readTestResults()
-        tlist.determineActiveTests( filter_dir=rtdata.getFilterPath() )
+        if not os.path.exists( tfile ):
+            tfile = None
 
-    elif os.path.exists( test_dir ):
-        tfile = os.path.join( test_dir, testlist_name )
-        tlist = TestList.TestList( statushandler, tfile, rtconfig )
-        tlist.readTestList()
-        tlist.readTestResults()
-        tlist.determineActiveTests()
+        return TestList.TestList( statushandler, tfile, rtconfig )
 
-    elif opts.keys or opts.files:
-        tlist = TestList.TestList( statushandler, None, rtconfig )
-        scan_test_source_directories( tlist, scan_dirs, optD['param_dict'] )
-        tlist.determineActiveTests()
+    def printKeywordUnion(self, tlist):
+        ""
+        print3( "\nresults keywords: " + ' '.join( RESULTS_KEYWORDS ) )
+        kd = {}
+        for t in tlist.getActiveTests():
+            for k in t.getKeywords():
+                if k not in RESULTS_KEYWORDS and k != t.getName():
+                    kd[k] = None
+        L = list( kd.keys() )
+        L.sort()
+        print3( "\ntest keywords: " )
+        while len(L) > 0:
+            k1 = L.pop(0)
+            if len(L) > 0: k2 = L.pop(0)
+            else:          k2 = ''
+            if len(L) > 0: k3 = L.pop(0)
+            else:          k3 = ''
+            print3( "  %-20s %-20s %-20s" % (k1,k2,k3) )
 
-    else:
-        print3( "*** warning: previous TestResults directory not found" )
-        tlist = TestList.TestList( statushandler, None, rtconfig )
-
-    return tlist
+    def printTestFiles(self, tlist):
+        ""
+        D = {}
+        for t in tlist.getActiveTests():
+            d = os.path.normpath( t.getFilename() )
+            D[d] = None
+        L = list( D.keys() )
+        L.sort()
+        for d in L:
+            print3( d )
 
 
 ##############################################################################
@@ -531,38 +574,6 @@ def extractTestFiles( opts, optD, dirs, target_dir, rtdata ):
                 try: shutil.copy2( fromf, tof )
                 except IOError: pass
 
-
-##############################################################################
-
-def keywordInformation( tlist, optkeys, optfiles ):
-    
-    if optkeys:
-      print3( "\nresults keywords: " + ' '.join( RESULTS_KEYWORDS ) )
-      kd = {}
-      for t in tlist.getActiveTests():
-        for k in t.getKeywords():
-          if k not in RESULTS_KEYWORDS and k != t.getName():
-            kd[k] = None
-      L = list( kd.keys() )
-      L.sort()
-      print3( "\ntest keywords: " )
-      while len(L) > 0:
-        k1 = L.pop(0)
-        if len(L) > 0: k2 = L.pop(0)
-        else:          k2 = ''
-        if len(L) > 0: k3 = L.pop(0)
-        else:          k3 = ''
-        print3( "  %-20s %-20s %-20s" % (k1,k2,k3) )
-    else:
-      assert optfiles
-      D = {}
-      for t in tlist.getActiveTests():
-        d = os.path.normpath( t.getFilename() )
-        D[d] = None
-      L = list( D.keys() )
-      L.sort()
-      for d in L:
-        print3( d )
 
 ##############################################################################
 
