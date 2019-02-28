@@ -24,8 +24,10 @@ class TestList:
     file and to read from a test XML file.
     """
 
-    def __init__(self, filename, runtime_config=None):
+    def __init__(self, statushandler, filename, runtime_config=None):
         ""
+        self.statushandler = statushandler
+
         if filename:
             self.filename = os.path.normpath( filename )
         else:
@@ -165,11 +167,6 @@ class TestList:
                 if t != None:
                     for k,v in tspec.getAttrs().items():
                         t.setAttr( k, v )
-                # if t == None:
-                #     self.tspecs[ xdir ] = tspec
-                # else:
-                #     for k,v in tspec.getAttrs().items():
-                #         t.setAttr( k, v )
 
     def ensureInlinedTestResultIncludes(self):
         ""
@@ -215,7 +212,8 @@ class TestList:
         # magic: this smells (when should groups get rebuilt??)
         self.groups.rebuild( self.tspecs )
 
-        apply_permanent_filters( self.tspecs, self.groups, self.rtconfig )
+        apply_permanent_filters( self.statushandler, self.tspecs,
+                                 self.groups, self.rtconfig )
 
         # magic: this smells (would be fixed by marking the tests)
         self.active.clear()
@@ -233,7 +231,8 @@ class TestList:
             if subdir == '' or subdir == '.':
                 subdir = None
 
-        self.active = apply_runtime_filters( self.tspecs, self.rtconfig, subdir,
+        self.active = apply_runtime_filters( self.statushandler, self.tspecs,
+                                             self.rtconfig, subdir,
                                              analyze_only, baseline )
 
         self.groups.rebuild( self.tspecs )
@@ -269,19 +268,14 @@ class TestList:
                     elif c == 'x':
                         L.append( t.getExecuteDirectory() )
                     elif c == 't':
-                        tm = get_test_runtime(t)
+                        tm = self.statushandler.getRuntime( t, None )
                         if tm == None: tm = 0
                         L.append( tm )
                     elif c == 'd':
-                        L.append( t.getAttr( 'xdate', 0 ) )
+                        L.append( self.statushandler.getStartDate( t, 0 ) )
                     elif c == 's':
-                        st = t.getAttr( 'state', 'notrun' )
-                        if st == 'notrun':
-                            L.append( st )
-                        elif st == 'done':
-                            L.append( t.getAttr( 'result', 'unknown' ) )
-                        else:
-                            L.append( 'notdone' )
+                        L.append( self.statushandler.getResultStatus( t ) )
+
                 L.append( t )
                 tL.append( L )
             tL.sort()
@@ -381,20 +375,6 @@ class TestList:
             if xdir not in self.tspecs:
                 self.tspecs[xdir] = t
 
-            # t2 = self.tspecs.get( xdir, None )
-            # if t2 == None:
-            #     self.tspecs[xdir] = t
-            # elif 'file' in t2.getOrigin():
-            #     # this new test is ignored because there is a previous test
-            #     # (generated from a file) with the same execute directory
-            #     pass
-            # else:
-            #     # existing test was read from a test list file; use the new
-            #     # test instance but take on the attributes from the previous
-            #     for n,v in t2.getAttrs().items():
-            #         t.setAttr(n,v)
-            #     self.tspecs[xdir] = t
-
     def addTest(self, t):
         """
         Add a test to the test spec list.  Will overwrite an existing test.
@@ -424,7 +404,7 @@ class TestList:
 
             assert t.constructionCompleted()
 
-            xt = TestExec.TestExec( t, perms )
+            xt = TestExec.TestExec( self.statushandler, t, perms )
 
             if t.getAttr( 'hasdependent', False ):
                 xt.setHasDependent()
@@ -488,7 +468,7 @@ class TestList:
             sortL = []
             for tx in L:
                 t = tx.atest
-                tm = get_test_runtime(t)
+                tm = self.statushandler.getRuntime( t, None )
                 if tm == None: tm = 0
                 sortL.append( (tm,tx) )
             sortL.sort()
@@ -610,14 +590,14 @@ class TestList:
             self.xtlist.pop( np )
 
 
-def filter_by_cummulative_runtime( activedict, rtsum ):
+def filter_by_cummulative_runtime( statushandler, activedict, rtsum ):
     ""
     rmD = {}
 
     # first, generate list with times
     tL = []
     for xdir,t in activedict.items():
-        tm = get_test_runtime(t)
+        tm = statushandler.getRuntime( t, None )
         if tm == None: tm = 0
         tL.append( (tm,xdir,t) )
     tL.sort()
@@ -659,17 +639,6 @@ def check_make_directory_containing_file( filename ):
     if d and d != '.':
         if not os.path.exists(d):
             os.mkdir( d )
-
-
-def get_test_runtime( testobj ):
-    """
-    Get and return the test 'xtime'.  If that was not set, then get the
-    'runtime'.  If neither are set, then return None.
-    """
-    tm = testobj.getAttr( 'xtime', None )
-    if tm == None or tm < 0:
-        tm = testobj.getAttr( 'runtime', None )
-    return tm
 
 
 class ParameterizeAnalyzeGroups:
@@ -803,9 +772,9 @@ def createTestObjects( rootpath, relpath, force_params, rtconfig ):
     return tests
 
 
-def apply_permanent_filters( tspec_map, groups, rtconfig ):
+def apply_permanent_filters( statushandler, tspec_map, groups, rtconfig ):
     ""
-    filt = TestFilter( rtconfig )
+    filt = TestFilter( rtconfig, statushandler )
 
     new_map = {}
     rm_groups = []
@@ -847,16 +816,16 @@ def apply_permanent_filters( tspec_map, groups, rtconfig ):
 
     rtsum = rtconfig.getAttr( 'runtime_sum', None )
     if not include_all and rtsum != None:
-        apply_cummulative_runtime_filter( new_map, rtsum, groups )
+        apply_cummulative_runtime_filter( statushandler, new_map, rtsum, groups )
 
     tspec_map.clear()
     tspec_map.update( new_map )
 
 
-def apply_runtime_filters( tspec_map, rtconfig, subdir,
+def apply_runtime_filters( statushandler, tspec_map, rtconfig, subdir,
                            analyze_only, baseline ):
     ""
-    filt = TestFilter( rtconfig )
+    filt = TestFilter( rtconfig, statushandler )
 
     include_all = rtconfig.getAttr( 'include_all', False )
 
@@ -898,18 +867,18 @@ def apply_runtime_filters( tspec_map, rtconfig, subdir,
 
     rtsum = rtconfig.getAttr( 'runtime_sum', None )
     if not include_all and rtsum != None:
-        apply_cummulative_runtime_filter( active, rtsum )
+        apply_cummulative_runtime_filter( statushandler, active, rtsum )
 
     return active
 
 
-def apply_cummulative_runtime_filter( active, rtsum, groups=None ):
+def apply_cummulative_runtime_filter( statushandler, active, rtsum, groups=None ):
     ""
     if groups == None:
         groups = ParameterizeAnalyzeGroups()
         groups.rebuild( active )
 
-    rmD = filter_by_cummulative_runtime( active, rtsum )
+    rmD = filter_by_cummulative_runtime( statushandler, active, rtsum )
 
     rm_groups = []
     for xdir,tspec in rmD.items():
@@ -952,9 +921,10 @@ def refreshTest( testobj, rtconfig ):
 
 class TestFilter:
 
-    def __init__(self, rtconfig):
+    def __init__(self, rtconfig, statushandler):
         ""
         self.rtconfig = rtconfig
+        self.statushandler = statushandler
 
     def checkPlatform(self, tspec):
         ""
@@ -971,7 +941,8 @@ class TestFilter:
 
     def checkKeywords(self, tspec, results_keywords=True):
         ""
-        kwlist = tspec.getKeywords() + tspec.getResultsKeywords()
+        kwlist = tspec.getKeywords() + \
+                 self.statushandler.getResultsKeywords( tspec )
         ok = self.rtconfig.satisfies_keywords( kwlist, results_keywords )
         return ok
 
@@ -1001,7 +972,7 @@ class TestFilter:
 
     def checkRuntime(self, tspec):
         ""
-        tm = get_test_runtime( tspec )
+        tm = self.statushandler.getRuntime( tspec, None )
         if tm != None and not self.rtconfig.evaluate_runtime( tm ):
             return False
         return True

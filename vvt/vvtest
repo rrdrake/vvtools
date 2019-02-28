@@ -36,6 +36,7 @@ import libvvtest.testlistio as testlistio
 import libvvtest.utesthooks as utesthooks
 import libvvtest.resultswriter as resultswriter
 import libvvtest.pathutil as pathutil
+from libvvtest.teststatus import TestStatusHandler, RESULTS_KEYWORDS
 
 
 version = '1.1'
@@ -89,6 +90,8 @@ def main():
     rtdata.setTestResultsDir( test_cache_dir )
 
     rtdata.setPermissionsObject( opts, optD )
+
+    rtdata.setTestStatusHandler( TestStatusHandler() )
 
     rtdata.setResultsWriter( opts, optD, start_time )
 
@@ -256,6 +259,10 @@ class RuntimeData:
         self.perms = make_PermissionSetter( self.test_dir, opts.perms )
     def getPermissionsObject(self): return self.perms
 
+    def setTestStatusHandler(self, statushandler):
+        self.statushandler = statushandler
+    def getTestStatusHandler(self): return self.statushandler
+
     def setResultsWriter(self, opts, optD, start_time):
         resw = make_results_writer( opts, optD, start_time,
                                     self.toolsdir,
@@ -344,32 +351,33 @@ def construct_info_test_list( opts, optD, rtdata, scan_dirs ):
     rtconfig = rtdata.getRuntimeConfig()
     plat = rtdata.getPlatformObject()
     test_dir = rtdata.getTestResultsDir()
+    statushandler = rtdata.getTestStatusHandler()
 
     # always include tdd in info mode
     rtconfig.setAttr( 'include_tdd', True )
 
     if rtdata.isRestartMode():
         tfile = os.path.join( test_dir, testlist_name )
-        tlist = TestList.TestList( tfile, rtconfig )
+        tlist = TestList.TestList( statushandler, tfile, rtconfig )
         tlist.readTestList()
         tlist.readTestResults()
         tlist.determineActiveTests( filter_dir=rtdata.getFilterPath() )
 
     elif os.path.exists( test_dir ):
         tfile = os.path.join( test_dir, testlist_name )
-        tlist = TestList.TestList( tfile, rtconfig )
+        tlist = TestList.TestList( statushandler, tfile, rtconfig )
         tlist.readTestList()
         tlist.readTestResults()
         tlist.determineActiveTests()
 
     elif opts.keys or opts.files:
-        tlist = TestList.TestList( None, rtconfig )
+        tlist = TestList.TestList( statushandler, None, rtconfig )
         scan_test_source_directories( tlist, scan_dirs, optD['param_dict'] )
         tlist.determineActiveTests()
 
     else:
         print3( "*** warning: previous TestResults directory not found" )
-        tlist = TestList.TestList( None, rtconfig )
+        tlist = TestList.TestList( statushandler, None, rtconfig )
 
     return tlist
 
@@ -401,16 +409,17 @@ def generateTestList( opts, optD, dirs, rtdata ):
     plat = rtdata.getPlatformObject()
     testsubdir = rtdata.getTestSubdir()
     perms = rtdata.getPermissionsObject()
+    statushandler = rtdata.getTestStatusHandler()
 
     test_dir = os.path.abspath( testsubdir )
 
     tfile = os.path.join( test_dir, testlist_name )
 
-    tlist = TestList.TestList( tfile, rtconfig )
+    tlist = TestList.TestList( statushandler, tfile, rtconfig )
 
     scan_test_source_directories( tlist, dirs, optD['param_dict'] )
 
-    loadRunTimes( tlist, plat,
+    loadRunTimes( statushandler, tlist, plat,
                   opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
 
     tlist.applyPermanentFilters()
@@ -436,12 +445,13 @@ def extractTestFiles( opts, optD, dirs, target_dir, rtdata ):
     """
     plat = rtdata.getPlatformObject()
     rtconfig = rtdata.getRuntimeConfig()
+    statushandler = rtdata.getTestStatusHandler()
 
-    tlist = TestList.TestList( None, rtconfig )
+    tlist = TestList.TestList( statushandler, None, rtconfig )
 
     scan_test_source_directories( tlist, dirs, optD['param_dict'] )
 
-    loadRunTimes( tlist, plat,
+    loadRunTimes( statushandler, tlist, plat,
                   opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
 
     tlist.applyPermanentFilters()
@@ -527,11 +537,11 @@ def extractTestFiles( opts, optD, dirs, target_dir, rtdata ):
 def keywordInformation( tlist, optkeys, optfiles ):
     
     if optkeys:
-      print3( "\nresults keywords: " + ' '.join( TestSpec.results_keywords ) )
+      print3( "\nresults keywords: " + ' '.join( RESULTS_KEYWORDS ) )
       kd = {}
       for t in tlist.getActiveTests():
         for k in t.getKeywords():
-          if k not in TestSpec.results_keywords and k != t.getName():
+          if k not in RESULTS_KEYWORDS and k != t.getName():
             kd[k] = None
       L = list( kd.keys() )
       L.sort()
@@ -830,12 +840,13 @@ def runTests( opts, optD, rtdata, dirs ):
     rtconfig = rtdata.getRuntimeConfig()
     plat = rtdata.getPlatformObject()
     testsubdir = rtdata.getTestSubdir()
+    statushandler = rtdata.getTestStatusHandler()
 
     # determine the directory that stores the test results then create it
     test_dir = os.path.abspath( testsubdir )
     tfile = os.path.join( test_dir, testlist_name )
 
-    tlist = TestList.TestList( tfile, rtconfig )
+    tlist = TestList.TestList( statushandler, tfile, rtconfig )
 
     check_for_currently_running_vvtest( tlist.getResultsFilenames(), opts.force )
 
@@ -855,7 +866,7 @@ def runTests( opts, optD, rtdata, dirs ):
 
     tlist.readTestList()
 
-    loadRunTimes( tlist, plat,
+    loadRunTimes( statushandler, tlist, plat,
                   opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
 
     tlist.applyPermanentFilters()
@@ -884,7 +895,7 @@ def runTests( opts, optD, rtdata, dirs ):
             saveResults( opts, optD, tlist, plat, test_dir, inprogress=True )
 
         if not opts.batch:
-            executeTestList( opts, optD,
+            executeTestList( opts, optD, rtdata,
                              tlist, test_dir, plat, perms, tfile,
                              results_writer )
 
@@ -936,8 +947,10 @@ def make_results_writer( opts, optD,
         junitfile = None
         gitlabdir = None
 
+    statushandler = TestStatusHandler()
+
     writer = resultswriter.ResultsWriter(
-                test_dir, perms,
+                test_dir, perms, statushandler,
                 optD['sort_letters'], opts.results_date,
                 htmlfile, junitfile, gitlabdir )
 
@@ -956,11 +969,13 @@ def make_results_writer( opts, optD,
     return writer
 
 
-def executeTestList( opts, optD,
+def executeTestList( opts, optD, rtdata,
                      tlist, test_dir, plat, perms, tfile,
                      results_writer ):
     """
     """
+    statushandler = rtdata.getTestStatusHandler()
+
     plat.display()
     starttime = time.time()
     print3( "Start time:", time.ctime() )
@@ -995,7 +1010,8 @@ def executeTestList( opts, optD,
             showprogress = False
             for tx in list( tlist.getRunning() ):
                 if tx.poll():
-                    xs = resultswriter.XstatusString( tx, test_dir, cwd )
+                    xs = resultswriter.XstatusString( statushandler,
+                                                      tx, test_dir, cwd )
                     print3( "Finished:", xs )
                     tlist.testDone( tx )
                     showprogress = True
@@ -1042,6 +1058,8 @@ def batchTestList( opts, optD, rtdata,
     The 'tlist' is a TestList class instance.
     """
     assert opts.qsub_id == None
+
+    statushandler = rtdata.getTestStatusHandler()
 
     qsublimit = opts.batch_limit
     if qsublimit == None:
@@ -1094,7 +1112,8 @@ def batchTestList( opts, optD, rtdata,
                 ids = ' '.join( [ str(qid) for qid in qidL ] )
                 print3( 'Finished batch IDS:', ids )
             for t in doneL:
-                ts = resultswriter.XstatusString( t, test_dir, cwd )
+                ts = resultswriter.XstatusString( statushandler,
+                                                  t, test_dir, cwd )
                 print3( "Finished:", ts )
 
             uthook.check( schedule.numInFlight(), schedule.numPastQueue() )
@@ -1148,12 +1167,13 @@ def batchTestList( opts, optD, rtdata,
     print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
 
 
-def loadRunTimes( tlist, plat, opttimeout, optmult, optmaxtimeout ):
+def loadRunTimes( statushandler, tlist, plat,
+                  opttimeout, optmult, optmaxtimeout ):
     """
     For each test, a 'runtimes' file will be read (if it exists) and the
-    run time for this platform extracted.  This run time is saved in the
-    test as the 'runtime' attribute.  Also, a timeout is calculated for
-    each test and placed in the 'timeout' attribute.
+    run time for this platform extracted.  This run time is saved as the
+    test execute time.  Also, a timeout is calculated for each test and
+    placed in the 'timeout' attribute.
     """
     pname = plat.getName()
     cplr = plat.getCompiler()
@@ -1170,7 +1190,9 @@ def loadRunTimes( tlist, plat, opttimeout, optmult, optmaxtimeout ):
 
         if tlen != None:
 
-            t.setAttr( 'runtime', int(tlen) )
+            rt = statushandler.getRuntime( t, None )
+            if rt == None:
+                statushandler.setRuntime( t, int(tlen) )
 
             if tout == None:
                 if tresult == "timeout":
@@ -1258,6 +1280,7 @@ class Batcher:
 
         self.scheduler = batchutils.BatchScheduler(
                             self.test_dir, self.tlist,
+                            self.rtdata.getTestStatusHandler(),
                             self.accountant, self.namer,
                             self.perms, self.plat, self.maxjobs,
                             self.clean_exit_marker )
@@ -1367,8 +1390,9 @@ class Batcher:
         qidstr = str(qnumber)
 
         testlistfname = self.namer.getTestListName( qidstr )
+        statushandler = self.rtdata.getTestStatusHandler()
 
-        tl = TestList.TestList( testlistfname )
+        tl = TestList.TestList( statushandler, testlistfname )
         tl.setResultsSuffix( results_suffix )
 
         tL = []
@@ -1494,6 +1518,7 @@ def restartTests( opts, optD, rtdata ):
     rtconfig = rtdata.getRuntimeConfig()
     plat = rtdata.getPlatformObject()
     test_dir = rtdata.getTestResultsDir()
+    statushandler = rtdata.getTestStatusHandler()
 
     # this variable allows vvtest tests to run vvtest (ie, allows recursion)
     os.environ['VVTEST_TEST_ROOT'] = test_dir
@@ -1508,7 +1533,7 @@ def restartTests( opts, optD, rtdata ):
         # prevent the run scripts from being written again
         config.set( 'refresh', False )
 
-    tlist = TestList.TestList( tfile, rtconfig )
+    tlist = TestList.TestList( statushandler, tfile, rtconfig )
 
     tlist.readTestList()
     tlist.readTestResults()
@@ -1517,7 +1542,7 @@ def restartTests( opts, optD, rtdata ):
     check_for_currently_running_vvtest( tlist.getResultsFilenames(), opts.force )
 
     if qid == None:
-        loadRunTimes( tlist, plat,
+        loadRunTimes( statushandler, tlist, plat,
                       opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
 
     reld = rtdata.getFilterPath()
@@ -1543,7 +1568,7 @@ def restartTests( opts, optD, rtdata ):
         tlist.createTestExecs( test_dir, plat, config, perms )
 
         if not opts.batch:
-            executeTestList( opts, optD,
+            executeTestList( opts, optD, rtdata,
                              tlist, test_dir, plat, perms, tfile,
                              results_writer )
 
@@ -1567,10 +1592,11 @@ def baselineTests( opts, optD, rtdata ):
     config = rtdata.getConfiguration()
     plat = rtdata.getPlatformObject()
     test_dir = rtdata.getTestResultsDir()
+    statushandler = rtdata.getTestStatusHandler()
 
     tfile = os.path.join( test_dir, testlist_name )
 
-    tlist = TestList.TestList( tfile, rtconfig )
+    tlist = TestList.TestList( statushandler, tfile, rtconfig )
 
     tlist.readTestList()
     tlist.readTestResults()
@@ -1611,7 +1637,7 @@ def baselineTests( opts, optD, rtdata ):
                 time.sleep(1)
 
                 if tx.poll():
-                    if tx.atest.getAttr('result') == "pass":
+                    if statushandler.passed( tx.atest ):
                         print3( "done" )
                     else:
                         failures = True

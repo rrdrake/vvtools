@@ -16,11 +16,13 @@ from . import pathutil
 
 class ResultsWriter:
 
-    def __init__(self, test_dir, perms, optsort, optrdate,
+    def __init__(self, test_dir, perms, statushandler,
+                       optsort, optrdate,
                        htmlfile, junitfile, gitlabdir ):
         ""
         self.test_dir = test_dir
         self.perms = perms
+        self.statushandler = statushandler
         self.optsort = optsort
         self.optrdate = optrdate
 
@@ -68,12 +70,13 @@ class ResultsWriter:
     def write_console(self, atestlist, short=False):
         ""
         rawlist = atestlist.getActiveTests( self.optsort )
-        write_to_console( rawlist, self.test_dir, short )
+        write_to_console( self.statushandler, rawlist, self.test_dir, short )
 
     def check_write_html(self, atestlist):
         ""
         if self.htmlfile:
-            printHTMLResults( atestlist, self.htmlfile, self.test_dir )
+            printHTMLResults( self.statushandler, atestlist,
+                              self.htmlfile, self.test_dir )
             self.perms.set( os.path.abspath( self.htmlfile ) )
 
     def check_write_junit(self, atestlist):
@@ -86,7 +89,8 @@ class ResultsWriter:
 
             testL = atestlist.getActiveTests()
             print3( "Writing", len(testL), "tests to JUnit file", self.junitfile )
-            write_JUnit_file( testL, self.test_dir, self.junitfile, datestr )
+            write_JUnit_file( self.statushandler, testL,
+                              self.test_dir, self.junitfile, datestr )
             self.perms.set( os.path.abspath( self.junitfile ) )
 
     def check_write_gitlab(self, atestlist):
@@ -102,7 +106,8 @@ class ResultsWriter:
                 print3( "Writing", len(testL),
                         "tests in GitLab format to", self.gitlabdir )
 
-                conv = GitLabMarkDownConverter( self.test_dir, self.gitlabdir )
+                conv = GitLabMarkDownConverter( self.test_dir, self.gitlabdir,
+                                                self.statushandler )
                 conv.setRunAttr( **self.runattrs )
                 conv.saveResults( testL )
 
@@ -132,13 +137,13 @@ def make_date_stamp( testdate, optrdate, timefmt="%Y_%m_%d" ):
     return datestr
 
 
-def partition_tests_by_result( tlist ):
+def partition_tests_by_result( statushandler, tlist ):
     ""
     parts = { 'fail':[], 'timeout':[], 'diff':[],
               'pass':[], 'notrun':[], 'notdone':[] }
 
     for tst in tlist:
-        result = XstatusResult( tst )
+        result = statushandler.getResultStatus( ensure_TestSpec( tst ) )
         parts[ result ].append( tst )
 
     return parts
@@ -154,9 +159,9 @@ def results_summary_string( testparts ):
     return ', '.join( sumL )
 
 
-def write_to_console( testL, test_dir, short=False ):
+def write_to_console( statushandler, testL, test_dir, short=False ):
     ""
-    parts = partition_tests_by_result( testL )
+    parts = partition_tests_by_result( statushandler, testL )
 
     sumstr = results_summary_string( parts )
 
@@ -164,25 +169,25 @@ def write_to_console( testL, test_dir, short=False ):
     print3( "==================================================" )
     if short and len(testL) > 16:
         for atest in testL[:8]:
-            print3( XstatusString( atest, test_dir, cwd ) )
+            print3( XstatusString( statushandler, atest, test_dir, cwd ) )
         print3( "..." )
         for atest in testL[-8:]:
-            print3( XstatusString( atest, test_dir, cwd ) )
+            print3( XstatusString( statushandler, atest, test_dir, cwd ) )
     else:
         for atest in testL:
-            print3( XstatusString( atest, test_dir, cwd ) )
+            print3( XstatusString( statushandler, atest, test_dir, cwd ) )
     print3( "==================================================" )
     print3( "Summary:", sumstr )
 
 
-def printHTMLResults( tlist, filename, test_dir ):
+def printHTMLResults( statushandler, tlist, filename, test_dir ):
     """
     Opens and writes an HTML summary file in the test directory.
     """
     datestamp = tlist.getDateStamp( time.time() )
     datestr = make_date_stamp( datestamp, None, "%Y-%m-%d %H:%M:%S" )
 
-    parts = partition_tests_by_result( tlist.getActiveTests() )
+    parts = partition_tests_by_result( statushandler, tlist.getActiveTests() )
 
     sumstr = results_summary_string( parts )
 
@@ -205,17 +210,17 @@ def printHTMLResults( tlist, filename, test_dir ):
         # segregate the tests into implicit keywords, such as fail and diff
 
         fp.write( '<h1>Tests that showed "fail"</h1>\n' )
-        writeHTMLTestList( fp, test_dir, parts['fail'] )
+        writeHTMLTestList( fp, statushandler, test_dir, parts['fail'] )
         fp.write( '<h1>Tests that showed "timeout"</h1>\n' )
-        writeHTMLTestList( fp, test_dir, parts['timeout'] )
+        writeHTMLTestList( fp, statushandler, test_dir, parts['timeout'] )
         fp.write( '<h1>Tests that showed "diff"</h1>\n' )
-        writeHTMLTestList( fp, test_dir, parts['diff'] )
+        writeHTMLTestList( fp, statushandler, test_dir, parts['diff'] )
         fp.write( '<h1>Tests that showed "notdone"</h1>\n' )
-        writeHTMLTestList( fp, test_dir, parts['notdone'] )
+        writeHTMLTestList( fp, statushandler, test_dir, parts['notdone'] )
         fp.write( '<h1>Tests that showed "pass"</h1>\n' )
-        writeHTMLTestList( fp, test_dir, parts['pass'] )
+        writeHTMLTestList( fp, statushandler, test_dir, parts['pass'] )
         fp.write( '<h1>Tests that showed "notrun"</h1>\n' )
-        writeHTMLTestList( fp, test_dir, parts['notrun'] )
+        writeHTMLTestList( fp, statushandler, test_dir, parts['notrun'] )
 
         fp.write( "</body>\n</html>\n" )
 
@@ -223,7 +228,7 @@ def printHTMLResults( tlist, filename, test_dir ):
         fp.close()
 
 
-def writeHTMLTestList( fp, test_dir, tlist ):
+def writeHTMLTestList( fp, statushandler, test_dir, tlist ):
     """
     Used by printHTMLResults().  Writes the HTML for a list of tests to the
     HTML summary file.
@@ -234,7 +239,8 @@ def writeHTMLTestList( fp, test_dir, tlist ):
 
     for atest in tlist:
 
-        fp.write( '  <li><code>' + XstatusString(atest, test_dir, cwd) + '</code>\n' )
+        xs = XstatusString( statushandler, atest, test_dir, cwd )
+        fp.write( '  <li><code>' + xs + '</code>\n' )
 
         ref = ensure_TestSpec( atest )
 
@@ -251,11 +257,12 @@ def writeHTMLTestList( fp, test_dir, tlist ):
         for (k,v) in atest.getParameters().items():
             fp.write( ' ' + k + '=' + v )
         fp.write( '</code></li>\n' )
-        fp.write( '  <li>Keywords: <code>' + ' '.join(atest.getKeywords()) + \
-                   ' ' + ' '.join( atest.getResultsKeywords() ) + \
+        kwlist = atest.getKeywords() + \
+                 statushandler.getResultsKeywords( atest )
+        fp.write( '  <li>Keywords: <code>' + ' '.join( kwlist ) + \
                    '</code></li>\n' )
-        fp.write( '  <li>Status: <code>' + XstatusString(atest, test_dir, cwd) + \
-                   '</code></li>\n' )
+        xs = XstatusString( statushandler, atest, test_dir, cwd )
+        fp.write( '  <li>Status: <code>' + xs + '</code></li>\n' )
         fp.write( '  <li> Files:' )
         if os.path.exists(reltdir):
             for f in os.listdir(reltdir):
@@ -268,35 +275,16 @@ def writeHTMLTestList( fp, test_dir, tlist ):
     fp.write( '  </ul>\n' )
 
 
-def XstatusString( t, test_dir, cwd ):
+def XstatusString( statushandler, t, test_dir, cwd ):
     """
     Returns a formatted string containing the job and its status.
     """
     ref = ensure_TestSpec( t )
-    s = "%-20s " % ref.getName()
 
-    state = ref.getAttr('state','notrun')  # magic: ugly: default "notrun"
-    if state != "notrun":
-
-        if state == "done":
-            result = ref.getAttr('result')
-            if result == 'diff':
-                s = s + "%-7s %-8s" % ("Exit", "diff")
-            elif result ==  'pass':
-                s = s + "%-7s %-8s" % ("Exit", "pass")
-            elif result == "timeout":
-                s = s + "%-7s %-8s" % ("TimeOut", 'SIGINT')
-            else:
-                s = s + "%-7s %-8s" % ("Exit", "fail(1)")
-
-            s += ' %-4s' % format_test_run_time( ref )
-        else:
-            s = s + "%-7s %-8s     " % ("Running", "")
-
-    else:
-        s = s + "%-7s %-8s     " % ("NotRun", "")
-
-    s += " %14s" % format_test_run_date( ref )
+    s =  '%-20s' % ref.getName()
+    s += ' %-8s' % statushandler.getResultStatus( ref )
+    s += ' %-4s' % format_test_run_time( statushandler, ref )
+    s += ' %14s' % format_test_run_date( statushandler, ref )
 
     xdir = ref.getExecuteDirectory()
     s += ' ' + pathutil.relative_execute_directory( xdir, test_dir, cwd )
@@ -304,37 +292,25 @@ def XstatusString( t, test_dir, cwd ):
     return s
 
 
-def format_test_run_date( tspec ):
+def format_test_run_date( statushandler, tspec ):
     ""
-    xdate = tspec.getAttr( 'xdate', 0 )
+    xdate = statushandler.getStartDate( tspec, 0 )
     if xdate > 0:
         return time.strftime( "%m/%d %H:%M:%S", time.localtime(xdate) )
     else:
         return ''
 
 
-def format_test_run_time( tspec ):
+def format_test_run_time( statushandler, tspec ):
     ""
-    xtime = tspec.getAttr( 'xtime', -1 )
-    if xtime >= 0:
-        return pretty_time( xtime )
+    xtime = statushandler.getRuntime( tspec, -1 )
+    if xtime < 0:
+        return ''
     else:
-        return '-'
+        return pretty_time( xtime )
 
 
-def XstatusResult(t):
-    ""
-    ref = ensure_TestSpec( t )
-
-    # magic: ugly here is state defaults to "notrun"
-    state = ref.getAttr('state','notrun')
-    if state == "notrun" or state == "notdone":
-        return state
-
-    return ref.getAttr('result')
-
-
-def write_JUnit_file( testL, test_dir, filename, datestr ):
+def write_JUnit_file( statushandler, testL, test_dir, filename, datestr ):
     """
     This collects information from the given test list (a python list of
     TestExec objects), then writes a file in the format of JUnit XML files.
@@ -353,7 +329,7 @@ def write_JUnit_file( testL, test_dir, filename, datestr ):
         https://github.com/jenkinsci/junit-plugin/
                     tree/master/src/test/resources/hudson/tasks/junit
     """
-    parts = partition_tests_by_result( testL )
+    parts = partition_tests_by_result( statushandler, testL )
 
     npass = len( parts['pass'] )
     nwarn = len( parts['diff'] ) + len( parts['notdone'] ) + len( parts['notrun'] )
@@ -361,7 +337,7 @@ def write_JUnit_file( testL, test_dir, filename, datestr ):
 
     tsum = 0.0
     for tst in testL:
-        tsum += max( 0.0, tst.getAttr( 'xtime', 0.0 ) )
+        tsum += max( 0.0, statushandler.getRuntime( tst, 0.0 ) )
 
     tdir = os.path.basename( test_dir )
     tdir = tdir.replace( '.', '_' )  # a dot is a Java class separator
@@ -383,7 +359,8 @@ def write_JUnit_file( testL, test_dir, filename, datestr ):
 
         for result in [ 'pass', 'fail', 'diff', 'timeout', 'notdone', 'notrun' ]:
             for tst in parts[result]:
-                write_testcase( fp, tst, result, test_dir, pkgclass, 10 )
+                write_testcase( fp, statushandler, tst,
+                                result, test_dir, pkgclass, 10 )
 
         fp.write( '</testsuite>\n' + \
                   '</testsuites>\n' )
@@ -392,9 +369,10 @@ def write_JUnit_file( testL, test_dir, filename, datestr ):
         fp.close()
 
 
-def write_testcase( fp, tst, result, test_dir, pkgclass, max_KB ):
+def write_testcase( fp, statushandler, tst,
+                    result, test_dir, pkgclass, max_KB ):
     ""
-    xt = max( 0.0, tst.getAttr( 'xtime', 0.0 ) )
+    xt = max( 0.0, statushandler.getRuntime( tst, 0.0 ) )
 
     fp.write( '<testcase name="'+tst.xdir+'"' + \
                        ' classname="'+pkgclass+'" time="'+str(xt)+'">\n' )
@@ -457,13 +435,14 @@ class GitLabFileSelector:
 
 class GitLabMarkDownConverter:
 
-    def __init__(self, test_dir, destdir,
+    def __init__(self, test_dir, destdir, statushandler,
                        max_KB=10,
                        big_table_size=100,
                        max_links_per_table=200 ):
         ""
         self.test_dir = test_dir
         self.destdir = destdir
+        self.statushandler = statushandler
         self.max_KB = max_KB
         self.big_table = big_table_size
         self.max_links = max_links_per_table
@@ -478,7 +457,7 @@ class GitLabMarkDownConverter:
 
     def saveResults(self, testL):
         ""
-        parts = partition_tests_by_result( testL )
+        parts = partition_tests_by_result( self.statushandler, testL )
 
         basepath = pjoin( self.destdir, 'TestResults' )
         fname = basepath + '.md'
@@ -490,7 +469,8 @@ class GitLabMarkDownConverter:
             for result in [ 'fail', 'diff', 'timeout',
                             'pass', 'notrun', 'notdone' ]:
                 altname = basepath + '_' + result + '.md'
-                write_gitlab_results( fp, result, parts[result], altname,
+                write_gitlab_results( fp, self.statushandler,
+                                      result, parts[result], altname,
                                       self.big_table, self.max_links )
 
         for result in [ 'fail', 'diff', 'timeout' ]:
@@ -506,7 +486,8 @@ class GitLabMarkDownConverter:
 
         srcdir = pjoin( self.test_dir, xdir )
 
-        result = XstatusString( tspec, self.test_dir, os.getcwd() )
+        result = XstatusString( self.statushandler,
+                                tspec, self.test_dir, os.getcwd() )
         preamble = 'Name: '+tspec.getName()+'  \n' + \
                    'Result: <code>'+result+'</code>  \n' + \
                    'Run directory: ' + os.path.abspath(srcdir) + '  \n'
@@ -538,7 +519,7 @@ def write_run_attributes( fp, attrs ):
     fp.write( '\n' )
 
 
-def write_gitlab_results( fp, result, testL, altname,
+def write_gitlab_results( fp, statushandler, result, testL, altname,
                               maxtablesize, max_path_links ):
     ""
     hdr = '## Tests that '+result+' = '+str( len(testL) ) + '\n\n'
@@ -548,38 +529,41 @@ def write_gitlab_results( fp, result, testL, altname,
         pass
 
     elif len(testL) <= maxtablesize:
-        write_gitlab_results_table( fp, result, testL, max_path_links )
+        write_gitlab_results_table( fp, statushandler, result, testL, max_path_links )
 
     else:
         bn = os.path.basename( altname )
         fp.write( 'Large table contained in ['+bn+']('+bn+').\n\n' )
         with open( altname, 'w' ) as altfp:
             altfp.write( hdr )
-            write_gitlab_results_table( altfp, result, testL, max_path_links )
+            write_gitlab_results_table( altfp, statushandler, result, testL, max_path_links )
 
 
-def write_gitlab_results_table( fp, result, testL, max_path_links ):
+def write_gitlab_results_table( fp, statushandler, result, testL, max_path_links ):
     ""
     fp.write( '| Result | Date   | Time   | Path   |\n' + \
               '| ------ | ------ | -----: | :----- |\n' )
 
     for i,tst in enumerate(testL):
         add_link = ( i < max_path_links )
-        fp.write( format_gitlab_table_line( tst, add_link ) + '\n' )
+        fp.write( format_gitlab_table_line( statushandler, tst, add_link ) + '\n' )
 
     fp.write( '\n' )
 
 
-def format_gitlab_table_line( tst, add_link ):
+def format_gitlab_table_line( statushandler, tst, add_link ):
     ""
     tspec = ensure_TestSpec( tst )
 
-    result = XstatusResult( tspec )
-    dt = format_test_run_date( tspec )
-    tm = format_test_run_time( tspec )
+    result = statushandler.getResultStatus( ensure_TestSpec( tspec ) )
+    dt = format_test_run_date( statushandler, tspec )
+    tm = format_test_run_time( statushandler, tspec )
     path = tspec.getExecuteDirectory()
 
     makelink = ( add_link and result in ['diff','fail','timeout'] )
+
+    if not tm:
+        tm = '-'
 
     s = '| '+result+' | '+dt+' | '+tm+' | '
     s += format_test_path_for_gitlab( path, makelink ) + ' |'

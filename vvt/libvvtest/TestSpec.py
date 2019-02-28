@@ -6,10 +6,6 @@
 
 import os
 
-results_keywords = [ 'notrun', 'notdone',
-                     'fail', 'diff', 'pass',
-                     'timeout' ]
-
 varname_chars_list = "abcdefghijklmnopqrstuvwxyz" + \
                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "0123456789_"
 
@@ -81,24 +77,7 @@ class TestSpec:
         Returns true if the keyword is contained in the list of keywords.
         """
         return keyword in self.keywords
-    
-    def getResultsKeywords(self):
-        """
-        Returns the keyword or keywords indicating the run state of the test.
-        """
-        state = self.getAttr('state',None)
-        if state == None:
-            return ['notrun']
-        else:
-            if state == "notrun": return ["notrun"]
-            if state == "notdone": return ["notdone","running"]
 
-        result = self.getAttr('result',None)
-        if result != None:
-            if result == "timeout": return ["timeout","fail"]
-            return [result]
-        return []
-    
     def getParameters(self):
         """
         Returns a dictionary mapping parameter names to values.

@@ -9,9 +9,9 @@ import re
 import fnmatch
 
 try:
-  from TestSpec import results_keywords
+  from teststatus import RESULTS_KEYWORDS
 except ImportError:
-  from .TestSpec import results_keywords
+  from .teststatus import RESULTS_KEYWORDS
 
 
 alphanum_chars = 'abcdefghijklmnopqrstuvwxyz' + \
@@ -97,7 +97,7 @@ class WordExpression:
 
     def containsResultsKeywords(self):
         ""
-        return len( set( results_keywords ).intersection( self.words ) ) > 0
+        return len( set( RESULTS_KEYWORDS ).intersection( self.words ) ) > 0
 
     def keywordEvaluate(self, keyword_list):
         """
@@ -243,7 +243,7 @@ class NonResultsExpressionModifier:
                 else:
                     oplist.append( tok )
 
-            elif tok in results_keywords:
+            elif tok in RESULTS_KEYWORDS:
                 oplist = []
 
             else:
