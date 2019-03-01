@@ -105,38 +105,3 @@ class ListWriter:
         mach = os.uname()[1]
 
         tr.writeResults( filename, pname, cplr, mach, self.testdir, inprogress )
-
-
-def saveResults( opts, optD, tlist, plat, test_dir, inprogress=False ):
-    ""
-    pname = plat.getName()
-    cplr = plat.getCompiler()
-
-    rtag = opts.results_tag
-    
-    # determine the date to embed in the file name
-    datestr = make_date_stamp(
-                    tlist.getDateStamp( time.time() ), opts.results_date )
-
-    L = []
-    if optD['onopts']:
-        for o in optD['onopts']:
-            if o != cplr:
-                L.append(o)
-    L.sort()
-    L.insert( 0, cplr )
-    optstag = '+'.join(L)
-
-    rdir = plat.testingDirectory()
-    if rdir == None or not os.path.isdir(rdir):
-      raise Exception( "invalid testing directory: " + str(rdir) )
-    
-    L = ['results',datestr,pname,optstag]
-    if rtag != None: L.append(rtag)
-    fname = os.path.join( rdir, '.'.join( L ) )
-    
-    tr = results.TestResults()
-    for t in tlist.getActiveTests():
-      tr.addTest(t)
-    mach = os.uname()[1]
-    tr.writeResults( fname, pname, cplr, mach, test_dir, inprogress )

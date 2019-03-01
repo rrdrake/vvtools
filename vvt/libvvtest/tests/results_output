@@ -51,6 +51,20 @@ class misc_tests( vtu.vvtestTestCase ):
         s = outpututils.make_date_stamp( tm0, tm1, "%Y-%m-%d_%H:%M:%S" )
         assert s == '2018-10-11_13:10:58'
 
+    def test_shortened_test_listing_in_console_output(self):
+        ""
+        for i in range(30):
+            util.writefile( 'test'+str(i)+'.vvt', """
+                pass
+                """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=30, npass=30 )
+
+        lines = vtu.testlines( vrun.out, get_first_cluster=True )
+        assert len( lines ) < 30
+
 
 def write_three_test_files():
     ""

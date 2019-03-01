@@ -462,7 +462,7 @@ def greptestlist( shell_pattern, vvtest_output ):
     return matchlines
 
 
-def testlines( vvtest_output ):
+def testlines( vvtest_output, get_first_cluster=False ):
     ""
     lineL = []
     mark = False
@@ -470,6 +470,8 @@ def testlines( vvtest_output ):
         if mark:
             if line.startswith( "==========" ):
                 mark = False
+                if get_first_cluster:
+                    break
             else:
                 lineL.append( line )
 
