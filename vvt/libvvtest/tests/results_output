@@ -24,6 +24,8 @@ import testutils as util
 from testutils import print3
 
 import libvvtest.resultswriter as resultswriter
+import libvvtest.outpututils as outpututils
+import libvvtest.gitlabwriter as gitlabwriter
 import libvvtest.TestSpec as TestSpec
 from libvvtest.TestList import createTestObjects
 from libvvtest.RuntimeConfig import RuntimeConfig
@@ -37,16 +39,16 @@ class misc_tests( vtu.vvtestTestCase ):
         tm0 = time.mktime( time.strptime( 'Sun Oct 11 13:20:58 2018' ) )
         tm1 = tm0 - 600
 
-        s = resultswriter.make_date_stamp( tm0, None )
+        s = outpututils.make_date_stamp( tm0, None )
         assert s == '2018_10_11'
 
-        s = resultswriter.make_date_stamp( tm0, None, "%Y-%m-%d_%H:%M:%S" )
+        s = outpututils.make_date_stamp( tm0, None, "%Y-%m-%d_%H:%M:%S" )
         assert s == '2018-10-11_13:20:58'
 
-        s = resultswriter.make_date_stamp( tm0, 'foobar' )
+        s = outpututils.make_date_stamp( tm0, 'foobar' )
         assert s == 'foobar'
 
-        s = resultswriter.make_date_stamp( tm0, tm1, "%Y-%m-%d_%H:%M:%S" )
+        s = outpututils.make_date_stamp( tm0, tm1, "%Y-%m-%d_%H:%M:%S" )
         assert s == '2018-10-11_13:10:58'
 
 
@@ -84,7 +86,7 @@ class junit_output_format_tests( vtu.vvtestTestCase ):
             """ )
         time.sleep(1)
 
-        buf = resultswriter.file_read_with_limit( 'afile.txt', 10 )
+        buf = outpututils.file_read_with_limit( 'afile.txt', 10 )
         assert len( buf.splitlines() ) > 2
         assert len( util.greplines( 'line one', buf ) ) == 1
         assert len( util.greplines( 'line two', buf ) ) == 1
@@ -99,7 +101,7 @@ class junit_output_format_tests( vtu.vvtestTestCase ):
         time.sleep(1)
 
         assert getfsize( 'afile.txt' ) > 1*1024
-        buf = resultswriter.file_read_with_limit( 'afile.txt', 1 )
+        buf = outpututils.file_read_with_limit( 'afile.txt', 1 )
         assert len( buf ) <= 1*1024
         assert len( buf.splitlines() ) > 10
         assert buf.lstrip().startswith( 'The Overlook Hotel' )
@@ -235,10 +237,10 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
     def test_turning_a_path_to_a_markdown_link(self):
         ""
-        s = resultswriter.format_test_path_for_gitlab( 'sub/name.np=1', False )
+        s = gitlabwriter.format_test_path_for_gitlab( 'sub/name.np=1', False )
         assert s == 'sub/name.np=1'
 
-        s = resultswriter.format_test_path_for_gitlab( 'sub/name.np=1', True )
+        s = gitlabwriter.format_test_path_for_gitlab( 'sub/name.np=1', True )
         assert s == '[sub/name.np=1](sub_name.np=1.md)'
 
     def test_write_table_line_for_a_test(self):
@@ -246,7 +248,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         statushandler = TestStatusHandler()
 
         tst = make_TestSpec_with_results( 'done', 'pass', 5 )
-        line = resultswriter.format_gitlab_table_line( statushandler, tst, True )
+        line = gitlabwriter.format_gitlab_table_line( statushandler, tst, True )
         print3( line )
         sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
         assert len(sL) == 4
@@ -254,7 +256,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         assert sL[3] == 'sdir/atest.np=4'
 
         tst = make_TestSpec_with_results( 'done', 'fail', 7 )
-        line = resultswriter.format_gitlab_table_line( statushandler, tst, True )
+        line = gitlabwriter.format_gitlab_table_line( statushandler, tst, True )
         print3( line )
         sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
         assert len(sL) == 4
@@ -262,7 +264,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         assert sL[3] == '[sdir/atest.np=4](sdir_atest.np=4.md)'
 
         tst = make_TestSpec_with_results( 'done', 'fail', 7 )
-        line = resultswriter.format_gitlab_table_line( statushandler, tst, False )
+        line = gitlabwriter.format_gitlab_table_line( statushandler, tst, False )
         print3( line )
         sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
         assert len(sL) == 4
@@ -277,7 +279,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
                make_TestSpec_with_results( 'done', 'diff', 5, 'bad' ) ]
 
         sio = StringIO()
-        resultswriter.write_gitlab_results_table( sio, statushandler,
+        gitlabwriter.write_gitlab_results_table( sio, statushandler,
                                                   'mixed', tL, 100 )
 
         val = sio.getvalue()
@@ -297,7 +299,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
                make_TestSpec_with_results( 'done', 'diff', 5, 'testD' ) ]
 
         sio = StringIO()
-        resultswriter.write_gitlab_results_table( sio, statushandler, 'diff', tL, 2 )
+        gitlabwriter.write_gitlab_results_table( sio, statushandler, 'diff', tL, 2 )
 
         val = sio.getvalue()
         print3( val )
@@ -324,7 +326,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
                make_TestSpec_with_results( 'done', 'fail', 5, 'testD' ) ]
 
         sio = StringIO()
-        resultswriter.write_gitlab_results( sio, statushandler, 'fail', tL, 'large.md', 2, 3 )
+        gitlabwriter.write_gitlab_results( sio, statushandler, 'fail', tL, 'large.md', 2, 3 )
         time.sleep(1)
 
         val = sio.getvalue()
@@ -347,7 +349,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         tL = []
 
         sio = StringIO()
-        resultswriter.write_gitlab_results( sio, None, 'fail', tL, 'nope.md', 2, 3 )
+        gitlabwriter.write_gitlab_results( sio, None, 'fail', tL, 'nope.md', 2, 3 )
         time.sleep(1)
 
         val = sio.getvalue()
@@ -362,21 +364,21 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         util.writefile( 'subdir/ardvaark.txt', "I am an ardvaark.\n" * 21 )
         time.sleep(1)
 
-        fL,width = resultswriter.get_directory_file_list( 'subdir' )
+        fL,width = gitlabwriter.get_directory_file_list( 'subdir' )
         assert fL == [ 'zeebra.txt', 'ardvaark.txt' ]
         assert width == 12
 
-        meta = resultswriter.get_file_meta_data_string( 'subdir/zeebra.txt', 10 )
+        meta = gitlabwriter.get_file_meta_data_string( 'subdir/zeebra.txt', 10 )
         print3( meta )
 
-        meta = resultswriter.get_file_meta_data_string( 'subdir/foobar.txt', 10 )
+        meta = gitlabwriter.get_file_meta_data_string( 'subdir/foobar.txt', 10 )
         print3( meta )
         assert 'error: ' in meta
 
         os.symlink( 'ardvaark.txt', 'subdir/ardvark.txt' )
         time.sleep(1)
 
-        meta = resultswriter.get_file_meta_data_string( 'subdir/ardvark.txt', 10 )
+        meta = gitlabwriter.get_file_meta_data_string( 'subdir/ardvark.txt', 10 )
         print3( meta )
         assert 'error:' not in meta
 
@@ -391,7 +393,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
         sio = StringIO()
         fn = os.path.abspath('file.txt')
-        resultswriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
+        gitlabwriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
 
         val = sio.getvalue()
         #print3( val )
@@ -403,7 +405,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
         sio = StringIO()
         fn = os.path.abspath('file.exo')
-        resultswriter.write_gitlab_formatted_file( sio, fn, False, 'label', 10 )
+        gitlabwriter.write_gitlab_formatted_file( sio, fn, False, 'label', 10 )
 
         val = sio.getvalue()
         #print3( val )
@@ -416,7 +418,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         ""
         sio = StringIO()
         fn = os.path.abspath('file.txt')
-        resultswriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
+        gitlabwriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
 
         val = sio.getvalue()
         #print3( val )
@@ -433,7 +435,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
         sio = StringIO()
         fn = os.path.abspath('file.txt')
-        resultswriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
+        gitlabwriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
 
         val = sio.getvalue()
         #print3( val )
@@ -450,7 +452,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         time.sleep(1)
 
         sio = StringIO()
-        resultswriter.stream_gitlab_files( sio, '.', MockSelector(), 10 )
+        gitlabwriter.stream_gitlab_files( sio, '.', MockSelector(), 10 )
 
         val = sio.getvalue()
         #print3( val )
@@ -480,7 +482,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         time.sleep(1)
 
         sio = StringIO()
-        resultswriter.stream_gitlab_files( sio, '.', MockSelector(), 10 )
+        gitlabwriter.stream_gitlab_files( sio, '.', MockSelector(), 10 )
 
         val = sio.getvalue()
         #print3( val )
@@ -496,7 +498,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         time.sleep(1)
 
         preamble = 'Houston, we have a problem.'
-        converter = resultswriter.GitLabMarkDownConverter( None, None, None )
+        converter = gitlabwriter.GitLabMarkDownConverter( None, None, None )
         converter.createGitlabDirectoryContents(
                                     'results.md', preamble, 'subdir' )
         time.sleep(1)
@@ -509,7 +511,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
     def test_create_file_directory_contents_but_directory_does_not_exist(self):
         ""
         preamble = 'Houston, we have a problem.'
-        converter = resultswriter.GitLabMarkDownConverter( None, None, None )
+        converter = gitlabwriter.GitLabMarkDownConverter( None, None, None )
         converter.createGitlabDirectoryContents(
                                     'results.md', preamble, 'subdir' )
         time.sleep(1)
@@ -520,7 +522,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
     def test_test_run_attributes(self):
         ""
-        conv = resultswriter.GitLabMarkDownConverter( '.', '.', None )
+        conv = gitlabwriter.GitLabMarkDownConverter( '.', '.', None )
         conv.saveResults( [] )
         time.sleep(1)
 
@@ -528,7 +530,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         val = fval.split( '## Tests that', 1 )[0]
         assert val.strip() == ''
 
-        conv = resultswriter.GitLabMarkDownConverter( '.', '.', None )
+        conv = gitlabwriter.GitLabMarkDownConverter( '.', '.', None )
         tm = time.time()
         conv.setRunAttr( startdate=str(tm)+' / '+time.ctime(tm),
                          finishdate=str(tm+10)+' / '+time.ctime(tm+10) )
@@ -556,7 +558,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         tst.setAttr( 'xtime', 3 )
         tst.setAttr( 'xdate', int(time.time()) )
 
-        conv = resultswriter.GitLabMarkDownConverter(
+        conv = gitlabwriter.GitLabMarkDownConverter(
                                         vrun.resultsDir(), '.',
                                         TestStatusHandler() )
         conv.createTestFile( tst )

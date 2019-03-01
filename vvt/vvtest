@@ -8,12 +8,8 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
-import re
-import stat
 import time
-import signal
 import shutil
-import types
 import glob
 import shlex
 import string
@@ -26,7 +22,6 @@ import libvvtest.TestSpec as TestSpec
 import libvvtest.TestExec as TestExec
 import libvvtest.TestList as TestList
 import libvvtest.batchutils as batchutils
-import libvvtest.TestSpecCreator as TestSpecCreator
 import libvvtest.FilterExpressions as FilterExpressions
 from libvvtest.RuntimeConfig import RuntimeConfig
 import results
@@ -35,11 +30,16 @@ from libvvtest.PermissionSetter import PermissionSetter
 import libvvtest.testlistio as testlistio
 import libvvtest.utesthooks as utesthooks
 import libvvtest.resultswriter as resultswriter
+import libvvtest.consolewriter as consolewriter
+import libvvtest.junitwriter as junitwriter
+import libvvtest.htmlwriter as htmlwriter
+import libvvtest.gitlabwriter as gitlabwriter
+from libvvtest.outpututils import XstatusString, pretty_time, make_date_stamp
 import libvvtest.pathutil as pathutil
 from libvvtest.teststatus import TestStatusHandler, RESULTS_KEYWORDS
 
 
-version = '1.1'
+version = '1.2'
 
 search_fnmatch = ['*.inp','*.apr','*.i']
 
@@ -269,7 +269,8 @@ class RuntimeData:
                                     self.toolsdir,
                                     self.test_dir, self.perms,
                                     self.plat.getName(),
-                                    self.cmdL )
+                                    self.cmdL,
+                                    self.statushandler )
         self.results_writer = resw
     def getResultsWriter(self): return self.results_writer
 
@@ -947,23 +948,38 @@ def check_for_currently_running_vvtest( resultsfiles, optforce ):
 def make_results_writer( opts, optD,
                          start_time, toolsdir,
                          test_dir, perms,
-                         platname, cmdL ):
+                         platname, cmdL, statushandler ):
     ""
+    conobj = consolewriter.ConsoleWriter( statushandler, sys.stdout, test_dir )
+    conobj.setSortingSpecification( optD['sort_letters'] )
+
+    htmlobj = None
+    junitobj = None
+    gitlabobj = None
+
     if opts.qsub_id == None:
-        htmlfile = opts.html
-        junitfile = opts.junit
-        gitlabdir = opts.gitlab
-    else:
-        htmlfile = None
-        junitfile = None
-        gitlabdir = None
 
-    statushandler = TestStatusHandler()
+        if opts.html:
+            htmlobj = htmlwriter.HTMLWriter( statushandler,
+                                             perms,
+                                             opts.html,
+                                             test_dir )
 
-    writer = resultswriter.ResultsWriter(
-                test_dir, perms, statushandler,
-                optD['sort_letters'], opts.results_date,
-                htmlfile, junitfile, gitlabdir )
+        if opts.junit:
+            junitobj = junitwriter.JUnitWriter( statushandler,
+                                                perms,
+                                                opts.junit,
+                                                test_dir )
+            junitobj.setOutputDate( opts.results_date )
+
+        if opts.gitlab:
+            gitlabobj = gitlabwriter.GitLabWriter( statushandler,
+                                                   perms,
+                                                   opts.gitlab,
+                                                   test_dir )
+            gitlabobj.setSortingSpecification( optD['sort_letters'] )
+
+    writer = resultswriter.ResultsWriter( conobj, htmlobj, junitobj, gitlabobj )
 
     writer.setRunAttr( startdate=str(start_time)+' / '+time.ctime(start_time) )
     writer.setRunAttr( platform=platname )
@@ -1021,8 +1037,7 @@ def executeTestList( opts, optD, rtdata,
             showprogress = False
             for tx in list( tlist.getRunning() ):
                 if tx.poll():
-                    xs = resultswriter.XstatusString( statushandler,
-                                                      tx, test_dir, cwd )
+                    xs = XstatusString( statushandler, tx, test_dir, cwd )
                     print3( "Finished:", xs )
                     tlist.testDone( tx )
                     showprogress = True
@@ -1034,7 +1049,7 @@ def executeTestList( opts, optD, rtdata,
                 ntot = tlist.numActive()
                 pct = 100 * float(ndone) / float(ntot)
                 div = str(ndone)+'/'+str(ntot)
-                dt = resultswriter.pretty_time( time.time() - starttime )
+                dt = pretty_time( time.time() - starttime )
                 print3( "Progress: " + div+" = %%%.1f"%pct + ', time = '+dt )
 
     finally:
@@ -1058,7 +1073,7 @@ def executeTestList( opts, optD, rtdata,
     print3()
     results_writer.postrun( tlist )
 
-    elapsed = resultswriter.pretty_time( time.time() - starttime )
+    elapsed = pretty_time( time.time() - starttime )
     print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
 
 
@@ -1123,8 +1138,7 @@ def batchTestList( opts, optD, rtdata,
                 ids = ' '.join( [ str(qid) for qid in qidL ] )
                 print3( 'Finished batch IDS:', ids )
             for t in doneL:
-                ts = resultswriter.XstatusString( statushandler,
-                                                  t, test_dir, cwd )
+                ts = XstatusString( statushandler, t, test_dir, cwd )
                 print3( "Finished:", ts )
 
             uthook.check( schedule.numInFlight(), schedule.numPastQueue() )
@@ -1137,7 +1151,7 @@ def batchTestList( opts, optD, rtdata,
                 ntot = tlist.numActive()
                 tpct = 100 * float(ndone) / float(ntot)
                 tdiv = 'tests '+str(ndone)+'/'+str(ntot)
-                dt = resultswriter.pretty_time( time.time() - starttime )
+                dt = pretty_time( time.time() - starttime )
                 print3( "Progress: " + \
                         jdiv+" = %%%.1f"%jpct + ' '+jflt+', ' + \
                         tdiv+" = %%%.1f"%tpct + ', ' + \
@@ -1174,7 +1188,7 @@ def batchTestList( opts, optD, rtdata,
     print3()
     results_writer.postrun( tlist )
     
-    elapsed = resultswriter.pretty_time( time.time() - starttime )
+    elapsed = pretty_time( time.time() - starttime )
     print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
 
 
@@ -1496,7 +1510,7 @@ def saveResults( opts, optD, tlist, plat, test_dir, inprogress=False ):
     rtag = opts.results_tag
     
     # determine the date to embed in the file name
-    datestr = resultswriter.make_date_stamp(
+    datestr = make_date_stamp(
                     tlist.getDateStamp( time.time() ), opts.results_date )
 
     L = []
