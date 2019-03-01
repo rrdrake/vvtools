@@ -45,10 +45,6 @@ search_fnmatch = ['*.inp','*.apr','*.i']
 
 testlist_name = 'testlist'
 
-# a FilterExpressions.WordExpression() object filled with the command line
-# -k and -K specifications
-keyword_expr = None
-
 
 class MainEntry:
 
@@ -67,9 +63,6 @@ class MainEntry:
             cmdline.parse_command_line( self.argv[1:], version )
 
         self.rtdata = RuntimeData( self.argv, get_tools_directory() )
-
-        global keyword_expr
-        keyword_expr = self.optD['keyword_expr']
 
         self.constructConfiguration()
 
@@ -116,9 +109,9 @@ class MainEntry:
         else:
 
             # if no results keywords are specified, then add -k notrun/notdone
-            if not keyword_expr.containsResultsKeywords() and \
-               not self.opts.dash_w and not self.opts.dash_R:
-                keyword_expr.append( ['notrun/notdone'], 'and' )
+            if not self.opts.dash_w and not self.opts.dash_R:
+                rtconfig = self.rtdata.getRuntimeConfig()
+                rtconfig.addResultsKeywordExpression( 'notrun/notdone' )
 
             if self.rtdata.isRestartMode():
                 restartTests( self.opts, self.optD, self.rtdata )
@@ -352,7 +345,7 @@ def construct_RuntimeConfig( plat, opts, optD ):
     ""
     rtconfig = RuntimeConfig( \
                   param_expr_list=optD['param_list'],
-                  keyword_expr=keyword_expr,
+                  keyword_expr=optD['keyword_expr'],
                   option_list=( optD['onopts'] + [plat.getCompiler()] ),
                   platform_name=plat.getName(),
                   ignore_platforms=( opts.dash_A == True ),
@@ -1669,8 +1662,7 @@ def baselineTests( opts, optD, rtdata ):
 
     # if the keyword expression does not include a results keyword, then
     # add the 'diff' keyword so that only diffs are rebaselined by default
-    if not keyword_expr.containsResultsKeywords():
-        keyword_expr.append( ['diff'], 'and' )
+    rtconfig.addResultsKeywordExpression( 'diff' )
 
     tlist.determineActiveTests( filter_dir=rtdata.getFilterPath(),
                                 baseline=True )
