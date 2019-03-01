@@ -25,15 +25,10 @@ import libvvtest.batchutils as batchutils
 import libvvtest.FilterExpressions as FilterExpressions
 from libvvtest.RuntimeConfig import RuntimeConfig
 import results
-from libvvtest.PermissionSetter import DummyPermissionSetter
-from libvvtest.PermissionSetter import PermissionSetter
 import libvvtest.testlistio as testlistio
 import libvvtest.utesthooks as utesthooks
 import libvvtest.resultswriter as resultswriter
 import libvvtest.consolewriter as consolewriter
-import libvvtest.junitwriter as junitwriter
-import libvvtest.htmlwriter as htmlwriter
-import libvvtest.gitlabwriter as gitlabwriter
 from libvvtest.outpututils import XstatusString, pretty_time, make_date_stamp
 import libvvtest.pathutil as pathutil
 from libvvtest.teststatus import TestStatusHandler, RESULTS_KEYWORDS
@@ -993,12 +988,14 @@ def make_results_writer( opts, optD,
     if opts.qsub_id == None:
 
         if opts.html:
+            import libvvtest.htmlwriter as htmlwriter
             htmlobj = htmlwriter.HTMLWriter( statushandler,
                                              perms,
                                              opts.html,
                                              test_dir )
 
         if opts.junit:
+            import libvvtest.junitwriter as junitwriter
             junitobj = junitwriter.JUnitWriter( statushandler,
                                                 perms,
                                                 opts.junit,
@@ -1006,6 +1003,7 @@ def make_results_writer( opts, optD,
             junitobj.setOutputDate( opts.results_date )
 
         if opts.gitlab:
+            import libvvtest.gitlabwriter as gitlabwriter
             gitlabobj = gitlabwriter.GitLabWriter( statushandler,
                                                    perms,
                                                    opts.gitlab,
@@ -1811,8 +1809,15 @@ def insert_configdir_into_sys_path( rtdata ):
 def make_PermissionSetter( test_dir, optperms ):
     ""
     if optperms:
+        from libvvtest.permsetter import PermissionSetter
         perms = PermissionSetter( test_dir, optperms )
+
     else:
+        class DummyPermissionSetter:
+            def __init__(self): pass
+            def set(self, path): pass
+            def recurse(self, path): pass
+
         perms = DummyPermissionSetter()
 
     return perms
