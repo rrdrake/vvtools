@@ -158,7 +158,7 @@ class MainEntry:
                                     self.rtdata.getToolsDir(),
                                     self.rtdata.getTestResultsDir(),
                                     self.rtdata.getPermissionsObject(),
-                                    self.rtdata.getPlatformObject().getName(),
+                                    self.rtdata.getPlatformObject(),
                                     self.rtdata.cmdL,
                                     self.rtdata.getTestStatusHandler() )
         self.rtdata.setResultsWriter( resw )
@@ -382,9 +382,6 @@ class InformationMode:
 
         elif self.opts.files:
             self.printTestFiles( tlist )
-
-        elif self.opts.save_results:
-            saveResults( self.opts, self.optD, tlist, plat, test_dir )
 
         else:
             self.rtdata.getResultsWriter().info( tlist )
@@ -931,9 +928,6 @@ def runTests( opts, optD, rtdata, dirs ):
 
         tlist.createTestExecs( test_dir, plat, config, perms )
 
-        if opts.save_results:
-            saveResults( opts, optD, tlist, plat, test_dir, inprogress=True )
-
         if not opts.batch:
             executeTestList( opts, optD, rtdata,
                              tlist, test_dir, plat, perms, tfile,
@@ -945,9 +939,6 @@ def runTests( opts, optD, rtdata, dirs ):
                            results_writer )
 
         print3( "Test directory:", testsubdir )
-
-        if opts.save_results:
-            saveResults( opts, optD, tlist, plat, test_dir )
 
     else:
         print3( "\n--------- no tests to run -----------\n" )
@@ -976,7 +967,7 @@ def check_for_currently_running_vvtest( resultsfiles, optforce ):
 def make_results_writer( opts, optD,
                          start_time, toolsdir,
                          test_dir, perms,
-                         platname, cmdL, statushandler ):
+                         platobj, cmdL, statushandler ):
     ""
     conobj = consolewriter.ConsoleWriter( statushandler, sys.stdout, test_dir )
     conobj.setSortingSpecification( optD['sort_letters'] )
@@ -984,6 +975,7 @@ def make_results_writer( opts, optD,
     htmlobj = None
     junitobj = None
     gitlabobj = None
+    wlistobj = None
 
     if opts.qsub_id == None:
 
@@ -1010,10 +1002,21 @@ def make_results_writer( opts, optD,
                                                    test_dir )
             gitlabobj.setSortingSpecification( optD['sort_letters'] )
 
-    writer = resultswriter.ResultsWriter( conobj, htmlobj, junitobj, gitlabobj )
+        if opts.save_results:
+            import libvvtest.listwriter as listwriter
+            wlistobj = listwriter.ListWriter( statushandler,
+                                              perms,
+                                              platobj.testingDirectory(),
+                                              test_dir )
+            wlistobj.setOutputDate( opts.results_date )
+            wlistobj.setNamingTags( optD['onopts'], opts.results_tag )
+
+    writer = resultswriter.ResultsWriter( conobj, htmlobj, junitobj,
+                                          gitlabobj, wlistobj )
 
     writer.setRunAttr( startdate=str(start_time)+' / '+time.ctime(start_time) )
-    writer.setRunAttr( platform=platname )
+    writer.setRunAttr( platform=platobj.getName() )
+    writer.setRunAttr( compiler=platobj.getCompiler() )
     writer.setRunAttr( commandline=' '.join( cmdL ) )
     writer.setRunAttr( hostname=os.uname()[1] )
     writer.setRunAttr( rundir=test_dir )
@@ -1516,58 +1519,6 @@ class Batcher:
         fp.close()
 
 
-def saveResults( opts, optD, tlist, plat, test_dir, inprogress=False ):
-    """
-    Option is
-    
-      --save-results
-    
-    which writes to the platform config testing directory (which looks first at
-    the TESTING_DIRECTORY env var).  Can add
-    
-      --results-tag <string>
-    
-    which is appended to the results file name.  A date string is embedded in
-    the file name, which is obtained from the date of the first test that
-    ran.  But if the option
-
-      --results-date <float or string>
-
-    is given on the vvtest command line, then that date is used instead.
-    """
-    pname = plat.getName()
-    cplr = plat.getCompiler()
-
-    rtag = opts.results_tag
-    
-    # determine the date to embed in the file name
-    datestr = make_date_stamp(
-                    tlist.getDateStamp( time.time() ), opts.results_date )
-
-    L = []
-    if optD['onopts']:
-        for o in optD['onopts']:
-            if o != cplr:
-                L.append(o)
-    L.sort()
-    L.insert( 0, cplr )
-    optstag = '+'.join(L)
-
-    rdir = plat.testingDirectory()
-    if rdir == None or not os.path.isdir(rdir):
-      raise Exception( "invalid testing directory: " + str(rdir) )
-    
-    L = ['results',datestr,pname,optstag]
-    if rtag != None: L.append(rtag)
-    fname = os.path.join( rdir, '.'.join( L ) )
-    
-    tr = results.TestResults()
-    for t in tlist.getActiveTests():
-      tr.addTest(t)
-    mach = os.uname()[1]
-    tr.writeResults( fname, pname, cplr, mach, test_dir, inprogress )
-
-
 def restartTests( opts, optD, rtdata ):
     ""
     config = rtdata.getConfiguration()
@@ -1618,9 +1569,6 @@ def restartTests( opts, optD, rtdata ):
         results_writer.prerun( tlist )
         print3()
 
-        if opts.save_results:
-            saveResults( opts, optD, tlist, plat, test_dir, inprogress=True )
-
         tlist.createTestExecs( test_dir, plat, config, perms )
 
         if not opts.batch:
@@ -1632,9 +1580,6 @@ def restartTests( opts, optD, rtdata ):
             batchTestList( opts, optD, rtdata,
                            tlist, test_dir, plat, perms,
                            results_writer )
-
-        if opts.save_results:
-            saveResults( opts, optD, tlist, plat, test_dir )
 
     else:
         print3( "\n--------- no tests to run -----------\n" )

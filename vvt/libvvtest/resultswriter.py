@@ -15,12 +15,13 @@ from . import outpututils
 
 class ResultsWriter:
 
-    def __init__(self, conobj, htmlobj, junitobj, gitlabobj ):
+    def __init__(self, conobj, htmlobj, junitobj, gitlabobj, wlistobj ):
         ""
         self.conobj = conobj
         self.htmlobj = htmlobj
         self.junitobj = junitobj
         self.gitlabobj = gitlabobj
+        self.wlistobj = wlistobj
 
         self.runattrs = {}
 
@@ -33,6 +34,7 @@ class ResultsWriter:
     def prerun(self, atestlist, short=True):
         ""
         self.write_console( atestlist, short )
+        self.check_write_testlist( atestlist, inprogress=True )
 
     def info(self, atestlist):
         ""
@@ -42,10 +44,12 @@ class ResultsWriter:
         self.check_write_html( atestlist )
         self.check_write_junit( atestlist )
         self.check_write_gitlab( atestlist )
+        self.check_write_testlist( atestlist )
 
     def postrun(self, atestlist):
         ""
         self.write_console( atestlist )
+        self.check_write_testlist( atestlist )
 
     def final(self, atestlist):
         ""
@@ -77,6 +81,11 @@ class ResultsWriter:
         ""
         if self.gitlabobj:
             self.gitlabobj.writeFiles( atestlist, self.runattrs )
+
+    def check_write_testlist(self, atestlist, inprogress=False):
+        ""
+        if self.wlistobj:
+            self.wlistobj.writeList( atestlist, self.runattrs, inprogress )
 
     def setElapsedTime(self, finishtime):
         ""
