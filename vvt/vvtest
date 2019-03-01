@@ -50,84 +50,136 @@ testlist_name = 'testlist'
 keyword_expr = None
 
 
-def main():
-    ""
-    start_time = time.time()
+class MainEntry:
 
-    check_for_bootstrap_file()
+    def __init__(self, argv):
+        ""
+        self.argv = argv
 
-    rtdata = RuntimeData( sys.argv )
+    def constructObjects(self):
+        ""
+        start_time = time.time()
 
-    # this may call sys.exit (for help or errors)
-    opts,optD,dirs = cmdline.parse_command_line( sys.argv[1:], version )
+        check_for_bootstrap_file()
 
-    global keyword_expr
-    keyword_expr = optD['keyword_expr']
+        # this may call sys.exit (for help or errors)
+        self.opts, self.optD, self.dirs = \
+            cmdline.parse_command_line( self.argv[1:], version )
 
-    populate_configuration_from_options( opts, optD, rtdata )
+        self.rtdata = RuntimeData( self.argv, get_tools_directory() )
 
-    insert_configdir_into_sys_path( rtdata )
+        global keyword_expr
+        keyword_expr = self.optD['keyword_expr']
 
-    # non-None only if the CWD is in a TestResults.* directory
-    test_cache_dir = readCommandInfo( opts, optD, rtdata )
+        self.constructConfiguration()
 
-    if opts.check:
-        for n in opts.check:
-            os.environ[ 'CHECK_' + n.upper() ] = ''
+        insert_configdir_into_sys_path( self.rtdata )
 
-    if test_cache_dir and optD['param_dict']:
-        print3( "*** error: cannot use -S in a TestResults directory" )
-        sys.exit(1)
+        test_cache_dir = self.readCacheData()
 
-    if test_cache_dir and opts.dash_g:
-        print3( "*** error: cannot use -g in a TestResults directory" )
-        sys.exit(1)
+        self.constructPlatform()
 
-    rtdata.setPlatformObject( opts, optD )
+        self.constructTestSubdirectory()
 
-    rtdata.setTestSubdir( opts.run_dir, optD['onopts'], optD['offopts'] )
+        self.rtdata.setTestResultsDir( test_cache_dir )
 
-    rtdata.setTestResultsDir( test_cache_dir )
+        self.rtdata.setPermissionsObject( self.opts, self.optD )
 
-    rtdata.setPermissionsObject( opts, optD )
+        self.rtdata.setTestStatusHandler( TestStatusHandler() )
 
-    rtdata.setTestStatusHandler( TestStatusHandler() )
+        self.constructResultsWriter( start_time )
 
-    rtdata.setResultsWriter( opts, optD, start_time )
+        self.rtdata.setFilterPath()
 
-    rtdata.setFilterPath()
+        self.constructRuntimeConfig()
 
-    rtdata.setRuntimeConfig( opts, optD )
+    def execute(self):
+        ""
+        if self.opts.dash_i or self.opts.keys or self.opts.files:
+            mode = InformationMode( self.opts, self.optD, self.rtdata )
+            mode.run( self.dirs )
 
-    if opts.dash_i or opts.keys or opts.files:
-        mode = InformationMode( opts, optD, rtdata )
-        mode.run( dirs )
+        elif self.opts.dash_g:
+            generateTestList( self.opts, self.optD, self.dirs, self.rtdata )
 
-    elif opts.dash_g:
-        generateTestList( opts, optD, dirs, rtdata )
+        elif self.opts.dash_b:
 
-    elif opts.dash_b:
+            if self.opts.dash_R or self.opts.dash_w:
+                print3( "*** error: cannot use -R or -w with -b (baseline)" )
+                sys.exit(1)
 
-        if opts.dash_R or opts.dash_w:
-            print3( "*** error: cannot use -R or -w with -b (baseline)" )
+            baselineTests( self.opts, self.optD, self.rtdata )
+
+        elif self.opts.extract:
+            extractTestFiles( self.opts, self.optD, self.dirs, self.opts.extract, self.rtdata )
+
+        else:
+
+            # if no results keywords are specified, then add -k notrun/notdone
+            if not keyword_expr.containsResultsKeywords() and \
+               not self.opts.dash_w and not self.opts.dash_R:
+                keyword_expr.append( ['notrun/notdone'], 'and' )
+
+            if self.rtdata.isRestartMode():
+                restartTests( self.opts, self.optD, self.rtdata )
+            else:
+                runTests( self.opts, self.optD, self.rtdata, self.dirs )
+
+    def constructConfiguration(self):
+        ""
+        config = create_configuration( self.opts, self.optD,
+                                       self.rtdata.getToolsDir() )
+        self.rtdata.setConfiguration( config )
+
+    def readCacheData(self):
+        ""
+        # non-None only if the CWD is in a TestResults.* directory
+        test_cache_dir = readCommandInfo( self.opts, self.optD, self.rtdata )
+
+        if test_cache_dir and self.optD['param_dict']:
+            print3( "*** error: cannot use -S in a TestResults directory" )
             sys.exit(1)
 
-        baselineTests( opts, optD, rtdata )
+        if test_cache_dir and self.opts.dash_g:
+            print3( "*** error: cannot use -g in a TestResults directory" )
+            sys.exit(1)
 
-    elif opts.extract:
-        extractTestFiles( opts, optD, dirs, opts.extract, rtdata )
+        # this is scheduled for deprecation
+        if self.opts.check:
+            for n in self.opts.check:
+                os.environ[ 'CHECK_' + n.upper() ] = ''
 
-    else:
+        return test_cache_dir
 
-        # if no results keywords are specified, then add -k notrun/notdone
-        if not keyword_expr.containsResultsKeywords() and \
-           not opts.dash_w and not opts.dash_R:
-            keyword_expr.append( ['notrun/notdone'], 'and' )
+    def constructPlatform(self):
+        ""
+        plat = construct_platform_instance( self.rtdata.getToolsDir(),
+                                            self.opts, self.optD )
+        self.rtdata.setPlatformObject( plat )
 
-        if rtdata.isRestartMode():
-            restartTests( opts, optD, rtdata )
-        else:
-            runTests( opts, optD, rtdata, dirs )
+    def constructTestSubdirectory(self):
+        ""
+        sd = test_results_subdir_name( self.opts.run_dir,
+                                       self.optD['onopts'], self.optD['offopts'],
+                                       self.rtdata.getPlatformObject().getName() )
+        self.rtdata.setTestSubdir( sd )
+
+    def constructResultsWriter(self, start_time):
+        ""
+        resw = make_results_writer( self.opts, self.optD, start_time,
+                                    self.rtdata.getToolsDir(),
+                                    self.rtdata.getTestResultsDir(),
+                                    self.rtdata.getPermissionsObject(),
+                                    self.rtdata.getPlatformObject().getName(),
+                                    self.rtdata.cmdL,
+                                    self.rtdata.getTestStatusHandler() )
+        self.rtdata.setResultsWriter( resw )
+
+    def constructRuntimeConfig(self):
+        ""
+        rtconfig = construct_RuntimeConfig( self.rtdata.getPlatformObject(),
+                                            self.opts, self.optD )
+        self.rtdata.setRuntimeConfig( rtconfig )
 
 
 class Configuration:
@@ -165,9 +217,11 @@ class Configuration:
           self.attrs[n] = v
 
 
-def populate_configuration_from_options( opts, optD, rtdata ):
+def create_configuration( opts, optD, toolsdir ):
     ""
-    config = rtdata.getConfiguration()
+    config = Configuration()
+
+    config.set( 'toolsdir', toolsdir )
 
     if optD['onopts']:
         config.set( 'onopts', optD['onopts'] )
@@ -182,7 +236,7 @@ def populate_configuration_from_options( opts, optD, rtdata ):
     else:
         d = os.getenv( 'VVTEST_CONFIGDIR' )
         if d == None:
-            d = os.path.join( rtdata.getToolsDir(), 'config' )
+            d = os.path.join( toolsdir, 'config' )
         config.set( 'configdir', os.path.abspath(d) )
 
     config.set( 'refresh', not opts.dash_m )
@@ -203,40 +257,33 @@ def populate_configuration_from_options( opts, optD, rtdata ):
             argL.extend( shlex.split( args ) )
         config.set( 'testargs', argL )
 
+    return config
+
 
 class RuntimeData:
 
-    def __init__(self, cmdL):
-        ""
+    def __init__(self, cmdL, toolsdir):
+        """
+        The 'toolsdir' is the directory containing this script.
+        """
         self.cmdL = [ os.path.abspath( cmdL[0] ) ]
         self.cmdL.extend( cmdL[1:] )
 
-        # directory containing this script
-        self.toolsdir = get_tools_directory()
-
-        self.config = Configuration()
-        self.config.set( 'toolsdir', self.toolsdir )
+        self.toolsdir = toolsdir
 
     def getToolsDir(self): return self.toolsdir
-    def getConfigDir(self): return self.config.get( 'configdir' )
+
+    def setConfiguration(self, config): self.config = config
     def getConfiguration(self): return self.config
 
-    def setPlatformObject(self, opts, optD):
-        self.plat = construct_platform_instance( self.toolsdir, opts, optD )
+    def setPlatformObject(self, platobj): self.plat = platobj
     def getPlatformObject(self): return self.plat
 
-    def setRuntimeConfig(self, opts, optD):
-        self.rtconfig = construct_RuntimeConfig( self.plat, opts, optD )
+    def setRuntimeConfig(self, rtconfig): self.rtconfig = rtconfig
     def getRuntimeConfig(self): return self.rtconfig
 
-    def setTestSubdir(self, optrundir, onopts, offopts):
-        ""
-        sd = test_results_subdir_name( optrundir, onopts, offopts,
-                                       self.plat.getName() )
-        self.testsubdir = sd
-
-    def getTestSubdir(self):
-        return self.testsubdir
+    def setTestSubdir(self, subdir): self.testsubdir = subdir
+    def getTestSubdir(self): return self.testsubdir
 
     def setTestResultsDir(self, test_cache_dir):
         ""
@@ -264,14 +311,7 @@ class RuntimeData:
         self.statushandler = statushandler
     def getTestStatusHandler(self): return self.statushandler
 
-    def setResultsWriter(self, opts, optD, start_time):
-        resw = make_results_writer( opts, optD, start_time,
-                                    self.toolsdir,
-                                    self.test_dir, self.perms,
-                                    self.plat.getName(),
-                                    self.cmdL,
-                                    self.statushandler )
-        self.results_writer = resw
+    def setResultsWriter(self, writer): self.results_writer = writer
     def getResultsWriter(self): return self.results_writer
 
     def setFilterPath(self):
@@ -1763,7 +1803,7 @@ def insert_configdir_into_sys_path( rtdata ):
     ""
     d1 = os.path.normpath( os.path.join( rtdata.getToolsDir(), 'config' ) )
 
-    d2 = rtdata.getConfigDir()
+    d2 = rtdata.getConfiguration().get( 'configdir' )
     if d2:
         d2 = os.path.normpath( d2 )
 
@@ -1831,5 +1871,7 @@ def fault_tolerant_remove( path, num_attempts=5 ):
 ##############################################################################
 
 if __name__ == '__main__':
-
-    main()
+    ""
+    main = MainEntry( sys.argv )
+    main.constructObjects()
+    main.execute()
