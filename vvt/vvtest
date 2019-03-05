@@ -963,11 +963,13 @@ def executeTestList( opts, optD,
     print3( "Start time:", time.ctime() )
 
     import signal
+    import datetime
     def print_running_tests(signum, stack):
-        print("Received {0}".format(signum))
         print("Running tests:")
         for tx in tlist.getRunning():
-            print("  {0}".format(tx.atest.xdir))
+            duration = time.time() - tx.atest.attrs['xdate']
+            duration = datetime.timedelta(seconds=int(duration))
+            print("  {0}: {1}".format(tx.atest.xdir, duration))
     signal.signal(signal.SIGQUIT, print_running_tests)
 
     uthook = utesthooks.construct_unit_testing_hook( 'run', opts.qsub_id )
