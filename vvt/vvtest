@@ -952,6 +952,7 @@ def make_results_writer( opts, optD,
     return writer
 
 
+
 def executeTestList( opts, optD,
                      tlist, test_dir, plat, perms, tfile,
                      results_writer ):
@@ -960,6 +961,14 @@ def executeTestList( opts, optD,
     plat.display()
     starttime = time.time()
     print3( "Start time:", time.ctime() )
+
+    import signal
+    def print_running_tests(signum, stack):
+        print("Received {0}".format(signum))
+        print("Running tests:")
+        for tx in tlist.getRunning():
+            print("  {0}".format(tx.atest.xdir))
+    signal.signal(signal.SIGQUIT, print_running_tests)
 
     uthook = utesthooks.construct_unit_testing_hook( 'run', opts.qsub_id )
 
