@@ -48,10 +48,10 @@ testlist_name = 'testlist'
 # -k and -K specifications
 keyword_expr = None
 
+start_time = time.time()
 
 def main():
     ""
-    start_time = time.time()
 
     check_for_bootstrap_file()
 
@@ -965,11 +965,15 @@ def executeTestList( opts, optD,
     import signal
     import datetime
     def print_running_tests(signum, stack):
-        print("Running tests:")
-        for tx in tlist.getRunning():
+        total_runtime = datetime.timedelta(seconds=int(time.time() - start_time))
+        print("\nInformation:")
+        print("  * Total runtime: {0}".format(total_runtime))
+        _tlist = tlist.getRunning()
+        print("  * {0:d} running tests (current runtime):".format(len(_tlist)))
+        for tx in _tlist:
             duration = time.time() - tx.atest.attrs['xdate']
             duration = datetime.timedelta(seconds=int(duration))
-            print("  {0}: {1}".format(tx.atest.xdir, duration))
+            print("    * {0} ({1})".format(tx.atest.xdir, duration))
     signal.signal(signal.SIGQUIT, print_running_tests)
 
     uthook = utesthooks.construct_unit_testing_hook( 'run', opts.qsub_id )
