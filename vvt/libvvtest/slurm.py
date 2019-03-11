@@ -56,6 +56,9 @@ class BatchSLURM:
             cmdL.append('--partition='+queue)
         if account != None:
             cmdL.append('--account='+account)
+        if 'QoS' in kwargs and kwargs['QoS'] != None:
+            cmdL.append('--qos='+kwargs['QoS'])
+
         cmdL.append('--output='+outfile)
         cmdL.append('--error='+outfile)
         cmdL.append('--workdir='+workdir)

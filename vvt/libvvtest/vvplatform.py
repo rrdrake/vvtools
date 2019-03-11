@@ -356,6 +356,10 @@ def construct_Platform( toolsdir, optdict, **kwargs ):
     wall = platopts.get( 'walltime', None )
     plat.setattr( 'walltime', wall )
 
+    # QoS = "Quality of Service" e.g. "normal", "long", etc.
+    QoS = platopts.get( 'QoS', None )
+    plat.setattr( 'QoS', QoS )
+
     try:
         # this comes from the config directory
         import platform_plugin
