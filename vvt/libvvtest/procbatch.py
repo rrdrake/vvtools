@@ -16,7 +16,7 @@ class ProcessBatch:
         self.ppn = ppn
         self.childids = []
 
-    def header(self, np, qtime, workdir, outfile):
+    def header(self, np, qtime, workdir, outfile, plat_attrs):
         """
         """
         hdr = '\n' + \

@@ -20,7 +20,7 @@ class BatchSLURM:
         ""
         self.runcmd = run_function
 
-    def header(self, np, qtime, workdir, outfile):
+    def header(self, np, qtime, workdir, outfile, plat_attrs):
         """
         """
         if np <= 0: np = 1
@@ -33,6 +33,11 @@ class BatchSLURM:
               '#SBATCH --output=' + outfile + '\n' + \
               '#SBATCH --error=' + outfile + '\n' + \
               '#SBATCH --workdir=' + workdir
+
+        # Add a line for Quality of Service (QoS) if the user defined it.
+        QoS = plat_attrs.get('QoS', None)
+        if QoS is not None:
+            hdr += '\n#SBATCH --qos=' + QoS
         
         return hdr
 

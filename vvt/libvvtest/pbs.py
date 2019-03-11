@@ -33,7 +33,7 @@ class BatchPBS:
         ""
         self.runcmd = run_function
 
-    def header(self, np, qtime, workdir, outfile):
+    def header(self, np, qtime, workdir, outfile, plat_attrs):
         if np <= 0: np = 1
         nnodes = int( np/self.ppn )
         if (np%self.ppn) != 0:
