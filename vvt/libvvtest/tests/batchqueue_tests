@@ -38,7 +38,7 @@ class the_tests( vtu.vvtestTestCase ):
 
         obj = ProcessBatch( 8 )
 
-        hdr = obj.header( 8, 123, workdir, os.path.abspath('out.txt') )
+        hdr = obj.header( 8, 123, workdir, os.path.abspath('out.txt') , {} )
 
         cmd,out,jobid,err = obj.submit( script, workdir, outfile )
 
@@ -58,7 +58,7 @@ class the_tests( vtu.vvtestTestCase ):
         obj = BatchSLURM( 16 )
         obj.setRunCommand( mock_slurm_run_command )
 
-        hdr = obj.header( 8, 123, os.getcwd(), os.path.abspath('out.txt') )
+        hdr = obj.header( 8, 123, os.getcwd(), os.path.abspath('out.txt') , {} )
         assert 'SBATCH' in hdr
 
         cmd,out,jobid,err = obj.submit( 'batchscript',
@@ -71,6 +71,20 @@ class the_tests( vtu.vvtestTestCase ):
         assert stateD[ 16004368 ] == 'running'
         assert stateD[ 16014368 ] == ''
 
+    def test_slurm_qos_test(self):
+        """
+        Make sure the header function can correctly include the --qos tag.
+        """
+        from libvvtest.slurm import BatchSLURM
+
+        obj = BatchSLURM( 16 )
+        obj.setRunCommand( mock_slurm_run_command )
+
+        hdr = obj.header( 8, 123, os.getcwd(), os.path.abspath('out.txt') , {'QoS': 'long'} )
+        print("This is hdr", hdr)
+        assert '#SBATCH --qos=long' in hdr
+
+
     def test_craypbs_smoke_test(self):
         ""
         from libvvtest.craypbs import BatchCrayPBS
@@ -78,7 +92,7 @@ class the_tests( vtu.vvtestTestCase ):
         obj = BatchCrayPBS( 16 )
         obj.setRunCommand( mock_craypbs_run_command )
 
-        hdr = obj.header( 8, 123, os.getcwd(), os.path.abspath('out.txt') )
+        hdr = obj.header( 8, 123, os.getcwd(), os.path.abspath('out.txt'), {} )
         assert 'MSUB' in hdr
 
         cmd,out,jobid,err = obj.submit( 'batchscript',
@@ -99,7 +113,7 @@ class the_tests( vtu.vvtestTestCase ):
         obj = BatchPBS( 16 )
         obj.setRunCommand( mock_pbs_run_command )
 
-        hdr = obj.header( 8, 123, os.getcwd(), os.path.abspath('out.txt') )
+        hdr = obj.header( 8, 123, os.getcwd(), os.path.abspath('out.txt'), {})
         assert 'PBS' in hdr
 
         cmd,out,jobid,err = obj.submit( 'batchscript',
