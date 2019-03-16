@@ -43,7 +43,6 @@ class TestList:
         self.groups = ParameterizeAnalyzeGroups( self.statushandler )
 
         self.tspecs = {}  # TestSpec xdir -> TestSpec object
-        # self.active = {}  # TestSpec xdir -> TestSpec object
 
         self.xtlist = {}  # np -> list of TestExec objects
         self.started = {}  # TestSpec xdir -> TestExec object
@@ -213,17 +212,12 @@ class TestList:
         apply_permanent_filters( self.statushandler, self.tspecs,
                                  self.groups, self.rtconfig )
 
-        # magic: this smells (would be fixed by marking the tests)
-        # self.active.clear()
-        # self.active.update( self.tspecs )
         self.numactive = count_active( self.statushandler, self.tspecs )
 
     def determineActiveTests(self, filter_dir=None,
                                    analyze_only=False,
                                    baseline=False):
         ""
-        # self.active.clear()
-
         subdir = None
         if filter_dir != None:
             subdir = os.path.normpath( filter_dir )
@@ -596,13 +590,13 @@ class TestList:
             self.xtlist.pop( np )
 
 
-def filter_by_cummulative_runtime( statushandler, activedict, rtsum ):
+def filter_by_cummulative_runtime( statushandler, tspec_map, rtsum ):
     ""
     rmD = {}
 
     # first, generate list with times
     tL = []
-    for xdir,t in activedict.items():
+    for xdir,t in tspec_map.items():
         tm = statushandler.getRuntime( t, None )
         if tm == None: tm = 0
         tL.append( (tm,xdir,t) )
@@ -618,24 +612,7 @@ def filter_by_cummulative_runtime( statushandler, activedict, rtsum ):
             if tsum > rtsum:
                 statushandler.markSkip( t, 'cummulative runtime threshhold' )
 
-                # analyze_xdir = groups.getAnalyzeExecuteDirectory( t )
-                # if analyze_xdir:
-                #     analyze_tspec = activedict.get( analyze_xdir, None )
-                #     if analyze_tspec:
-                #         if not statushandler.skipTest( analyze_tspec ):
-                #             statushandler.markSkip( analyze_tspec,
-                #                     'filtered out due to child' )
-
         i += 1
-
-    # put the rest of the tests in the remove dict
-    # while i < n:
-    #     tm,xdir,t = tL[i]
-    #     rmD[xdir] = t
-    #     i += 1
-    # tL = None
-
-    # return rmD
 
 
 def is_subdir(parent_dir, subdir):
@@ -800,8 +777,6 @@ def apply_permanent_filters( statushandler, tspec_map, groups, rtconfig ):
 
     for xdir,tspec in tspec_map.items():
 
-#magic        statushandler.resetSkip( tspec )
-
         if not include_all:
 
             if not filt.checkParameters( tspec ):
@@ -836,6 +811,7 @@ def apply_permanent_filters( statushandler, tspec_map, groups, rtconfig ):
 
     filter_analyze_tests( statushandler, groups )
 
+
 def filter_analyze_tests( statushandler, groups ):
     ""
     for key,tspecL in groups.groupmap.items():
@@ -861,44 +837,6 @@ def filter_analyze_tests( statushandler, groups ):
                     return False
                 pset = analyze.getParameterSet()
                 pset.applyParamFilter( evalfunc )
-
-
-    # for xdir,tspec in tspec_map.items():
-
-    #     if tspec.isAnalyze():
-    #         # align the analyze parameter set with its parameterized tests
-    #         paramset = tspec.getParameterSet()
-    #         paramset.applyParamFilter( rtconfig.evaluate_parameters )
-
-    #     if include_all:
-    #         pass
-
-    #     elif not filt.checkParameters( tspec ):
-    #         statushandler.markSkip( tspec, 'parameter expression' )
-
-    #     else:
-    #         keep = ( filt.checkPlatform( tspec ) and \
-    #                  filt.checkOptions( tspec ) and \
-    #                  filt.checkKeywords( tspec, results_keywords=False ) and \
-    #                  filt.checkTDD( tspec ) and \
-    #                  filt.checkFileSearch( tspec ) and \
-    #                  filt.checkMaxProcessors( tspec ) and \
-    #                  filt.checkRuntime( tspec ) )
-
-    #         if not keep:
-    #             statushandler.markSkip( tspec, 'filtered out' )
-
-    #             analyze_xdir = groups.getAnalyzeExecuteDirectory( tspec )
-    #             if analyze_xdir:
-    #                 analyze_tspec = tspec_map.get( analyze_xdir, None )
-    #                 if analyze_tspec:
-    #                     if not statushandler.skipTest( analyze_tspec ):
-    #                         statushandler.markSkip( analyze_tspec,
-    #                                 'filtered out due to child' )
-
-    # rtsum = rtconfig.getAttr( 'runtime_sum', None )
-    # if not include_all and rtsum != None:
-    #     apply_cummulative_runtime_filter( statushandler, tspec_map, rtsum, groups )
 
 
 def apply_runtime_filters( statushandler, tspec_map, rtconfig, subdir,
@@ -954,20 +892,10 @@ def apply_runtime_filters( statushandler, tspec_map, rtconfig, subdir,
     if not include_all and rtsum != None:
         filter_by_cummulative_runtime( statushandler, tspec_map, rtsum )
 
-    # magic: turning this on causes failures because results_keywords=True
-    #        causes analyze tests to be skipped (params, analyze_filtering)
     if not baseline:
         groups = ParameterizeAnalyzeGroups( statushandler )
         groups.rebuild( tspec_map )
         filter_analyze_tests( statushandler, groups )
-
-# def apply_cummulative_runtime_filter( statushandler, active, rtsum, groups=None ):
-#     ""
-#     if groups == None:
-#         groups = ParameterizeAnalyzeGroups( statushandler )
-#         groups.rebuild( active )
-
-#     filter_by_cummulative_runtime( statushandler, active, rtsum, groups )
 
 
 def count_active( statushandler, tspec_map ):
@@ -998,6 +926,7 @@ def refreshTest( testobj, rtconfig ):
     if testobj.isAnalyze():
         # if analyze test, filter the parameter set to the parameters
         # that would be included
+        # magic: is this still needed???
         paramset = testobj.getParameterSet()
         paramset.applyParamFilter( rtconfig.evaluate_parameters )
 
