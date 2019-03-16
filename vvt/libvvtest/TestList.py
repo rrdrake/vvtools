@@ -772,27 +772,22 @@ def apply_permanent_filters( statushandler, tspec_map, groups, rtconfig ):
     ""
     filt = TestFilter( rtconfig, statushandler )
 
-    # magic: "assert include_all" because batch should always be a restart
-    include_all = rtconfig.getAttr( 'include_all', False )
-
     for xdir,tspec in tspec_map.items():
 
-        if not include_all:
+        if not filt.checkParameters( tspec ):
+            statushandler.markSkipByParameter( tspec )
 
-            if not filt.checkParameters( tspec ):
-                statushandler.markSkipByParameter( tspec )
-
-            elif not ( filt.checkPlatform( tspec ) and \
-                       filt.checkOptions( tspec ) and \
-                       filt.checkKeywords( tspec, results_keywords=False ) and \
-                       filt.checkTDD( tspec ) and \
-                       filt.checkFileSearch( tspec ) and \
-                       filt.checkMaxProcessors( tspec ) and \
-                       filt.checkRuntime( tspec ) ):
-                statushandler.markSkip( tspec, 'filtered out' )
+        elif not ( filt.checkPlatform( tspec ) and \
+                   filt.checkOptions( tspec ) and \
+                   filt.checkKeywords( tspec, results_keywords=False ) and \
+                   filt.checkTDD( tspec ) and \
+                   filt.checkFileSearch( tspec ) and \
+                   filt.checkMaxProcessors( tspec ) and \
+                   filt.checkRuntime( tspec ) ):
+            statushandler.markSkip( tspec, 'filtered out' )
 
     rtsum = rtconfig.getAttr( 'runtime_sum', None )
-    if not include_all and rtsum != None:
+    if rtsum != None:
         filter_by_cummulative_runtime( statushandler, tspec_map, rtsum )
 
     # magic: TODO:
@@ -915,20 +910,11 @@ def refreshTest( testobj, rtconfig ):
     object are used.
 
     If the test XML contains bad syntax, a TestSpecError is raised.
-    
-    Returns false if any of the filtering would exclude this test.
     """
     evaluator = TestSpecCreator.ExpressionEvaluator( rtconfig.platformName(),
                                                      rtconfig.getOptionList() )
 
     TestSpecCreator.reparse_test_object( testobj, evaluator )
-
-    if testobj.isAnalyze():
-        # if analyze test, filter the parameter set to the parameters
-        # that would be included
-        # magic: is this still needed???
-        paramset = testobj.getParameterSet()
-        paramset.applyParamFilter( rtconfig.evaluate_parameters )
 
 
 class TestFilter:
