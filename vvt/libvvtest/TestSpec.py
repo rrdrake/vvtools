@@ -239,6 +239,10 @@ class TestSpec:
         if len(args) > 0:
           return self.attrs.get( name, args[0] )
         return self.attrs[name]
+
+    def removeAttr(self, name):
+        ""
+        self.attrs.pop( name, None )
     
     def getAttrs(self):
         """

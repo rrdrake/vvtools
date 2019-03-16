@@ -26,9 +26,8 @@ class TestStatusHandler:
     def resetResults(self, tspec):
         ""
         tspec.setAttr( 'state', 'notrun' )
-        # magic: setting to -1 is a little ugly; should remove the attribute
-        tspec.setAttr( 'xtime', -1 )
-        tspec.setAttr( 'xdate', -1 )
+        tspec.removeAttr( 'xtime' )
+        tspec.removeAttr( 'xdate' )
 
     def getResultsKeywords(self, tspec):
         ""
@@ -45,6 +44,40 @@ class TestStatusHandler:
             return [result]
 
         return []
+
+    def resetSkip(self, tspec):
+        ""
+        tspec.removeAttr( 'skip' )
+
+    def markSkipByParameter(self, tspec):
+        ""
+        tspec.setAttr( 'skip', 'parameter expression failed' )
+
+    def skipTestByParameter(self, tspec):
+        ""
+        return tspec.getAttr( 'skip', None ) == 'parameter expression failed'
+
+    def skipTestCausingAnalyzeSkip(self, tspec):
+        ""
+        skipit = False
+        skp = tspec.getAttr( 'skip', None )
+        if skp != None:
+            if skp.startswith( 'parameter expression failed' ) or \
+               skp.startswith( 'restart parameter expression failed' ) or \
+               skp.startswith( 'results keyword expression' ) or \
+               skp.startswith( 'subdir' ):
+                skipit = False
+            else:
+                skipit = True
+        return skipit
+
+    def markSkip(self, tspec, reason):
+        ""
+        tspec.setAttr( 'skip', reason )
+
+    def skipTest(self, tspec):
+        ""
+        return tspec.getAttr( 'skip', False )
 
     def isNotrun(self, tspec):
         ""
@@ -112,6 +145,12 @@ class TestStatusHandler:
         ""
         self.markDone( tspec, 1 )
         tspec.setAttr( 'result', 'timeout' )
+
+    def copyResults(self, to_tspec, from_tspec):
+        ""
+        for k,v in from_tspec.getAttrs().items():
+            if k != 'skip':
+                to_tspec.setAttr( k, v )
 
 
 def translate_exit_status_to_result_string( exit_status ):

@@ -526,9 +526,9 @@ def extractTestFiles( opts, optD, dirs, target_dir, rtdata ):
     tlist.applyPermanentFilters()
 
     if not os.path.isabs(target_dir):
-      target_dir = os.path.abspath(target_dir)
+        target_dir = os.path.abspath(target_dir)
     if not os.path.exists(target_dir):
-      os.makedirs( target_dir )
+        os.makedirs( target_dir )
     
     uniqD = {}
     
@@ -548,57 +548,57 @@ def extractTestFiles( opts, optD, dirs, target_dir, rtdata ):
             tf = os.path.join(td,f1)
             shutil.copy2( f2, tf )
     
-    for xdir,t in tlist.active.items():
-      
-      tname = t.getName()
-      T = (tname, t.getFilename())
-      
-      from_dir = os.path.dirname( t.getFilename() )
-      p = os.path.dirname( t.getFilepath() )
-      if p: to_dir = os.path.normpath( os.path.join( target_dir, p ) )
-      else: to_dir = target_dir
-      
-      if not os.path.exists( to_dir ):
-        os.makedirs( to_dir )
-      tof = os.path.join( target_dir, t.getFilepath() )
-      
-      if tof not in uniqD:
-        uniqD[tof] = None
-        try: shutil.copy2( t.getFilename(), tof )
-        except IOError: pass
-      
-      for srcf in t.getSourceFiles():
+    for t in tlist.getActiveTests():
 
-        if os.path.exists( os.path.join( from_dir, srcf ) ):
-            fL = [ srcf ]
-        else:
-            cwd = os.getcwd()
-            try:
-                os.chdir( from_dir )
-                fL = glob.glob( srcf )
-            except Exception:
-                fL = []
-            os.chdir( cwd )
+        tname = t.getName()
+        T = (tname, t.getFilename())
 
-        for f in fL:
-            fromf = os.path.join( from_dir, f )
-            tof = os.path.join( to_dir, f )
-            tod = os.path.dirname(tof)
-            if tof not in uniqD:
-              uniqD[tof] = None
-              if not os.path.exists(tod):
-                os.makedirs(tod)
-              
-              if os.path.isdir(fromf):
+        from_dir = os.path.dirname( t.getFilename() )
+        p = os.path.dirname( t.getFilepath() )
+        if p: to_dir = os.path.normpath( os.path.join( target_dir, p ) )
+        else: to_dir = target_dir
+
+        if not os.path.exists( to_dir ):
+            os.makedirs( to_dir )
+        tof = os.path.join( target_dir, t.getFilepath() )
+
+        if tof not in uniqD:
+            uniqD[tof] = None
+            try: shutil.copy2( t.getFilename(), tof )
+            except IOError: pass
+
+        for srcf in t.getSourceFiles():
+
+            if os.path.exists( os.path.join( from_dir, srcf ) ):
+                fL = [ srcf ]
+            else:
                 cwd = os.getcwd()
-                os.chdir(fromf)
-                for root,dirs,files in os.walk( '.' ):
-                    wvisit( (fromf, tof), root, dirs, files )
-                os.chdir(cwd)
-                
-              else:
-                try: shutil.copy2( fromf, tof )
-                except IOError: pass
+                try:
+                    os.chdir( from_dir )
+                    fL = glob.glob( srcf )
+                except Exception:
+                    fL = []
+                os.chdir( cwd )
+
+            for f in fL:
+                fromf = os.path.join( from_dir, f )
+                tof = os.path.join( to_dir, f )
+                tod = os.path.dirname(tof)
+                if tof not in uniqD:
+                    uniqD[tof] = None
+                    if not os.path.exists(tod):
+                        os.makedirs(tod)
+                    
+                    if os.path.isdir(fromf):
+                        cwd = os.getcwd()
+                        os.chdir(fromf)
+                        for root,dirs,files in os.walk( '.' ):
+                            wvisit( (fromf, tof), root, dirs, files )
+                        os.chdir(cwd)
+                      
+                    else:
+                        try: shutil.copy2( fromf, tof )
+                        except IOError: pass
 
 
 ##############################################################################
@@ -920,7 +920,7 @@ def runTests( opts, optD, rtdata, dirs ):
 
     results_writer = rtdata.getResultsWriter()
 
-    if len(tlist.active) > 0:
+    if tlist.numActive() > 0:
 
         print3( "Running these tests:" )
         results_writer.prerun( tlist )
@@ -1563,7 +1563,7 @@ def restartTests( opts, optD, rtdata ):
 
     results_writer = rtdata.getResultsWriter()
 
-    if len(tlist.active) > 0:
+    if tlist.numActive() > 0:
 
         print3( "Running these tests:" )
         results_writer.prerun( tlist )
@@ -1610,7 +1610,7 @@ def baselineTests( opts, optD, rtdata ):
     tlist.determineActiveTests( filter_dir=rtdata.getFilterPath(),
                                 baseline=True )
 
-    if len(tlist.active) > 0:
+    if tlist.numActive() > 0:
 
         perms = rtdata.getPermissionsObject()
 

@@ -156,17 +156,19 @@ class runtimes_and_tmin_tmax( vtu.vvtestTestCase ):
 
             vtu.remove_results()
 
-            # none of the execute/analyze tests should have been selected
+            # none of the analyze tests should have been selected
             vrun = vtu.runvvtest( '--tmax 6 tests', batch=batch )
-            vrun.assertCounts( total=1, npass=1 )
-            assert vrun.getTestIds() == [ 'AA' ]
+            vrun.assertCounts( total=3, npass=3 )
+            assert vrun.getTestIds() == \
+                            [ 'AA', 'BB.planet=mars', 'BB.planet=mercury' ]
 
             vrun = vtu.runvvtest( batch=batch, chdir=tdir )
             vrun.assertCounts( total=0 )
 
             vrun = vtu.runvvtest( '-R', batch=batch, chdir=tdir )
-            vrun.assertCounts( total=1, npass=1 )
-            assert vrun.getTestIds() == [ 'AA' ]
+            vrun.assertCounts( total=3, npass=3 )
+            assert vrun.getTestIds() == \
+                            [ 'AA', 'BB.planet=mars', 'BB.planet=mercury' ]
 
     def test_using_tmin_tmax_wont_destroy_previous_results(self):
         """

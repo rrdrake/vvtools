@@ -408,7 +408,7 @@ class format_versions( vtu.vvtestTestCase ):
 
         tlr = tio.TestListReader( 'testlist' )
         tlr.read()
-        assert tlr.getFileVersion() == 32
+        assert tlr.getFileVersion() == 33
 
     def test_reading_testlist_format_version_31_is_an_exception(self):
         ""
@@ -419,6 +419,18 @@ class format_versions( vtu.vvtestTestCase ):
 
         tlr = tio.TestListReader( 'testlist' )
         self.assertRaises( Exception, tlr.read )
+
+    def test_that_testlist_format_version_32_is_compatible_with_version_33(self):
+        ""
+        fp = open( 'testlist', 'w' )
+        fp.write( example_testlist_version_32 )
+        fp.close()
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'testlist' )
+        tlr.read()
+        assert tlr.getFileVersion() == 32
+        assert len( tlr.getTests() ) == 3
 
 
 example_testlist_version_31 = \
@@ -431,6 +443,19 @@ py1 "/scratch/rrdrake/temp/prob" "py1.vvt" "_keywords_=bar foo py1" "state=Snotd
 py1 "/scratch/rrdrake/temp/prob" "py1.vvt" "_keywords_=bar foo py1" "result=Spass" "state=Sdone" "timeout=I3600" "xdate=I1538259163" "xtime=I1"
 
 #VVT: Finish = Sat Sep 29 16:12:44 2018
+"""
+
+example_testlist_version_32 = \
+"""
+#VVT: Version = 32
+#VVT: Start = ['Sun Mar  3 18:26:21 2019', 1551662781.325458]
+#VVT: Attrs = {}
+
+{'name': 'at', 'params': {'np': '1'}, 'attrs': {'xdate': -1, 'state': 'notrun', 'xtime': -1}, 'keywords': ['np', 'foo', 'bar', 'at'], 'path': 'at.vvt', 'root': '/scratch/rrdrake/temp/prob/analyze'}
+{'name': 'at', 'params': {'np': '2'}, 'attrs': {'xdate': -1, 'state': 'notrun', 'xtime': -1}, 'keywords': ['np', 'foo', 'bar', 'at'], 'path': 'at.vvt', 'root': '/scratch/rrdrake/temp/prob/analyze'}
+{'name': 'at', 'params': {}, 'attrs': {'xdate': -1, 'state': 'notrun', 'xtime': -1}, 'keywords': ['np', 'foo', 'bar', 'at'], 'path': 'at.vvt', 'root': '/scratch/rrdrake/temp/prob/analyze'}
+
+#VVT: Finish = ['Sun Mar  3 18:26:21 2019', 1551662781.325975]
 """
 
 

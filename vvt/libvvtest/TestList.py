@@ -40,10 +40,10 @@ class TestList:
         self.datestamp = None
         self.finish = None
 
-        self.groups = ParameterizeAnalyzeGroups()
+        self.groups = ParameterizeAnalyzeGroups( self.statushandler )
 
         self.tspecs = {}  # TestSpec xdir -> TestSpec object
-        self.active = {}  # TestSpec xdir -> TestSpec object
+        # self.active = {}  # TestSpec xdir -> TestSpec object
 
         self.xtlist = {}  # np -> list of TestExec objects
         self.started = {}  # TestSpec xdir -> TestExec object
@@ -132,7 +132,6 @@ class TestList:
 
             self.results_suffix = tlr.getAttr( 'results_suffix', None )
 
-            #magic self.tspecs.update( tlr.getTests() )
             for xdir,tspec in tlr.getTests().items():
                 if xdir not in self.tspecs:
                     self.tspecs[ xdir ] = tspec
@@ -165,8 +164,7 @@ class TestList:
 
                 t = self.tspecs.get( xdir, None )
                 if t != None:
-                    for k,v in tspec.getAttrs().items():
-                        t.setAttr( k, v )
+                    self.statushandler.copyResults( t, tspec )
 
     def ensureInlinedTestResultIncludes(self):
         ""
@@ -216,14 +214,15 @@ class TestList:
                                  self.groups, self.rtconfig )
 
         # magic: this smells (would be fixed by marking the tests)
-        self.active.clear()
-        self.active.update( self.tspecs )
+        # self.active.clear()
+        # self.active.update( self.tspecs )
+        self.numactive = count_active( self.statushandler, self.tspecs )
 
     def determineActiveTests(self, filter_dir=None,
                                    analyze_only=False,
                                    baseline=False):
         ""
-        self.active.clear()
+        # self.active.clear()
 
         subdir = None
         if filter_dir != None:
@@ -231,11 +230,12 @@ class TestList:
             if subdir == '' or subdir == '.':
                 subdir = None
 
-        self.active = apply_runtime_filters( self.statushandler, self.tspecs,
+        apply_runtime_filters( self.statushandler, self.tspecs,
                                              self.rtconfig, subdir,
                                              analyze_only, baseline )
 
         self.groups.rebuild( self.tspecs )
+        self.numactive = count_active( self.statushandler, self.tspecs )
 
     def markTestsWithDependents(self):
         ""
@@ -255,29 +255,33 @@ class TestList:
                 s : test status (such as pass, fail, diff, etc)
                 r : reverse the order
         """
+        tL = []
         if not sorting:
-            tL = list( self.active.values() )
+            for tspec in self.tspecs.values():
+                if not self.statushandler.skipTest( tspec ):
+                    tL.append( tspec )
             tL.sort()
-        else:
-            tL = []
-            for t in self.active.values():
-                L = []
-                for c in sorting:
-                    if c == 'n':
-                        L.append( t.getName() )
-                    elif c == 'x':
-                        L.append( t.getExecuteDirectory() )
-                    elif c == 't':
-                        tm = self.statushandler.getRuntime( t, None )
-                        if tm == None: tm = 0
-                        L.append( tm )
-                    elif c == 'd':
-                        L.append( self.statushandler.getStartDate( t, 0 ) )
-                    elif c == 's':
-                        L.append( self.statushandler.getResultStatus( t ) )
 
-                L.append( t )
-                tL.append( L )
+        else:
+            for t in self.tspecs.values():
+                if not self.statushandler.skipTest(t):
+                    subL = []
+                    for c in sorting:
+                        if c == 'n':
+                            subL.append( t.getName() )
+                        elif c == 'x':
+                            subL.append( t.getExecuteDirectory() )
+                        elif c == 't':
+                            tm = self.statushandler.getRuntime( t, None )
+                            if tm == None: tm = 0
+                            subL.append( tm )
+                        elif c == 'd':
+                            subL.append( self.statushandler.getStartDate( t, 0 ) )
+                        elif c == 's':
+                            subL.append( self.statushandler.getResultStatus( t ) )
+
+                    subL.append( t )
+                    tL.append( subL )
             tL.sort()
             if 'r' in sorting:
                 tL.reverse()
@@ -388,11 +392,11 @@ class TestList:
         d = os.path.join( config.get('toolsdir'), 'libvvtest' )
         c = config.get('configdir')
         xdb = CommonSpec.loadCommonSpec( d, c )
-        
+
         self._createTestExecList( perms )
         
         for xt in self.getTestExecList():
-          xt.init( test_dir, platform, xdb, config )
+            xt.init( test_dir, platform, xdb, config )
     
     def _createTestExecList(self, perms):
         """
@@ -400,22 +404,24 @@ class TestList:
         self.xtlist = {}
 
         xtD = {}
-        for t in self.active.values():
+        for t in self.tspecs.values():
 
-            assert t.constructionCompleted()
+            if not self.statushandler.skipTest( t ):
 
-            xt = TestExec.TestExec( self.statushandler, t, perms )
+                assert t.constructionCompleted()
 
-            if t.getAttr( 'hasdependent', False ):
-                xt.setHasDependent()
+                xt = TestExec.TestExec( self.statushandler, t, perms )
 
-            np = int( t.getParameters().get('np', 0) )
-            if np in self.xtlist:
-                self.xtlist[np].append(xt)
-            else:
-                self.xtlist[np] = [xt]
+                if t.getAttr( 'hasdependent', False ):
+                    xt.setHasDependent()
 
-            xtD[ t.getExecuteDirectory() ] = xt
+                np = int( t.getParameters().get('np', 0) )
+                if np in self.xtlist:
+                    self.xtlist[np].append(xt)
+                else:
+                    self.xtlist[np] = [xt]
+
+                xtD[ t.getExecuteDirectory() ] = xt
 
         # sort tests longest running first; 
         self.sortTestExecList()
@@ -551,7 +557,7 @@ class TestList:
         """
         Return the total number of active tests (the tests that are to be run).
         """
-        return len(self.active)
+        return self.numactive
 
     def numDone(self):
         """
@@ -607,19 +613,29 @@ def filter_by_cummulative_runtime( statushandler, activedict, rtsum ):
     i = 0 ; n = len(tL)
     while i < n:
         tm,xdir,t = tL[i]
-        tsum += tm
-        if tsum > rtsum:
-            break
+        if not statushandler.skipTest( t ):
+            tsum += tm
+            if tsum > rtsum:
+                statushandler.markSkip( t, 'cummulative runtime threshhold' )
+
+                # analyze_xdir = groups.getAnalyzeExecuteDirectory( t )
+                # if analyze_xdir:
+                #     analyze_tspec = activedict.get( analyze_xdir, None )
+                #     if analyze_tspec:
+                #         if not statushandler.skipTest( analyze_tspec ):
+                #             statushandler.markSkip( analyze_tspec,
+                #                     'filtered out due to child' )
+
         i += 1
 
     # put the rest of the tests in the remove dict
-    while i < n:
-        tm,xdir,t = tL[i]
-        rmD[xdir] = t
-        i += 1
-    tL = None
+    # while i < n:
+    #     tm,xdir,t = tL[i]
+    #     rmD[xdir] = t
+    #     i += 1
+    # tL = None
 
-    return rmD
+    # return rmD
 
 
 def is_subdir(parent_dir, subdir):
@@ -643,8 +659,9 @@ def check_make_directory_containing_file( filename ):
 
 class ParameterizeAnalyzeGroups:
 
-    def __init__(self):
+    def __init__(self, statushandler):
         ""
+        self.statushandler = statushandler
         self.groupmap = {}  # (test filepath, test name) -> list of TestSpec
 
     def getGroup(self, tspec):
@@ -678,16 +695,18 @@ class ParameterizeAnalyzeGroups:
 
         for xdir,t in tspecs.items():
 
-            # this key is common to each test in a parameterize/analyze
-            # test group (including the analyze test)
-            key = ( t.getFilepath(), t.getName() )
+            if not self.statushandler.skipTestByParameter(t):
 
-            L = self.groupmap.get( key, None )
-            if L == None:
-                L = []
-                self.groupmap[ key ] = L
+                # this key is common to each test in a parameterize/analyze
+                # test group (including the analyze test)
+                key = ( t.getFilepath(), t.getName() )
 
-            L.append( t )
+                L = self.groupmap.get( key, None )
+                if L == None:
+                    L = []
+                    self.groupmap[ key ] = L
+
+                L.append( t )
 
 
 def find_tests_by_execute_directory_match( xdir, pattern, xdir_list ):
@@ -776,50 +795,110 @@ def apply_permanent_filters( statushandler, tspec_map, groups, rtconfig ):
     ""
     filt = TestFilter( rtconfig, statushandler )
 
-    new_map = {}
-    rm_groups = []
-
+    # magic: "assert include_all" because batch should always be a restart
     include_all = rtconfig.getAttr( 'include_all', False )
 
     for xdir,tspec in tspec_map.items():
 
-        if tspec.isAnalyze():
-            # align the analyze parameter set with its parameterized tests
-            paramset = tspec.getParameterSet()
-            paramset.applyParamFilter( rtconfig.evaluate_parameters )
+#magic        statushandler.resetSkip( tspec )
 
-        if include_all:
-            new_map[ xdir ] = tspec
+        if not include_all:
 
-        elif filt.checkParameters( tspec ):
+            if not filt.checkParameters( tspec ):
+                statushandler.markSkipByParameter( tspec )
 
-            keep = ( filt.checkPlatform( tspec ) and \
-                     filt.checkOptions( tspec ) and \
-                     filt.checkKeywords( tspec, results_keywords=False ) and \
-                     filt.checkTDD( tspec ) and \
-                     filt.checkFileSearch( tspec ) and \
-                     filt.checkMaxProcessors( tspec ) and \
-                     filt.checkRuntime( tspec ) )
-
-            if keep:
-                new_map[ xdir ] = tspec
-            else:
-                analyze_xdir = groups.getAnalyzeExecuteDirectory( tspec )
-                if analyze_xdir:
-                    analyze_tspec = tspec_map.get( analyze_xdir, None )
-                    if analyze_tspec:
-                        rm_groups.append( analyze_tspec )
-
-    for analyze_tspec in rm_groups:
-        for tspec in groups.getGroup( analyze_tspec ):
-            new_map.pop( tspec.getExecuteDirectory(), None )
+            elif not ( filt.checkPlatform( tspec ) and \
+                       filt.checkOptions( tspec ) and \
+                       filt.checkKeywords( tspec, results_keywords=False ) and \
+                       filt.checkTDD( tspec ) and \
+                       filt.checkFileSearch( tspec ) and \
+                       filt.checkMaxProcessors( tspec ) and \
+                       filt.checkRuntime( tspec ) ):
+                statushandler.markSkip( tspec, 'filtered out' )
 
     rtsum = rtconfig.getAttr( 'runtime_sum', None )
     if not include_all and rtsum != None:
-        apply_cummulative_runtime_filter( statushandler, new_map, rtsum, groups )
+        filter_by_cummulative_runtime( statushandler, tspec_map, rtsum )
 
-    tspec_map.clear()
-    tspec_map.update( new_map )
+    # magic: TODO:
+    #   - move this rebuild to top of this function
+    #   - add access methods to the "groups" class that consider the skip
+    #     status of their children
+    #   - use case that will fail otherwise is:
+    #       - a bunch of analyze tests that take a considerable amount of time
+    #       - they are not excluded before the --tsum filter process
+    #       - they are excluded afterwards if all children are excluded by
+    #         parameter
+    #       - now the tests left to run will take significantly less time
+    #         than the --tmax value
+
+    groups.rebuild( tspec_map )
+
+    filter_analyze_tests( statushandler, groups )
+
+def filter_analyze_tests( statushandler, groups ):
+    ""
+    for key,tspecL in groups.groupmap.items():
+        analyze = None
+        skip_analyze = False
+        paramsets = []
+        for tspec in tspecL:
+            if tspec.isAnalyze():
+                analyze = tspec
+            elif statushandler.skipTestCausingAnalyzeSkip( tspec ):
+                skip_analyze = True
+            else:
+                paramsets.append( tspec.getParameters() )
+
+        if analyze != None:
+            if skip_analyze:
+                statushandler.markSkip( analyze, 'analyze dependency skipped' )
+            else:
+                def evalfunc( paramD ):
+                    for D in paramsets:
+                        if paramD == D:
+                            return True
+                    return False
+                pset = analyze.getParameterSet()
+                pset.applyParamFilter( evalfunc )
+
+
+    # for xdir,tspec in tspec_map.items():
+
+    #     if tspec.isAnalyze():
+    #         # align the analyze parameter set with its parameterized tests
+    #         paramset = tspec.getParameterSet()
+    #         paramset.applyParamFilter( rtconfig.evaluate_parameters )
+
+    #     if include_all:
+    #         pass
+
+    #     elif not filt.checkParameters( tspec ):
+    #         statushandler.markSkip( tspec, 'parameter expression' )
+
+    #     else:
+    #         keep = ( filt.checkPlatform( tspec ) and \
+    #                  filt.checkOptions( tspec ) and \
+    #                  filt.checkKeywords( tspec, results_keywords=False ) and \
+    #                  filt.checkTDD( tspec ) and \
+    #                  filt.checkFileSearch( tspec ) and \
+    #                  filt.checkMaxProcessors( tspec ) and \
+    #                  filt.checkRuntime( tspec ) )
+
+    #         if not keep:
+    #             statushandler.markSkip( tspec, 'filtered out' )
+
+    #             analyze_xdir = groups.getAnalyzeExecuteDirectory( tspec )
+    #             if analyze_xdir:
+    #                 analyze_tspec = tspec_map.get( analyze_xdir, None )
+    #                 if analyze_tspec:
+    #                     if not statushandler.skipTest( analyze_tspec ):
+    #                         statushandler.markSkip( analyze_tspec,
+    #                                 'filtered out due to child' )
+
+    # rtsum = rtconfig.getAttr( 'runtime_sum', None )
+    # if not include_all and rtsum != None:
+    #     apply_cummulative_runtime_filter( statushandler, tspec_map, rtsum, groups )
 
 
 def apply_runtime_filters( statushandler, tspec_map, rtconfig, subdir,
@@ -829,71 +908,75 @@ def apply_runtime_filters( statushandler, tspec_map, rtconfig, subdir,
 
     include_all = rtconfig.getAttr( 'include_all', False )
 
-    active = {}
-
     for xdir,tspec in tspec_map.items():
 
+        if not statushandler.skipTest( tspec ):
 
-        keep = True
+            keep = True
 
-        if not include_all:
+            if not include_all:
 
-            if subdir and subdir != xdir and not is_subdir( subdir, xdir ):
-                keep = False
+                if subdir and subdir != xdir and not is_subdir( subdir, xdir ):
+                    keep = False
+                    statushandler.markSkip( tspec, 'subdir' )
+
+                if keep and not \
+                        filt.checkKeywords( tspec, results_keywords=True ):
+                    keep = False
+                    statushandler.markSkip( tspec, 'results keyword expression' )
+
+                if keep and not filt.checkParameters( tspec ):
+                    keep = False
+                    statushandler.markSkip( tspec, 'restart parameter expression failed' )
+
+                if keep:
+                    keep = ( filt.checkPlatform( tspec ) and \
+                             filt.checkOptions( tspec ) and \
+                             filt.checkTDD( tspec ) and \
+                             filt.checkFileSearch( tspec ) and \
+                             filt.checkMaxProcessors( tspec ) and \
+                             filt.checkRuntime( tspec ) )
+                    if not keep:
+                        statushandler.markSkip( tspec, 'filter' )
+
+            if keep and not tspec.constructionCompleted():
+                # magic: this smells (use the 'status' field??)
+                # plus, how to avoid refresh just for vvtest -i ??
+                refreshTest( tspec, rtconfig )
 
             if keep:
-                keep = ( filt.checkPlatform( tspec ) and \
-                         filt.checkOptions( tspec ) and \
-                         filt.checkKeywords( tspec, results_keywords=True ) and \
-                         filt.checkTDD( tspec ) and \
-                         filt.checkFileSearch( tspec ) and \
-                         filt.checkParameters( tspec ) and \
-                         filt.checkMaxProcessors( tspec ) and \
-                         filt.checkRuntime( tspec ) )
-
-        if keep and not tspec.constructionCompleted():
-            # magic: this smells (use the 'status' field??)
-            # plus, how to avoid refresh just for vvtest -i ??
-            refreshTest( tspec, rtconfig )
-
-        if keep:
-            # magic: an ugly thing here is the baseline script is only loaded
-            #        after a refresh, so this test has to be after
-            if baseline and not tspec.hasBaseline():
-                keep = False
-
-        if keep:
-            active[ xdir ] = tspec
+                # magic: an ugly thing here is the baseline script is only loaded
+                #        after a refresh, so this test has to be after
+                if baseline and not tspec.hasBaseline():
+                    statushandler.markSkip( tspec, 'no baseline handling' )
 
     rtsum = rtconfig.getAttr( 'runtime_sum', None )
     if not include_all and rtsum != None:
-        apply_cummulative_runtime_filter( statushandler, active, rtsum )
+        filter_by_cummulative_runtime( statushandler, tspec_map, rtsum )
 
-    return active
+    # magic: turning this on causes failures because results_keywords=True
+    #        causes analyze tests to be skipped (params, analyze_filtering)
+    if not baseline:
+        groups = ParameterizeAnalyzeGroups( statushandler )
+        groups.rebuild( tspec_map )
+        filter_analyze_tests( statushandler, groups )
+
+# def apply_cummulative_runtime_filter( statushandler, active, rtsum, groups=None ):
+#     ""
+#     if groups == None:
+#         groups = ParameterizeAnalyzeGroups( statushandler )
+#         groups.rebuild( active )
+
+#     filter_by_cummulative_runtime( statushandler, active, rtsum, groups )
 
 
-def apply_cummulative_runtime_filter( statushandler, active, rtsum, groups=None ):
+def count_active( statushandler, tspec_map ):
     ""
-    if groups == None:
-        groups = ParameterizeAnalyzeGroups()
-        groups.rebuild( active )
-
-    rmD = filter_by_cummulative_runtime( statushandler, active, rtsum )
-
-    rm_groups = []
-    for xdir,tspec in rmD.items():
-
-        analyze_xdir = groups.getAnalyzeExecuteDirectory( tspec )
-        if analyze_xdir:
-            analyze_tspec = active.get( analyze_xdir, None )
-            if analyze_tspec:
-                rm_groups.append( analyze_tspec )
-
-        active.pop( xdir, None )
-
-    for analyze_tspec in rm_groups:
-        for tspec in groups.getGroup( analyze_tspec ):
-            active.pop( tspec.getExecuteDirectory(), None )
+    cnt = 0
+    for tspec in tspec_map.values():
+        if not statushandler.skipTest( tspec ):
+            cnt += 1
+    return cnt
 
 
 def refreshTest( testobj, rtconfig ):
@@ -956,7 +1039,11 @@ class TestFilter:
 
     def checkParameters(self, tspec):
         ""
-        ok = self.rtconfig.evaluate_parameters( tspec.getParameters() )
+        if tspec.isAnalyze():
+            # analyze tests are not excluded by parameter expressions
+            ok = True
+        else:
+            ok = self.rtconfig.evaluate_parameters( tspec.getParameters() )
         return ok
 
     def checkFileSearch(self, tspec):
