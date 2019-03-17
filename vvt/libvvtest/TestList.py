@@ -228,6 +228,12 @@ class TestList:
                                              self.rtconfig, subdir,
                                              analyze_only, baseline )
 
+        refresh_active_tests( self.statushandler, self.tspecs, self.rtconfig )
+
+        if baseline:
+            # baseline marking must come after TestSpecs are refreshed
+            mark_skips_for_baselining( self.statushandler, self.tspecs )
+
         self.groups.rebuild( self.tspecs )
         self.numactive = count_active( self.statushandler, self.tspecs )
 
@@ -673,6 +679,7 @@ class ParameterizeAnalyzeGroups:
 
         for xdir,t in tspecs.items():
 
+
             if not self.statushandler.skipTestByParameter(t):
 
                 # this key is common to each test in a parameterize/analyze
@@ -844,17 +851,6 @@ def apply_runtime_filters( statushandler, tspec_map, rtconfig, subdir,
                     if not keep:
                         statushandler.markSkip( tspec, 'filter' )
 
-            if keep and not tspec.constructionCompleted():
-                # magic: this smells (use the 'status' field??)
-                # plus, how to avoid refresh just for vvtest -i ??
-                refreshTest( tspec, rtconfig )
-
-            if keep:
-                # magic: an ugly thing here is the baseline script is only loaded
-                #        after a refresh, so this test has to be after
-                if baseline and not tspec.hasBaseline():
-                    statushandler.markSkip( tspec, 'no baseline handling' )
-
     if not baseline:
 
         if not include_all:
@@ -862,7 +858,16 @@ def apply_runtime_filters( statushandler, tspec_map, rtconfig, subdir,
 
         groups = ParameterizeAnalyzeGroups( statushandler )
         groups.rebuild( tspec_map )
+
         filter_analyze_tests( statushandler, groups )
+
+
+def mark_skips_for_baselining( statushandler, tspec_map ):
+    ""
+    for xdir,tspec in tspec_map.items():
+        if not statushandler.skipTest( tspec ):
+            if not tspec.hasBaseline():
+                statushandler.markSkip( tspec, 'no baseline handling' )
 
 
 def filter_analyze_tests( statushandler, groups ):
@@ -899,6 +904,14 @@ def count_active( statushandler, tspec_map ):
         if not statushandler.skipTest( tspec ):
             cnt += 1
     return cnt
+
+
+def refresh_active_tests( statushandler, tspec_map, rtconfig ):
+    ""
+    for xdir,tspec in tspec_map.items():
+        if not statushandler.skipTest( tspec ):
+            if not tspec.constructionCompleted():
+                refreshTest( tspec, rtconfig )
 
 
 def refreshTest( testobj, rtconfig ):

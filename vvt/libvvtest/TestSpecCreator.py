@@ -205,7 +205,6 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
 
         analyze_spec = parseAnalyze_scr( t, vspecs, evaluator )
 
-
         if analyze_spec:
 
             if numparams == 0:
@@ -253,17 +252,8 @@ def reparse_test_object( testobj, evaluator ):
 
         parse_include_platform( testobj, filedoc )
 
-        analyze_spec = parseAnalyze( testobj, filedoc, evaluator )
-
-        if analyze_spec and len( testobj.getParameters() ) == 0:
-
-            paramset = parseTestParameters( filedoc, tname, evaluator, None )
-
-            if len( paramset.getParameters() ) == 0:
-                raise TestSpecError( 'an analyze requires at least one ' + \
-                               'parameter to be defined' )
-
-            testobj.setParameterSet( paramset )
+        if testobj.isAnalyze():
+            analyze_spec = parseAnalyze( testobj, filedoc, evaluator )
             testobj.setAnalyzeScript( analyze_spec )
 
         parseKeywords    ( testobj, filedoc, tname )
@@ -283,18 +273,8 @@ def reparse_test_object( testobj, evaluator ):
 
         parse_enable_platform( testobj, vspecs )
 
-        analyze_spec = parseAnalyze_scr( testobj, vspecs, evaluator )
-
-        if analyze_spec and len( testobj.getParameters() ) == 0:
-
-            paramset = parseTestParameters_scr( vspecs, tname, evaluator, None )
-
-            if len( paramset.getParameters() ) == 0:
-                raise TestSpecError( 'an analyze requires at least one ' + \
-                               'parameter to be defined' )
-
-            testobj.setParameterSet( paramset )
-
+        if testobj.isAnalyze():
+            analyze_spec = parseAnalyze_scr( testobj, vspecs, evaluator )
             testobj.setAnalyzeScript( analyze_spec )
             if not analyze_spec.startswith('-'):
                 testobj.addLinkFile( analyze_spec )

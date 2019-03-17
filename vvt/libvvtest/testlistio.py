@@ -293,7 +293,7 @@ def test_to_string( tspec ):
     testdict['keywords'] = tspec.getKeywords()
 
     if tspec.isAnalyze():
-        testdict['isanalyze'] = True
+        testdict['paramset'] = tspec.getParameterSet().getParameters()
     else:
         testdict['params'] = tspec.getParameters()
 
@@ -317,8 +317,11 @@ def string_to_test( strid ):
 
     tspec = TestSpec.TestSpec( name, root, path )
 
-    if testdict.get( 'isanalyze', False ):
-        tspec.setParameterSet( ParameterSet() )
+    if 'paramset' in testdict:
+        pset = ParameterSet()
+        for T,L in testdict['paramset'].items():
+            pset.addParameterGroup( T, L )
+        tspec.setParameterSet( pset )
     else:
         tspec.setParameters( testdict['params'] )
 
