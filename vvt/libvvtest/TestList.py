@@ -40,7 +40,7 @@ class TestList:
         self.datestamp = None
         self.finish = None
 
-        self.groups = ParameterizeAnalyzeGroups( self.statushandler )
+        self.groups = None  # a ParameterizeAnalyzeGroups class instance
 
         self.tspecs = {}  # TestSpec xdir -> TestSpec object
 
@@ -206,8 +206,7 @@ class TestList:
 
     def applyPermanentFilters(self):
         ""
-        # magic: this smells (when should groups get rebuilt??)
-        self.groups.rebuild( self.tspecs )
+        self._check_create_parameterize_analyze_group_map()
 
         apply_permanent_filters( self.statushandler, self.tspecs,
                                  self.groups, self.rtconfig )
@@ -218,15 +217,16 @@ class TestList:
                                    analyze_only=False,
                                    baseline=False):
         ""
+        self._check_create_parameterize_analyze_group_map()
+
         subdir = None
         if filter_dir != None:
             subdir = os.path.normpath( filter_dir )
             if subdir == '' or subdir == '.':
                 subdir = None
 
-        apply_runtime_filters( self.statushandler, self.tspecs,
-                                             self.rtconfig, subdir,
-                                             analyze_only, baseline )
+        apply_runtime_filters( self.statushandler, self.tspecs, self.groups,
+                               self.rtconfig, subdir, baseline )
 
         refresh_active_tests( self.statushandler, self.tspecs, self.rtconfig )
 
@@ -234,7 +234,6 @@ class TestList:
             # baseline marking must come after TestSpecs are refreshed
             mark_skips_for_baselining( self.statushandler, self.tspecs )
 
-        self.groups.rebuild( self.tspecs )
         self.numactive = count_active( self.statushandler, self.tspecs )
 
     def markTestsWithDependents(self):
@@ -397,7 +396,13 @@ class TestList:
         
         for xt in self.getTestExecList():
             xt.init( test_dir, platform, xdb, config )
-    
+
+    def _check_create_parameterize_analyze_group_map(self):
+        ""
+        if self.groups == None:
+            self.groups = ParameterizeAnalyzeGroups( self.statushandler )
+            self.groups.rebuild( self.tspecs )
+
     def _createTestExecList(self, perms):
         """
         """
@@ -434,17 +439,18 @@ class TestList:
         add dependencies of analyze tests to TestExec objects
         """
         for xt in self.getTestExecList():
-            analyze_xdir = self.groups.getAnalyzeExecuteDirectory( xt.atest )
-            if analyze_xdir != None:
-                # this test has an analyze dependent
-                analyze_xt = xdir2testexec.get( analyze_xdir, None )
-                if analyze_xt != None:
-                    connect_dependency( analyze_xt, xt )
-            elif xt.atest.isAnalyze():
+            if xt.atest.isAnalyze():
                 grpL = self.groups.getGroup( xt.atest )
                 for gt in grpL:
                     if not gt.isAnalyze():
                         connect_dependency( xt, gt )
+            else:
+                analyze_xdir = self.groups.getAnalyzeExecuteDirectory( xt.atest )
+                if analyze_xdir != None:
+                    # this test has an analyze dependent
+                    analyze_xt = xdir2testexec.get( analyze_xdir, None )
+                    if analyze_xt != None:
+                        connect_dependency( analyze_xt, xt )
 
     def _add_general_dependencies(self, xdir2testexec):
         """
@@ -651,24 +657,19 @@ class ParameterizeAnalyzeGroups:
     def getGroup(self, tspec):
         ""
         key = ( tspec.getFilepath(), tspec.getName() )
-        return self.groupmap[key]
-
-    def getAnalyzeGroup(self, tspec, *default):
-        ""
-        grpL = self.getGroup( tspec )
-
-        for t in grpL:
-            if t.isAnalyze():
-                return grpL
-
-        return default[0]
+        tL = []
+        for tspec in self.groupmap[key]:
+            if not self.statushandler.skipTestByParameter( tspec ):
+                tL.append( tspec )
+        return tL
 
     def getAnalyzeExecuteDirectory(self, tspec):
         ""
-        grpL = self.getGroup( tspec )
+        key = ( tspec.getFilepath(), tspec.getName() )
+        grpL = self.groupmap[key]
 
         for t in grpL:
-            if t != tspec and t.isAnalyze():
+            if t.isAnalyze():
                 return t.getExecuteDirectory()
 
         return None
@@ -679,19 +680,33 @@ class ParameterizeAnalyzeGroups:
 
         for xdir,t in tspecs.items():
 
+            # this key is common to each test in a parameterize/analyze
+            # test group (including the analyze test)
+            key = ( t.getFilepath(), t.getName() )
 
-            if not self.statushandler.skipTestByParameter(t):
+            L = self.groupmap.get( key, None )
+            if L == None:
+                L = []
+                self.groupmap[ key ] = L
 
-                # this key is common to each test in a parameterize/analyze
-                # test group (including the analyze test)
-                key = ( t.getFilepath(), t.getName() )
+            L.append( t )
 
-                L = self.groupmap.get( key, None )
-                if L == None:
-                    L = []
-                    self.groupmap[ key ] = L
+    def iterateGroups(self):
+        ""
+        for key,tspecL in self.groupmap.items():
 
-                L.append( t )
+            analyze = None
+            tL = []
+
+            for tspec in tspecL:
+
+                if tspec.isAnalyze():
+                    analyze = tspec
+                elif not self.statushandler.skipTestByParameter( tspec ):
+                    tL.append( tspec )
+
+            if analyze != None:
+                yield ( analyze, tL )
 
 
 def find_tests_by_execute_directory_match( xdir, pattern, xdir_list ):
@@ -794,12 +809,14 @@ def apply_permanent_filters( statushandler, tspec_map, groups, rtconfig ):
                    filt.checkRuntime( tspec ) ):
             statushandler.markSkip( tspec, 'filtered out' )
 
+    # magic: TODO: add skip analyze logic to this function (see comment below)
     filter_by_cummulative_runtime( statushandler, rtconfig, tspec_map )
 
     # magic: TODO:
     #   - move this rebuild to top of this function
     #   - add access methods to the "groups" class that consider the skip
-    #     status of their children
+    #     status of their children (which allows the tsum filter to exclude
+    #     parents)
     #   - use case that will fail otherwise is:
     #       - a bunch of analyze tests that take a considerable amount of time
     #       - they are not excluded before the --tsum filter process
@@ -808,25 +825,23 @@ def apply_permanent_filters( statushandler, tspec_map, groups, rtconfig ):
     #       - now the tests left to run will take significantly less time
     #         than the --tmax value
 
-    groups.rebuild( tspec_map )
-
     filter_analyze_tests( statushandler, groups )
 
 
-def apply_runtime_filters( statushandler, tspec_map, rtconfig, subdir,
-                           analyze_only, baseline ):
+def apply_runtime_filters( statushandler, tspec_map, groups,
+                           rtconfig, subdir, baseline ):
     ""
     filt = TestFilter( rtconfig, statushandler )
 
     include_all = rtconfig.getAttr( 'include_all', False )
 
-    for xdir,tspec in tspec_map.items():
+    if not include_all:
 
-        if not statushandler.skipTest( tspec ):
+        for xdir,tspec in tspec_map.items():
 
-            keep = True
+            if not statushandler.skipTest( tspec ):
 
-            if not include_all:
+                keep = True
 
                 if subdir and subdir != xdir and not is_subdir( subdir, xdir ):
                     keep = False
@@ -856,9 +871,6 @@ def apply_runtime_filters( statushandler, tspec_map, rtconfig, subdir,
         if not include_all:
             filter_by_cummulative_runtime( statushandler, rtconfig, tspec_map )
 
-        groups = ParameterizeAnalyzeGroups( statushandler )
-        groups.rebuild( tspec_map )
-
         filter_analyze_tests( statushandler, groups )
 
 
@@ -870,31 +882,30 @@ def mark_skips_for_baselining( statushandler, tspec_map ):
                 statushandler.markSkip( tspec, 'no baseline handling' )
 
 
+# magic: rename this function; it also sets the parameter sets on analyze tests
 def filter_analyze_tests( statushandler, groups ):
     ""
-    for key,tspecL in groups.groupmap.items():
-        analyze = None
+    for analyze, tspecL in groups.iterateGroups():
+
         skip_analyze = False
         paramsets = []
+
         for tspec in tspecL:
-            if tspec.isAnalyze():
-                analyze = tspec
-            elif statushandler.skipTestCausingAnalyzeSkip( tspec ):
+            if statushandler.skipTestCausingAnalyzeSkip( tspec ):
                 skip_analyze = True
             else:
                 paramsets.append( tspec.getParameters() )
 
-        if analyze != None:
-            if skip_analyze:
-                statushandler.markSkip( analyze, 'analyze dependency skipped' )
-            else:
-                def evalfunc( paramD ):
-                    for D in paramsets:
-                        if paramD == D:
-                            return True
-                    return False
-                pset = analyze.getParameterSet()
-                pset.applyParamFilter( evalfunc )
+        if skip_analyze:
+            statushandler.markSkip( analyze, 'analyze dependency test skipped' )
+        else:
+            def evalfunc( paramD ):
+                for D in paramsets:
+                    if paramD == D:
+                        return True
+                return False
+            pset = analyze.getParameterSet()
+            pset.applyParamFilter( evalfunc )
 
 
 def count_active( statushandler, tspec_map ):
