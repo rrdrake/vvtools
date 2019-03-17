@@ -50,6 +50,8 @@ class TestList:
         
         self.rtconfig = runtime_config
 
+        self.testfilter = TestFilter( self.rtconfig, self.statushandler )
+
     def setResultsSuffix(self, suffix=None):
         ""
         if suffix:
@@ -208,8 +210,9 @@ class TestList:
         ""
         self._check_create_parameterize_analyze_group_map()
 
-        apply_permanent_filters( self.statushandler, self.tspecs,
-                                 self.groups, self.rtconfig )
+        self.testfilter.applyPermanent( self.tspecs )
+
+        finalize_analyze_tests( self.statushandler, self.groups )
 
         self.numactive = count_active( self.statushandler, self.tspecs )
 
@@ -219,14 +222,10 @@ class TestList:
         ""
         self._check_create_parameterize_analyze_group_map()
 
-        subdir = None
-        if filter_dir != None:
-            subdir = os.path.normpath( filter_dir )
-            if subdir == '' or subdir == '.':
-                subdir = None
+        self.testfilter.applyRuntime( self.tspecs, filter_dir )
 
-        apply_runtime_filters( self.statushandler, self.tspecs, self.groups,
-                               self.rtconfig, subdir, baseline )
+        if not baseline:
+            finalize_analyze_tests( self.statushandler, self.groups )
 
         refresh_active_tests( self.statushandler, self.tspecs, self.rtconfig )
 
@@ -791,89 +790,6 @@ def createTestObjects( rootpath, relpath, force_params, rtconfig ):
     return tests
 
 
-def apply_permanent_filters( statushandler, tspec_map, groups, rtconfig ):
-    ""
-    filt = TestFilter( rtconfig, statushandler )
-
-    for xdir,tspec in tspec_map.items():
-
-        if not filt.checkParameters( tspec ):
-            statushandler.markSkipByParameter( tspec )
-
-        elif not ( filt.checkPlatform( tspec ) and \
-                   filt.checkOptions( tspec ) and \
-                   filt.checkKeywords( tspec, results_keywords=False ) and \
-                   filt.checkTDD( tspec ) and \
-                   filt.checkFileSearch( tspec ) and \
-                   filt.checkMaxProcessors( tspec ) and \
-                   filt.checkRuntime( tspec ) ):
-            statushandler.markSkip( tspec, 'filtered out' )
-
-    # magic: TODO: add skip analyze logic to this function (see comment below)
-    filter_by_cummulative_runtime( statushandler, rtconfig, tspec_map )
-
-    # magic: TODO:
-    #   - move this rebuild to top of this function
-    #   - add access methods to the "groups" class that consider the skip
-    #     status of their children (which allows the tsum filter to exclude
-    #     parents)
-    #   - use case that will fail otherwise is:
-    #       - a bunch of analyze tests that take a considerable amount of time
-    #       - they are not excluded before the --tsum filter process
-    #       - they are excluded afterwards if all children are excluded by
-    #         parameter
-    #       - now the tests left to run will take significantly less time
-    #         than the --tmax value
-
-    filter_analyze_tests( statushandler, groups )
-
-
-def apply_runtime_filters( statushandler, tspec_map, groups,
-                           rtconfig, subdir, baseline ):
-    ""
-    filt = TestFilter( rtconfig, statushandler )
-
-    include_all = rtconfig.getAttr( 'include_all', False )
-
-    if not include_all:
-
-        for xdir,tspec in tspec_map.items():
-
-            if not statushandler.skipTest( tspec ):
-
-                keep = True
-
-                if subdir and subdir != xdir and not is_subdir( subdir, xdir ):
-                    keep = False
-                    statushandler.markSkip( tspec, 'subdir' )
-
-                if keep and not \
-                        filt.checkKeywords( tspec, results_keywords=True ):
-                    keep = False
-                    statushandler.markSkip( tspec, 'results keyword expression' )
-
-                if keep and not filt.checkParameters( tspec ):
-                    keep = False
-                    statushandler.markSkip( tspec, 'restart parameter expression failed' )
-
-                if keep:
-                    keep = ( filt.checkPlatform( tspec ) and \
-                             filt.checkOptions( tspec ) and \
-                             filt.checkTDD( tspec ) and \
-                             filt.checkFileSearch( tspec ) and \
-                             filt.checkMaxProcessors( tspec ) and \
-                             filt.checkRuntime( tspec ) )
-                    if not keep:
-                        statushandler.markSkip( tspec, 'filter' )
-
-    if not baseline:
-
-        if not include_all:
-            filter_by_cummulative_runtime( statushandler, rtconfig, tspec_map )
-
-        filter_analyze_tests( statushandler, groups )
-
-
 def mark_skips_for_baselining( statushandler, tspec_map ):
     ""
     for xdir,tspec in tspec_map.items():
@@ -882,8 +798,7 @@ def mark_skips_for_baselining( statushandler, tspec_map ):
                 statushandler.markSkip( tspec, 'no baseline handling' )
 
 
-# magic: rename this function; it also sets the parameter sets on analyze tests
-def filter_analyze_tests( statushandler, groups ):
+def finalize_analyze_tests( statushandler, groups ):
     ""
     for analyze, tspecL in groups.iterateGroups():
 
@@ -918,14 +833,6 @@ def count_active( statushandler, tspec_map ):
 
 
 def refresh_active_tests( statushandler, tspec_map, rtconfig ):
-    ""
-    for xdir,tspec in tspec_map.items():
-        if not statushandler.skipTest( tspec ):
-            if not tspec.constructionCompleted():
-                refreshTest( tspec, rtconfig )
-
-
-def refreshTest( testobj, rtconfig ):
     """
     Parses the test source file and resets the settings for the given test.
     The test name is not changed.  The parameters in the test XML file are
@@ -937,7 +844,10 @@ def refreshTest( testobj, rtconfig ):
     evaluator = TestSpecCreator.ExpressionEvaluator( rtconfig.platformName(),
                                                      rtconfig.getOptionList() )
 
-    TestSpecCreator.reparse_test_object( testobj, evaluator )
+    for xdir,tspec in tspec_map.items():
+        if not statushandler.skipTest( tspec ):
+            if not tspec.constructionCompleted():
+                TestSpecCreator.reparse_test_object( tspec, evaluator )
 
 
 class TestFilter:
@@ -1001,6 +911,85 @@ class TestFilter:
         if tm != None and not self.rtconfig.evaluate_runtime( tm ):
             return False
         return True
+
+    def applyPermanent(self, tspec_map):
+        ""
+        for xdir,tspec in tspec_map.items():
+
+            if not self.checkParameters( tspec ):
+                self.statushandler.markSkipByParameter( tspec )
+
+            elif not ( self.checkPlatform( tspec ) and \
+                       self.checkOptions( tspec ) and \
+                       self.checkKeywords( tspec, results_keywords=False ) and \
+                       self.checkTDD( tspec ) and \
+                       self.checkFileSearch( tspec ) and \
+                       self.checkMaxProcessors( tspec ) and \
+                       self.checkRuntime( tspec ) ):
+                self.statushandler.markSkip( tspec, 'filtered out' )
+
+        # magic: TODO: add skip analyze logic to this function (see comment below)
+        filter_by_cummulative_runtime( self.statushandler, self.rtconfig, tspec_map )
+
+        # magic:
+        #   - use case that will fail is:
+        #       - a bunch of analyze tests that take a considerable amount of time
+        #       - they are not excluded before the --tsum filter process
+        #       - they are excluded afterwards if all children are excluded by
+        #         parameter
+        #       - now the tests left to run will take significantly less time
+        #         than the --tmax value
+
+    def applyRuntime(self, tspec_map, filter_dir):
+        ""
+        include_all = self.rtconfig.getAttr( 'include_all', False )
+
+        if not include_all:
+
+            subdir = clean_up_filter_directory( filter_dir )
+
+            for xdir,tspec in tspec_map.items():
+
+                if not self.statushandler.skipTest( tspec ):
+
+                    keep = True
+
+                    if subdir and subdir != xdir and not is_subdir( subdir, xdir ):
+                        keep = False
+                        self.statushandler.markSkip( tspec, 'subdir' )
+
+                    if keep and not \
+                            self.checkKeywords( tspec, results_keywords=True ):
+                        keep = False
+                        self.statushandler.markSkip( tspec, 'results keyword expression' )
+
+                    if keep and not self.checkParameters( tspec ):
+                        keep = False
+                        self.statushandler.markSkip( tspec, 'restart parameter expression failed' )
+
+                    if keep:
+                        keep = ( self.checkPlatform( tspec ) and \
+                                 self.checkOptions( tspec ) and \
+                                 self.checkTDD( tspec ) and \
+                                 self.checkFileSearch( tspec ) and \
+                                 self.checkMaxProcessors( tspec ) and \
+                                 self.checkRuntime( tspec ) )
+                        if not keep:
+                            self.statushandler.markSkip( tspec, 'filter' )
+
+            filter_by_cummulative_runtime( self.statushandler, self.rtconfig, tspec_map )
+
+
+def clean_up_filter_directory( filter_dir ):
+    ""
+    subdir = None
+
+    if filter_dir != None:
+        subdir = os.path.normpath( filter_dir )
+        if subdir == '' or subdir == '.':
+            subdir = None
+
+    return subdir
 
 
 class PlatformEvaluator:

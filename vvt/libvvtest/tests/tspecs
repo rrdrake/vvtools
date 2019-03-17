@@ -18,10 +18,11 @@ import testutils as util
 from testutils import print3
 
 import libvvtest.TestSpec as TestSpec
-from libvvtest.TestList import createTestObjects, refreshTest, PlatformEvaluator
+from libvvtest.TestList import createTestObjects, PlatformEvaluator
 from libvvtest.TestSpecError import TestSpecError
 import libvvtest.FilterExpressions as FilterExpressions
 from libvvtest.RuntimeConfig import RuntimeConfig
+import libvvtest.TestSpecCreator as TestSpecCreator
 
 
 class XML_ElementTree_tests( vtu.vvtestTestCase ):
@@ -1109,7 +1110,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize np="1"/>
             </rtest>""" )
 
-        refreshTest( tL[0], RuntimeConfig() )
+        reparse_test( tL[0], RuntimeConfig() )
 
         util.writefile( 'bad27.xml', """
             <rtest name="atest">
@@ -1123,7 +1124,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize np="4"/>
             </rtest>""" )
 
-        refreshTest( tL[0], RuntimeConfig() )
+        reparse_test( tL[0], RuntimeConfig() )
 
         util.writefile( 'bad28.xml', """
             <rtest name="atest">
@@ -1139,7 +1140,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         for t in tL:
-          refreshTest( t, RuntimeConfig() )
+          reparse_test( t, RuntimeConfig() )
 
         util.writefile( 'bad29.xml', """
             <rtest name="atest">
@@ -1154,7 +1155,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         for t in tL:
-          refreshTest( t, RuntimeConfig() )
+          reparse_test( t, RuntimeConfig() )
 
         util.writefile( 'bad30.xml', """
             <rtest name="atest">
@@ -1169,7 +1170,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         for t in tL:
-          try: refreshTest( t, RuntimeConfig() )
+          try: reparse_test( t, RuntimeConfig() )
           except TestSpecError: print3( sys.exc_info()[1] )
           else: raise Exception( "expected a TestSpecError exception" )
 
@@ -1221,7 +1222,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
         uf = RuntimeConfig( platform_name='Linux' )
         tL = createTestObjects( '.', 'ok34.xml', None, uf )
         for t in tL:
-          refreshTest( t, uf )
+          reparse_test( t, uf )
           print3( t )
           kL = t.getKeywords()
           kL.sort()
@@ -1472,6 +1473,14 @@ class XML_test_specifications( vtu.vvtestTestCase ):
 
 
 #####################################################################
+
+def reparse_test( testobj, rtconfig ):
+    ""
+    evaluator = TestSpecCreator.ExpressionEvaluator( rtconfig.platformName(),
+                                                     rtconfig.getOptionList() )
+
+    TestSpecCreator.reparse_test_object( testobj, evaluator )
+
 
 def paramGather(testL):
     """
