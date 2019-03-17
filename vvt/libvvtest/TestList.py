@@ -361,8 +361,8 @@ class TestList:
         assert relfile
 
         try:
-          testL = createTestObjects(
-                        basepath, relfile, force_params, self.rtconfig )
+          testL = createTestObjects( basepath, relfile,
+                                     force_params, self.rtconfig )
         except TestSpecError:
           print3( "*** skipping file " + os.path.join( basepath, relfile ) + \
                   ": " + str( sys.exc_info()[1] ) )
@@ -379,7 +379,7 @@ class TestList:
 
     def addTest(self, t):
         """
-        Add a test to the test spec list.  Will overwrite an existing test.
+        Add a test to the TestSpec list.  Will overwrite an existing test.
         """
         self.tspecs[ t.getExecuteDirectory() ] = t
     
@@ -599,32 +599,6 @@ class TestList:
         del L[i]
         if len(L) == 0:
             self.xtlist.pop( np )
-
-
-def filter_by_cummulative_runtime( statushandler, rtconfig, tspec_map ):
-    ""
-    rtsum = rtconfig.getAttr( 'runtime_sum', None )
-    if rtsum != None:
-
-        # first, generate list with times
-        tL = []
-        for xdir,t in tspec_map.items():
-            tm = statushandler.getRuntime( t, None )
-            if tm == None: tm = 0
-            tL.append( (tm,xdir,t) )
-        tL.sort()
-
-        # accumulate tests until allowed runtime is exceeded
-        tsum = 0.
-        i = 0 ; n = len(tL)
-        while i < n:
-            tm,xdir,t = tL[i]
-            if not statushandler.skipTest( t ):
-                tsum += tm
-                if tsum > rtsum:
-                    statushandler.markSkip( t, 'cummulative runtime threshhold' )
-
-            i += 1
 
 
 def is_subdir(parent_dir, subdir):
@@ -929,7 +903,7 @@ class TestFilter:
                 self.statushandler.markSkip( tspec, 'filtered out' )
 
         # magic: TODO: add skip analyze logic to this function (see comment below)
-        filter_by_cummulative_runtime( self.statushandler, self.rtconfig, tspec_map )
+        self.filterByCummulativeRuntime( tspec_map )
 
         # magic:
         #   - use case that will fail is:
@@ -977,7 +951,32 @@ class TestFilter:
                         if not keep:
                             self.statushandler.markSkip( tspec, 'filter' )
 
-            filter_by_cummulative_runtime( self.statushandler, self.rtconfig, tspec_map )
+            self.filterByCummulativeRuntime( tspec_map )
+
+    def filterByCummulativeRuntime(self, tspec_map):
+        ""
+        rtsum = self.rtconfig.getAttr( 'runtime_sum', None )
+        if rtsum != None:
+
+            # first, generate list with times
+            tL = []
+            for xdir,t in tspec_map.items():
+                tm = self.statushandler.getRuntime( t, None )
+                if tm == None: tm = 0
+                tL.append( (tm,xdir,t) )
+            tL.sort()
+
+            # accumulate tests until allowed runtime is exceeded
+            tsum = 0.
+            i = 0 ; n = len(tL)
+            while i < n:
+                tm,xdir,t = tL[i]
+                if not self.statushandler.skipTest( t ):
+                    tsum += tm
+                    if tsum > rtsum:
+                        self.statushandler.markSkip( t, 'cummulative runtime threshhold' )
+
+                i += 1
 
 
 def clean_up_filter_directory( filter_dir ):
