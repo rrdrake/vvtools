@@ -590,29 +590,30 @@ class TestList:
             self.xtlist.pop( np )
 
 
-def filter_by_cummulative_runtime( statushandler, tspec_map, rtsum ):
+def filter_by_cummulative_runtime( statushandler, rtconfig, tspec_map ):
     ""
-    rmD = {}
+    rtsum = rtconfig.getAttr( 'runtime_sum', None )
+    if rtsum != None:
 
-    # first, generate list with times
-    tL = []
-    for xdir,t in tspec_map.items():
-        tm = statushandler.getRuntime( t, None )
-        if tm == None: tm = 0
-        tL.append( (tm,xdir,t) )
-    tL.sort()
+        # first, generate list with times
+        tL = []
+        for xdir,t in tspec_map.items():
+            tm = statushandler.getRuntime( t, None )
+            if tm == None: tm = 0
+            tL.append( (tm,xdir,t) )
+        tL.sort()
 
-    # accumulate tests until allowed runtime is exceeded
-    tsum = 0.
-    i = 0 ; n = len(tL)
-    while i < n:
-        tm,xdir,t = tL[i]
-        if not statushandler.skipTest( t ):
-            tsum += tm
-            if tsum > rtsum:
-                statushandler.markSkip( t, 'cummulative runtime threshhold' )
+        # accumulate tests until allowed runtime is exceeded
+        tsum = 0.
+        i = 0 ; n = len(tL)
+        while i < n:
+            tm,xdir,t = tL[i]
+            if not statushandler.skipTest( t ):
+                tsum += tm
+                if tsum > rtsum:
+                    statushandler.markSkip( t, 'cummulative runtime threshhold' )
 
-        i += 1
+            i += 1
 
 
 def is_subdir(parent_dir, subdir):
@@ -786,9 +787,7 @@ def apply_permanent_filters( statushandler, tspec_map, groups, rtconfig ):
                    filt.checkRuntime( tspec ) ):
             statushandler.markSkip( tspec, 'filtered out' )
 
-    rtsum = rtconfig.getAttr( 'runtime_sum', None )
-    if rtsum != None:
-        filter_by_cummulative_runtime( statushandler, tspec_map, rtsum )
+    filter_by_cummulative_runtime( statushandler, rtconfig, tspec_map )
 
     # magic: TODO:
     #   - move this rebuild to top of this function
@@ -805,33 +804,6 @@ def apply_permanent_filters( statushandler, tspec_map, groups, rtconfig ):
     groups.rebuild( tspec_map )
 
     filter_analyze_tests( statushandler, groups )
-
-
-def filter_analyze_tests( statushandler, groups ):
-    ""
-    for key,tspecL in groups.groupmap.items():
-        analyze = None
-        skip_analyze = False
-        paramsets = []
-        for tspec in tspecL:
-            if tspec.isAnalyze():
-                analyze = tspec
-            elif statushandler.skipTestCausingAnalyzeSkip( tspec ):
-                skip_analyze = True
-            else:
-                paramsets.append( tspec.getParameters() )
-
-        if analyze != None:
-            if skip_analyze:
-                statushandler.markSkip( analyze, 'analyze dependency skipped' )
-            else:
-                def evalfunc( paramD ):
-                    for D in paramsets:
-                        if paramD == D:
-                            return True
-                    return False
-                pset = analyze.getParameterSet()
-                pset.applyParamFilter( evalfunc )
 
 
 def apply_runtime_filters( statushandler, tspec_map, rtconfig, subdir,
@@ -883,14 +855,41 @@ def apply_runtime_filters( statushandler, tspec_map, rtconfig, subdir,
                 if baseline and not tspec.hasBaseline():
                     statushandler.markSkip( tspec, 'no baseline handling' )
 
-    rtsum = rtconfig.getAttr( 'runtime_sum', None )
-    if not include_all and rtsum != None:
-        filter_by_cummulative_runtime( statushandler, tspec_map, rtsum )
-
     if not baseline:
+
+        if not include_all:
+            filter_by_cummulative_runtime( statushandler, rtconfig, tspec_map )
+
         groups = ParameterizeAnalyzeGroups( statushandler )
         groups.rebuild( tspec_map )
         filter_analyze_tests( statushandler, groups )
+
+
+def filter_analyze_tests( statushandler, groups ):
+    ""
+    for key,tspecL in groups.groupmap.items():
+        analyze = None
+        skip_analyze = False
+        paramsets = []
+        for tspec in tspecL:
+            if tspec.isAnalyze():
+                analyze = tspec
+            elif statushandler.skipTestCausingAnalyzeSkip( tspec ):
+                skip_analyze = True
+            else:
+                paramsets.append( tspec.getParameters() )
+
+        if analyze != None:
+            if skip_analyze:
+                statushandler.markSkip( analyze, 'analyze dependency skipped' )
+            else:
+                def evalfunc( paramD ):
+                    for D in paramsets:
+                        if paramD == D:
+                            return True
+                    return False
+                pset = analyze.getParameterSet()
+                pset.applyParamFilter( evalfunc )
 
 
 def count_active( statushandler, tspec_map ):
