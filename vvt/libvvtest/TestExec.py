@@ -14,6 +14,7 @@ import traceback
 from . import cshScriptWriter
 from . import ScriptWriter
 from . import pgexec
+from .depend import DependencySet
 
 
 # if a test times out, it receives a SIGINT.  if it doesn't finish up
@@ -42,10 +43,7 @@ class TestExec:
         self.pid = 0
         self.xdir = None
 
-        # magic: make a class to hold dependencies
-        # a list of runtime dependencies; items are tuples
-        #    (TestExec or TestSpec, match pattern, word expr)
-        self.deps = []
+        self.depset = DependencySet( self.statushandler )
 
     def init(self, test_dir, platform, commondb, config ):
         """
@@ -175,71 +173,9 @@ class TestExec:
         ""
         return self.has_dependent
 
-    def addDependency(self, testexec, match_pattern=None, expr=None):
-        """
-        A dependency can be either a TestExec object or a TestSpec object.
-        A TestExec object will replace a TestSpec object with the same
-        execute directory.
-        """
-        append = True
-        for i,tup in enumerate( self.deps ):
-            if same_execute_directory( testexec, tup[0] ):
-                if isinstance( testexec, TestExec ):
-                    self.deps[i] = ( testexec, match_pattern, expr )
-                append = False
-                break
-
-        if append:
-            self.deps.append( (testexec,match_pattern,expr) )
-
-    def hasDependency(self):
-        """
-        """
-        return len(self.deps) > 0
-
-    def getDependencies(self):
-        """
-        """
-        return self.deps
-
-    def getBlockingDependency(self):
-        """
-        If one or more dependencies did not run, did not finish, or failed,
-        then that offending TestExec is returned.  Otherwise, None is returned.
-        """
-        for tx,pat,expr in self.deps:
-
-            if isinstance( tx, TestExec ):
-                ref = tx.atest
-            else:
-                ref = tx
-
-            if not self.statushandler.isDone( ref ):
-                return tx
-
-            result = self.statushandler.getResultStatus( ref )
-
-            if expr == None:
-                if result not in ['pass','diff']:
-                    return tx
-
-            elif not expr.evaluate( lambda word: word == result ):
-                return tx
-
-        return None
-
-    def getDependencyDirectories(self):
+    def getDependencySet(self):
         ""
-        L = []
-
-        for tx,pat,expr in self.deps:
-
-            if isinstance( tx, TestExec ):
-                L.append( (pat,tx.atest.getExecuteDirectory()) )
-            else:
-                L.append( (pat,tx.getExecuteDirectory()) )
-
-        return L
+        return self.depset
 
     def _prepare_and_execute_test(self, baseline):
         ""
@@ -574,7 +510,7 @@ class TestExec:
                 ScriptWriter.writeScript( self.atest, script_file,
                                           lang, self.config, self.platform,
                                           test_dir,
-                                          self.getDependencyDirectories() )
+                                          self.getDependencySet() )
 
                 self.perms.set( os.path.abspath( script_file ) )
 
@@ -608,21 +544,6 @@ def echo_test_execution_info( testname, cmd_list, timeout ):
 
     sys.stdout.write( '\n' )
     sys.stdout.flush()
-
-
-def same_execute_directory( testobj1, testobj2 ):
-    ""
-    if isinstance( testobj1, TestExec ):
-        xdir1 = testobj1.atest.getExecuteDirectory()
-    else:
-        xdir1 = testobj1.getExecuteDirectory()
-
-    if isinstance( testobj2, TestExec ):
-        xdir2 = testobj2.atest.getExecuteDirectory()
-    else:
-        xdir2 = testobj2.getExecuteDirectory()
-
-    return xdir1 == xdir2
 
 
 def set_timeout_environ_variable( timeout ):

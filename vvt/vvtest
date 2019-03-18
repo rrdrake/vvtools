@@ -1094,8 +1094,9 @@ def executeTestList( opts, optD, rtdata,
     if len(tL) > 0:
         print3()
     for tx in tL:
-        deptx = tx.getBlockingDependency()
-        assert tx.hasDependency() and deptx != None
+        depset = tx.getDependencySet()
+        deptx = depset.getBlocking()
+        assert depset.numDependencies() > 0 and deptx != None
         if isinstance( deptx, TestExec.TestExec ):
             xdir = deptx.atest.getExecuteDirectory()
         else:
@@ -1210,7 +1211,8 @@ def batchTestList( opts, optD, rtdata,
       print3( "*** Warning: these batch numbers did not seem to finish:",
               ' '.join(NF) )
     for tx,deptx in nrL:
-        assert tx.hasDependency() and deptx != None
+        depset = tx.getDependencySet()
+        assert depset.numDependencies() > 0 and deptx != None
         if isinstance( deptx, TestExec.TestExec ):
             xdir = deptx.atest.getExecuteDirectory()
         else:
@@ -1370,7 +1372,8 @@ class Batcher:
           grpL = []
           tsum = 0
           for rt,tx in xL:
-            if tx.hasDependency() or tx.atest.getAttr('timeout') < 1:
+            depset = tx.getDependencySet()
+            if depset.numDependencies() > 0 or tx.atest.getAttr('timeout') < 1:
               # analyze tests and those with no timeout get their own group
               qL.append( [ self.Tzero, len(qL), [tx] ] )
             else:

@@ -255,7 +255,7 @@ class BatchScheduler:
         Otherwise None is returned.
         """
         for tx in bjob.testL:
-            deptx = tx.getBlockingDependency()
+            deptx = tx.getDependencySet().getBlocking()
             if deptx != None:
                 return deptx
         return None

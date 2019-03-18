@@ -18,6 +18,7 @@ from . import FilterExpressions
 from .TestSpecError import TestSpecError
 from .filtering import TestFilter
 from .groups import ParameterizeAnalyzeGroups
+from . import depend
 
 
 class TestList:
@@ -588,7 +589,7 @@ class TestList:
                 i = 0
                 while i < N:
                     tx = tL[i]
-                    if tx.getBlockingDependency() == None:
+                    if tx.getDependencySet().getBlocking() == None:
                         self._pop_test_exec( np, i )
                         return tx
                     i += 1
@@ -659,7 +660,13 @@ def connect_dependency( from_test, to_test, pattrn=None, expr=None ):
     ""
     assert isinstance( from_test, TestExec.TestExec )
 
-    from_test.addDependency( to_test, pattrn, expr )
+    if isinstance( to_test, TestExec.TestExec ):
+        ref = to_test.atest
+    else:
+        ref = to_test
+
+    tdep = depend.TestDependency( ref, pattrn, expr )
+    from_test.getDependencySet().addDependency( tdep )
 
     if isinstance( to_test, TestExec.TestExec ):
         to_test.setHasDependent()
