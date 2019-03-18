@@ -45,10 +45,6 @@ class TestStatusHandler:
 
         return []
 
-    def resetSkip(self, tspec):
-        ""
-        tspec.removeAttr( 'skip' )
-
     def markSkipByParameter(self, tspec, permanent=True):
         ""
         if permanent:
