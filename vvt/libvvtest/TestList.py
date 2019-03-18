@@ -769,7 +769,7 @@ def mark_skips_for_baselining( statushandler, tspec_map ):
     for xdir,tspec in tspec_map.items():
         if not statushandler.skipTest( tspec ):
             if not tspec.hasBaseline():
-                statushandler.markSkip( tspec, 'no baseline handling' )
+                statushandler.markSkipByBaselineHandling( tspec )
 
 
 def finalize_analyze_tests( statushandler, groups ):
@@ -786,7 +786,7 @@ def finalize_analyze_tests( statushandler, groups ):
                 paramsets.append( tspec.getParameters() )
 
         if skip_analyze:
-            statushandler.markSkip( analyze, 'analyze dependency test skipped' )
+            statushandler.markSkipByAnalyzeDependency( analyze )
         else:
             def evalfunc( paramD ):
                 for D in paramsets:
@@ -831,24 +831,44 @@ class TestFilter:
         self.rtconfig = rtconfig
         self.statushandler = statushandler
 
+    def checkSubdirectory(self, tspec, subdir):
+        ""
+        ok = True
+
+        xdir = tspec.getExecuteDirectory()
+        if subdir and subdir != xdir and not is_subdir( subdir, xdir ):
+            ok = False
+            self.statushandler.markSkipBySubdirectoryFilter( tspec )
+
+        return ok
+
     def checkPlatform(self, tspec):
         ""
         pev = PlatformEvaluator( tspec.getPlatformEnableExpressions() )
         ok = self.rtconfig.evaluate_platform_include( pev.satisfies_platform )
+        if not ok:
+            self.statushandler.markSkipByPlatform( tspec )
         return ok
 
     def checkOptions(self, tspec):
         ""
+        ok = True
         for opexpr in tspec.getOptionEnableExpressions():
             if not self.rtconfig.evaluate_option_expr( opexpr ):
-                return False
-        return True
+                ok = False
+                break
+        if not ok:
+            self.statushandler.markSkipByOption( tspec )
+        return ok
 
     def checkKeywords(self, tspec, results_keywords=True):
         ""
         kwlist = tspec.getKeywords() + \
                  self.statushandler.getResultsKeywords( tspec )
         ok = self.rtconfig.satisfies_keywords( kwlist, results_keywords )
+        if not ok:
+            self.statushandler.markSkipByKeyword( tspec,
+                                                  with_results=results_keywords )
         return ok
 
     def checkTDD(self, tspec):
@@ -857,50 +877,60 @@ class TestFilter:
             ok = True
         else:
             ok = ( 'TDD' not in tspec.getKeywords() )
+        if not ok:
+            self.statushandler.markSkipByTDD( tspec )
         return ok
 
-    def checkParameters(self, tspec):
+    def checkParameters(self, tspec, permanent=True):
         ""
         if tspec.isAnalyze():
             # analyze tests are not excluded by parameter expressions
             ok = True
         else:
             ok = self.rtconfig.evaluate_parameters( tspec.getParameters() )
+
+        if not ok:
+            self.statushandler.markSkipByParameter( tspec, permanent=permanent )
+
         return ok
 
     def checkFileSearch(self, tspec):
         ""
         ok = self.rtconfig.file_search( tspec )
+        if not ok:
+            self.statushandler.markSkipByFileSearch( tspec )
         return ok
 
     def checkMaxProcessors(self, tspec):
         ""
         np = int( tspec.getParameters().get( 'np', 1 ) )
         ok = self.rtconfig.evaluate_maxprocs( np )
+        if not ok:
+            self.statushandler.markSkipByMaxProcessors( tspec )
         return ok
 
     def checkRuntime(self, tspec):
         ""
+        ok = True
         tm = self.statushandler.getRuntime( tspec, None )
         if tm != None and not self.rtconfig.evaluate_runtime( tm ):
-            return False
-        return True
+            ok = False
+        if not ok:
+            self.statushandler.markSkipByRuntime( tspec )
+        return ok
 
     def applyPermanent(self, tspec_map):
         ""
         for xdir,tspec in tspec_map.items():
 
-            if not self.checkParameters( tspec ):
-                self.statushandler.markSkipByParameter( tspec )
-
-            elif not ( self.checkPlatform( tspec ) and \
-                       self.checkOptions( tspec ) and \
-                       self.checkKeywords( tspec, results_keywords=False ) and \
-                       self.checkTDD( tspec ) and \
-                       self.checkFileSearch( tspec ) and \
-                       self.checkMaxProcessors( tspec ) and \
-                       self.checkRuntime( tspec ) ):
-                self.statushandler.markSkip( tspec, 'filtered out' )
+            self.checkParameters( tspec, permanent=True ) and \
+                self.checkKeywords( tspec, results_keywords=False ) and \
+                self.checkPlatform( tspec ) and \
+                self.checkOptions( tspec ) and \
+                self.checkTDD( tspec ) and \
+                self.checkFileSearch( tspec ) and \
+                self.checkMaxProcessors( tspec ) and \
+                self.checkRuntime( tspec )
 
         # magic: TODO: add skip analyze logic to this function (see comment below)
         self.filterByCummulativeRuntime( tspec_map )
@@ -926,30 +956,17 @@ class TestFilter:
 
                 if not self.statushandler.skipTest( tspec ):
 
-                    keep = True
+                    self.checkSubdirectory( tspec, subdir ) and \
+                        self.checkKeywords( tspec, results_keywords=True ) and \
+                        self.checkParameters( tspec, permanent=False ) and \
+                        self.checkPlatform( tspec ) and \
+                        self.checkOptions( tspec ) and \
+                        self.checkTDD( tspec ) and \
+                        self.checkMaxProcessors( tspec ) and \
+                        self.checkRuntime( tspec )
 
-                    if subdir and subdir != xdir and not is_subdir( subdir, xdir ):
-                        keep = False
-                        self.statushandler.markSkip( tspec, 'subdir' )
-
-                    if keep and not \
-                            self.checkKeywords( tspec, results_keywords=True ):
-                        keep = False
-                        self.statushandler.markSkip( tspec, 'results keyword expression' )
-
-                    if keep and not self.checkParameters( tspec ):
-                        keep = False
-                        self.statushandler.markSkip( tspec, 'restart parameter expression failed' )
-
-                    if keep:
-                        keep = ( self.checkPlatform( tspec ) and \
-                                 self.checkOptions( tspec ) and \
-                                 self.checkTDD( tspec ) and \
-                                 self.checkFileSearch( tspec ) and \
-                                 self.checkMaxProcessors( tspec ) and \
-                                 self.checkRuntime( tspec ) )
-                        if not keep:
-                            self.statushandler.markSkip( tspec, 'filter' )
+                    # file search doesn't work in restart mode
+                    #   self.checkFileSearch( tspec )
 
             self.filterByCummulativeRuntime( tspec_map )
 
@@ -974,7 +991,7 @@ class TestFilter:
                 if not self.statushandler.skipTest( t ):
                     tsum += tm
                     if tsum > rtsum:
-                        self.statushandler.markSkip( t, 'cummulative runtime threshhold' )
+                        self.statushandler.markSkipByCummulativeRuntime( t )
 
                 i += 1
 

@@ -49,13 +49,63 @@ class TestStatusHandler:
         ""
         tspec.removeAttr( 'skip' )
 
-    def markSkipByParameter(self, tspec):
+    def markSkipByParameter(self, tspec, permanent=True):
         ""
-        tspec.setAttr( 'skip', 'parameter expression failed' )
+        if permanent:
+            tspec.setAttr( 'skip', 'parameter expression failed' )
+        else:
+            tspec.setAttr( 'skip', 'restart parameter expression failed' )
 
     def skipTestByParameter(self, tspec):
         ""
         return tspec.getAttr( 'skip', None ) == 'parameter expression failed'
+
+    def markSkipByKeyword(self, tspec, with_results=False):
+        ""
+        if with_results:
+            tspec.setAttr( 'skip', 'results keyword expression' )
+        else:
+            tspec.setAttr( 'skip', 'keyword expression' )
+
+    def markSkipBySubdirectoryFilter(self, tspec):
+        ""
+        tspec.setAttr( 'skip', 'subdir' )
+
+    def markSkipByPlatform(self, tspec):
+        ""
+        tspec.setAttr( 'skip', 'platform' )
+
+    def markSkipByOption(self, tspec):
+        ""
+        tspec.setAttr( 'skip', 'option' )
+
+    def markSkipByTDD(self, tspec):
+        ""
+        tspec.setAttr( 'skip', 'tdd' )
+
+    def markSkipByFileSearch(self, tspec):
+        ""
+        tspec.setAttr( 'skip', 'search' )
+
+    def markSkipByMaxProcessors(self, tspec):
+        ""
+        tspec.setAttr( 'skip', 'maxprocs' )
+
+    def markSkipByRuntime(self, tspec):
+        ""
+        tspec.setAttr( 'skip', 'runtime' )
+
+    def markSkipByBaselineHandling(self, tspec):
+        ""
+        tspec.setAttr( 'skip', 'nobaseline' )
+
+    def markSkipByAnalyzeDependency(self, tspec):
+        ""
+        tspec.setAttr( 'skip', 'depskip' )
+
+    def markSkipByCummulativeRuntime(self, tspec):
+        ""
+        tspec.setAttr( 'skip', 'tsum' )
 
     def skipTestCausingAnalyzeSkip(self, tspec):
         ""
@@ -70,10 +120,6 @@ class TestStatusHandler:
             else:
                 skipit = True
         return skipit
-
-    def markSkip(self, tspec, reason):
-        ""
-        tspec.setAttr( 'skip', reason )
 
     def skipTest(self, tspec):
         ""
