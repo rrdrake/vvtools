@@ -23,17 +23,6 @@ class ParameterizeAnalyzeGroups:
                 tL.append( tspec )
         return tL
 
-    def getAnalyzeExecuteDirectory(self, tspec):
-        ""
-        key = ( tspec.getFilepath(), tspec.getName() )
-        grpL = self.groupmap[key]
-
-        for t in grpL:
-            if t.isAnalyze():
-                return t.getExecuteDirectory()
-
-        return None
-
     def rebuild(self, tspecs):
         ""
         self.groupmap.clear()

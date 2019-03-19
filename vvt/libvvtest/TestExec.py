@@ -14,7 +14,6 @@ import traceback
 from . import cshScriptWriter
 from . import ScriptWriter
 from . import pgexec
-from .depend import DependencySet
 
 
 # if a test times out, it receives a SIGINT.  if it doesn't finish up
@@ -43,7 +42,9 @@ class TestExec:
         self.pid = 0
         self.xdir = None
 
-        self.depset = DependencySet( self.statushandler )
+        # do this import here to avoid possible cyclic dependency
+        import depend
+        self.depset = depend.DependencySet( self.statushandler )
 
     def init(self, test_dir, platform, commondb, config ):
         """

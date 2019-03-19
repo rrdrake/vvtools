@@ -6,7 +6,6 @@
 
 import os, sys
 import time
-import fnmatch
 import glob
 
 from . import TestSpec
@@ -433,43 +432,15 @@ class TestList:
         # sort tests longest running first; 
         self.sortTestExecList()
 
-        self._add_analyze_dependencies( xtD )
-        self._add_general_dependencies( xtD )
+        self._connect_execute_dependencies( xtD )
 
-    def _add_analyze_dependencies(self, xdir2testexec):
-        """
-        add dependencies of analyze tests to TestExec objects
-        """
+    def _connect_execute_dependencies(self, xdir2testexec):
+        ""
         for xt in self.getTestExecList():
             if xt.atest.isAnalyze():
                 grpL = self.groups.getGroup( xt.atest )
-                for gt in grpL:
-                    if not gt.isAnalyze():
-                        connect_dependency( xt, gt )
-            else:
-                analyze_xdir = self.groups.getAnalyzeExecuteDirectory( xt.atest )
-                if analyze_xdir != None:
-                    # this test has an analyze dependent
-                    analyze_xt = xdir2testexec.get( analyze_xdir, None )
-                    if analyze_xt != None:
-                        connect_dependency( analyze_xt, xt )
-
-    def _add_general_dependencies(self, xdir2testexec):
-        """
-        add general dependencies to TestExec objects
-        """
-        xdirlist = self.tspecs.keys()
-        for xt in self.getTestExecList():
-            xdir = xt.atest.getExecuteDirectory()
-            for dep_pat,expr in xt.atest.getDependencies():
-                depL = find_tests_by_execute_directory_match(
-                                                xdir, dep_pat, xdirlist )
-                for dep_xdir in depL:
-                    dep_obj = xdir2testexec.get(
-                                    dep_xdir,
-                                    self.tspecs.get( dep_xdir, None ) )
-                    if dep_obj != None:
-                        connect_dependency( xt, dep_obj, dep_pat, expr )
+                depend.connect_analyze_dependencies( xt, grpL, xdir2testexec )
+            depend.check_connect_dependencies( xt, self.tspecs, xdir2testexec )
 
     def sortTestExecList(self):
         """
@@ -610,66 +581,6 @@ def check_make_directory_containing_file( filename ):
     if d and d != '.':
         if not os.path.exists(d):
             os.mkdir( d )
-
-
-def find_tests_by_execute_directory_match( xdir, pattern, xdir_list ):
-    """
-    Given 'xdir' dependent execute directory, the shell glob 'pattern' is
-    matched against the execute directories in the 'xdir_list', in this order:
-
-        1. basename(xdir)/pat
-        2. basename(xdir)/*/pat
-        3. pat
-        4. *pat
-
-    The first of these that matches at least one test will be returned.
-
-    A python set of xdir is returned.
-    """
-    tbase = os.path.dirname( xdir )
-    if tbase == '.':
-        tbase = ''
-    elif tbase:
-        tbase += '/'
-
-    L1 = [] ; L2 = [] ; L3 = [] ; L4 = []
-
-    for xdir in xdir_list:
-
-        p1 = os.path.normpath( tbase+pattern )
-        if fnmatch.fnmatch( xdir, p1 ):
-            L1.append( xdir )
-
-        if fnmatch.fnmatch( xdir, tbase+'*/'+pattern ):
-            L2.append( xdir )
-
-        if fnmatch.fnmatch( xdir, pattern ):
-            L3.append( xdir )
-
-        if fnmatch.fnmatch( xdir, '*'+pattern ):
-            L4.append( xdir )
-
-    for L in [ L1, L2, L3, L4 ]:
-        if len(L) > 0:
-            return set(L)
-
-    return set()
-
-
-def connect_dependency( from_test, to_test, pattrn=None, expr=None ):
-    ""
-    assert isinstance( from_test, TestExec.TestExec )
-
-    if isinstance( to_test, TestExec.TestExec ):
-        ref = to_test.atest
-    else:
-        ref = to_test
-
-    tdep = depend.TestDependency( ref, pattrn, expr )
-    from_test.getDependencySet().addDependency( tdep )
-
-    if isinstance( to_test, TestExec.TestExec ):
-        to_test.setHasDependent()
 
 
 def createTestObjects( rootpath, relpath, force_params, rtconfig ):
