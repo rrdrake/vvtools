@@ -65,7 +65,7 @@ class ResultsWriter:
 
     def write_console(self, atestlist, short=False):
         ""
-        self.conobj.writeTests( atestlist, abbreviate=short )
+        self.conobj.writeTestList( atestlist, abbreviate=short )
 
     def check_write_html(self, atestlist):
         ""

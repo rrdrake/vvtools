@@ -502,3 +502,41 @@ def testtimes(out):
             pass
 
     return timesL
+
+
+def parse_summary_string( summary_string ):
+    """
+    Parses the summary string from vvtest output, such as
+
+        Summary: pass=0, fail=1, diff=0, timeout=0, notdone=0, notrun=1, skip=0
+
+    Returns dictionary of these names to their values.
+    """
+    valD = {}
+
+    for spec in summary_string.split():
+        spec = spec.strip(',')
+        if '=' in spec:
+            nv = spec.split('=')
+            assert len(nv) == 2
+            valD[ nv[0] ] = int( nv[1] )
+
+    return valD
+
+
+def assert_summary_string( summary_string,
+                           npass=None, fail=None, diff=None,
+                           timeout=None, notdone=None, notrun=None,
+                           skip=None ):
+    """
+    Parses the summary string and asserts any given values.
+    """
+    valD = parse_summary_string( summary_string )
+
+    if npass   != None: assert valD['pass']    == npass
+    if fail    != None: assert valD['fail']    == fail
+    if diff    != None: assert valD['diff']    == diff
+    if timeout != None: assert valD['timeout'] == timeout
+    if notdone != None: assert valD['notdone'] == notdone
+    if notrun  != None: assert valD['notrun']  == notrun
+    if skip    != None: assert valD['skip']    == skip

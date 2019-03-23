@@ -10,7 +10,7 @@ import time
 
 RESULTS_KEYWORDS = [ 'notrun', 'notdone',
                      'fail', 'diff', 'pass',
-                     'timeout' ]
+                     'timeout', 'skip' ]
 
 
 # this is the exit status that tests use to indicate a diff
@@ -21,7 +21,22 @@ class TestStatusHandler:
 
     def __init__(self):
         ""
-        pass
+        self.skipreason = {
+                PARAM_SKIP           : 'parameter expression failed',
+                RESTART_PARAM_SKIP   : 'parameter expression failed',
+                KEYWORD_SKIP         : 'keyword expression failed',
+                RESULTS_KEYWORD_SKIP : 'results keyword expression',
+                SUBDIR_SKIP          : 'current working directory',
+                'platform'           : 'platform expression failed',
+                'option'             : 'option expression failed',
+                'tdd'                : 'TDD test',
+                'search'             : 'file search expression failed',
+                'maxprocs'           : 'exceeds max processors',
+                'runtime'            : 'runtime too low or too high',
+                'nobaseline'         : 'no rebaseline specification',
+                'depskip'            : 'analyze dependency skipped',
+                'tsum'               : 'cummulative runtime exceeded',
+            }
 
     def resetResults(self, tspec):
         ""
@@ -31,41 +46,50 @@ class TestStatusHandler:
 
     def getResultsKeywords(self, tspec):
         ""
+        kL = []
+
+        skip = tspec.getAttr( 'skip', None )
+        if skip != None:
+            kL.append( 'skip' )
+
         state = tspec.getAttr('state',None)
         if state == None:
-            return ['notrun']
+            kL.append( 'notrun' )
         else:
-            if state == "notrun": return ["notrun"]
-            if state == "notdone": return ["notdone","running"]
+            if state == "notrun":
+                kL.append( 'notrun' )
+            elif state == "notdone":
+                kL.extend( ['notdone', 'running'] )
 
         result = tspec.getAttr('result',None)
         if result != None:
-            if result == "timeout": return ["timeout","fail"]
-            return [result]
+            if result == 'timeout':
+                kL.append( 'fail' )
+            kL.append( result )
 
-        return []
+        return kL
 
     def markSkipByParameter(self, tspec, permanent=True):
         ""
         if permanent:
-            tspec.setAttr( 'skip', 'parameter expression failed' )
+            tspec.setAttr( 'skip', PARAM_SKIP )
         else:
-            tspec.setAttr( 'skip', 'restart parameter expression failed' )
+            tspec.setAttr( 'skip', RESTART_PARAM_SKIP )
 
     def skipTestByParameter(self, tspec):
         ""
-        return tspec.getAttr( 'skip', None ) == 'parameter expression failed'
+        return tspec.getAttr( 'skip', None ) == PARAM_SKIP
 
     def markSkipByKeyword(self, tspec, with_results=False):
         ""
         if with_results:
-            tspec.setAttr( 'skip', 'results keyword expression' )
+            tspec.setAttr( 'skip', RESULTS_KEYWORD_SKIP )
         else:
-            tspec.setAttr( 'skip', 'keyword expression' )
+            tspec.setAttr( 'skip', KEYWORD_SKIP )
 
     def markSkipBySubdirectoryFilter(self, tspec):
         ""
-        tspec.setAttr( 'skip', 'subdir' )
+        tspec.setAttr( 'skip', SUBDIR_SKIP )
 
     def markSkipByPlatform(self, tspec):
         ""
@@ -108,10 +132,10 @@ class TestStatusHandler:
         skipit = False
         skp = tspec.getAttr( 'skip', None )
         if skp != None:
-            if skp.startswith( 'parameter expression failed' ) or \
-               skp.startswith( 'restart parameter expression failed' ) or \
-               skp.startswith( 'results keyword expression' ) or \
-               skp.startswith( 'subdir' ):
+            if skp.startswith( PARAM_SKIP ) or \
+               skp.startswith( RESTART_PARAM_SKIP ) or \
+               skp.startswith( RESULTS_KEYWORD_SKIP ) or \
+               skp.startswith( SUBDIR_SKIP ):
                 skipit = False
             else:
                 skipit = True
@@ -120,6 +144,12 @@ class TestStatusHandler:
     def skipTest(self, tspec):
         ""
         return tspec.getAttr( 'skip', False )
+
+    def getReasonForSkipTest(self, tspec):
+        ""
+        skip = self.skipTest( tspec )
+        assert skip
+        return self.skipreason[ skip ]
 
     def isNotrun(self, tspec):
         ""
@@ -188,11 +218,18 @@ class TestStatusHandler:
         self.markDone( tspec, 1 )
         tspec.setAttr( 'result', 'timeout' )
 
-    def copyResults(self, to_tspec, from_tspec):
+    def copyResultsExceptSkips(self, to_tspec, from_tspec):
         ""
         for k,v in from_tspec.getAttrs().items():
             if k != 'skip':
                 to_tspec.setAttr( k, v )
+
+
+PARAM_SKIP = 'param'
+RESTART_PARAM_SKIP = 'restartparam'
+KEYWORD_SKIP = 'keyword'
+RESULTS_KEYWORD_SKIP = 'resultskeyword'
+SUBDIR_SKIP = 'subdir'
 
 
 def translate_exit_status_to_result_string( exit_status ):

@@ -65,14 +65,18 @@ def make_date_stamp( testdate, optrdate, timefmt="%Y_%m_%d" ):
     return datestr
 
 
-def partition_tests_by_result( statushandler, tlist ):
+def partition_tests_by_result( statushandler, testL ):
     ""
     parts = { 'fail':[], 'timeout':[], 'diff':[],
-              'pass':[], 'notrun':[], 'notdone':[] }
+              'pass':[], 'notrun':[], 'notdone':[],
+              'skip':[] }
 
-    for tst in tlist:
-        result = statushandler.getResultStatus( ensure_TestSpec( tst ) )
-        parts[ result ].append( tst )
+    for tst in testL:
+        if statushandler.skipTest( tst ):
+            parts[ 'skip' ].append( tst )
+        else:
+            result = statushandler.getResultStatus( ensure_TestSpec( tst ) )
+            parts[ result ].append( tst )
 
     return parts
 
@@ -81,7 +85,8 @@ def results_summary_string( testparts ):
     ""
     sumL = []
 
-    for result in [ 'pass', 'fail', 'diff', 'timeout', 'notdone', 'notrun' ]:
+    for result in [ 'pass', 'fail', 'diff', 'timeout',
+                    'notdone', 'notrun', 'skip' ]:
         sumL.append( result+'='+str( len( testparts[result] ) ) )
 
     return ', '.join( sumL )

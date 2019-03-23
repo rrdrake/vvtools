@@ -841,28 +841,6 @@ def readCommandInfo( opts, optD, rtdata ):
     return None
 
 
-def load_filter_and_prune_test_list( test_dir, tlist, plat, filter_dir,
-                                     optanalyze ):
-    ""
-    pruneL,cntmax = tlist.loadAndFilter( plat.getMaxProcs(),
-                                         filter_dir=filter_dir,
-                                         analyze_only=optanalyze,
-                                         prune=True )
-
-    # **** magic **** get this info to user
-
-    if len(pruneL) > 0:
-        print3()
-        for pt,ct in pruneL:
-            print3( '*** Warning: analyze test', exec_path( pt, test_dir ),
-                    'will not be run due to dependency',
-                    exec_path( ct, test_dir ) )
-    if cntmax > 0:
-        print3()
-        print3( 'Note: there were', cntmax, 'tests that exceeded the',
-                'maximum number of processors - they will not be run' )
-
-
 def exec_path( testspec, test_dir ):
     ""
     xdir = testspec.getExecuteDirectory()
@@ -907,7 +885,6 @@ def runTests( opts, optD, rtdata, dirs ):
                   opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
 
     tlist.applyPermanentFilters()
-    #load_filter_and_prune_test_list( test_dir, tlist, plat, None, opts.analyze )
 
     # save the test list in the TestResults directory
     tlist.stringFileWrite()
@@ -922,7 +899,7 @@ def runTests( opts, optD, rtdata, dirs ):
 
     if tlist.numActive() > 0:
 
-        print3( "Running these tests:" )
+        print3( "Test list:" )
         results_writer.prerun( tlist )
         print3()
 
@@ -1557,7 +1534,6 @@ def restartTests( opts, optD, rtdata ):
 
     reld = rtdata.getFilterPath()
 
-    #load_filter_and_prune_test_list( test_dir, tlist, plat, reld, opts.analyze )
     tlist.determineActiveTests( filter_dir=reld )
 
     perms = rtdata.getPermissionsObject()
@@ -1568,7 +1544,7 @@ def restartTests( opts, optD, rtdata ):
 
     if tlist.numActive() > 0:
 
-        print3( "Running these tests:" )
+        print3( "Test list:" )
         results_writer.prerun( tlist )
         print3()
 

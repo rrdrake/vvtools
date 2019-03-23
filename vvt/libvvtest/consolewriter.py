@@ -24,26 +24,77 @@ class ConsoleWriter:
         ""
         self.sortspec = sortspec
 
-    def writeTests(self, atestlist, abbreviate=False):
+    def writeTestList(self, atestlist, abbreviate=False):
         ""
-        testL = atestlist.getActiveTests( self.sortspec )
 
+        if abbreviate:
+            self._write_summary( atestlist )
+        else:
+            self._write_full_list( atestlist )
+
+    def _write_summary(self, atestlist):
+        ""
+        testL = atestlist.getTests()
+        parts = outpututils.partition_tests_by_result( self.statushandler, testL )
+
+        n = len( parts['pass'] ) + len( parts['diff'] ) + len( parts['timeout'] )
+        self.iwrite( 'completed:', n )
+        if n > 0:
+            self._write_part_count( parts, 'pass' )
+            self._write_part_count( parts, 'diff' )
+            self._write_part_count( parts, 'fail' )
+            self._write_part_count( parts, 'timeout' )
+
+        self._write_part_count( parts, 'notdone', indent=False )
+        self._write_part_count( parts, 'notrun', indent=False )
+
+        self._write_part_count( parts, 'skip', indent=False, label='skipped' )
+        self._write_skips( parts['skip'] )
+
+    def _write_skips(self, skiplist):
+        ""
+        skipmap = self._collect_skips( skiplist )
+
+        keys = list( skipmap.keys() )
+        keys.sort()
+        for k in keys:
+            self.iwrite( ' %6d' % skipmap[k], 'due to "'+k+'"' )
+
+    def _collect_skips(self, skiplist):
+        ""
+        skipmap = {}
+
+        for tst in skiplist:
+            reason = self.statushandler.getReasonForSkipTest( tst )
+            if reason not in skipmap:
+                skipmap[reason] = 0
+            skipmap[reason] += 1
+
+        return skipmap
+
+    def _write_part_count(self, parts, part_name, indent=True, label=None):
+        ""
+        n = len( parts[part_name] )
+
+        if label == None:
+            label = part_name
+
+        if n > 0:
+            if indent:
+                self.iwrite( ' %6d'%n, label  )
+            else:
+                self.iwrite( label+':', n  )
+
+    def _write_full_list(self, atestlist):
+        ""
         cwd = os.getcwd()
 
         self.write( "==================================================" )
 
-        if abbreviate and len(testL) > 16:
-            for atest in testL[:8]:
-                self.write( outpututils.XstatusString( self.statushandler, atest,
-                                                       self.testdir, cwd ) )
-            self.write( "..." )
-            for atest in testL[-8:]:
-                self.write( outpututils.XstatusString( self.statushandler, atest,
-                                                       self.testdir, cwd ) )
-        else:
-            for atest in testL:
-                self.write( outpututils.XstatusString( self.statushandler, atest,
-                                                       self.testdir, cwd ) )
+        testL = atestlist.getActiveTests( self.sortspec )
+
+        for atest in testL:
+            self.writeTest( atest, cwd )
 
         self.write( "==================================================" )
 
@@ -54,3 +105,14 @@ class ConsoleWriter:
         ""
         self.fileobj.write( ' '.join( [ str(arg) for arg in args ] ) + '\n' )
         self.fileobj.flush()
+
+    def iwrite(self, *args):
+        ""
+        argstr = ' '.join( [ str(arg) for arg in args ] )
+        self.write( '   ', *args )
+
+    def writeTest(self, atest, cwd):
+        ""
+        astr = outpututils.XstatusString( self.statushandler, atest,
+                                          self.testdir, cwd )
+        self.write( astr )
