@@ -493,7 +493,8 @@ def generateTestList( opts, optD, dirs, rtdata ):
 
     tlist.applyPermanentFilters()
 
-    rtdata.getResultsWriter().prerun( tlist, short=False )
+    rtdata.getResultsWriter().prerun( tlist, abbreviate=False )
+    print3()
 
     createTestDir( testsubdir, perms, opts.dash_M )
     writeCommandInfo( opts, optD, rtdata, test_dir, plat, perms )
@@ -899,7 +900,6 @@ def runTests( opts, optD, rtdata, dirs ):
 
     if tlist.numActive() > 0:
 
-        print3( "Test list:" )
         results_writer.prerun( tlist )
         print3()
 
@@ -946,7 +946,8 @@ def make_results_writer( opts, optD,
                          test_dir, perms,
                          platobj, cmdL, statushandler ):
     ""
-    conobj = consolewriter.ConsoleWriter( statushandler, sys.stdout, test_dir )
+    conobj = consolewriter.ConsoleWriter( statushandler, sys.stdout, test_dir,
+                                          verbose=1 )
     conobj.setSortingSpecification( optD['sort_letters'] )
 
     htmlobj = None
@@ -1544,7 +1545,6 @@ def restartTests( opts, optD, rtdata ):
 
     if tlist.numActive() > 0:
 
-        print3( "Test list:" )
         results_writer.prerun( tlist )
         print3()
 
@@ -1593,8 +1593,8 @@ def baselineTests( opts, optD, rtdata ):
 
         perms = rtdata.getPermissionsObject()
 
-        print3( "Baselining these tests:" )
-        rtdata.getResultsWriter().prerun( tlist, short=False )
+        rtdata.getResultsWriter().prerun( tlist, abbreviate=False )
+        print3()
 
         tlist.createTestExecs( test_dir, plat, config, perms )
 

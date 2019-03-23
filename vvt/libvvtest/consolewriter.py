@@ -12,11 +12,14 @@ from . import outpututils
 
 class ConsoleWriter:
 
-    def __init__(self, statushandler, output_file_obj, results_test_dir):
+    def __init__(self, statushandler, output_file_obj, results_test_dir,
+                       verbose=1):
         ""
         self.statushandler = statushandler
         self.fileobj = output_file_obj
         self.testdir = results_test_dir
+
+        self.verbose = verbose
 
         self.sortspec = None
 
@@ -24,13 +27,16 @@ class ConsoleWriter:
         ""
         self.sortspec = sortspec
 
-    def writeTestList(self, atestlist, abbreviate=False):
+    def writeTestList(self, atestlist, is_postrun, abbreviate=False):
         ""
-
-        if abbreviate:
-            self._write_summary( atestlist )
-        else:
+        if not abbreviate:
             self._write_full_list( atestlist )
+
+        if is_postrun:
+            self.write( 'Summary:' )
+        else:
+            self.write( 'Test list:' )
+        self._write_summary( atestlist )
 
     def _write_summary(self, atestlist):
         ""
@@ -98,9 +104,6 @@ class ConsoleWriter:
 
         self.write( "==================================================" )
 
-        parts = outpututils.partition_tests_by_result( self.statushandler, testL )
-        self.write( "Summary:", outpututils.results_summary_string( parts ) )
-
     def write(self, *args):
         ""
         self.fileobj.write( ' '.join( [ str(arg) for arg in args ] ) + '\n' )
@@ -108,7 +111,6 @@ class ConsoleWriter:
 
     def iwrite(self, *args):
         ""
-        argstr = ' '.join( [ str(arg) for arg in args ] )
         self.write( '   ', *args )
 
     def writeTest(self, atest, cwd):
