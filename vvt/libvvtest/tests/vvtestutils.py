@@ -345,16 +345,18 @@ def parse_vvtest_counts( out ):
 
         lineL = line.strip().split()
 
-        ntot += 1
-
         if   check_pass   ( lineL ): np += 1
         elif check_fail   ( lineL ): nf += 1
         elif check_diff   ( lineL ): nd += 1
         elif check_notrun ( lineL ): nn += 1
         elif check_timeout( lineL ): nt += 1
         elif check_notdone( lineL ): nr += 1
+        elif lineL[0] == '...':
+            break  # a truncated test listing message starts with "..."
         else:
             raise Exception( 'unable to parse test line: '+line )
+
+        ntot += 1
 
     cntD = { 'total'  : ntot,
              'npass'  : np,

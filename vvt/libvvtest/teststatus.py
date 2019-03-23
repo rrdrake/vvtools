@@ -160,6 +160,10 @@ class TestStatusHandler:
         ""
         return tspec.getAttr( 'state', None ) == 'done'
 
+    def isNotDone(self, tspec):
+        ""
+        return tspec.getAttr( 'state', None ) == 'notdone'
+
     def passed(self, tspec):
         ""
         return self.isDone( tspec ) and \
