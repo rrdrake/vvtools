@@ -19,12 +19,24 @@ def XstatusString( statushandler, t, test_dir, cwd ):
     ref = ensure_TestSpec( t )
 
     s =  '%-20s' % ref.getName()
-    s += ' %-8s' % statushandler.getResultStatus( ref )
+
+    skipreason = None
+    if statushandler.skipTest( ref ):
+        skipreason = statushandler.getReasonForSkipTest( ref )
+
+    if skipreason:
+        s += ' %-8s' % 'skip'
+    else:
+        s += ' %-8s' % statushandler.getResultStatus( ref )
+
     s += ' %-4s' % format_test_run_time( statushandler, ref )
     s += ' %14s' % format_test_run_date( statushandler, ref )
 
     xdir = ref.getExecuteDirectory()
     s += ' ' + pathutil.relative_execute_directory( xdir, test_dir, cwd )
+
+    if skipreason:
+        s += ' skip_reason="'+skipreason+'"'
 
     return s
 

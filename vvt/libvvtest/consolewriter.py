@@ -99,9 +99,9 @@ class ConsoleWriter:
             else:
                 self.iwrite( label+':', n  )
 
-    def _write_test_list_results(self, atestlist, detail):
+    def _write_test_list_results(self, atestlist, level):
         ""
-        level = self._adjust_detail_level_by_verbose( detail )
+        level = self._adjust_detail_level_by_verbose( level )
 
         cwd = os.getcwd()
 
@@ -112,7 +112,13 @@ class ConsoleWriter:
         if level == 1:
             numwritten = self._write_nonpass_notdone( testL, cwd )
 
-        elif level >= 2:
+        elif level == 2:
+            for atest in testL:
+                self.writeTest( atest, cwd )
+            numwritten = len( testL )
+
+        elif level > 2:
+            testL = atestlist.getTests()
             for atest in testL:
                 self.writeTest( atest, cwd )
             numwritten = len( testL )
@@ -120,10 +126,8 @@ class ConsoleWriter:
         if numwritten > 0:
             self.write( "==================================================" )
 
-    def _adjust_detail_level_by_verbose(self, detail):
+    def _adjust_detail_level_by_verbose(self, level):
         ""
-        level = detail
-
         if self.verbose > 1:
             level += 1
         if self.verbose > 2:

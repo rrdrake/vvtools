@@ -199,7 +199,8 @@ class VvtestCommandRunner:
     def assertCounts(self, total=None, finish=None,
                            npass=None, diff=None,
                            fail=None, timeout=None,
-                           notrun=None, notdone=None ):
+                           notrun=None, notdone=None,
+                           skip=None ):
         ""
         if total   != None: assert total   == self.cntD['total']
         if npass   != None: assert npass   == self.cntD['npass']
@@ -208,6 +209,7 @@ class VvtestCommandRunner:
         if timeout != None: assert timeout == self.cntD['timeout']
         if notrun  != None: assert notrun  == self.cntD['notrun']
         if notdone != None: assert notdone == self.cntD['notdone']
+        if skip    != None: assert skip    == self.cntD['skip']
 
         if finish != None:
             assert finish == self.cntD['npass'] + \
@@ -312,7 +314,7 @@ def vvtest_command_line( *cmd_args, **options ):
 
     cmdL = [ sys.executable, vvtest_file ]
 
-    if '-i' not in argL:
+    if need_to_add_verbose_flag( argL ):
         # add -v when running in order to extract the full test list
         cmdL.append( '-v' )
 
@@ -340,10 +342,18 @@ def vvtest_command_line( *cmd_args, **options ):
     return cmd
 
 
+def need_to_add_verbose_flag( vvtest_args ):
+    ""
+    if '-i' in vvtest_args: return False
+    if '-g' in vvtest_args: return False
+    if '-v' in vvtest_args: return False
+    return True
+
+
 def parse_vvtest_counts( out ):
     ""
     ntot = 0
-    np = 0 ; nf = 0 ; nd = 0 ; nn = 0 ; nt = 0 ; nr = 0
+    np = 0 ; nf = 0 ; nd = 0 ; nn = 0 ; nt = 0 ; nr = 0 ; ns = 0
 
     for line in testlines( out ):
 
@@ -355,6 +365,7 @@ def parse_vvtest_counts( out ):
         elif check_notrun ( lineL ): nn += 1
         elif check_timeout( lineL ): nt += 1
         elif check_notdone( lineL ): nr += 1
+        elif check_skip   ( lineL ): ns += 1
         elif lineL[0] == '...':
             break  # a truncated test listing message starts with "..."
         else:
@@ -368,7 +379,8 @@ def parse_vvtest_counts( out ):
              'diff'   : nd,
              'notrun' : nn,
              'timeout': nt,
-             'notdone': nr }
+             'notdone': nr,
+             'skip'   : ns }
 
     return cntD
 
@@ -380,6 +392,7 @@ def check_diff(L): return len(L) >= 5 and L[1] == 'diff'
 def check_notrun(L): return len(L) >= 3 and L[1] == 'notrun'
 def check_timeout(L): return len(L) >= 4 and L[1] == 'timeout'
 def check_notdone(L): return len(L) >= 3 and L[1] == 'notdone'
+def check_skip(L): return len(L) >= 4 and L[1] == 'skip'
 
 
 def parse_test_ids( vvtest_output, results_dir ):

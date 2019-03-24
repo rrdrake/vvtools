@@ -157,6 +157,47 @@ class misc_tests( vtu.vvtestTestCase ):
         cntD = vtu.parse_vvtest_counts( val )
         assert cntD['total'] == 3
 
+    def test_max_detail_console_list_output(self):
+        ""
+        tlist = MockTestList( self.statushandler, self.getFakeTestList() )
+
+        sio = StringIO()
+        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd(), verbose=3 )
+        conwr.writeResultsList( tlist )
+        conwr.writeListSummary( tlist, 'Summary:' )
+
+        val = sio.getvalue()
+        print3( val )
+        cntD = vtu.parse_vvtest_counts( val )
+        assert cntD['skip'] == 2
+
+    def test_list_output_using_double_verbose_flag(self):
+        ""
+        util.writefile( 'passtest.vvt', """
+            pass
+            """ )
+        util.writefile( 'difftest.vvt', """
+            import sys
+            import vvtest_util as vvt
+            sys.exit( vvt.diff_exit_status )
+            """ )
+        util.writefile( 'keywtest.vvt', """
+            #VVT: keywords = chevy
+            pass
+            """ )
+        util.writefile( 'plattest.vvt', """
+            #VVT: enable (platforms="XBox")
+            pass
+            """ )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-v -v -K chevy', batch=batch )
+            vrun.assertCounts( total=4, npass=1, diff=1, skip=2 )
+
 
 def write_three_test_files():
     ""
