@@ -110,7 +110,7 @@ class misc_tests( vtu.vvtestTestCase ):
 
         sio = StringIO()
         conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
-        conwr.writeTestList( tlist, False, detail_level=0 )
+        conwr.writeListSummary( tlist, 'Test list:' )
 
         val = sio.getvalue()
         print3( val )
@@ -120,7 +120,7 @@ class misc_tests( vtu.vvtestTestCase ):
 
         sio = StringIO()
         conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
-        conwr.writeTestList( tlist, True, detail_level=0 )
+        conwr.writeListSummary( tlist, 'Summary:' )
 
         val = sio.getvalue()
         self.assert_test_list_summary( val )
@@ -133,7 +133,8 @@ class misc_tests( vtu.vvtestTestCase ):
 
         sio = StringIO()
         conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
-        conwr.writeTestList( tlist, False, detail_level=1 )
+        conwr.writeResultsList( tlist )
+        conwr.writeListSummary( tlist, 'Summary:' )
 
         val = sio.getvalue()
         self.assert_test_list_summary( val )
@@ -147,7 +148,8 @@ class misc_tests( vtu.vvtestTestCase ):
         sio = StringIO()
         conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
         conwr.setMaxNonPass( 3 )
-        conwr.writeTestList( tlist, True, detail_level=1 )
+        conwr.writeResultsList( tlist )
+        conwr.writeListSummary( tlist, 'Summary:' )
 
         val = sio.getvalue()
         print3( val )

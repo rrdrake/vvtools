@@ -33,18 +33,17 @@ class ResultsWriter:
 
     def prerun(self, atestlist, abbreviate=True):
         ""
-        if abbreviate:
-            level = 0
-        else:
-            level = 1
-        self.write_console( atestlist, False, level )
+        if not abbreviate:
+            self.conobj.writeActiveList( atestlist )
+        self.conobj.writeListSummary( atestlist, 'Test list:' )
 
         self.check_write_testlist( atestlist, inprogress=True )
 
     def info(self, atestlist):
         ""
         if not self.htmlobj and not self.junitobj and not self.gitlabobj:
-            self.write_console( atestlist, True, 2 )
+            self.conobj.writeActiveList( atestlist )
+            self.conobj.writeListSummary( atestlist, 'Summary:' )
 
         self.check_write_html( atestlist )
         self.check_write_junit( atestlist )
@@ -53,7 +52,9 @@ class ResultsWriter:
 
     def postrun(self, atestlist):
         ""
-        self.write_console( atestlist, True, 1 )
+        self.conobj.writeResultsList( atestlist )
+        self.conobj.writeListSummary( atestlist, 'Summary:' )
+
         self.check_write_testlist( atestlist )
 
     def final(self, atestlist):
@@ -67,10 +68,6 @@ class ResultsWriter:
         self.check_write_gitlab( atestlist )
 
     ###
-
-    def write_console(self, atestlist, is_postrun, detail_level):
-        ""
-        self.conobj.writeTestList( atestlist, is_postrun, detail_level )
 
     def check_write_html(self, atestlist):
         ""

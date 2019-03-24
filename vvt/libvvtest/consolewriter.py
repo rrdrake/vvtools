@@ -33,16 +33,18 @@ class ConsoleWriter:
         assert num > 0
         self.maxnonpass = num
 
-    def writeTestList(self, atestlist, is_postrun, detail_level=0):
+    def writeListSummary(self, atestlist, label):
         ""
-        if detail_level > 0:
-            self._write_test_list_results( atestlist, detail_level )
-
-        if is_postrun:
-            self.write( 'Summary:' )
-        else:
-            self.write( 'Test list:' )
+        self.write( label )
         self._write_summary( atestlist )
+
+    def writeActiveList(self, atestlist):
+        ""
+        self._write_test_list_results( atestlist, 2 )
+
+    def writeResultsList(self, atestlist):
+        ""
+        self._write_test_list_results( atestlist, 1 )
 
     def _write_summary(self, atestlist):
         ""
@@ -97,9 +99,9 @@ class ConsoleWriter:
             else:
                 self.iwrite( label+':', n  )
 
-    def _write_test_list_results(self, atestlist, detail_level):
+    def _write_test_list_results(self, atestlist, detail):
         ""
-        level = self._adjust_detail_level_by_verbose( detail_level )
+        level = self._adjust_detail_level_by_verbose( detail )
 
         cwd = os.getcwd()
 
@@ -118,9 +120,9 @@ class ConsoleWriter:
         if numwritten > 0:
             self.write( "==================================================" )
 
-    def _adjust_detail_level_by_verbose(self, detail_level):
+    def _adjust_detail_level_by_verbose(self, detail):
         ""
-        level = detail_level
+        level = detail
 
         if self.verbose > 1:
             level += 1
