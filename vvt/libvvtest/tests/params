@@ -319,9 +319,10 @@ class parameter_tests( vtu.vvtestTestCase ):
                                  'TestResults*/params1.animal=cat/execute.log' )
             assert len( sL ) == 1
 
-            vtu.runvvtest( '-ik animal' ).assertCounts( total=2, npass=2 )
-            vtu.runvvtest( '-ik dog' ).assertCounts( total=0 )
-            vtu.runvvtest( '-ik Z' ).assertCounts( total=4, npass=4 )
+            # parameter names are also keywords, but not parameter values
+            vtu.runvvtest( '-i -k animal' ).assertCounts( total=2, npass=2 )
+            vtu.runvvtest( '-i -k dog' ).assertCounts( total=0 )
+            vtu.runvvtest( '-i -k Z' ).assertCounts( total=4, npass=4 )
 
 
 #####################################################################

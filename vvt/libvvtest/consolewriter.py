@@ -33,10 +33,10 @@ class ConsoleWriter:
         assert num > 0
         self.maxnonpass = num
 
-    def writeTestList(self, atestlist, is_postrun, abbreviate=False):
+    def writeTestList(self, atestlist, is_postrun, detail_level=0):
         ""
-        if not abbreviate:
-            self._write_test_list_results( atestlist )
+        if detail_level > 0:
+            self._write_test_list_results( atestlist, detail_level )
 
         if is_postrun:
             self.write( 'Summary:' )
@@ -97,25 +97,41 @@ class ConsoleWriter:
             else:
                 self.iwrite( label+':', n  )
 
-    def _write_test_list_results(self, atestlist):
+    def _write_test_list_results(self, atestlist, detail_level):
         ""
+        level = self._adjust_detail_level_by_verbose( detail_level )
+
         cwd = os.getcwd()
 
         self.write( "==================================================" )
 
         testL = atestlist.getActiveTests( self.sortspec )
 
-        if self.verbose == 1:
-            self._write_nonpass_notdone( testL, cwd )
+        if level == 1:
+            numwritten = self._write_nonpass_notdone( testL, cwd )
 
-        elif self.verbose == 2:
+        elif level >= 2:
             for atest in testL:
                 self.writeTest( atest, cwd )
+            numwritten = len( testL )
 
-        self.write( "==================================================" )
+        if numwritten > 0:
+            self.write( "==================================================" )
+
+    def _adjust_detail_level_by_verbose(self, detail_level):
+        ""
+        level = detail_level
+
+        if self.verbose > 1:
+            level += 1
+        if self.verbose > 2:
+            level += 1
+
+        return level
 
     def _write_nonpass_notdone(self, testL, cwd):
         ""
+        numwritten = 0
         i = 0
         for atest in testL:
 
@@ -124,12 +140,15 @@ class ConsoleWriter:
 
             if self._nonpass_or_notdone( atest ):
                 self.writeTest( atest, cwd )
+                numwritten += 1
 
             i += 1
 
         if i < len( testL ):
             self.write( '... non-pass list too long'
                         ' (use -v for full list or run with -i later)' )
+
+        return numwritten
 
     def _nonpass_or_notdone(self, tspec):
         ""

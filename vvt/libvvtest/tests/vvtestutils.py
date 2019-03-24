@@ -312,6 +312,10 @@ def vvtest_command_line( *cmd_args, **options ):
 
     cmdL = [ sys.executable, vvtest_file ]
 
+    if '-i' not in argL:
+        # add -v when running in order to extract the full test list
+        cmdL.append( '-v' )
+
     if options.get( 'addplatform', True ) and '--plat' not in argL:
         cmdL.extend( [ '--plat', core_platform_name() ] )
 
@@ -464,16 +468,15 @@ def greptestlist( shell_pattern, vvtest_output ):
     return matchlines
 
 
-def testlines( vvtest_output, get_first_cluster=False ):
+def testlines( vvtest_output ):
     ""
     lineL = []
     mark = False
     for line in vvtest_output.splitlines():
         if mark:
-            if line.startswith( "==========" ):
+            if line.startswith( "==========" ) or \
+               line.startswith( 'Summary:' ):  # happens if test list is empty
                 mark = False
-                if get_first_cluster:
-                    break
             else:
                 lineL.append( line )
 

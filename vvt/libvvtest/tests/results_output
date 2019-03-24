@@ -110,7 +110,7 @@ class misc_tests( vtu.vvtestTestCase ):
 
         sio = StringIO()
         conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
-        conwr.writeTestList( tlist, False, abbreviate=True )
+        conwr.writeTestList( tlist, False, detail_level=0 )
 
         val = sio.getvalue()
         print3( val )
@@ -120,7 +120,7 @@ class misc_tests( vtu.vvtestTestCase ):
 
         sio = StringIO()
         conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
-        conwr.writeTestList( tlist, True, abbreviate=True )
+        conwr.writeTestList( tlist, True, detail_level=0 )
 
         val = sio.getvalue()
         self.assert_test_list_summary( val )
@@ -133,7 +133,7 @@ class misc_tests( vtu.vvtestTestCase ):
 
         sio = StringIO()
         conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
-        conwr.writeTestList( tlist, False, abbreviate=False )
+        conwr.writeTestList( tlist, False, detail_level=1 )
 
         val = sio.getvalue()
         self.assert_test_list_summary( val )
@@ -144,13 +144,10 @@ class misc_tests( vtu.vvtestTestCase ):
         assert cntD['timeout'] == 2
         assert cntD['notdone'] == 1
 
-
-        tlist = MockTestList( self.statushandler, self.getFakeTestList() )
-
         sio = StringIO()
         conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
         conwr.setMaxNonPass( 3 )
-        conwr.writeTestList( tlist, True, abbreviate=False )
+        conwr.writeTestList( tlist, True, detail_level=1 )
 
         val = sio.getvalue()
         print3( val )

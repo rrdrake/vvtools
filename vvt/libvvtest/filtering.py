@@ -48,10 +48,26 @@ class TestFilter:
         ""
         kwlist = tspec.getKeywords() + \
                  self.statushandler.getResultsKeywords( tspec )
-        ok = self.rtconfig.satisfies_keywords( kwlist, results_keywords )
-        if not ok:
-            self.statushandler.markSkipByKeyword( tspec,
-                                                  with_results=results_keywords )
+
+        if results_keywords:
+            ok = self.rtconfig.satisfies_keywords( kwlist, True )
+            if not ok:
+                nr_ok = self.rtconfig.satisfies_keywords( kwlist, False )
+                if nr_ok:
+                    # only mark failed by results keywords if including
+                    # results keywords is what causes it to fail
+                    self.statushandler.markSkipByKeyword( tspec,
+                                                          with_results=True )
+                else:
+                    self.statushandler.markSkipByKeyword( tspec,
+                                                          with_results=False )
+
+        else:
+            ok = self.rtconfig.satisfies_keywords( kwlist, False )
+            if not ok:
+                self.statushandler.markSkipByKeyword( tspec,
+                                                      with_results=False )
+
         return ok
 
     def checkTDD(self, tspec):

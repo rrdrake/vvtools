@@ -941,13 +941,25 @@ def check_for_currently_running_vvtest( resultsfiles, optforce ):
                 sys.exit(1)
 
 
+def determine_verbose_integer( dash_v ):
+    ""
+    if dash_v:
+        verb = 1 + dash_v
+    else:
+        verb = 1
+
+    return verb
+
+
 def make_results_writer( opts, optD,
                          start_time, toolsdir,
                          test_dir, perms,
                          platobj, cmdL, statushandler ):
     ""
+    verb = determine_verbose_integer( opts.dash_v )
+
     conobj = consolewriter.ConsoleWriter( statushandler, sys.stdout, test_dir,
-                                          verbose=1 )
+                                          verbose=verb )
     conobj.setSortingSpecification( optD['sort_letters'] )
 
     htmlobj = None

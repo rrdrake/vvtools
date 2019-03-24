@@ -396,7 +396,8 @@ help_deprecated = """
 
 >DEPRECATED BUT STILL AVAILABLE:
 
-The -v option is deprecated.  Use --version instead.
+The -v option used to print the program version, but now means "verbose".
+Use --version instead to get the version.
 
 The --pipeline option is deprecated.  It is equivalent to --batch.
 
@@ -438,8 +439,9 @@ def create_parser( argvlist, vvtest_version ):
 
     psr.add_argument( '--version', action='store_true',
         help='Print the version of vvtest and exit.' )
-    psr.add_argument( '-v', dest='dash_v', action='store_true',
-        help='Deprecated; use --version.' )
+    psr.add_argument( '-v', dest='dash_v', action='count',
+        help='Add verbosity to console output.  Can be repeated, which gives '
+             'even more verbosity.' )
 
     grp = psr.add_argument_group( 'Test selection / filters (subhelp: filters)' )
 
@@ -658,9 +660,6 @@ def check_deprecated_option_use( opts ):
 
     if opts.pipeline:
         opts.batch = True  # --pipeline replaced with --batch
-
-    if opts.dash_v:
-        opts.version = True  # -v will be dropped
 
     if opts.qsub_limit:
         # --qsub-limit replaced with --batch-limit
