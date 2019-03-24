@@ -390,7 +390,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize not_keywords="fast" paramA="A1 A2" paramB="B1 B2"/>
             </rtest>""" )
 
-        wx = FilterExpressions.WordExpression(['fast'])
+        wx = FilterExpressions.WordExpression('fast')
         uf = RuntimeConfig( keyword_expr=wx )
         try: tL = createTestObjects( '.', 'ok6f.xml', None, uf )
         except TestSpecError: print3( sys.exc_info()[1] )
@@ -422,9 +422,9 @@ class XML_test_specifications( vtu.vvtestTestCase ):
         print3( "param list", pL )
         assert pL[0] == 'paramA=A1.paramB=B1'
 
-    def expr(self, *string_expr):
+    def expr(self, string_expr):
         ""
-        expr = FilterExpressions.WordExpression( list( string_expr ) )
+        expr = FilterExpressions.WordExpression( string_expr )
         return expr
 
     def test_platform_specifications(self):
@@ -503,7 +503,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
         create_test_and_eval_platform_expr( 'ok9a.xml', 'something', True )
         create_test_and_eval_platform_expr( 'ok9a.xml', 'somethingelse', False )
         create_test_and_eval_platform_expr( 'ok9a.xml', 'something', False,
-                                        platform_expr=self.expr('!something') )
+                        platform_expr=self.expr('not something') )
 
         util.writefile( 'ok10.xml', """
             <rtest name="atest">
@@ -514,7 +514,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
         create_test_and_eval_platform_expr( 'ok10.xml', 'IRIX', True )
         create_test_and_eval_platform_expr( 'ok10.xml', 'somethingelse', False )
         create_test_and_eval_platform_expr( 'ok10.xml', 'Linux', True,
-                                        platform_expr=self.expr('IRIX','!SunOS') )
+                        platform_expr=self.expr('IRIX and not SunOS') )
 
         util.writefile( 'ok10a.xml', """
             <rtest name="atest">
@@ -534,7 +534,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
         create_test_and_eval_platform_expr( 'ok11.xml', 'IRIX', False )
         create_test_and_eval_platform_expr( 'ok11.xml', 'somethingelse', True )
         create_test_and_eval_platform_expr( 'ok11.xml', 'Linux', True,
-                                platform_expr=self.expr('Linux','!IRIX') )
+                            platform_expr=self.expr('Linux and not IRIX') )
 
         util.writefile( 'ok11a.xml', """
             <rtest name="atest">
@@ -545,7 +545,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
         create_test_and_eval_platform_expr( 'ok11a.xml', 'IRIX', False )
         create_test_and_eval_platform_expr( 'ok11a.xml', 'somethingelse', True )
         create_test_and_eval_platform_expr( 'ok11a.xml', 'Linux', True,
-                                platform_expr=self.expr('SunOS','!IRIX') )
+                            platform_expr=self.expr('SunOS and not IRIX') )
 
         util.writefile( 'ok12.xml', """
             <rtest name="atest">

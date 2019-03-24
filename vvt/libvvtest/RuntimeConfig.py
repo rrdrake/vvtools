@@ -73,7 +73,7 @@ class RuntimeConfig:
         ""
         expr = self.attrs['keyword_expr']
         if not expr.containsResultsKeywords():
-            expr.append( [add_expr], 'and' )
+            expr.append( add_expr, 'and' )
 
     def satisfies_keywords(self, keyword_list, include_results=True):
         ""

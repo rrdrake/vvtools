@@ -14,29 +14,6 @@ except ImportError:
   from .teststatus import RESULTS_KEYWORDS
 
 
-alphanum_chars = 'abcdefghijklmnopqrstuvwxyz' + \
-                 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' + \
-                 '0123456789_'
-
-extra_chars = '-+=#@%^:.~'
-
-alphanum_chars_dict = {}
-for c in alphanum_chars:
-  alphanum_chars_dict[c] = None
-
-extra_chars_dict = {}
-for c in extra_chars:
-  extra_chars_dict[c] = None
-
-def allowableKeyword(s):
-    for c in s:
-      if c not in alphanum_chars_dict and c not in extra_chars_dict:
-        return 0
-    return 1
-
-
-###########################################################################
-
 class WordExpression:
     """
     Takes a string consisting of words, parentheses, and the operators "and",
@@ -66,20 +43,12 @@ class WordExpression:
     def append(self, expr, operator='or'):
         """
         Appends the given expression string using an 'and' or 'or' operator.
-        If the 'expr' is a python list, then the "k-format" is assumed, where
-        k-format is, for example, ["key1/key2", "!key3"] and comes from a
-        command line such as "-k key1/key2 -k !key3".
         """
-        if operator not in ['or','and']:
-            raise ValueError( "the 'operator' argument must be 'or' or 'and'" )
+        assert operator in ['or','and']
 
         if expr != None:
 
-            if type(expr) == type([]):
-                # magic: assert 0  # only origin for list form is command line
-                expr = convert_from_k_format( expr )
-            else:
-                expr = expr.strip()
+            expr = expr.strip()
 
             if self.expr != None:
                 expr = combine_two_expressions( self.expr, expr, operator )
@@ -338,29 +307,6 @@ def split_but_retain_separator( expr, separator ):
             seplist.append( separator )
 
     return seplist
-
-
-def convert_from_k_format( expr_list ):
-    ""
-    S = ''
-    for grp in expr_list:
-        L = []
-        for k in grp.split('/'):
-            k = k.strip()
-            bang = ''
-            while k[:1] == '!':
-                k = k[1:].strip()
-                if bang: bang = ''  # two bangs in a row cancel out
-                else: bang = 'not '
-            if k and allowableKeyword(k):
-                L.append( bang + k )
-            else:
-                raise ValueError( 'invalid word: "'+str(k)+'"' )
-        if len(L) > 0:
-            if S: S += ' and '
-            S += '( ' + ' or '.join(L) + ' )'
-    
-    return ' '.join( S.split() )
 
 
 ##############################################################################

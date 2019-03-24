@@ -786,7 +786,7 @@ def create_keyword_expression( keywords, not_keywords ):
     expr = FilterExpressions.WordExpression()
 
     if len(keywL) > 0:
-        expr.append( keywL, 'and' )
+        expr.append( convert_from_k_format(keywL), 'and' )
 
     return expr
 
@@ -821,10 +821,13 @@ def create_parameter_list( params, not_params ):
 
 def create_platform_expression( platforms, not_platforms ):
     ""
-    expr = None
-
-    if platforms or not_platforms:
-        expr = FilterExpressions.WordExpression( platforms )
+    if platforms:
+        strexpr = convert_from_k_format( platforms )
+        expr = FilterExpressions.WordExpression( strexpr )
+    elif not_platforms:
+        expr = FilterExpressions.WordExpression()
+    else:
+        expr = None
 
     if not_platforms:
         # convert -X values into -x values
@@ -842,9 +845,49 @@ def create_platform_expression( platforms, not_platforms ):
                     exprL.append( '/'.join( orL ) )
 
         if len( exprL ) > 0:
-            expr.append( exprL, 'and' )
+            expr.append( convert_from_k_format(exprL), 'and' )
 
     return expr
+
+
+def convert_from_k_format( expr_list ):
+    """
+    The 'expr_list' is, for example, ["key1/key2", "!key3"] and comes from a
+    command line such as "-k key1/key2 -k !key3".  A string expression is
+    returned.
+    """
+    S = ''
+    for grp in expr_list:
+
+        L = []
+        for k in grp.split('/'):
+            k = k.strip()
+
+            bang = ''
+            while k[:1] == '!':
+                k = k[1:].strip()
+                if bang: bang = ''  # two bangs in a row cancel out
+                else: bang = 'not '
+
+            if k and allowable_word(k):
+                L.append( bang + k )
+            else:
+                raise ValueError( 'invalid word: "'+str(k)+'"' )
+
+        if len(L) > 0:
+            if S: S += ' and '
+            S += '( ' + ' or '.join(L) + ' )'
+    
+    return ' '.join( S.split() )
+
+
+allowable_chars = set( 'abcdefghijklmnopqrstuvwxyz' + \
+                       'ABCDEFGHIJKLMNOPQRSTUVWXYZ' + \
+                       '0123456789_' + '-+=#@%^:.~' )
+
+def allowable_word(s):
+    ""
+    return set(s).issubset( allowable_chars )
 
 
 def create_search_regex_list( pattern_list ):
