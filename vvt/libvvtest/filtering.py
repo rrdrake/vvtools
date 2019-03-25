@@ -131,17 +131,7 @@ class TestFilter:
                 self.checkMaxProcessors( tspec ) and \
                 self.checkRuntime( tspec )
 
-        # magic: TODO: add skip analyze logic to this function (see comment below)
         self.filterByCummulativeRuntime( tspec_map )
-
-        # magic:
-        #   - use case that will fail is:
-        #       - a bunch of analyze tests that take a considerable amount of time
-        #       - they are not excluded before the --tsum filter process
-        #       - they are excluded afterwards if all children are excluded by
-        #         parameter
-        #       - now the tests left to run will take significantly less time
-        #         than the --tmax value
 
     def applyRuntime(self, tspec_map, filter_dir):
         ""
@@ -158,14 +148,14 @@ class TestFilter:
                     self.checkSubdirectory( tspec, subdir ) and \
                         self.checkKeywords( tspec, results_keywords=True ) and \
                         self.checkParameters( tspec, permanent=False ) and \
-                        self.checkPlatform( tspec ) and \
-                        self.checkOptions( tspec ) and \
                         self.checkTDD( tspec ) and \
                         self.checkMaxProcessors( tspec ) and \
                         self.checkRuntime( tspec )
 
-                    # file search doesn't work in restart mode
+                    # these don't work in restart mode
                     #   self.checkFileSearch( tspec )
+                    #   self.checkPlatform( tspec )
+                    #   self.checkOptions( tspec )
 
             self.filterByCummulativeRuntime( tspec_map )
 
