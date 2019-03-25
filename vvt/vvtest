@@ -887,6 +887,34 @@ def runTests( opts, optD, rtdata, dirs ):
 
     tlist.applyPermanentFilters()
 
+    # If there is a test curator, import it and use it. Test curators
+    # can be used to enforce keyword conventions, set timeouts, etc.
+    # After the curator is called, reload runtimes and re-apply filters.
+    try:
+        import vvtest_curator
+    except ImportError:
+        # Python 3.6+ will raise a ModuleNotFoundError that is a
+        # sub-exception of ImportError which will be caught by this.
+        #
+        # To allow for vvtest to be a soft link to an installed vvtest area,
+        # look for a curator file in the directory containing the soft link.
+        bindir = os.path.dirname( os.path.abspath( sys.argv[0] ) )
+        curate = os.path.join( bindir, 'vvtest_curator.py' )
+        if os.path.exists( curate ):
+            sys.path.append( bindir )
+            import vvtest_curator
+        else:
+            vvtest_curator = None
+
+    if (vvtest_curator is not None
+        and hasattr(vvtest_curator, 'curateTestList')):
+        vvtest_curator.curateTestList(tlist)
+
+        loadRunTimes( statushandler, tlist, plat,
+                      opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
+
+        tlist.applyPermanentFilters()
+
     # save the test list in the TestResults directory
     tlist.stringFileWrite()
     perms.set( os.path.abspath( tfile ) )
