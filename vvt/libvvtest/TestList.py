@@ -375,8 +375,13 @@ class TestList:
             # (or a different test source but the same relative path from root)
             xdir = t.getExecuteDirectory()
 
-            # magic: this is where a warning about the same xdir would be generated
-            if xdir not in self.tspecs:
+            if xdir in self.tspecs:
+                tspec = self.tspecs[ xdir ]
+                print3( '*** warning:',
+                    'ignoring test with duplicate execution directory\n',
+                    '      first file :', tspec.getFilename() + '\n',
+                    '      second file:', t.getFilename() )
+            else:
                 self.tspecs[xdir] = t
 
     def addTest(self, t):
