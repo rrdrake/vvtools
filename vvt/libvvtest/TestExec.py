@@ -43,7 +43,7 @@ class TestExec:
         self.xdir = None
 
         # do this import here to avoid possible cyclic dependency
-        import depend
+        from . import depend
         self.depset = depend.DependencySet( self.statushandler )
 
     def init(self, test_dir, platform, commondb, config ):
