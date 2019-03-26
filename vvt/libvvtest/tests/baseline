@@ -180,7 +180,7 @@ class baseline_tests( vtu.vvtestTestCase ):
     def test_script_format_rebaseline_using_option(self):
         ""
         util.writescript( "bline.vvt", """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: baseline : --bline
             import os, sys
             import shutil, filecmp
@@ -271,7 +271,7 @@ class baseline_tests( vtu.vvtestTestCase ):
               <baseline file="$NAME.txt" destination="${NAME}_base.txt"/>
             </rtest>""" )
         util.writescript( "pybase.vvt", """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: baseline : $NAME.txt, ${NAME}_base.txt
             import vvtest_util as vvt
             import sys, filecmp
@@ -313,7 +313,7 @@ class baseline_tests( vtu.vvtestTestCase ):
                         file="$NAME.txt" destination="${NAME}_base.txt"/>
             </rtest>""" )
         util.writescript( "pybase.vvt", """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : foo = 1 2
             #VVT: baseline (parameters="foo=1") : $NAME.txt, ${NAME}_base.txt
             import vvtest_util as vvt
@@ -354,7 +354,7 @@ class baseline_tests( vtu.vvtestTestCase ):
     def test_specifying_baseline_for_analyze_only(self):
         ""
         util.writescript( "control.vvt", """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : foo = 1 2
             #VVT: analyze : --analyze
             #VVT: baseline : --rebase
@@ -370,7 +370,7 @@ class baseline_tests( vtu.vvtestTestCase ):
             """ )
 
         util.writescript( "pybase.vvt", """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : foo = 1 2
             #VVT: analyze : --analyze
             #VVT: baseline (parameters="!foo") : --rebase

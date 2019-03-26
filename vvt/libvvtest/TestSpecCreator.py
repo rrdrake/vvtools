@@ -17,124 +17,6 @@ from .ScriptReader import ScriptReader, check_parse_attributes_section
 from .TestSpecError import TestSpecError
 
 
-###########################################################################
-
-def createTestObjects( rootpath, relpath, force_params, rtconfig ):
-    """
-    The 'rootpath' is the top directory of the file scan.  The 'relpath' is
-    the name of the test file relative to 'rootpath' (it must not be an
-    absolute path).  If 'force_params' is not None, then any parameters in
-    the test that are in the 'force_params' dictionary have their values
-    replaced for that parameter name.
-    
-    Returns a list of TestSpec objects, including a "parent" test if needed.
-
-
-    Is the following note about parameter filtering still relevant?  Is it
-    any different when filtering is performed above create/refresh?
-
-        Important: this function always applies filtering, even if the
-        "include_all" flag is present in 'rtconfig'.  This means any command
-        line parameter expressions must be passed along in batch queue mode.
-
-    """
-    evaluator = ExpressionEvaluator( rtconfig.platformName(),
-                                     rtconfig.getOptionList() )
-
-    tests = create_unfiltered_testlist( rootpath, relpath,
-                                        force_params, evaluator )
-
-    tL = []
-    for t in tests:
-
-        if t.isAnalyze():
-            # if analyze test, filter the parameter set to the parameters
-            # that would be included
-            paramset = t.getParameterSet()
-            paramset.applyParamFilter( rtconfig.evaluate_parameters )
-
-        if test_is_active( t, rtconfig ):
-            tL.append( t )
-
-    return tL
-
-
-def refreshTest( testobj, rtconfig ):
-    """
-    Parses the test source file and resets the settings for the given test.
-    The test name is not changed.  The parameters in the test XML file are
-    not considered; instead, the parameters already defined in the test
-    object are used.
-
-    If the test XML contains bad syntax, a TestSpecError is raised.
-    
-    Returns false if any of the filtering would exclude this test.
-    """
-    evaluator = ExpressionEvaluator( rtconfig.platformName(),
-                                     rtconfig.getOptionList() )
-
-    reparse_test_object( testobj, evaluator )
-
-    if testobj.isAnalyze():
-        # if analyze test, filter the parameter set to the parameters
-        # that would be included
-        paramset = testobj.getParameterSet()
-        paramset.applyParamFilter( rtconfig.evaluate_parameters )
-
-    keep = True
-    filt = not rtconfig.getAttr( 'include_all', False )
-    if filt and not test_is_active( testobj, rtconfig ):
-        keep = False
-
-    return keep
-
-
-def test_is_active( testobj, rtconfig ):
-    """
-    Uses the given filter to test whether the test is active (enabled).
-    """
-    pev = PlatformEvaluator( testobj.getPlatformEnableExpressions() )
-    if not rtconfig.evaluate_platform_include( pev.satisfies_platform ):
-        return False
-
-    for opexpr in testobj.getOptionEnableExpressions():
-        if not rtconfig.evaluate_option_expr( opexpr ):
-            return False
-
-    if not rtconfig.satisfies_keywords( testobj.getKeywords(True) ):
-        return False
-
-    if not rtconfig.getAttr( 'include_tdd', False ) and \
-       'TDD' in testobj.getKeywords():
-        return False
-
-    if not rtconfig.evaluate_parameters( testobj.getParameters() ):
-        return False
-
-    if not rtconfig.file_search( testobj ):
-        return False
-
-    return True
-
-
-class PlatformEvaluator:
-    """
-    Tests can use platform expressions to enable/disable the test.  This class
-    caches the expressions and provides a function that answers the question
-
-        "Would the test run on the given platform name?"
-    """
-    def __init__(self, list_of_word_expr):
-        self.exprL = list_of_word_expr
-
-    def satisfies_platform(self, plat_name):
-        ""
-        for wx in self.exprL:
-            if not wx.evaluate( lambda tok: tok == plat_name ):
-                return False
-        return True
-
-
 class ExpressionEvaluator:
     """
     Script test headers or attributes in test XML can specify a word
@@ -168,12 +50,8 @@ class ExpressionEvaluator:
         """
         Evaluate the given expression against the list of command line options.
         """
-        #wx = WordExpression(expr)
-        #opL = self.attrs.get( 'option_list', [] )
         return word_expr.evaluate( self.option_list.count )
 
-
-###########################################################################
 
 def create_unfiltered_testlist( rootpath, relpath, force_params, evaluator ):
     """
@@ -237,6 +115,9 @@ def create_unfiltered_testlist( rootpath, relpath, force_params, evaluator ):
     else:
         raise Exception( "invalid file extension: "+ext )
 
+    for tspec in tL:
+        tspec.setConstructionCompleted()
+
     return tL
 
 
@@ -252,14 +133,14 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
     testL = []
 
     if numparams == 0:
-        t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
+        t = TestSpec.TestSpec( tname, rootpath, relpath )
         testL.append(t)
 
     else:
         # take a cartesian product of all the parameter values
         for pdict in paramset.getInstances():
             # create the test and add to test list
-            t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
+            t = TestSpec.TestSpec( tname, rootpath, relpath )
             t.setParameters( pdict )
             testL.append(t)
 
@@ -306,14 +187,14 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
     testL = []
 
     if numparams == 0:
-        t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
+        t = TestSpec.TestSpec( tname, rootpath, relpath )
         testL.append(t)
 
     else:
         # take a cartesian product of all the parameter values
         for pdict in paramset.getInstances():
             # create the test and add to test list
-            t = TestSpec.TestSpec( tname, rootpath, relpath, "file" )
+            t = TestSpec.TestSpec( tname, rootpath, relpath )
             t.setParameters( pdict )
             testL.append(t)
     
@@ -323,7 +204,6 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
         t = testL[0]
 
         analyze_spec = parseAnalyze_scr( t, vspecs, evaluator )
-
 
         if analyze_spec:
 
@@ -372,17 +252,8 @@ def reparse_test_object( testobj, evaluator ):
 
         parse_include_platform( testobj, filedoc )
 
-        analyze_spec = parseAnalyze( testobj, filedoc, evaluator )
-
-        if analyze_spec and len( testobj.getParameters() ) == 0:
-
-            paramset = parseTestParameters( filedoc, tname, evaluator, None )
-
-            if len( paramset.getParameters() ) == 0:
-                raise TestSpecError( 'an analyze requires at least one ' + \
-                               'parameter to be defined' )
-
-            testobj.setParameterSet( paramset )
+        if testobj.isAnalyze():
+            analyze_spec = parseAnalyze( testobj, filedoc, evaluator )
             testobj.setAnalyzeScript( analyze_spec )
 
         parseKeywords    ( testobj, filedoc, tname )
@@ -402,18 +273,8 @@ def reparse_test_object( testobj, evaluator ):
 
         parse_enable_platform( testobj, vspecs )
 
-        analyze_spec = parseAnalyze_scr( testobj, vspecs, evaluator )
-
-        if analyze_spec and len( testobj.getParameters() ) == 0:
-
-            paramset = parseTestParameters_scr( vspecs, tname, evaluator, None )
-
-            if len( paramset.getParameters() ) == 0:
-                raise TestSpecError( 'an analyze requires at least one ' + \
-                               'parameter to be defined' )
-
-            testobj.setParameterSet( paramset )
-
+        if testobj.isAnalyze():
+            analyze_spec = parseAnalyze_scr( testobj, vspecs, evaluator )
             testobj.setAnalyzeScript( analyze_spec )
             if not analyze_spec.startswith('-'):
                 testobj.addLinkFile( analyze_spec )
@@ -427,7 +288,7 @@ def reparse_test_object( testobj, evaluator ):
     else:
         raise Exception( "invalid file extension: "+ext )
 
-    testobj.addOrigin( 'file' )  # mark test as refreshed
+    testobj.setConstructionCompleted()
 
 
 ##########################################################################
@@ -706,8 +567,8 @@ def parseFiles_scr( t, vspecs, evaluator ):
     """
         #VVT: copy : file1 file2
         #VVT: link : file3 file4
-        #VVT: copy (rename) : srcname1,copyname1 srcname2,copyname2
-        #VVT: link (rename) : srcname1,linkname1 srcname2,linkname2
+        #VVT: copy (filters) : srcname1,copyname1 srcname2,copyname2
+        #VVT: link (filters) : srcname1,linkname1 srcname2,linkname2
 
         #VVT: sources : file1 file2 ${NAME}_*.py
     """
@@ -1390,12 +1251,6 @@ def parseExecuteList( t, filedoc, evaluator ):
     
     If a name is given, the content is arguments to the named executable.
     Otherwise, the content is a script fragment.
-    
-    Returns a list of 3-tuples consisting of
-    
-      ( name, content, filterspec )
-    
-    where the name may be None.
     """
     t.resetExecutionList()
     
@@ -1760,9 +1615,3 @@ def allowableVariable(s):
       if c not in alphanum_chars_dict:
         return 0
     return 1
-
-def extract_keywords( expr ):
-    """
-    """
-    wx = FilterExpressions.WordExpression( expr )
-    return wx.getWordList()

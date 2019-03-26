@@ -16,11 +16,14 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
-import libvvtest.TestSpecCreator as creator
+from libvvtest.TestList import createTestObjects
 from libvvtest.RuntimeConfig import RuntimeConfig
-from libvvtest.TestList import find_tests_by_execute_directory_match
 from libvvtest.TestSpec import TestSpec
 from libvvtest.TestExec import TestExec
+from libvvtest.teststatus import TestStatusHandler
+
+from libvvtest import depend
+find_tests_by_execute_directory_match = depend.find_tests_by_execute_directory_match
 
 
 class Parse_Dependencies( vtu.vvtestTestCase ):
@@ -37,12 +40,12 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         nofltr = RuntimeConfig()
 
-        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+        tL = createTestObjects( '.', 'testX.py.vvt', None, nofltr )
         assert len(tL) == 1
         assert_dependencies( tL[0], 'testY' )
         assert get_depencency_expr( tL[0], 'testY' ) == None
 
-        tL = creator.createTestObjects( '.', 'testA.py.vvt', None, nofltr )
+        tL = createTestObjects( '.', 'testA.py.vvt', None, nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testC', 'testB' )
@@ -61,7 +64,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         nofltr = RuntimeConfig()
 
-        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+        tL = createTestObjects( '.', 'testX.py.vvt', None, nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testY', 'testZ' )
@@ -72,7 +75,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
             assert not wx.evaluate( lambda word: word == "diff" )
             assert wx.evaluate( lambda word: word == "fail" )
 
-        tL = creator.createTestObjects( '.', 'testA.py.vvt', None, nofltr )
+        tL = createTestObjects( '.', 'testA.py.vvt', None, nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testB' )
@@ -91,7 +94,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         nofltr = RuntimeConfig()
 
-        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+        tL = createTestObjects( '.', 'testX.py.vvt', None, nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testY', 'testZ' )
@@ -112,7 +115,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         nofltr = RuntimeConfig()
 
-        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+        tL = createTestObjects( '.', 'testX.py.vvt', None, nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testB', 'testW', 'testY', 'testZ' )
@@ -140,7 +143,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         fltr = RuntimeConfig( platform_name='XBox' )
 
-        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, fltr )
+        tL = createTestObjects( '.', 'testX.py.vvt', None, fltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testY' )
@@ -152,7 +155,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         fltr = RuntimeConfig( platform_name='PlayStation' )
 
-        tL = creator.createTestObjects( '.', 'testX.py.vvt', None, fltr )
+        tL = createTestObjects( '.', 'testX.py.vvt', None, fltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testZ' )
@@ -186,6 +189,15 @@ def get_depencency_expr( tspec, dep_name ):
 
 #######################################
 
+def make_tspec_map( *dirlist ):
+    ""
+    D = {}
+    for sd in dirlist:
+        D[ sd ] = None
+
+    return D
+
+
 class Function_find_tests_by_execute_directory_match( vtu.vvtestTestCase ):
 
     def setUp(self):
@@ -194,93 +206,107 @@ class Function_find_tests_by_execute_directory_match( vtu.vvtestTestCase ):
 
     def test_base_match(self):
         ""
-        xL = [ 'subdir/testB', 'subdir/testC' ]
+        xL = make_tspec_map( 'subdir/testB', 'subdir/testC' )
         S = find_tests_by_execute_directory_match( 'subdir/testA', 'testB', xL )
         assert has_same_values( S, ['subdir/testB'] )
 
-        xL = [ 'subdir/testC', 'subdir1/testB', 'subdir2/testB' ]
+        xL = make_tspec_map( 'subdir/testC', 'subdir1/testB', 'subdir2/testB' )
         S = find_tests_by_execute_directory_match( 'subdir2/testA', 'testB', xL )
         assert has_same_values( S, ['subdir2/testB'] )
 
-        xL = [ 'subdir/testC', 'subdir1/testB', 'subdir2/testB' ]
+        xL = make_tspec_map( 'subdir/testC', 'subdir1/testB', 'subdir2/testB' )
         S = find_tests_by_execute_directory_match( 'subdir1/testA', 'testB', xL )
         assert has_same_values( S, ['subdir1/testB'] )
 
-        xL = [ 'subdir/testB', 'subdir/testC', 'subdir/down/testB' ]
+        xL = make_tspec_map( 'subdir/testB', 'subdir/testC', 'subdir/down/testB' )
         S = find_tests_by_execute_directory_match( 'subdir/testA', 'testB', xL )
         assert has_same_values( S, ['subdir/testB'] )
 
-        xL = [ 'testB', 'testC' ]
+        xL = make_tspec_map( 'testB', 'testC' )
         S = find_tests_by_execute_directory_match( 'testA', 'testB', xL )
         assert has_same_values( S, ['testB'] )
 
-        xL = [ 'testB', 'testC', 'down/testB' ]
+        xL = make_tspec_map( 'testB', 'testC', 'down/testB' )
         S = find_tests_by_execute_directory_match( 'subdir/testA', 'testB', xL )
         assert has_same_values( S, ['testB'] )
 
     def test_subdir_match(self):
         ""
-        xL = [ 'subdir/testB' ]
+        xL = make_tspec_map( 'subdir/testB' )
         S = find_tests_by_execute_directory_match( 'testA', 'testB', xL )
         assert has_same_values( S, ['subdir/testB'] )
 
-        xL = [ 'top/subdir/testB' ]
+        xL = make_tspec_map( 'top/subdir/testB' )
         S = find_tests_by_execute_directory_match( 'top/testA', 'testB', xL )
         assert has_same_values( S, ['top/subdir/testB'] )
 
-        xL = [ 'subdir/testB', 'subdir/deep/testB' ]
+        xL = make_tspec_map( 'subdir/testB', 'subdir/deep/testB' )
         S = find_tests_by_execute_directory_match( 'testA', 'testB', xL )
         assert has_same_values( S, ['subdir/deep/testB','subdir/testB'] )
 
-        xL = [ 'top/subdir/testB', 'top/subdir/deep/testB' ]
+        xL = make_tspec_map( 'top/subdir/testB', 'top/subdir/deep/testB' )
         S = find_tests_by_execute_directory_match( 'top/testA', 'testB', xL )
         assert has_same_values( S, ['top/subdir/deep/testB','top/subdir/testB'] )
 
-        xL = [ 'subdir/testB', 'subdir/deep/testB' ]
+        xL = make_tspec_map( 'subdir/testB', 'subdir/deep/testB' )
         S = find_tests_by_execute_directory_match( 'testA', 't*B', xL )
         assert has_same_values( S, ['subdir/deep/testB','subdir/testB'] )
 
-        xL = [ 'subdir1/deep2/testB', 'subdir1/deep1/testB', 'subdir2/testB' ]
+        xL = make_tspec_map( 'subdir1/deep2/testB', 'subdir1/deep1/testB', 'subdir2/testB' )
         S = find_tests_by_execute_directory_match( 'subdir1/testA', 'testB', xL )
         assert has_same_values( S, ['subdir1/deep1/testB','subdir1/deep2/testB'] )
 
-        xL = [ 'subdir1/deep2/testB', 'subdir1/deep1/testB', 'subdir2/testB' ]
+        xL = make_tspec_map( 'subdir1/deep2/testB', 'subdir1/deep1/testB', 'subdir2/testB' )
         S = find_tests_by_execute_directory_match( 'subdir1/testA', 't*B', xL )
         assert has_same_values( S, ['subdir1/deep1/testB','subdir1/deep2/testB'] )
 
     def test_absolute_path_pattern(self):
         ""
-        xL = [ 'subdir1/testB', 'subdir2/testB' ]
+        xL = make_tspec_map( 'subdir1/testB', 'subdir2/testB' )
         S = find_tests_by_execute_directory_match(
                             'subdir1/testA', 'subdir2/testB', xL )
         assert has_same_values( S, ['subdir2/testB'] )
 
-        xL = [ 'subdir1/testB', 'subdir2/subdir1/testB' ]
+        xL = make_tspec_map( 'subdir1/testB', 'subdir2/subdir1/testB' )
         S = find_tests_by_execute_directory_match(
                             'subdir1/testA', 'subdir1/testB', xL )
         assert has_same_values( S, ['subdir1/testB'] )
 
     def test_general_pattern(self):
         ""
-        xL = [ 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' ]
+        xL = make_tspec_map( 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' )
         S = find_tests_by_execute_directory_match(
                             'subdir3/testA', 't*B', xL )
         assert has_same_values( S, ['subdir1/testB', 'subdir2/testB'] )
 
     def test_relative_directory_test_location(self):
         ""
-        xL = [ 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' ]
+        xL = make_tspec_map( 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' )
         S = find_tests_by_execute_directory_match(
                             'subdir3/testA', '../subdir1/*B', xL )
         assert has_same_values( S, ['subdir1/testB'] )
 
-        xL = [ 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' ]
+        xL = make_tspec_map( 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' )
         S = find_tests_by_execute_directory_match(
                             'subdir3/testA', '../sub*/*B', xL )
         assert has_same_values( S, ['subdir1/testB','subdir2/testB'] )
 
 
 #######################################
+
+def make_test_dep( testobj ):
+    ""
+    if isinstance( testobj, TestSpec ):
+        return depend.TestDependency( testobj, None, None )
+    else:
+        return depend.TestDependency( testobj.atest, None, None )
+
+
+def add_dependency( from_test, to_test ):
+    ""
+    depset = from_test.getDependencySet()
+    depset.addDependency( make_test_dep( to_test ) )
+
 
 class dependency_related_functions( vtu.vvtestTestCase ):
 
@@ -291,58 +317,58 @@ class dependency_related_functions( vtu.vvtestTestCase ):
     def test_addDependency_uniquifies_multiple_TestSpec(self):
         ""
         ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = TestExec( ts, None )
+        tx = TestExec( TestStatusHandler(), ts, None )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx.addDependency( ts1 )
+        add_dependency( tx, ts1 )
 
         ts2 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx.addDependency( ts2 )
+        add_dependency( tx, ts2 )
 
-        assert len( tx.getDependencies() ) == 1
+        assert tx.getDependencySet().numDependencies() == 1
 
     def test_addDependency_uniquifies_multiple_TestExec(self):
         ""
         ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = TestExec( ts, None )
+        tx = TestExec( TestStatusHandler(), ts, None )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx1 = TestExec( ts1, None )
-        tx.addDependency( tx1 )
+        tx1 = TestExec( TestStatusHandler(), ts1, None )
+        add_dependency( tx, tx1 )
 
         ts2 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx2 = TestExec( ts2, None )
-        tx.addDependency( tx2 )
+        tx2 = TestExec( TestStatusHandler(), ts2, None )
+        add_dependency( tx, tx2 )
 
-        assert len( tx.getDependencies() ) == 1
+        assert tx.getDependencySet().numDependencies() == 1
 
     def test_addDependency_uniquifies_TestSpec_then_TestExec(self):
         ""
         ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = TestExec( ts, None )
+        tx = TestExec( TestStatusHandler(), ts, None )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx.addDependency( ts1 )
+        add_dependency( tx, ts1 )
 
         ts2 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx2 = TestExec( ts2, None )
-        tx.addDependency( tx2 )
+        tx2 = TestExec( TestStatusHandler(), ts2, None )
+        add_dependency( tx, tx2 )
 
-        assert len( tx.getDependencies() ) == 1
+        assert tx.getDependencySet().numDependencies() == 1
 
     def test_addDependency_uniquifies_TestExec_then_TestSpec(self):
         ""
         ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = TestExec( ts, None )
+        tx = TestExec( TestStatusHandler(), ts, None )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx1 = TestExec( ts1, None )
-        tx.addDependency( tx1 )
+        tx1 = TestExec( TestStatusHandler(), ts1, None )
+        add_dependency( tx, tx1 )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx.addDependency( ts1 )
+        add_dependency( tx, ts1 )
 
-        assert len( tx.getDependencies() ) == 1
+        assert tx.getDependencySet().numDependencies() == 1
 
 
 #######################################

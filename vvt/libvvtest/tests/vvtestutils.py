@@ -199,7 +199,8 @@ class VvtestCommandRunner:
     def assertCounts(self, total=None, finish=None,
                            npass=None, diff=None,
                            fail=None, timeout=None,
-                           notrun=None, notdone=None ):
+                           notrun=None, notdone=None,
+                           skip=None ):
         ""
         if total   != None: assert total   == self.cntD['total']
         if npass   != None: assert npass   == self.cntD['npass']
@@ -208,6 +209,7 @@ class VvtestCommandRunner:
         if timeout != None: assert timeout == self.cntD['timeout']
         if notrun  != None: assert notrun  == self.cntD['notrun']
         if notdone != None: assert notdone == self.cntD['notdone']
+        if skip    != None: assert skip    == self.cntD['skip']
 
         if finish != None:
             assert finish == self.cntD['npass'] + \
@@ -312,6 +314,10 @@ def vvtest_command_line( *cmd_args, **options ):
 
     cmdL = [ sys.executable, vvtest_file ]
 
+    if need_to_add_verbose_flag( argL ):
+        # add -v when running in order to extract the full test list
+        cmdL.append( '-v' )
+
     if options.get( 'addplatform', True ) and '--plat' not in argL:
         cmdL.extend( [ '--plat', core_platform_name() ] )
 
@@ -336,16 +342,22 @@ def vvtest_command_line( *cmd_args, **options ):
     return cmd
 
 
+def need_to_add_verbose_flag( vvtest_args ):
+    ""
+    if '-i' in vvtest_args: return False
+    if '-g' in vvtest_args: return False
+    if '-v' in vvtest_args: return False
+    return True
+
+
 def parse_vvtest_counts( out ):
     ""
     ntot = 0
-    np = 0 ; nf = 0 ; nd = 0 ; nn = 0 ; nt = 0 ; nr = 0
+    np = 0 ; nf = 0 ; nd = 0 ; nn = 0 ; nt = 0 ; nr = 0 ; ns = 0
 
     for line in testlines( out ):
 
         lineL = line.strip().split()
-
-        ntot += 1
 
         if   check_pass   ( lineL ): np += 1
         elif check_fail   ( lineL ): nf += 1
@@ -353,8 +365,13 @@ def parse_vvtest_counts( out ):
         elif check_notrun ( lineL ): nn += 1
         elif check_timeout( lineL ): nt += 1
         elif check_notdone( lineL ): nr += 1
+        elif check_skip   ( lineL ): ns += 1
+        elif lineL[0] == '...':
+            break  # a truncated test listing message starts with "..."
         else:
             raise Exception( 'unable to parse test line: '+line )
+
+        ntot += 1
 
     cntD = { 'total'  : ntot,
              'npass'  : np,
@@ -362,18 +379,20 @@ def parse_vvtest_counts( out ):
              'diff'   : nd,
              'notrun' : nn,
              'timeout': nt,
-             'notdone': nr }
+             'notdone': nr,
+             'skip'   : ns }
 
     return cntD
 
 
 # these have to be modified if/when the output format changes in vvtest
-def check_pass(L): return len(L) >= 5 and L[2] == 'pass'
-def check_fail(L): return len(L) >= 5 and L[2][:4] == 'fail'
-def check_diff(L): return len(L) >= 5 and L[2] == 'diff'
-def check_notrun(L): return len(L) >= 3 and L[1] == 'NotRun'
-def check_timeout(L): return len(L) >= 5 and L[1] == 'TimeOut'
-def check_notdone(L): return len(L) >= 3 and L[1] == 'Running'
+def check_pass(L): return len(L) >= 5 and L[1] == 'pass'
+def check_fail(L): return len(L) >= 5 and L[1] == 'fail'
+def check_diff(L): return len(L) >= 5 and L[1] == 'diff'
+def check_notrun(L): return len(L) >= 3 and L[1] == 'notrun'
+def check_timeout(L): return len(L) >= 4 and L[1] == 'timeout'
+def check_notdone(L): return len(L) >= 3 and L[1] == 'notdone'
+def check_skip(L): return len(L) >= 4 and L[1] == 'skip'
 
 
 def parse_test_ids( vvtest_output, results_dir ):
@@ -468,7 +487,8 @@ def testlines( vvtest_output ):
     mark = False
     for line in vvtest_output.splitlines():
         if mark:
-            if line.startswith( "==========" ):
+            if line.startswith( "==========" ) or \
+               line.startswith( 'Summary:' ):  # happens if test list is empty
                 mark = False
             else:
                 lineL.append( line )
@@ -492,11 +512,49 @@ def testtimes(out):
     for line in testlines(out):
         L = line.strip().split()
         try:
-            s = time.strftime('%Y ')+L[4]+' '+L[5]
+            s = time.strftime('%Y ')+L[3]+' '+L[4]
             t = time.mktime( time.strptime( s, fmt ) )
-            e = t + int( L[3][:-1] )
+            e = t + int( L[2][:-1] )
             timesL.append( [ L[-1], t, e ] )
         except Exception:
             pass
 
     return timesL
+
+
+def parse_summary_string( summary_string ):
+    """
+    Parses the summary string from vvtest output, such as
+
+        Summary: pass=0, fail=1, diff=0, timeout=0, notdone=0, notrun=1, skip=0
+
+    Returns dictionary of these names to their values.
+    """
+    valD = {}
+
+    for spec in summary_string.split():
+        spec = spec.strip(',')
+        if '=' in spec:
+            nv = spec.split('=')
+            assert len(nv) == 2
+            valD[ nv[0] ] = int( nv[1] )
+
+    return valD
+
+
+def assert_summary_string( summary_string,
+                           npass=None, fail=None, diff=None,
+                           timeout=None, notdone=None, notrun=None,
+                           skip=None ):
+    """
+    Parses the summary string and asserts any given values.
+    """
+    valD = parse_summary_string( summary_string )
+
+    if npass   != None: assert valD['pass']    == npass
+    if fail    != None: assert valD['fail']    == fail
+    if diff    != None: assert valD['diff']    == diff
+    if timeout != None: assert valD['timeout'] == timeout
+    if notdone != None: assert valD['notdone'] == notdone
+    if notrun  != None: assert valD['notrun']  == notrun
+    if skip    != None: assert valD['skip']    == skip

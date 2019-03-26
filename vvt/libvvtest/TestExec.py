@@ -15,8 +15,6 @@ from . import cshScriptWriter
 from . import ScriptWriter
 from . import pgexec
 
-# this is the exit status that tests use to indicate a diff
-diffExitStatus = 64
 
 # if a test times out, it receives a SIGINT.  if it doesn't finish up
 # after that in this number of seconds, it gets sent a SIGKILL
@@ -29,29 +27,25 @@ class TestExec:
     The status and test results are saved in the TestSpec object.
     """
     
-    def __init__(self, atest, perms):
+    def __init__(self, statushandler, atest, perms):
         """
         Constructs a test execution object which references a TestSpec obj.
         The 'perms' argument is a PermissionsSetter object.
         """
+        self.statushandler = statushandler
         self.atest = atest
         self.perms = perms
         self.has_dependent = False
         
         self.platform = None
         self.timeout = 0
-        self.tzero = 0
         self.pid = 0
         self.xdir = None
 
-        # a list of runtime dependencies; items are tuples
-        #    (TestExec or TestSpec, match pattern, word expr)
-        self.deps = []  
+        # do this import here to avoid possible cyclic dependency
+        from . import depend
+        self.depset = depend.DependencySet( self.statushandler )
 
-        # constructing a TestExec object implies that it will be run, so
-        # mark the test state as notrun
-        self.atest.setAttr( 'state', "notrun" )
-    
     def init(self, test_dir, platform, commondb, config ):
         """
         The platform is a Platform object.  The test_dir is the top level
@@ -61,6 +55,8 @@ class TestExec:
         self.platform = platform
         self.config = config
         self.timeout = self.atest.getAttr( 'timeout', 0 )
+
+        self.statushandler.resetResults( self.atest )
 
         self.xdir = os.path.join( test_dir, self.atest.getExecuteDirectory() )
 
@@ -84,13 +80,9 @@ class TestExec:
 
         self.plugin_obj = self.platform.obtainProcs( np )
 
-        self.tzero = time.time()
-
         self.timedout = 0  # holds time.time() if the test times out
 
-        self.atest.setAttr( 'state', "notdone" )
-        self.atest.setAttr( 'xtime', -1 )
-        self.atest.setAttr( 'xdate', int(time.time()) )
+        self.statushandler.startRunning( self.atest )
 
         sys.stdout.flush() ; sys.stderr.flush()
 
@@ -102,9 +94,11 @@ class TestExec:
     def poll(self):
         """
         """
-        if self.atest.getAttr('state') == "notrun": return 0
+        if self.isNotrun():
+            return False
 
-        if self.atest.getAttr('state') == "done": return 1
+        if self.isDone():
+            return True
 
         assert self.pid > 0
 
@@ -116,36 +110,39 @@ class TestExec:
 
             self.platform.giveProcs( self.plugin_obj )
 
-            self.atest.setAttr('state', "done")
-            self.atest.setAttr('xtime', int(time.time()-self.tzero))
-
-            result = translate_exit_status_to_test_result( code )
-            self.atest.setAttr( 'result', result )
-
             if self.timedout > 0:
-                self.atest.setAttr( 'result', "timeout" )
+                self.statushandler.markTimedOut( self.atest )
+            else:
+                exit_status = decode_subprocess_exit_code( code )
+                self.statushandler.markDone( self.atest, exit_status )
 
             self.perms.recurse( self.xdir )
 
             if self.config.get('postclean') and \
-               self.atest.getAttr('result') == 'pass' and \
+               self.statushandler.passed( self.atest ) and \
                not self.has_dependent:
                 self.postclean()
 
         # not done .. check for timeout
-        elif self.timeout > 0 and (time.time() - self.tzero) > self.timeout:
-            if self.timedout == 0:
-                # interrupt all processes in the process group
-                self.signalJob( signal.SIGINT )
-                self.timedout = time.time()
-            elif (time.time() - self.timedout) > interrupt_to_kill_timeout:
-                # SIGINT isn't killing fast enough, use stronger method
-                self.signalJob( signal.SIGTERM )
+        elif self.timeout > 0:
+            tm = time.time()
+            tzero = self.statushandler.getStartDate( self.atest )
+            if tm-tzero > self.timeout:
+                if self.timedout == 0:
+                    # interrupt all processes in the process group
+                    self.signalJob( signal.SIGINT )
+                    self.timedout = tm
+                elif (tm - self.timedout) > interrupt_to_kill_timeout:
+                    # SIGINT isn't killing fast enough, use stronger method
+                    self.signalJob( signal.SIGTERM )
 
-        return self.atest.getAttr('state') == "done"
+        return self.isDone()
+
+    def isNotrun(self):
+        return self.statushandler.isNotrun( self.atest )
 
     def isDone(self):
-        return self.atest.getAttr('state') == "done"
+        return self.statushandler.isDone( self.atest )
     
     def signalJob(self, sig):
         """
@@ -177,68 +174,9 @@ class TestExec:
         ""
         return self.has_dependent
 
-    def addDependency(self, testexec, match_pattern=None, expr=None):
-        """
-        A dependency can be either a TestExec object or a TestSpec object.
-        A TestExec object will replace a TestSpec object with the same
-        execute directory.
-        """
-        append = True
-        for i,tup in enumerate( self.deps ):
-            if same_execute_directory( testexec, tup[0] ):
-                if isinstance( testexec, TestExec ):
-                    self.deps[i] = ( testexec, match_pattern, expr )
-                append = False
-                break
-
-        if append:
-            self.deps.append( (testexec,match_pattern,expr) )
-
-    def hasDependency(self):
-        """
-        """
-        return len(self.deps) > 0
-
-    def getDependencies(self):
-        """
-        """
-        return self.deps
-
-    def getBlockingDependency(self):
-        """
-        If one or more dependencies did not run, did not finish, or failed,
-        then that offending TestExec is returned.  Otherwise, None is returned.
-        """
-        for tx,pat,expr in self.deps:
-
-            if isinstance( tx, TestExec ):
-
-                if tx.atest.getAttr('state') != 'done':
-                    return tx
-
-                result = tx.atest.getAttr('result')
-
-                if expr == None:
-                    if result not in ['pass','diff']:
-                        return tx
-
-                elif not expr.evaluate( lambda word: word == result ):
-                    return tx
-
-        return None
-
-    def getDependencyDirectories(self):
+    def getDependencySet(self):
         ""
-        L = []
-
-        for tx,pat,expr in self.deps:
-
-            if isinstance( tx, TestExec ):
-                L.append( (pat,tx.atest.getExecuteDirectory()) )
-            else:
-                L.append( (pat,tx.getExecuteDirectory()) )
-
-        return L
+        return self.depset
 
     def _prepare_and_execute_test(self, baseline):
         ""
@@ -573,7 +511,7 @@ class TestExec:
                 ScriptWriter.writeScript( self.atest, script_file,
                                           lang, self.config, self.platform,
                                           test_dir,
-                                          self.getDependencyDirectories() )
+                                          self.getDependencySet() )
 
                 self.perms.set( os.path.abspath( script_file ) )
 
@@ -607,21 +545,6 @@ def echo_test_execution_info( testname, cmd_list, timeout ):
 
     sys.stdout.write( '\n' )
     sys.stdout.flush()
-
-
-def same_execute_directory( testobj1, testobj2 ):
-    ""
-    if isinstance( testobj1, TestExec ):
-        xdir1 = testobj1.atest.getExecuteDirectory()
-    else:
-        xdir1 = testobj1.getExecuteDirectory()
-
-    if isinstance( testobj2, TestExec ):
-        xdir2 = testobj2.atest.getExecuteDirectory()
-    else:
-        xdir2 = testobj2.getExecuteDirectory()
-
-    return xdir1 == xdir2
 
 
 def set_timeout_environ_variable( timeout ):
@@ -746,25 +669,15 @@ def make_core_execute_command( atest, baseline ):
     return cmdL
 
 
-def translate_exit_status_to_test_result( exit_status ):
+def decode_subprocess_exit_code( exit_code ):
     ""
-    if os.WIFEXITED( exit_status ):
+    if os.WIFEXITED( exit_code ):
+        return os.WEXITSTATUS( exit_code )
 
-        if os.WEXITSTATUS( exit_status ) == 0:
-            result = 'pass'
-        elif os.WEXITSTATUS( exit_status ) == diffExitStatus:
-            result = 'diff'
-        else:
-            result = 'fail'
+    if os.WIFSIGNALED( exit_code ) or os.WIFSTOPPED( exit_code ):
+        return 1
 
-    elif os.WIFSIGNALED(exit_status) or os.WIFSTOPPED(exit_status):
-        result = 'fail'
+    if exit_code == 0:
+        return 0
 
-    else:
-        # could not translate exit_status
-        if exit_status == 0:
-            result = 'pass'  # assume pass
-        else:
-            result = 'fail'  # assume fail
-
-    return result
+    return 1

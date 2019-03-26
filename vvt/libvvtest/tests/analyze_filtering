@@ -1,0 +1,147 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+
+import vvtestutils as vtu
+import testutils as util
+from testutils import print3
+
+
+class execute_analyze_filtering_behavior( vtu.vvtestTestCase ):
+
+    def test_using_parameter_expression_on_execute_analyze(self):
+        ""
+        util.writefile( 'foo.vvt', """
+            #VVT: parameterize : val = a b c
+            #VVT: analyze : --analyze
+            import os, sys
+            from vvtest_util import DEPDIRS
+            if '--analyze' in sys.argv:
+                print ( 'DEPDIRS=' + repr(DEPDIRS) )
+            """ )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( batch=batch )
+            vrun.assertCounts( total=4, npass=4 )
+            depdirs = get_relative_DEPDIRS( vrun.resultsDir(), 'foo' )
+            assert depdirs == [ 'foo.val=a', 'foo.val=b', 'foo.val=c' ]
+
+            # restrict parameters
+            vtu.remove_results()
+            vrun = vtu.runvvtest( '-p val=a/val=c',  batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
+            assert vrun.getTestIds() == [ 'foo', 'foo.val=a', 'foo.val=c' ]
+            depdirs = get_relative_DEPDIRS( vrun.resultsDir(), 'foo' )
+            assert depdirs == [ 'foo.val=a', 'foo.val=c' ]
+
+            # running inside test results with additional param expr restricts
+            # the execute tests that get run, but not the analyze deps
+            vrun = vtu.runvvtest( '-R -P val=a', chdir=vrun.resultsDir(),
+                                                 batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
+            assert vrun.getTestIds() == [ 'foo', 'foo.val=c' ]
+            depdirs = get_relative_DEPDIRS( vrun.resultsDir(), 'foo' )
+            assert depdirs == [ 'foo.val=a', 'foo.val=c' ]
+
+            # lifting the additional restriction reverts to initial execute set
+            vrun = vtu.runvvtest( '-R', chdir=vrun.resultsDir(), batch=batch )
+            vrun.assertCounts( total=3, npass=3 )
+            assert vrun.getTestIds() == [ 'foo', 'foo.val=a', 'foo.val=c' ]
+            depdirs = get_relative_DEPDIRS( vrun.resultsDir(), 'foo' )
+            assert depdirs == [ 'foo.val=a', 'foo.val=c' ]
+
+    def test_if_an_execute_test_is_excluded_then_the_analyze_is_not_run(self):
+        ""
+        util.writefile( 'foo.vvt', """
+            #VVT: parameterize : np = 1 8 32
+            #VVT: analyze : --analyze
+            import os, sys
+            """ )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-N 8', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
+            assert vrun.getTestIds() == [ 'foo.np=1', 'foo.np=8' ]
+
+            vrun = vtu.runvvtest( '-R -N 4', chdir=vrun.resultsDir(),
+                                             batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+            assert vrun.getTestIds() == [ 'foo.np=1' ]
+
+            vrun = vtu.runvvtest( '-R', chdir=vrun.resultsDir(),
+                                        batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
+            assert vrun.getTestIds() == [ 'foo.np=1', 'foo.np=8' ]
+
+    def test_if_execute_is_excluded_by_tsum_then_the_analyze_is_not_run(self):
+        ""
+        util.writefile( 'foo.vvt', """
+            #VVT: parameterize : val = a b c
+            #VVT: analyze : --analyze
+            import os, sys, time
+            if '--analyze' in sys.argv:
+                time.sleep(1)
+            else:
+                time.sleep( 5 )
+            """ )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( batch=batch )
+            vrun.assertCounts( total=4, npass=4 )
+
+            vrun = vtu.runvvtest( '-R --tsum 12', batch=batch )
+            testids = vrun.getTestIds()
+            assert len( testids ) > 0 and len( testids ) < 3
+            assert 'foo' not in testids
+
+            # behavioral bug [Mar 2019]: cannot just run -R here because the
+            # test times are not known until the "runtime filtering", which
+            # happens after the testlist is written
+            vrun = vtu.runvvtest( '-R --tsum 12', chdir=vrun.resultsDir(),
+                                                  batch=batch )
+            testids = vrun.getTestIds()
+            assert len( testids ) > 0 and len( testids ) < 3
+            assert 'foo' not in testids
+
+
+def get_relative_DEPDIRS( resultsdir, testname ):
+    ""
+    lines = util.grepfiles( 'DEPDIRS=', resultsdir+'/'+testname+'/execute.log' )
+    assert len( lines ) == 1
+
+    rep = lines[0].split( 'DEPDIRS=', 1 )[1].strip()
+    dL = eval( rep )
+
+    prefix = resultsdir+'/'
+    dL = list( map( lambda d: d.replace( prefix, '', 1 ), dL ) )
+
+    dL.sort()
+
+    return dL
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

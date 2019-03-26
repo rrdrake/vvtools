@@ -15,10 +15,12 @@ from . import testlistio
 
 class BatchScheduler:
 
-    def __init__(self, test_dir, tlist, accountant, namer, perms,
+    def __init__(self, test_dir, tlist, statushandler,
+                       accountant, namer, perms,
                        plat, maxjobs, clean_exit_marker):
         self.test_dir = test_dir
         self.tlist = tlist
+        self.statushandler = statushandler
         self.accountant = accountant
         self.namer = namer
         self.perms = perms
@@ -235,7 +237,7 @@ class BatchScheduler:
                 xdir = tx.atest.getExecuteDirectory()
 
                 tspec = jobtests.get( xdir, None )
-                if tspec and tspec.getAttr( 'state', None ) == 'done':
+                if tspec and self.statushandler.isDone( tspec ):
                     tL.append( tx.atest )
                     self.tlist.stopped[ xdir ] = tx
         
@@ -253,7 +255,7 @@ class BatchScheduler:
         Otherwise None is returned.
         """
         for tx in bjob.testL:
-            deptx = tx.getBlockingDependency()
+            deptx = tx.getDependencySet().getBlocking()
             if deptx != None:
                 return deptx
         return None

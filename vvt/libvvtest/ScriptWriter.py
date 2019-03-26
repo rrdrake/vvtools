@@ -8,7 +8,7 @@ import os, sys
 
 
 def writeScript( testobj, filename, lang, config, plat,
-                          test_dir, dep_list ):
+                          test_dir, depset ):
     """
     Writes a helper script for the test.  The script language is based on
     the 'lang' argument.
@@ -34,6 +34,8 @@ def writeScript( testobj, filename, lang, config, plat,
 
     platname = plat.getName()
     cplrname = plat.getCompiler()
+
+    dep_list = depset.getMatchDirectories()
 
     w = LineWriter()
 

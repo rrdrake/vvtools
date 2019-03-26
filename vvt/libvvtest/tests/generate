@@ -11,6 +11,7 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
+import glob
 
 import vvtestutils as vtu
 import testutils as util
@@ -134,6 +135,27 @@ class generate_tests( vtu.vvtestTestCase ):
         # try out the -S option with -g
         vrun = vtu.runvvtest( '-gS hello=jupiter subdir' )
         assert vrun.countTestLines( 'boom.hello=jupiter' ) == 1
+
+    def test_that_generate_applies_filtering(self):
+        ""
+        util.writefile( "one.vvt", """
+            #VVT: keywords : foo
+            """ )
+        util.writefile( "two.vvt", """
+            #VVT: keywords : bar
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest( '-g' )
+        vrun.assertCounts( total=2, notrun=2 )
+        assert util.globfile( 'TestResults*/one' )
+        assert util.globfile( 'TestResults*/two' )
+
+        vtu.remove_results()
+        vrun = vtu.runvvtest( '-g -k foo' )
+        vrun.assertCounts( total=1, notrun=1 )
+        assert util.globfile( 'TestResults*/one' )
+        assert len( glob.glob( 'TestResults*/two' ) ) == 0
 
     def test_that_TestResults_and_Build_directories_are_excluded_from_scans(self):
         ""
@@ -288,6 +310,49 @@ class generate_tests( vtu.vvtestTestCase ):
         assert vrun.countTestLines( 'multi_2nd.paramB=five' ) == 1
         assert vrun.countGrepLogs( 'test name multiXXX' ) == 0
         assert vrun.countGrepLogs( 'test name multi_2ndXXX' ) == 3
+
+    def test_that_restarts_do_not_modify_the_testlist(self):
+        ""
+        util.writefile( "one.vvt", """
+            #VVT: keywords : foo
+            """ )
+        util.writefile( "two.vvt", """
+            #VVT: keywords : bar
+            """ )
+        util.writefile( "three.vvt", """
+            #VVT: keywords : bar baz
+            """ )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-k bar/baz', batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
+            assert vrun.getTestIds() == [ 'three', 'two' ]
+
+            tdir = vrun.resultsDir()
+
+            # run inside test results directory with new keyword expression
+            vrun = vtu.runvvtest( '-R -k baz', chdir=tdir, batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+            assert vrun.getTestIds() == [ 'three' ]
+
+            # the original test list should be run here
+            vrun = vtu.runvvtest( '-R', chdir=tdir, batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
+            assert vrun.getTestIds() == [ 'three', 'two' ]
+
+            # running outside always rescans & recomputes the test list
+            vrun = vtu.runvvtest( '-k foo/baz', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+            assert vrun.getTestIds() == [ 'one' ]
+
+            # the first testlist should have been overwritten
+            vrun = vtu.runvvtest( '-R', chdir=tdir, batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
+            assert vrun.getTestIds() == [ 'one', 'three' ]
 
 
 ########################################################################

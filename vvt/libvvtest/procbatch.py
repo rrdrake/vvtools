@@ -16,7 +16,7 @@ class ProcessBatch:
         self.ppn = ppn
         self.childids = []
 
-    def header(self, np, qtime, workdir, outfile):
+    def header(self, np, qtime, workdir, outfile, plat_attrs):
         """
         """
         hdr = '\n' + \
@@ -29,7 +29,7 @@ class ProcessBatch:
         return hdr
 
     def submit(self, fname, workdir, outfile,
-                     queue=None, account=None, confirm=False):
+                     queue=None, account=None, confirm=False, **kwargs):
         """
         Executes the script 'fname' as a background process.
         Returns (cmd, out, job id, error message) where 'cmd' is

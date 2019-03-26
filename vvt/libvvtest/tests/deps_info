@@ -18,7 +18,6 @@ from testutils import print3
 
 import libvvtest.TestSpecCreator as creator
 from libvvtest.RuntimeConfig import RuntimeConfig
-from libvvtest.TestList import find_tests_by_execute_directory_match
 from libvvtest.TestSpec import TestSpec
 
 
@@ -27,7 +26,7 @@ class dependency_information( vtu.vvtestTestCase ):
     def test_the_dependency_dirs_are_available(self):
         ""
         util.writescript( 'testX.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: depends on : testY
             import os
             import vvtest_util as vvt
@@ -37,7 +36,7 @@ class dependency_information( vtu.vvtestTestCase ):
             assert os.path.exists( yfile )
             """ )
         util.writescript( 'testY.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             fp = open( 'Y.out', 'w' )
             fp.close()
             """ )
@@ -74,7 +73,7 @@ class dependency_information( vtu.vvtestTestCase ):
     def test_multiple_depdirs(self):
         ""
         util.writescript( 'testX.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: depends on : te*Y t*tZ
             import os, glob
             import vvtest_util as vvt
@@ -97,12 +96,12 @@ class dependency_information( vtu.vvtestTestCase ):
             assert vvt.DEPDIRMAP['t*tZ'][0] == vvt.DEPDIRS[1]
             """ )
         util.writescript( 'testY.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             fp = open( 'Y.out', 'w' )
             fp.close()
             """ )
         util.writescript( 'testZ.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             fp = open( 'Z.out', 'w' )
             fp.close()
             """ )
@@ -117,7 +116,7 @@ class dependency_information( vtu.vvtestTestCase ):
     def test_multiple_dep_matches(self):
         ""
         util.writescript( 'testX.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: depends on : testY
             import os, glob
             import vvtest_util as vvt
@@ -135,12 +134,12 @@ class dependency_information( vtu.vvtestTestCase ):
             assert len( glob.glob( pat ) ) == 1
             """ )
         util.writescript( 'sub1/testY.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             fp = open( 'Y1.out', 'w' )
             fp.close()
             """ )
         util.writescript( 'sub2/testY.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             fp = open( 'Y2.out', 'w' )
             fp.close()
             """ )
@@ -155,7 +154,7 @@ class dependency_information( vtu.vvtestTestCase ):
     def test_depdirs_in_subdirs(self):
         ""
         util.writescript( 'tsrc/testX.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: depends on : sub1/testY
             #VVT: depends on : sub2/testZ
             import os, glob
@@ -169,12 +168,12 @@ class dependency_information( vtu.vvtestTestCase ):
             assert len(fL) == 1
             """ )
         util.writescript( 'tsrc/sub1/testY.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             fp = open( 'Y.out', 'w' )
             fp.close()
             """ )
         util.writescript( 'tsrc/sub2/testZ.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             fp = open( 'Z.out', 'w' )
             fp.close()
             """ )
@@ -199,7 +198,7 @@ class dependency_information( vtu.vvtestTestCase ):
     def test_depdirs_in_subdirs_of_a_subdir(self):
         ""
         util.writescript( 'tsrc/topdir/testX.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: depends on : sub1/testY
             #VVT: depends on : sub2/testZ
             import os, glob
@@ -213,12 +212,12 @@ class dependency_information( vtu.vvtestTestCase ):
             assert len(fL) == 1
             """ )
         util.writescript( 'tsrc/topdir/sub1/testY.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             fp = open( 'Y.out', 'w' )
             fp.close()
             """ )
         util.writescript( 'tsrc/topdir/sub2/testZ.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             fp = open( 'Z.out', 'w' )
             fp.close()
             """ )
@@ -229,7 +228,7 @@ class dependency_information( vtu.vvtestTestCase ):
     def test_analyze_only_restart(self):
         ""
         util.writescript( 'testX.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: depends on : testY testZ
             import os, glob
             import vvtest_util as vvt
@@ -242,12 +241,12 @@ class dependency_information( vtu.vvtestTestCase ):
             assert len(fL) == 1
             """ )
         util.writescript( 'sub1/testY.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             fp = open( 'Y.out', 'w' )
             fp.close()
             """ )
         util.writescript( 'sub2/testZ.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             fp = open( 'Z.out', 'w' )
             fp.close()
             """ )
@@ -267,7 +266,7 @@ class dependency_information( vtu.vvtestTestCase ):
     def test_restart_dependent_and_one_dependency(self):
         ""
         util.writescript( 'testX.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: depends on : testY testZ
             import os, glob
             import vvtest_util as vvt
@@ -286,7 +285,7 @@ class dependency_information( vtu.vvtestTestCase ):
             assert 'testZ says goodbye' in Zout
             """ )
         util.writescript( 'sub1/testY.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import os, sys, time
             import vvtest_util as vvt
             time.sleep(3)
@@ -296,7 +295,7 @@ class dependency_information( vtu.vvtestTestCase ):
             sys.exit( vvt.diff_exit_status )
             """ )
         util.writescript( 'sub2/testZ.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import os, time
             time.sleep(3)
             fp = open( 'Z.out', 'w' )
@@ -308,7 +307,7 @@ class dependency_information( vtu.vvtestTestCase ):
         for batch in [False,True]:
 
             util.writescript( 'sub1/testY.vvt', """
-                #!/usr/bin/env python
+                #!"""+sys.executable+"""
                 import os, sys, time
                 import vvtest_util as vvt
                 time.sleep(3)
@@ -325,7 +324,7 @@ class dependency_information( vtu.vvtestTestCase ):
 
             # "fix" the test
             util.writescript( 'sub1/testY.vvt', """
-                #!/usr/bin/env python
+                #!"""+sys.executable+"""
                 import os, time
                 fp = open( 'Y.out', 'w' )
                 fp.write( 'testY says hello'+os.linesep )
@@ -340,7 +339,7 @@ class dependency_information( vtu.vvtestTestCase ):
     def test_depdirs_are_available_when_rerunning_an_analyze(self):
         ""
         util.writescript( 'testA.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : value = 1 2
             #VVT: analyze : --analyze
 
@@ -367,7 +366,7 @@ class dependency_information( vtu.vvtestTestCase ):
     def test_depdirs_are_available_when_rerunning_a_test_with_a_dependency(self):
         ""
         util.writescript( 'testX.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: depends on : testY
             import vvtest_util as vvt
             print ( 'DEPDIRS', vvt.DEPDIRS )
@@ -375,7 +374,7 @@ class dependency_information( vtu.vvtestTestCase ):
             raise Exception( 'always fail' )
             """ )
         util.writescript( 'testY.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import vvtest_util as vvt
             assert len(vvt.DEPDIRS) == 0
             """ )

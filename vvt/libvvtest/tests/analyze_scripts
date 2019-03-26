@@ -23,7 +23,7 @@ class parameterize_analyze_script_specs( vtu.vvtestTestCase ):
     def test_simple_use_case(self):
         ""
         util.writescript( 'ana.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : V=a b
             #VVT: analyze : -a
             import os, sys
@@ -52,7 +52,7 @@ class parameterize_analyze_script_specs( vtu.vvtestTestCase ):
     def test_analyze_with_only_one_parameterize_value(self):
         ""
         util.writescript( 'ana.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : V=a
             #VVT: analyze : -a
             import os, sys
@@ -79,7 +79,7 @@ class parameterize_analyze_script_specs( vtu.vvtestTestCase ):
     def test_analyze_is_a_separate_script(self):
         ""    
         util.writescript( 'ana.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : V=a b
             #VVT: analyze : ana.sh
             import os, sys
@@ -118,7 +118,7 @@ class parameterize_analyze_script_specs( vtu.vvtestTestCase ):
     def test_non_executable_analyze_file_should_be_run_using_python(self):
         ""    
         util.writescript( 'ana.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : V=a b
             #VVT: analyze : analyze
             import os, sys
@@ -150,7 +150,7 @@ class parameterize_analyze_script_specs( vtu.vvtestTestCase ):
         execute/analyze where all but one parameter value is filtered out
         """    
         util.writescript( 'scr.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : V=a b
             #VVT: analyze : -a
             import os, sys
@@ -166,7 +166,7 @@ class parameterize_analyze_script_specs( vtu.vvtestTestCase ):
 
             vtu.remove_results()
 
-            vrun = vtu.runvvtest( '-p "V<b or !V"', batch=batch )
+            vrun = vtu.runvvtest( '-p "V<b"', batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
             assert len( glob.glob( 'TestResults.*/scr*/execute.log' ) ) == 2
@@ -183,7 +183,7 @@ class parameterize_analyze_script_specs( vtu.vvtestTestCase ):
         using the -a or --analyze option with script test
         """    
         util.writescript( 'pytest.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : ival = 1 2
             #VVT: analyze : --analyze
             import os, sys

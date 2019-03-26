@@ -22,6 +22,7 @@ from testutils import print3
 import libvvtest.testlistio as tio
 import libvvtest.TestList as TestList
 import libvvtest.TestSpec as TestSpec
+from libvvtest.teststatus import TestStatusHandler
 
 
 class TestSpec_to_and_from_string( vtu.vvtestTestCase ):
@@ -323,7 +324,7 @@ class TestList_results_file( vtu.vvtestTestCase ):
         sfx = tl.getResultsSuffix()
         time.sleep(2)
 
-        tl = TestList.TestList( 'testlist' )
+        tl = TestList.TestList( TestStatusHandler(), 'testlist' )
         tl.readTestList()
         assert tl.getResultsSuffix() == sfx
         rfile = write_TestList_fake_results( tl )
@@ -343,7 +344,7 @@ class TestList_results_file( vtu.vvtestTestCase ):
 
         # write include test list file containing suffix attribute
         ts = list( tl.getTests() )[0]
-        tlincl = TestList.TestList( 'subtests' )
+        tlincl = TestList.TestList( TestStatusHandler(), 'subtests' )
         tlincl.setResultsSuffix( sfx )
         tl.addTest( ts )
         tlincl.stringFileWrite( include_results_suffix=True )
@@ -355,7 +356,7 @@ class TestList_results_file( vtu.vvtestTestCase ):
         time.sleep(1)
 
         # create the sublist test results
-        tlsub = TestList.TestList( 'subtests' )
+        tlsub = TestList.TestList( TestStatusHandler(), 'subtests' )
         tlsub.readTestList()
         rfile = write_TestList_fake_results( tlsub )
         time.sleep(1)
@@ -368,14 +369,14 @@ class TestList_results_file( vtu.vvtestTestCase ):
 
     def test_read_an_unfinished_test_list_file(self):
         ""
-        tl = TestList.TestList( 'testlist' )
+        tl = TestList.TestList( TestStatusHandler(), 'testlist' )
         rfile = tl.initializeResultsFile()
         tspec = make_fake_TestSpec()
         tl.appendTestResult( tspec )
 
         time.sleep(1)
 
-        tl = TestList.TestList( None )
+        tl = TestList.TestList( TestStatusHandler(), None )
         tl.readTestResults( rfile )
 
         tm = tl.getDateStamp()
@@ -386,7 +387,7 @@ class TestList_results_file( vtu.vvtestTestCase ):
 
     def test_scan_an_unfinished_test_list_file(self):
         ""
-        tl = TestList.TestList( 'testlist' )
+        tl = TestList.TestList( TestStatusHandler(), 'testlist' )
         rfile = tl.initializeResultsFile()
         tspec = make_fake_TestSpec()
         tl.appendTestResult( tspec )
@@ -407,7 +408,7 @@ class format_versions( vtu.vvtestTestCase ):
 
         tlr = tio.TestListReader( 'testlist' )
         tlr.read()
-        assert tlr.getFileVersion() == 32
+        assert tlr.getFileVersion() == 33
 
     def test_reading_testlist_format_version_31_is_an_exception(self):
         ""
@@ -418,6 +419,18 @@ class format_versions( vtu.vvtestTestCase ):
 
         tlr = tio.TestListReader( 'testlist' )
         self.assertRaises( Exception, tlr.read )
+
+    def test_that_testlist_format_version_32_is_compatible_with_version_33(self):
+        ""
+        fp = open( 'testlist', 'w' )
+        fp.write( example_testlist_version_32 )
+        fp.close()
+        time.sleep(1)
+
+        tlr = tio.TestListReader( 'testlist' )
+        tlr.read()
+        assert tlr.getFileVersion() == 32
+        assert len( tlr.getTests() ) == 3
 
 
 example_testlist_version_31 = \
@@ -430,6 +443,19 @@ py1 "/scratch/rrdrake/temp/prob" "py1.vvt" "_keywords_=bar foo py1" "state=Snotd
 py1 "/scratch/rrdrake/temp/prob" "py1.vvt" "_keywords_=bar foo py1" "result=Spass" "state=Sdone" "timeout=I3600" "xdate=I1538259163" "xtime=I1"
 
 #VVT: Finish = Sat Sep 29 16:12:44 2018
+"""
+
+example_testlist_version_32 = \
+"""
+#VVT: Version = 32
+#VVT: Start = ['Sun Mar  3 18:26:21 2019', 1551662781.325458]
+#VVT: Attrs = {}
+
+{'name': 'at', 'params': {'np': '1'}, 'attrs': {'xdate': -1, 'state': 'notrun', 'xtime': -1}, 'keywords': ['np', 'foo', 'bar', 'at'], 'path': 'at.vvt', 'root': '/scratch/rrdrake/temp/prob/analyze'}
+{'name': 'at', 'params': {'np': '2'}, 'attrs': {'xdate': -1, 'state': 'notrun', 'xtime': -1}, 'keywords': ['np', 'foo', 'bar', 'at'], 'path': 'at.vvt', 'root': '/scratch/rrdrake/temp/prob/analyze'}
+{'name': 'at', 'params': {}, 'attrs': {'xdate': -1, 'state': 'notrun', 'xtime': -1}, 'keywords': ['np', 'foo', 'bar', 'at'], 'path': 'at.vvt', 'root': '/scratch/rrdrake/temp/prob/analyze'}
+
+#VVT: Finish = ['Sun Mar  3 18:26:21 2019', 1551662781.325975]
 """
 
 
@@ -532,7 +558,7 @@ def write_TestList_with_fake_test( filename, **kwargs ):
     ""
     dosuffix = kwargs.pop( 'results_suffix', False )
 
-    tl = TestList.TestList( filename )
+    tl = TestList.TestList( TestStatusHandler(), filename )
 
     if dosuffix:
         tl.setResultsSuffix()
@@ -559,8 +585,8 @@ def write_TestList_fake_results( testlistobj ):
 
 def read_TestList_and_check_fake_test( filename ):
     ""
-    tl = TestList.TestList( filename )
-    tl.readTestResults( filename )
+    tl = TestList.TestList( TestStatusHandler(), filename )
+    tl.readTestList()
     tL = list( tl.getTests() )
     assert len(tL) == 1
     assert_TestSpec_same_as_fake( tL[0] )

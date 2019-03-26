@@ -11,8 +11,9 @@ import tempfile
 import shutil
 
 from . import TestSpec
+from .ParameterSet import ParameterSet
 
-version = 32
+version = 33
 
 
 class TestListWriter:
@@ -94,7 +95,7 @@ class TestListReader:
             except Exception:
                 pass
 
-        assert self.vers == 32, \
+        assert self.vers == 32 or self.vers == 33, \
             'corrupt test list file or older format: '+str(self.filename)
 
     def getFileVersion(self):
@@ -290,7 +291,12 @@ def test_to_string( tspec ):
     testdict['root'] = tspec.getRootpath()
     testdict['path'] = tspec.getFilepath()
     testdict['keywords'] = tspec.getKeywords()
-    testdict['params'] = tspec.getParameters()
+
+    if tspec.isAnalyze():
+        testdict['paramset'] = tspec.getParameterSet().getParameters()
+    else:
+        testdict['params'] = tspec.getParameters()
+
     testdict['attrs'] = tspec.getAttrs()
 
     s = repr( testdict )
@@ -308,10 +314,17 @@ def string_to_test( strid ):
     name = testdict['name']
     root = testdict['root']
     path = testdict['path']
-    
-    tspec = TestSpec.TestSpec( name, root, path, "string" )
 
-    tspec.setParameters( testdict['params'] )
+    tspec = TestSpec.TestSpec( name, root, path )
+
+    if 'paramset' in testdict:
+        pset = ParameterSet()
+        for T,L in testdict['paramset'].items():
+            pset.addParameterGroup( T, L )
+        tspec.setParameterSet( pset )
+    else:
+        tspec.setParameters( testdict['params'] )
+
     tspec.setKeywords( testdict['keywords'] )
 
     for k,v in testdict['attrs'].items():

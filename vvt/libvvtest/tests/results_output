@@ -11,6 +11,7 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 import time
+import re
 import glob
 from os.path import getsize as getfsize
 
@@ -24,29 +25,178 @@ import testutils as util
 from testutils import print3
 
 import libvvtest.resultswriter as resultswriter
+import libvvtest.outpututils as outpututils
+from libvvtest.consolewriter import ConsoleWriter
+import libvvtest.gitlabwriter as gitlabwriter
 import libvvtest.TestSpec as TestSpec
-from libvvtest.TestSpecCreator import createTestObjects
+from libvvtest.TestList import createTestObjects
 from libvvtest.RuntimeConfig import RuntimeConfig
+from libvvtest.teststatus import TestStatusHandler, DIFF_EXIT_STATUS
 
 
 class misc_tests( vtu.vvtestTestCase ):
+
+    def setUp(self):
+        ""
+        vtu.vvtestTestCase.setUp( self )
+
+        self.statushandler = TestStatusHandler()
+
+    def makeTest(self, result=None, runtime=None, name='atest'):
+        ""
+        return make_TestSpec_with_results( self.statushandler,
+                                           result, runtime, name )
 
     def test_make_date_stamp(self):
         ""
         tm0 = time.mktime( time.strptime( 'Sun Oct 11 13:20:58 2018' ) )
         tm1 = tm0 - 600
 
-        s = resultswriter.make_date_stamp( tm0, None )
+        s = outpututils.make_date_stamp( tm0, None )
         assert s == '2018_10_11'
 
-        s = resultswriter.make_date_stamp( tm0, None, "%Y-%m-%d_%H:%M:%S" )
+        s = outpututils.make_date_stamp( tm0, None, "%Y-%m-%d_%H:%M:%S" )
         assert s == '2018-10-11_13:20:58'
 
-        s = resultswriter.make_date_stamp( tm0, 'foobar' )
+        s = outpututils.make_date_stamp( tm0, 'foobar' )
         assert s == 'foobar'
 
-        s = resultswriter.make_date_stamp( tm0, tm1, "%Y-%m-%d_%H:%M:%S" )
+        s = outpututils.make_date_stamp( tm0, tm1, "%Y-%m-%d_%H:%M:%S" )
         assert s == '2018-10-11_13:10:58'
+
+    def getFakeTestList(self):
+        ""
+        return [ self.makeTest( 'pass' ),
+                 self.makeTest( 'fail' ),
+                 self.makeTest( 'fail' ),
+                 self.makeTest( 'diff' ),
+                 self.makeTest( 'diff' ),
+                 self.makeTest( 'diff' ),
+                 self.makeTest( 'timeout' ),
+                 self.makeTest( 'timeout' ),
+                 self.makeTest( 'notdone' ),
+                 self.makeTest( 'notrun' ),
+                 self.makeTest( 'notrun' ),
+                 self.makeTest( 'notrun' ),
+                 self.makeTest( 'skip' ),
+                 self.makeTest( 'skip' ),
+               ]
+
+    def test_partition_then_summary_string(self):
+        ""
+        tL = self.getFakeTestList()
+
+        parts = outpututils.partition_tests_by_result( self.statushandler, tL )
+        sumry = outpututils.results_summary_string( parts )
+        vtu.assert_summary_string( sumry, npass=1, fail=2, diff=3,
+                                          timeout=2, notdone=1, notrun=3,
+                                          skip=2 )
+
+    def assert_test_list_summary(self, output):
+        ""
+        assert re.search( 'completed.* 6', output ) != None
+        assert re.search( '1 pass', output ) != None
+        assert re.search( '3 diff', output ) != None
+        assert re.search( '2 fail', output ) != None
+        assert re.search( '2 timeout', output ) != None
+        assert re.search( 'notdone.* 1', output ) != None
+        assert re.search( 'notrun.* 3', output ) != None
+        assert re.search( 'skip.* 2', output ) != None
+        assert re.search( '2 due to ', output ) != None
+
+    def test_abbreviated_console_output(self):
+        ""
+        tlist = MockTestList( self.statushandler, self.getFakeTestList() )
+
+        sio = StringIO()
+        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
+        conwr.writeListSummary( tlist, 'Test list:' )
+
+        val = sio.getvalue()
+        print3( val )
+        self.assert_test_list_summary( val )
+        assert 'Test list:' in val
+        assert 'Summary:' not in val
+
+        sio = StringIO()
+        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
+        conwr.writeListSummary( tlist, 'Summary:' )
+
+        val = sio.getvalue()
+        self.assert_test_list_summary( val )
+        assert 'Test list:' not in val
+        assert 'Summary:' in val
+
+    def test_postrun_console_output(self):
+        ""
+        tlist = MockTestList( self.statushandler, self.getFakeTestList() )
+
+        sio = StringIO()
+        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
+        conwr.writeResultsList( tlist )
+        conwr.writeListSummary( tlist, 'Summary:' )
+
+        val = sio.getvalue()
+        self.assert_test_list_summary( val )
+        cntD = vtu.parse_vvtest_counts( val )
+        assert cntD['total'] == 8
+        assert cntD['diff'] == 3
+        assert cntD['fail'] == 2
+        assert cntD['timeout'] == 2
+        assert cntD['notdone'] == 1
+
+        sio = StringIO()
+        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
+        conwr.setMaxNonPass( 3 )
+        conwr.writeResultsList( tlist )
+        conwr.writeListSummary( tlist, 'Summary:' )
+
+        val = sio.getvalue()
+        print3( val )
+        self.assert_test_list_summary( val )
+        cntD = vtu.parse_vvtest_counts( val )
+        assert cntD['total'] == 3
+
+    def test_max_detail_console_list_output(self):
+        ""
+        tlist = MockTestList( self.statushandler, self.getFakeTestList() )
+
+        sio = StringIO()
+        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd(), verbose=3 )
+        conwr.writeResultsList( tlist )
+        conwr.writeListSummary( tlist, 'Summary:' )
+
+        val = sio.getvalue()
+        print3( val )
+        cntD = vtu.parse_vvtest_counts( val )
+        assert cntD['skip'] == 2
+
+    def test_list_output_using_double_verbose_flag(self):
+        ""
+        util.writefile( 'passtest.vvt', """
+            pass
+            """ )
+        util.writefile( 'difftest.vvt', """
+            import sys
+            import vvtest_util as vvt
+            sys.exit( vvt.diff_exit_status )
+            """ )
+        util.writefile( 'keywtest.vvt', """
+            #VVT: keywords = chevy
+            pass
+            """ )
+        util.writefile( 'plattest.vvt', """
+            #VVT: enable (platforms="XBox")
+            pass
+            """ )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-v -v -K chevy', batch=batch )
+            vrun.assertCounts( total=4, npass=1, diff=1, skip=2 )
 
 
 def write_three_test_files():
@@ -83,7 +233,7 @@ class junit_output_format_tests( vtu.vvtestTestCase ):
             """ )
         time.sleep(1)
 
-        buf = resultswriter.file_read_with_limit( 'afile.txt', 10 )
+        buf = outpututils.file_read_with_limit( 'afile.txt', 10 )
         assert len( buf.splitlines() ) > 2
         assert len( util.greplines( 'line one', buf ) ) == 1
         assert len( util.greplines( 'line two', buf ) ) == 1
@@ -98,7 +248,7 @@ class junit_output_format_tests( vtu.vvtestTestCase ):
         time.sleep(1)
 
         assert getfsize( 'afile.txt' ) > 1*1024
-        buf = resultswriter.file_read_with_limit( 'afile.txt', 1 )
+        buf = outpututils.file_read_with_limit( 'afile.txt', 1 )
         assert len( buf ) <= 1*1024
         assert len( buf.splitlines() ) > 10
         assert buf.lstrip().startswith( 'The Overlook Hotel' )
@@ -232,34 +382,47 @@ class html_output_format_tests( vtu.vvtestTestCase ):
 
 class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
+    def setUp(self):
+        ""
+        vtu.vvtestTestCase.setUp( self )
+
+        self.statushandler = TestStatusHandler()
+
+    def makeTest(self, result=None, runtime=None, name='atest'):
+        ""
+        return make_TestSpec_with_results( self.statushandler,
+                                           result, runtime, name )
+
     def test_turning_a_path_to_a_markdown_link(self):
         ""
-        s = resultswriter.format_test_path_for_gitlab( 'sub/name.np=1', False )
+        s = gitlabwriter.format_test_path_for_gitlab( 'sub/name.np=1', False )
         assert s == 'sub/name.np=1'
 
-        s = resultswriter.format_test_path_for_gitlab( 'sub/name.np=1', True )
+        s = gitlabwriter.format_test_path_for_gitlab( 'sub/name.np=1', True )
         assert s == '[sub/name.np=1](sub_name.np=1.md)'
 
     def test_write_table_line_for_a_test(self):
         ""
-        tst = make_TestSpec_with_results( 'done', 'pass', 5 )
-        line = resultswriter.format_gitlab_table_line( tst, True )
+        handler = self.statushandler
+
+        tst = self.makeTest( 'pass', 5 )
+        line = gitlabwriter.format_gitlab_table_line( handler, tst, True )
         print3( line )
         sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
         assert len(sL) == 4
         assert sL[0] == 'pass' and sL[2] == '5s'
         assert sL[3] == 'sdir/atest.np=4'
 
-        tst = make_TestSpec_with_results( 'done', 'fail', 7 )
-        line = resultswriter.format_gitlab_table_line( tst, True )
+        tst = self.makeTest( 'fail', 7 )
+        line = gitlabwriter.format_gitlab_table_line( handler, tst, True )
         print3( line )
         sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
         assert len(sL) == 4
         assert sL[0] == 'fail' and sL[2] == '7s'
         assert sL[3] == '[sdir/atest.np=4](sdir_atest.np=4.md)'
 
-        tst = make_TestSpec_with_results( 'done', 'fail', 7 )
-        line = resultswriter.format_gitlab_table_line( tst, False )
+        tst = self.makeTest( 'fail', 7 )
+        line = gitlabwriter.format_gitlab_table_line( handler, tst, False )
         print3( line )
         sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
         assert len(sL) == 4
@@ -268,11 +431,13 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
     def test_write_gitlab_results_table(self):
         ""
-        tL = [ make_TestSpec_with_results( 'done', 'pass', 5, 'good' ),
-               make_TestSpec_with_results( 'done', 'diff', 5, 'bad' ) ]
+        handler = self.statushandler
+
+        tL = [ self.makeTest( 'pass', 5, 'good' ),
+               self.makeTest( 'diff', 5, 'bad' ) ]
 
         sio = StringIO()
-        resultswriter.write_gitlab_results_table( sio, 'mixed', tL, 100 )
+        gitlabwriter.write_gitlab_results_table( sio, handler, 'mixed', tL, 100 )
 
         val = sio.getvalue()
         print3( val )
@@ -283,13 +448,15 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
     def test_write_results_table_with_max_path_links(self):
         ""
-        tL = [ make_TestSpec_with_results( 'done', 'diff', 5, 'testA' ),
-               make_TestSpec_with_results( 'done', 'diff', 5, 'testB' ),
-               make_TestSpec_with_results( 'done', 'diff', 5, 'testC' ),
-               make_TestSpec_with_results( 'done', 'diff', 5, 'testD' ) ]
+        handler = self.statushandler
+
+        tL = [ self.makeTest( 'diff', 5, 'testA' ),
+               self.makeTest( 'diff', 5, 'testB' ),
+               self.makeTest( 'diff', 5, 'testC' ),
+               self.makeTest( 'diff', 5, 'testD' ) ]
 
         sio = StringIO()
-        resultswriter.write_gitlab_results_table( sio, 'diff', tL, 2 )
+        gitlabwriter.write_gitlab_results_table( sio, handler, 'diff', tL, 2 )
 
         val = sio.getvalue()
         print3( val )
@@ -308,13 +475,15 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
     def test_that_large_results_tables_go_to_separate_file(self):
         ""
-        tL = [ make_TestSpec_with_results( 'done', 'fail', 5, 'testA' ),
-               make_TestSpec_with_results( 'done', 'fail', 5, 'testB' ),
-               make_TestSpec_with_results( 'done', 'fail', 5, 'testC' ),
-               make_TestSpec_with_results( 'done', 'fail', 5, 'testD' ) ]
+        handler = self.statushandler
+
+        tL = [ self.makeTest( 'fail', 5, 'testA' ),
+               self.makeTest( 'fail', 5, 'testB' ),
+               self.makeTest( 'fail', 5, 'testC' ),
+               self.makeTest( 'fail', 5, 'testD' ) ]
 
         sio = StringIO()
-        resultswriter.write_gitlab_results( sio, 'fail', tL, 'large.md', 2, 3 )
+        gitlabwriter.write_gitlab_results( sio, handler, 'fail', tL, 'large.md', 2, 3 )
         time.sleep(1)
 
         val = sio.getvalue()
@@ -337,7 +506,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         tL = []
 
         sio = StringIO()
-        resultswriter.write_gitlab_results( sio, 'fail', tL, 'nope.md', 2, 3 )
+        gitlabwriter.write_gitlab_results( sio, None, 'fail', tL, 'nope.md', 2, 3 )
         time.sleep(1)
 
         val = sio.getvalue()
@@ -352,21 +521,21 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         util.writefile( 'subdir/ardvaark.txt', "I am an ardvaark.\n" * 21 )
         time.sleep(1)
 
-        fL,width = resultswriter.get_directory_file_list( 'subdir' )
+        fL,width = gitlabwriter.get_directory_file_list( 'subdir' )
         assert fL == [ 'zeebra.txt', 'ardvaark.txt' ]
         assert width == 12
 
-        meta = resultswriter.get_file_meta_data_string( 'subdir/zeebra.txt', 10 )
+        meta = gitlabwriter.get_file_meta_data_string( 'subdir/zeebra.txt', 10 )
         print3( meta )
 
-        meta = resultswriter.get_file_meta_data_string( 'subdir/foobar.txt', 10 )
+        meta = gitlabwriter.get_file_meta_data_string( 'subdir/foobar.txt', 10 )
         print3( meta )
         assert 'error: ' in meta
 
         os.symlink( 'ardvaark.txt', 'subdir/ardvark.txt' )
         time.sleep(1)
 
-        meta = resultswriter.get_file_meta_data_string( 'subdir/ardvark.txt', 10 )
+        meta = gitlabwriter.get_file_meta_data_string( 'subdir/ardvark.txt', 10 )
         print3( meta )
         assert 'error:' not in meta
 
@@ -381,7 +550,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
         sio = StringIO()
         fn = os.path.abspath('file.txt')
-        resultswriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
+        gitlabwriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
 
         val = sio.getvalue()
         #print3( val )
@@ -393,7 +562,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
         sio = StringIO()
         fn = os.path.abspath('file.exo')
-        resultswriter.write_gitlab_formatted_file( sio, fn, False, 'label', 10 )
+        gitlabwriter.write_gitlab_formatted_file( sio, fn, False, 'label', 10 )
 
         val = sio.getvalue()
         #print3( val )
@@ -406,7 +575,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         ""
         sio = StringIO()
         fn = os.path.abspath('file.txt')
-        resultswriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
+        gitlabwriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
 
         val = sio.getvalue()
         #print3( val )
@@ -423,7 +592,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
         sio = StringIO()
         fn = os.path.abspath('file.txt')
-        resultswriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
+        gitlabwriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
 
         val = sio.getvalue()
         #print3( val )
@@ -440,7 +609,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         time.sleep(1)
 
         sio = StringIO()
-        resultswriter.stream_gitlab_files( sio, '.', MockSelector(), 10 )
+        gitlabwriter.stream_gitlab_files( sio, '.', MockSelector(), 10 )
 
         val = sio.getvalue()
         #print3( val )
@@ -470,7 +639,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         time.sleep(1)
 
         sio = StringIO()
-        resultswriter.stream_gitlab_files( sio, '.', MockSelector(), 10 )
+        gitlabwriter.stream_gitlab_files( sio, '.', MockSelector(), 10 )
 
         val = sio.getvalue()
         #print3( val )
@@ -486,7 +655,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         time.sleep(1)
 
         preamble = 'Houston, we have a problem.'
-        converter = resultswriter.GitLabMarkDownConverter( None, None )
+        converter = gitlabwriter.GitLabMarkDownConverter( None, None, None )
         converter.createGitlabDirectoryContents(
                                     'results.md', preamble, 'subdir' )
         time.sleep(1)
@@ -499,7 +668,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
     def test_create_file_directory_contents_but_directory_does_not_exist(self):
         ""
         preamble = 'Houston, we have a problem.'
-        converter = resultswriter.GitLabMarkDownConverter( None, None )
+        converter = gitlabwriter.GitLabMarkDownConverter( None, None, None )
         converter.createGitlabDirectoryContents(
                                     'results.md', preamble, 'subdir' )
         time.sleep(1)
@@ -510,7 +679,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
     def test_test_run_attributes(self):
         ""
-        conv = resultswriter.GitLabMarkDownConverter( '.', '.' )
+        conv = gitlabwriter.GitLabMarkDownConverter( '.', '.', None )
         conv.saveResults( [] )
         time.sleep(1)
 
@@ -518,7 +687,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         val = fval.split( '## Tests that', 1 )[0]
         assert val.strip() == ''
 
-        conv = resultswriter.GitLabMarkDownConverter( '.', '.' )
+        conv = gitlabwriter.GitLabMarkDownConverter( '.', '.', None )
         tm = time.time()
         conv.setRunAttr( startdate=str(tm)+' / '+time.ctime(tm),
                          finishdate=str(tm+10)+' / '+time.ctime(tm+10) )
@@ -541,12 +710,14 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         nofltr = RuntimeConfig( platform_name=vrun.platformName() )
         tL = createTestObjects( '.', 'DiffTest.xml', None, nofltr )
         tst = tL[0]
-        tst.setAttr( 'state', 'done' )
-        tst.setAttr( 'result', 'diff' )
-        tst.setAttr( 'xtime', 3 )
-        tst.setAttr( 'xdate', int(time.time()) )
 
-        conv = resultswriter.GitLabMarkDownConverter( vrun.resultsDir(), '.' )
+        self.statushandler.startRunning( tst )
+        self.statushandler.markDone( tst, DIFF_EXIT_STATUS )
+        self.statushandler.setRuntime( tst, 3 )
+
+        conv = gitlabwriter.GitLabMarkDownConverter(
+                                        vrun.resultsDir(), '.',
+                                        self.statushandler )
         conv.createTestFile( tst )
         time.sleep(1)
 
@@ -680,34 +851,64 @@ def find_child_node( node, childname ):
     return child
 
 
-def make_fake_TestSpec():
-    ""
-    ts = TestSpec.TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-
-    ts.setKeywords( ['key1','key2'] )
-
-    ts.setParameters( { 'P1':'V1', 'P2':'V2' } )
-
-    return ts
-
-
-def make_TestSpec_with_results( state='notrun', result=None,
+def make_TestSpec_with_results( statushandler, result=None,
                                 runtime=None, name='atest' ):
     ""
     ts = TestSpec.TestSpec( name, os.getcwd(), 'sdir/'+name+'.vvt' )
+
+    statushandler.resetResults( ts )
 
     ts.setKeywords( ['key1','key2'] )
 
     ts.setParameters( { 'np':'4' } )
 
-    ts.setAttr( 'state', state )
     if result:
-        ts.setAttr( 'result', result )
+        if result == 'skip':
+            statushandler.markSkipByPlatform( ts )
+        elif result == 'timeout':
+            statushandler.startRunning( ts )
+            statushandler.markTimedOut( ts )
+        elif result == 'pass':
+            statushandler.startRunning( ts )
+            statushandler.markDone( ts, 0 )
+        elif result == 'diff':
+            statushandler.startRunning( ts )
+            statushandler.markDone( ts, DIFF_EXIT_STATUS )
+        elif result == 'notdone':
+            statushandler.startRunning( ts )
+        elif result == 'notrun':
+            pass
+        else:
+            assert result == 'fail', '*** error (value='+str(result)+')'
+            statushandler.startRunning( ts )
+            statushandler.markDone( ts, 1 )
+
     if runtime != None:
-        ts.setAttr( 'xtime', runtime )
-    ts.setAttr( 'xdate', int(time.time()) )
+        statushandler.setRuntime( ts, runtime )
 
     return ts
+
+
+class MockTestList:
+
+    def __init__(self, statushandler, list_of_TestSpec):
+        ""
+        self.statushandler = statushandler
+        self.tspecs = list_of_TestSpec
+
+    def getTests(self):
+        ""
+        return self.tspecs
+
+    def getActiveTests(self, sorting=''):
+        ""
+        tL = []
+        for tspec in self.tspecs:
+            if not self.statushandler.skipTest( tspec ):
+                tL.append( tspec )
+        tL.sort()
+
+        return tL
 
 
 ############################################################################

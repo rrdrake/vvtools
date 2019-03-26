@@ -10,227 +10,416 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
+import time
 import re
 
 import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
-import libvvtest.TestSpec as TestSpec
-import libvvtest.FilterExpressions as FilterExpressions
-import libvvtest.xmlwrapper as xmlwrapper
+from libvvtest.FilterExpressions import WordExpression
+from libvvtest.FilterExpressions import ParamFilter
+from libvvtest.FilterExpressions import split_but_retain_separator
+from libvvtest.FilterExpressions import separate_expression_into_tokens
+from libvvtest.FilterExpressions import convert_token_list_into_eval_string
+from libvvtest.FilterExpressions import parse_non_results_expression
 
-xreader = xmlwrapper.XmlDocReader()
 
-
-class expression_tests( vtu.vvtestTestCase ):
+class word_expression_tests( vtu.vvtestTestCase ):
 
     def setUp(self):
         vtu.vvtestTestCase.setUp( self, cleanout=False )
 
     def test_WordExpression_use_cases(self):
         ""
-        ex = FilterExpressions.WordExpression()
+        ex = WordExpression()
         print3( ex )
         assert str(ex) == 'WordExpression=None'
-        assert ex.evaluate( AList().inlist )
+        assert ex.evaluate( list().count )
 
         ex.append(None)
         print3( ex )
         assert str(ex) == 'WordExpression=None'
-        assert ex.evaluate( AList().inlist )
+        assert ex.evaluate( list().count )
 
-        ex = FilterExpressions.WordExpression('')
+        ex = WordExpression('')
         print3( ex )
         assert str(ex) == 'WordExpression=""'
-        assert not ex.evaluate( AList().inlist )
+        assert not ex.evaluate( list().count )
 
         ex.append('')
         print3( ex )
         assert str(ex) == 'WordExpression=""'
-        assert not ex.evaluate( AList().inlist )
+        assert not ex.evaluate( list().count )
 
         ex.append("")
         print3( ex )
         assert str(ex) == 'WordExpression=""'
-        assert not ex.evaluate( AList().inlist )
+        assert not ex.evaluate( list().count )
 
         ex.append(" ")
         print3( ex )
         assert str(ex) == 'WordExpression=""'
-        assert not ex.evaluate( AList().inlist )
+        assert not ex.evaluate( list().count )
 
-        ex = FilterExpressions.WordExpression(" ")
+        ex = WordExpression(" ")
         print3( ex )
         assert str(ex) == 'WordExpression=""'
-        assert not ex.evaluate( AList().inlist )
+        assert not ex.evaluate( list().count )
 
-        ex = FilterExpressions.WordExpression(" hello  ")
+        ex = WordExpression(" hello  ")
         print3( ex )
         assert str(ex) == 'WordExpression="hello"'
-        assert not ex.evaluate( AList().inlist )
-        assert ex.evaluate( AList(['hello']).inlist )
-        assert not ex.evaluate( AList(['world']).inlist )
+        assert not ex.evaluate( list().count )
+        assert ex.evaluate( list(['hello']).count )
+        assert not ex.evaluate( list(['world']).count )
 
         ex.append(None)
         print3( ex )
         assert str(ex) == 'WordExpression="hello"'
-        assert not ex.evaluate( AList().inlist )
-        assert ex.evaluate( AList(['hello']).inlist )
-        assert not ex.evaluate( AList(['world']).inlist )
+        assert not ex.evaluate( list().count )
+        assert ex.evaluate( list(['hello']).count )
+        assert not ex.evaluate( list(['world']).count )
 
         ex.append("")
         print3( ex )
         assert str(ex) == 'WordExpression="hello"'
-        assert not ex.evaluate( AList().inlist )
-        assert ex.evaluate( AList(['hello']).inlist )
-        assert not ex.evaluate( AList(['world']).inlist )
+        assert not ex.evaluate( list().count )
+        assert ex.evaluate( list(['hello']).count )
+        assert not ex.evaluate( list(['world']).count )
 
         ex.append("  ")
         print3( ex )
         assert str(ex) == 'WordExpression="hello"'
-        assert not ex.evaluate( AList().inlist )
-        assert ex.evaluate( AList(['hello']).inlist )
-        assert not ex.evaluate( AList(['world']).inlist )
+        assert not ex.evaluate( list().count )
+        assert ex.evaluate( list(['hello']).count )
+        assert not ex.evaluate( list(['world']).count )
 
         ex.append("world")
         print3( ex )
         assert str(ex) == 'WordExpression="hello or world"'
-        assert not ex.evaluate( AList().inlist )
-        assert ex.evaluate( AList(['hello']).inlist )
-        assert ex.evaluate( AList(['world']).inlist )
-        assert ex.evaluate( AList(['hello','world']).inlist )
-        assert not ex.evaluate( AList(['the','next']).inlist )
+        assert not ex.evaluate( list().count )
+        assert ex.evaluate( list(['hello']).count )
+        assert ex.evaluate( list(['world']).count )
+        assert ex.evaluate( list(['hello','world']).count )
+        assert not ex.evaluate( list(['the','next']).count )
 
         ex.append( "period", operator="and" )
         print3( ex )
         assert str(ex) == 'WordExpression="hello or world and period"'
-        assert not ex.evaluate( AList().inlist )
-        assert     ex.evaluate( AList(['hello']).inlist )
-        assert not ex.evaluate( AList(['world']).inlist )
-        assert     ex.evaluate( AList(['hello','world']).inlist )
-        assert not ex.evaluate( AList(['the','next']).inlist )
-        assert not ex.evaluate( AList(['period']).inlist )
-        assert     ex.evaluate( AList(['hello','period']).inlist )
-        assert     ex.evaluate( AList(['world','period']).inlist )
-        assert     ex.evaluate( AList(['hello','world','period']).inlist )
+        assert not ex.evaluate( list().count )
+        assert     ex.evaluate( list(['hello']).count )
+        assert not ex.evaluate( list(['world']).count )
+        assert     ex.evaluate( list(['hello','world']).count )
+        assert not ex.evaluate( list(['the','next']).count )
+        assert not ex.evaluate( list(['period']).count )
+        assert     ex.evaluate( list(['hello','period']).count )
+        assert     ex.evaluate( list(['world','period']).count )
+        assert     ex.evaluate( list(['hello','world','period']).count )
 
     def test_expression_and_or_precedence(self):
         ""
-        ex = FilterExpressions.WordExpression("hello and world or period")
+        ex = WordExpression("hello and world or period")
         print3( ex )
         assert str(ex) == 'WordExpression="hello and world or period"'
-        assert     ex.evaluate( AList(['period']).inlist )
+        assert ex.evaluate( list(['period']).count )
 
-        ex = FilterExpressions.WordExpression("(hello and world) or period")
+        ex = WordExpression("(hello and world) or period")
         print3( ex )
         assert str(ex) == 'WordExpression="(hello and world) or period"'
-        assert     ex.evaluate( AList(['period']).inlist )
+        assert ex.evaluate( list(['period']).count )
 
-        ex = FilterExpressions.WordExpression("hello or world and period")
+        ex = WordExpression("hello or world and period")
         print3( ex )
         assert str(ex) == 'WordExpression="hello or world and period"'
-        assert     ex.evaluate( AList(['hello']).inlist )
+        assert ex.evaluate( list(['hello']).count )
 
-        ex = FilterExpressions.WordExpression("hello or (world and period)")
+        ex = WordExpression("hello or (world and period)")
         print3( ex )
         assert str(ex) == 'WordExpression="hello or (world and period)"'
-        assert     ex.evaluate( AList(['hello']).inlist )
+        assert ex.evaluate( list(['hello']).count )
 
     def test_expression_errors(self):
         ""
-        ex = FilterExpressions.WordExpression(None)
-        self.assertRaises( ValueError, ex.append, "aword","xor" )
+        ex = WordExpression()
 
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "aword1) word2" )
+        self.assertRaises( Exception, ex.append, "aword","xor" )
+        self.assertRaises( ValueError, WordExpression, "aword1) word2" )
+        self.assertRaises( ValueError, WordExpression, "word1 not word2" )
+        self.assertRaises( ValueError, WordExpression, "word1 word2" )
+        self.assertRaises( ValueError, WordExpression, "word1 and" )
+        self.assertRaises( ValueError, WordExpression, "word1 or" )
+        self.assertRaises( ValueError, WordExpression, "(word or)" )
+        self.assertRaises( ValueError, WordExpression, "(word and)" )
+        self.assertRaises( ValueError, WordExpression, "word and ()" )
+        self.assertRaises( ValueError, WordExpression, "()" )
+        self.assertRaises( ValueError, WordExpression, "word1 and and word2" )
+        self.assertRaises( ValueError, WordExpression, "word1 and or word2" )
+        self.assertRaises( ValueError, WordExpression, "word1 or and word2" )
+        self.assertRaises( ValueError, WordExpression, "word1 or not or word2" )
+        self.assertRaises( ValueError, WordExpression, "word1 and not and word2" )
+        self.assertRaises( ValueError, WordExpression, "and word1" )
+        self.assertRaises( ValueError, WordExpression, "or word1" )
+        self.assertRaises( ValueError, WordExpression, "word1 word2" )
+        self.assertRaises( ValueError, WordExpression, "word and" )
+        self.assertRaises( ValueError, WordExpression, "word or" )
 
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "word1 not word2" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "word1 word2" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "word1 and" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "word1 or" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "(word or)" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "(word and)" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "word and ()" )
-
-        self.assertRaises( ValueError, FilterExpressions.WordExpression, "()" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "word1 and and word2" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "word1 and or word2" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "word1 or and word2" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "word1 or not or word2" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "word1 and not and word2" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "and word1" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "or word1" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "word1 word2" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "word and" )
-
-        self.assertRaises( ValueError,
-            FilterExpressions.WordExpression, "word or" )
-
-    def test_using_parens_int_expressions(self):
+    def test_using_parens_in_expressions(self):
         ""
-        ex = FilterExpressions.WordExpression("( word1 and word2 ) or (word3 and word4)")
+        ex = WordExpression("( word1 and word2 ) or (word3 and word4)")
         print3( ex )
-        assert     ex.evaluate( AList(['word1','word2']).inlist )
-        assert     ex.evaluate( AList(['word3','word4']).inlist )
-        assert not ex.evaluate( AList(['word1','word3']).inlist )
-        assert not ex.evaluate( AList(['word2','word4']).inlist )
+        assert     ex.evaluate( list(['word1','word2']).count )
+        assert     ex.evaluate( list(['word3','word4']).count )
+        assert not ex.evaluate( list(['word1','word3']).count )
+        assert not ex.evaluate( list(['word2','word4']).count )
 
-        ex = FilterExpressions.WordExpression("( word1 and not (word2 or word3) ) or word4")
+        ex = WordExpression("( word1 and not (word2 or word3) ) or word4")
         print3( ex )
-        assert     ex.evaluate( AList(['word4']).inlist )
-        assert     ex.evaluate( AList(['word1']).inlist )
-        assert not ex.evaluate( AList(['word1','word2']).inlist )
-        assert not ex.evaluate( AList(['word1','word3']).inlist )
+        assert     ex.evaluate( list(['word4']).count )
+        assert     ex.evaluate( list(['word1']).count )
+        assert not ex.evaluate( list(['word1','word2']).count )
+        assert not ex.evaluate( list(['word1','word3']).count )
 
-        ex = FilterExpressions.WordExpression("word1 and not (word2 or word3) or word4")
+        ex = WordExpression("word1 and not (word2 or word3) or word4")
         print3( ex )
-        assert     ex.evaluate( AList(['word4']).inlist )
-        assert     ex.evaluate( AList(['word1']).inlist )
-        assert not ex.evaluate( AList(['word1','word2']).inlist )
-        assert not ex.evaluate( AList(['word1','word3']).inlist )
+        assert     ex.evaluate( list(['word4']).count )
+        assert     ex.evaluate( list(['word1']).count )
+        assert not ex.evaluate( list(['word1','word2']).count )
+        assert not ex.evaluate( list(['word1','word3']).count )
 
-        ex = FilterExpressions.WordExpression("word4 or word1 and not (word2 or word3)")
+        ex = WordExpression("word4 or word1 and not (word2 or word3)")
         print3( ex )
-        assert     ex.evaluate( AList(['word4']).inlist )
-        assert     ex.evaluate( AList(['word1']).inlist )
-        assert not ex.evaluate( AList(['word1','word2']).inlist )
-        assert not ex.evaluate( AList(['word1','word3']).inlist )
+        assert     ex.evaluate( list(['word4']).count )
+        assert     ex.evaluate( list(['word1']).count )
+        assert not ex.evaluate( list(['word1','word2']).count )
+        assert not ex.evaluate( list(['word1','word3']).count )
+
+    def test_get_word_list_after_construction(self):
+        ""
+        ex = WordExpression( "word4 or word1 and not (word2 or word3 )" )
+        wL = ex.getWordList()
+        wL.sort()
+        assert wL == ['word1','word2','word3','word4']
+
+        ex = WordExpression()
+        assert ex.getWordList() == []
+
+        ex = WordExpression( '' )
+        assert ex.getWordList() == []
+
+    def test_tokenizing_expressions(self):
+        ""
+        assert split_but_retain_separator( '', '(' ) == ['']
+        assert split_but_retain_separator( ' ', '(' ) == [' ']
+        assert split_but_retain_separator( 'abc', '(' ) == ['abc']
+        assert split_but_retain_separator( '(', '(' ) == ['','(','']
+        assert split_but_retain_separator( 'a(', '(' ) == ['a','(','']
+        assert split_but_retain_separator( '(b', '(' ) == ['','(','b']
+        assert split_but_retain_separator( 'a(b', '(' ) == ['a','(','b']
+        assert split_but_retain_separator( 'a(b (c(', '(' ) == \
+                                           ['a','(','b ','(','c','(','']
+        assert split_but_retain_separator( ')a)b', ')' ) == \
+                                           ['',')','a',')','b']
+
+        assert separate_expression_into_tokens( '' ) == ['']
+        assert separate_expression_into_tokens( ' ' ) == ['']
+        assert separate_expression_into_tokens( 'word' ) == ['word']
+        assert separate_expression_into_tokens( ' word ' ) == ['word']
+        assert separate_expression_into_tokens( 'word1  or word2 ' ) == \
+                                            ['word1','or','word2']
+        assert separate_expression_into_tokens( ' not  word' ) == \
+                                            ['not','word']
+        assert separate_expression_into_tokens( ' not ( word )' ) == \
+                                            ['not','(','word',')']
+        assert separate_expression_into_tokens( ' not(word) ' ) == \
+                                            ['not','(','word',')']
+        assert separate_expression_into_tokens(
+            'not ( word1 or word2) and word3 or (word4)' ) == \
+            ['not','(','word1','or','word2',')','and','word3','or','(','word4',')']
+
+    def test_creating_eval_string(self):
+        ""
+        def evalfunc(tok):
+            assert tok != None and tok.strip()
+            return tok == 'word'
+
+        es = convert_token_list_into_eval_string( [''] )
+        val = eval( es )
+        assert val == False and type(val) == type(True)
+
+        es = convert_token_list_into_eval_string( ['not','word'] )
+        val = eval( es )
+        assert val == False and type(val) == type(True)
+
+        es = convert_token_list_into_eval_string( ['not','foo'] )
+        val = eval( es )
+        assert val == True and type(val) == type(True)
+
+        es = convert_token_list_into_eval_string( ['not','(','foo',')'] )
+        val = eval( es )
+        assert val == True and type(val) == type(True)
+
+        es = convert_token_list_into_eval_string( ['(','word',')'] )
+        val = eval( es )
+        assert val == True and type(val) == type(True)
+
+        es = convert_token_list_into_eval_string(
+                                    ['(','word',')','or','not','word'] )
+        val = eval( es )
+        assert val == True and type(val) == type(True)
+
+    def test_parsing_expr_for_non_results_evaluation(self):
+        ""
+        def evalfunc(tok):
+            return tok == 'word'
+
+        ex = parse_non_results_expression( '' )
+        print3( ex )
+        assert not eval( ex )
+
+        ex = parse_non_results_expression( 'notrun' )
+        assert ex == None
+
+        ex = parse_non_results_expression( 'not pass' )
+        assert ex == None
+
+        ex = parse_non_results_expression( 'not ( pass or diff )' )
+        assert ex == None
+
+        ex = parse_non_results_expression( 'word and fail' )
+        assert eval( ex ) == True
+
+        ex = parse_non_results_expression( 'fail and word' )
+        print3( ex )
+        assert eval( ex ) == True
+
+        ex = parse_non_results_expression( 'not word and fail' )
+        print3( ex )
+        assert eval( ex ) == False
+
+        ex = parse_non_results_expression( 'fail and not word' )
+        print3( ex )
+        assert eval( ex ) == False
+
+        ex = parse_non_results_expression( '( foo or word ) and ( pass or fail )' )
+        print3( ex )
+        assert eval( ex ) == True
+
+        ex = parse_non_results_expression(
+                            '( foo or word ) and not ( pass or fail )' )
+        print3( ex )
+        assert eval( ex ) == True
+
+        ex = parse_non_results_expression(
+                            '( pass or fail ) and ( foo or word ) ' )
+        print3( ex )
+        assert eval( ex ) == True
+
+        ex = parse_non_results_expression( 'word1 and not word2' )
+        print3( ex )
+        assert eval( ex ) == False
+
+        def evalfunc(tok):
+            return tok in ['word1','word3']
+
+        ex = parse_non_results_expression(
+                    '( word1 and not (word2 or word3) ) or word' )
+        print3( ex )
+        assert eval( ex ) == False
+
+    def test_removing_results_keywords_from_expressions(self):
+        ""
+        ex = WordExpression( "foo and bar" )
+        assert not ex.containsResultsKeywords()
+        assert not ex.evaluate( ['foo'].count )
+        assert not ex.evaluate( ['foo'].count, include_results=False )
+        assert     ex.evaluate( ['foo','bar'].count )
+        assert     ex.evaluate( ['foo','bar'].count, include_results=False )
+
+        ex = WordExpression( "notrun or notdone" )
+        assert     ex.containsResultsKeywords()
+        assert     ex.evaluate( ['aword','notdone'].count )
+        assert not ex.evaluate( ['aword','pass'].count )
+        assert     ex.evaluate( ['aword','pass'].count, include_results=False )
+
+        ex = WordExpression( "notrun and word" )
+        assert     ex.containsResultsKeywords()
+        assert     ex.evaluate( ['word','notrun'].count )
+        assert     ex.evaluate( ['word','notrun'].count, include_results=False )
+        assert not ex.evaluate( ['word','pass'].count )
+        assert     ex.evaluate( ['word','pass'].count, include_results=False )
+
+        ex = WordExpression( "not pass and not ( foo or bar )" )
+        assert     ex.containsResultsKeywords()
+        assert     ex.evaluate( ['foobar','notrun'].count )
+        assert     ex.evaluate( ['foobar','notrun'].count, include_results=False )
+        assert not ex.evaluate( ['foobar','pass'].count )
+        assert not ex.evaluate( ['foobar','pass'].count )
+        assert     ex.evaluate( ['foobar','pass'].count, include_results=False )
+
+        ex = WordExpression( "not pass or not ( foo or bar )" )
+        assert     ex.containsResultsKeywords()
+        assert     ex.evaluate( ['foo','notrun'].count )
+        assert not ex.evaluate( ['foo','notrun'].count, include_results=False )
+
+
+class cmd_line_word_expression_tests( vtu.vvtestTestCase ):
+
+    def setUp(self):
+        vtu.vvtestTestCase.setUp( self )
+
+    def write_filter_test_script(self, filename, args_true, args_false):
+        ""
+        util.writescript( filename, """
+            #!"""+sys.executable+"""
+            import sys, subprocess
+
+            cmd = '"""+sys.executable +"""'
+            cmd += ' """+vtu.vvtdir+"""/libvvtest/FilterExpressions.py'
+            cmd_true = cmd + ' """+args_true+"""'
+            cmd_false = cmd + ' """+args_false+"""'
+
+            pop = subprocess.Popen( cmd_true, shell=True, stdout=subprocess.PIPE )
+            out,err = pop.communicate()
+            assert pop.returncode == 0
+            if sys.version_info[0] >= 3:
+                out = out.decode()
+            assert out.strip() == 'true'
+
+            pop = subprocess.Popen( cmd_false, shell=True, stdout=subprocess.PIPE )
+            out,err = pop.communicate()
+            assert pop.returncode == 0
+            if sys.version_info[0] >= 3:
+                out = out.decode()
+            assert out.strip() == 'false'
+            """ )
+
+    def test_invoking_FilterExpressions_as_an_executable(self):
+        ""
+        self.write_filter_test_script( 'run_platform_expr',
+                '-f "Linux or Darwin" Linux',
+                '-f "Linux or Darwin" IRIX' )
+        self.write_filter_test_script( 'run_param_expr',
+                '-p "AA<101" "AA/11 BB/22"',
+                '-p "AA<101" "AA/102 BB/22"' )
+        self.write_filter_test_script( 'run_option_expr',
+                '-o "debug or gcc" "debug intel"',
+                '-o "debug or gcc" "intel"' )
+        time.sleep(1)
+
+        util.runcmd( './run_platform_expr' )
+        util.runcmd( './run_param_expr' )
+        util.runcmd( './run_option_expr' )
+
+
+class param_expression_tests( vtu.vvtestTestCase ):
+
+    def setUp(self):
+        vtu.vvtestTestCase.setUp( self, cleanout=False )
 
     def test_ParamFilters_with_integer_param_types(self):
         ""
-        pf = FilterExpressions.ParamFilter( ['np=4'] )
+        pf = ParamFilter( ['np=4'] )
         assert not pf.evaluate( {} )
         assert     pf.evaluate( {'np':4} )
         assert not pf.evaluate( {'np':2} )
@@ -238,7 +427,7 @@ class expression_tests( vtu.vvtestTestCase ):
         assert     pf.evaluate( {'size':"10", 'np':4} )
         assert not pf.evaluate( {'size':"10"} )
 
-        pf = FilterExpressions.ParamFilter( ['np=1/np=4'] )
+        pf = ParamFilter( ['np=1/np=4'] )
         assert not pf.evaluate( {} )
         assert     pf.evaluate( {'np':4} )
         assert     pf.evaluate( {'np':1} )
@@ -247,60 +436,60 @@ class expression_tests( vtu.vvtestTestCase ):
         assert not pf.evaluate( {'size':"10", 'np':3} )
         assert not pf.evaluate( {'size':"10"} )
 
-        pf = FilterExpressions.ParamFilter( ['np=1/!np'] )
+        pf = ParamFilter( ['np=1/!np'] )
         assert not pf.evaluate( {'np':4} )
         assert     pf.evaluate( {'np':1} )
         assert     pf.evaluate( {'size':"10", 'np':1} )
         assert     pf.evaluate( {'size':"10"} )
         assert     pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['np=1/np!='] )
+        pf = ParamFilter( ['np=1/np!='] )
         assert not pf.evaluate( {'np':4} )
         assert     pf.evaluate( {'np':1} )
         assert     pf.evaluate( {'size':"10", 'np':1} )
         assert     pf.evaluate( {'size':"10"} )
         assert     pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['!np'] )
+        pf = ParamFilter( ['!np'] )
         assert not pf.evaluate( {'np':4} )
         assert not pf.evaluate( {'size':"10", 'np':1} )
         assert     pf.evaluate( {'size':"10"} )
         assert     pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['np=1', 'size'] )
+        pf = ParamFilter( ['np=1', 'size'] )
         assert not pf.evaluate( {'np':4} )
         assert not pf.evaluate( {'size':"10"} )
         assert not pf.evaluate( {'size':"10", 'np':4} )
         assert     pf.evaluate( {'size':"10", 'np':1} )
         assert not pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['np=1', 'size='] )
+        pf = ParamFilter( ['np=1', 'size='] )
         assert not pf.evaluate( {'np':4} )
         assert not pf.evaluate( {'size':"10"} )
         assert not pf.evaluate( {'size':"10", 'np':4} )
         assert     pf.evaluate( {'size':"10", 'np':1} )
         assert not pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['np!=1', 'np!=4'] )
+        pf = ParamFilter( ['np!=1', 'np!=4'] )
         assert not pf.evaluate( {'np':1} )
         assert not pf.evaluate( {'np':4} )
         assert     pf.evaluate( {'np':2} )
 
-        pf = FilterExpressions.ParamFilter( ['np<=13'] )
+        pf = ParamFilter( ['np<=13'] )
         assert     pf.evaluate( {'np':2} )
         assert not pf.evaluate( {'np':14} )
         assert     pf.evaluate( {'np':13} )
         assert not pf.evaluate( {'size':"10"} )
         assert not pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['np>=13'] )
+        pf = ParamFilter( ['np>=13'] )
         assert not pf.evaluate( {'np':2} )
         assert     pf.evaluate( {'np':13} )
         assert     pf.evaluate( {'np':14} )
         assert not pf.evaluate( {'size':"10"} )
         assert not pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['np<13'] )
+        pf = ParamFilter( ['np<13'] )
         assert     pf.evaluate( {'np':2} )
         assert not pf.evaluate( {'np':14} )
         assert not pf.evaluate( {'np':15} )
@@ -308,7 +497,7 @@ class expression_tests( vtu.vvtestTestCase ):
         assert not pf.evaluate( {'size':"10"} )
         assert not pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['np>13'] )
+        pf = ParamFilter( ['np>13'] )
         assert not pf.evaluate( {'np':2} )
         assert not pf.evaluate( {'np':13} )
         assert     pf.evaluate( {'np':14} )
@@ -317,7 +506,7 @@ class expression_tests( vtu.vvtestTestCase ):
 
     def test_ParamFilters_with_string_param_types(self):
         ""
-        pf = FilterExpressions.ParamFilter( ['np=4'] )
+        pf = ParamFilter( ['np=4'] )
         assert not pf.evaluate( {} )
         assert     pf.evaluate( {'np':'4'} )
         assert not pf.evaluate( {'np':'2'} )
@@ -325,7 +514,7 @@ class expression_tests( vtu.vvtestTestCase ):
         assert     pf.evaluate( {'size':"10", 'np':'4'} )
         assert not pf.evaluate( {'size':"10"} )
 
-        pf = FilterExpressions.ParamFilter( ['np=1/np=4'] )
+        pf = ParamFilter( ['np=1/np=4'] )
         assert not pf.evaluate( {} )
         assert     pf.evaluate( {'np':'4'} )
         assert     pf.evaluate( {'np':'1'} )
@@ -334,60 +523,60 @@ class expression_tests( vtu.vvtestTestCase ):
         assert not pf.evaluate( {'size':"10", 'np':'3'} )
         assert not pf.evaluate( {'size':"10"} )
 
-        pf = FilterExpressions.ParamFilter( ['np=1/!np'] )
+        pf = ParamFilter( ['np=1/!np'] )
         assert not pf.evaluate( {'np':'4'} )
         assert     pf.evaluate( {'np':'1'} )
         assert     pf.evaluate( {'size':"10", 'np':'1'} )
         assert     pf.evaluate( {'size':"10"} )
         assert     pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['np=1/np!='] )
+        pf = ParamFilter( ['np=1/np!='] )
         assert not pf.evaluate( {'np':'4'} )
         assert     pf.evaluate( {'np':'1'} )
         assert     pf.evaluate( {'size':"10", 'np':'1'} )
         assert     pf.evaluate( {'size':"10"} )
         assert     pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['!np'] )
+        pf = ParamFilter( ['!np'] )
         assert not pf.evaluate( {'np':'4'} )
         assert not pf.evaluate( {'size':"10", 'np':'1'} )
         assert     pf.evaluate( {'size':"10"} )
         assert     pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['np=1', 'size'] )
+        pf = ParamFilter( ['np=1', 'size'] )
         assert not pf.evaluate( {'np':'4'} )
         assert not pf.evaluate( {'size':"10"} )
         assert not pf.evaluate( {'size':"10", 'np':'4'} )
         assert     pf.evaluate( {'size':"10", 'np':'1'} )
         assert not pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['np=1', 'size='] )
+        pf = ParamFilter( ['np=1', 'size='] )
         assert not pf.evaluate( {'np':'4'} )
         assert not pf.evaluate( {'size':"10"} )
         assert not pf.evaluate( {'size':"10", 'np':'4'} )
         assert     pf.evaluate( {'size':"10", 'np':'1'} )
         assert not pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['np!=1', 'np!=4'] )
+        pf = ParamFilter( ['np!=1', 'np!=4'] )
         assert not pf.evaluate( {'np':'1'} )
         assert not pf.evaluate( {'np':'4'} )
         assert     pf.evaluate( {'np':'2'} )
 
-        pf = FilterExpressions.ParamFilter( ['np<=13'] )
+        pf = ParamFilter( ['np<=13'] )
         assert     pf.evaluate( {'np':'2'} )
         assert not pf.evaluate( {'np':'20'} )
         assert     pf.evaluate( {'np':'13'} )
         assert not pf.evaluate( {'size':"10"} )
         assert not pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['np>=13'] )
+        pf = ParamFilter( ['np>=13'] )
         assert not pf.evaluate( {'np':'2'} )
         assert     pf.evaluate( {'np':'13'} )
         assert     pf.evaluate( {'np':'20'} )
         assert not pf.evaluate( {'size':"10"} )
         assert not pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['np<13'] )
+        pf = ParamFilter( ['np<13'] )
         assert     pf.evaluate( {'np':'2'} )
         assert not pf.evaluate( {'np':'20'} )
         assert not pf.evaluate( {'np':'15'} )
@@ -395,7 +584,7 @@ class expression_tests( vtu.vvtestTestCase ):
         assert not pf.evaluate( {'size':"10"} )
         assert not pf.evaluate( {} )
 
-        pf = FilterExpressions.ParamFilter( ['np>13'] )
+        pf = ParamFilter( ['np>13'] )
         assert not pf.evaluate( {'np':'2'} )
         assert not pf.evaluate( {'np':'13'} )
         assert     pf.evaluate( {'np':'14'} )
@@ -404,101 +593,92 @@ class expression_tests( vtu.vvtestTestCase ):
 
     def test_ParamFilters_with_mixed_types(self):
         ""
-        pf = FilterExpressions.ParamFilter( ['np=13'] )
+        pf = ParamFilter( ['np=13'] )
         assert not pf.evaluate( {'np':'a'} )
 
-        pf = FilterExpressions.ParamFilter( ['np=ab'] )
+        pf = ParamFilter( ['np=ab'] )
         assert not pf.evaluate( {'np':'13'} )
 
-        pf = FilterExpressions.ParamFilter( ['np=ab'] )
+        pf = ParamFilter( ['np=ab'] )
         assert     pf.evaluate( {'np':'ab'} )
 
 
-        pf = FilterExpressions.ParamFilter( ['np!=13'] )
+        pf = ParamFilter( ['np!=13'] )
         assert     pf.evaluate( {'np':'a'} )
 
-        pf = FilterExpressions.ParamFilter( ['np!=ab'] )
+        pf = ParamFilter( ['np!=ab'] )
         assert     pf.evaluate( {'np':'13'} )
 
-        pf = FilterExpressions.ParamFilter( ['np!=ab'] )
+        pf = ParamFilter( ['np!=ab'] )
         assert not pf.evaluate( {'np':'ab'} )
 
 
-        pf = FilterExpressions.ParamFilter( ['np<=13'] )
+        pf = ParamFilter( ['np<=13'] )
         assert not pf.evaluate( {'np':'a'} )
 
-        pf = FilterExpressions.ParamFilter( ['np<=13'] )
+        pf = ParamFilter( ['np<=13'] )
         assert     pf.evaluate( {'np':'0a'} )
 
-        pf = FilterExpressions.ParamFilter( ['np<=ab'] )
+        pf = ParamFilter( ['np<=ab'] )
         assert     pf.evaluate( {'np':'13'} )
 
-        pf = FilterExpressions.ParamFilter( ['np<=ab'] )
+        pf = ParamFilter( ['np<=ab'] )
         assert     pf.evaluate( {'np':'ab'} )
 
 
-        pf = FilterExpressions.ParamFilter( ['np>=13'] )
+        pf = ParamFilter( ['np>=13'] )
         assert     pf.evaluate( {'np':'a'} )
 
-        pf = FilterExpressions.ParamFilter( ['np>=13'] )
+        pf = ParamFilter( ['np>=13'] )
         assert not pf.evaluate( {'np':'0a'} )
 
-        pf = FilterExpressions.ParamFilter( ['np>=ab'] )
+        pf = ParamFilter( ['np>=ab'] )
         assert not pf.evaluate( {'np':'13'} )
 
-        pf = FilterExpressions.ParamFilter( ['np>=ab'] )
+        pf = ParamFilter( ['np>=ab'] )
         assert     pf.evaluate( {'np':'ab'} )
 
 
-        pf = FilterExpressions.ParamFilter( ['np<13'] )
+        pf = ParamFilter( ['np<13'] )
         assert not pf.evaluate( {'np':'a'} )
 
-        pf = FilterExpressions.ParamFilter( ['np<13'] )
+        pf = ParamFilter( ['np<13'] )
         assert     pf.evaluate( {'np':'0a'} )
 
-        pf = FilterExpressions.ParamFilter( ['np<ab'] )
+        pf = ParamFilter( ['np<ab'] )
         assert     pf.evaluate( {'np':'13'} )
 
-        pf = FilterExpressions.ParamFilter( ['np<ab'] )
+        pf = ParamFilter( ['np<ab'] )
         assert not pf.evaluate( {'np':'ab'} )
 
 
-        pf = FilterExpressions.ParamFilter( ['np>13'] )
+        pf = ParamFilter( ['np>13'] )
         assert     pf.evaluate( {'np':'a'} )
 
-        pf = FilterExpressions.ParamFilter( ['np>13'] )
+        pf = ParamFilter( ['np>13'] )
         assert not pf.evaluate( {'np':'0a'} )
 
-        pf = FilterExpressions.ParamFilter( ['np>ab'] )
+        pf = ParamFilter( ['np>ab'] )
         assert not pf.evaluate( {'np':'13'} )
 
-        pf = FilterExpressions.ParamFilter( ['np>ab'] )
+        pf = ParamFilter( ['np>ab'] )
         assert not pf.evaluate( {'np':'ab'} )
 
     def test_using_word_expressions_instead_of_a_list(self):
         ""
-        pf = FilterExpressions.ParamFilter( 'np>2' )
+        pf = ParamFilter( 'np>2' )
         assert not pf.evaluate( {'np':2} )
         assert     pf.evaluate( {'np':3} )
 
-        pf = FilterExpressions.ParamFilter( '!np>2' )
+        pf = ParamFilter( '!np>2' )
         assert     pf.evaluate( {'np':2} )
         assert not pf.evaluate( {'np':3} )
 
-        pf = FilterExpressions.ParamFilter( '!np>3 and np!=1' )
+        pf = ParamFilter( '!np>3 and np!=1' )
         assert not pf.evaluate( {'np':1} )
         assert     pf.evaluate( {'np':2} )
         assert     pf.evaluate( {'np':3} )
         assert not pf.evaluate( {'np':4} )
-
-
-############################################################################
-
-class AList:
-    def __init__(self, L=[]):
-        self.L = L
-    def inlist(self, item):
-        return item in self.L
 
 
 ############################################################################

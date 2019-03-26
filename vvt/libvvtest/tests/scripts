@@ -115,18 +115,18 @@ class script_tests( vtu.vvtestTestCase ):
     def test_a_python_test_that_exits_with_a_diff_a_pass_and_a_fail(self):
         ""
         util.writescript( 'tpass.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import os, sys
             import vvtest_util as vvt
             """ )
         util.writescript( 'tdiff.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import sys
             import vvtest_util as vvt
             sys.exit( vvt.diff_exit_status )
             """ )
         util.writescript( 'tfail.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import os, sys
             def myfunc():
                 raise Exception( "test failed" )
@@ -144,7 +144,7 @@ class script_tests( vtu.vvtestTestCase ):
     def test_multiple_tests_in_one_script_file(self):
         ""
         util.writescript( 'multi.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: name=multi
             #VVT: name=multi2
             import vvtest_util as vvt
@@ -167,27 +167,27 @@ class script_tests( vtu.vvtestTestCase ):
     def test_header_specification_comment_variations(self):
         ""
         util.writescript( 'tst1.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
 
             #VVT: name=test1
             import vvtest_util as vvt
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
         util.writescript( 'tst2.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             # 
             #VVT: name=test2
             import vvtest_util as vvt
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
         util.writescript( 'tst3.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import vvtest_util as vvt
             #VVT: name=test3
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
         util.writescript( 'tst4.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: name=test4a
 
             #VVT: name=test4b
@@ -196,7 +196,7 @@ class script_tests( vtu.vvtestTestCase ):
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
         util.writescript( 'tst5.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             # regular comments can be interleaved
             #VVT: name=test5a
 
@@ -249,55 +249,55 @@ class script_tests( vtu.vvtestTestCase ):
     def test_incorrect_specification_syntax(self):
         ""
         util.writescript( 'tst1.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: =junk
             import vvtest_util as vvt
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
         util.writescript( 'tst2.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: keywords (testname=tst2) foo : bar
             import vvtest_util as vvt
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
         util.writescript( 'tst2b.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: keywords (testname=tst2b) foo
             import vvtest_util as vvt
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
         util.writescript( 'tst2c.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: keywords (testname=tst2c) (testname=tst2b)
             import vvtest_util as vvt
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
         util.writescript( 'tst3.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: keywords (testname=tst3) : junk
             import vvtest_util as vvt
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
         util.writescript( 'tst4.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT::
             import vvtest_util as vvt
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
         util.writescript( 'tst5.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: keywords (=tst5) : foo bar
             import vvtest_util as vvt
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
         util.writescript( 'tst6.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: keywords (foo=bar,=) : foo bar
             import vvtest_util as vvt
             print ( "hello from the "+vvt.NAME+" test" )
             """ )
         util.writescript( 'tst7.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: keywords (foo=bar : foo bar
             import vvtest_util as vvt
             print ( "hello from the "+vvt.NAME+" test" )
@@ -330,7 +330,7 @@ class script_tests( vtu.vvtestTestCase ):
             this is file three
             """ )
         util.writescript( 'files.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: link : file1.txt file2.txt
             #VVT: copy : file3.txt
             #VVT: link (rename) : file1.txt, lfile1 file2.txt,lfile2
@@ -383,7 +383,7 @@ class script_tests( vtu.vvtestTestCase ):
             this is file five
             """ )
         util.writescript( 'files.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             
             #VVT: name = files
             #VVT: name = another

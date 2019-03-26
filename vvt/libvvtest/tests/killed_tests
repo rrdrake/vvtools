@@ -38,7 +38,7 @@ class running_after_vvtest_is_killed( vtu.vvtestTestCase ):
             print3( out )
 
             counts = vtu.parse_vvtest_counts( out )
-            assert counts['total'] == 1 and counts['notrun'] == 1
+            assert counts['total'] == 0
 
             vrun = vtu.runvvtest()
             vrun.assertCounts( total=1, npass=1 )
@@ -60,7 +60,7 @@ class running_after_vvtest_is_killed( vtu.vvtestTestCase ):
             print3( out )
 
             counts = vtu.parse_vvtest_counts( out )
-            assert counts['total'] == 1 and counts['notrun'] == 1
+            assert counts['total'] == 0
 
             vrun = vtu.runvvtest( raise_on_error=False )
             assert vrun.x > 0
@@ -80,7 +80,7 @@ class running_after_vvtest_is_killed( vtu.vvtestTestCase ):
         tdir = util.globfile( 'TestResults*' )
 
         counts = vtu.parse_vvtest_counts( out )
-        assert counts['total'] == 1 and counts['notrun'] == 1
+        assert counts['total'] == 0
 
         vrun = vtu.runvvtest( raise_on_error=False, chdir=tdir )
         assert vrun.x > 0

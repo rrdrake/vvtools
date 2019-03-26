@@ -173,7 +173,7 @@ class XmlDocReader:
             # this succeeds with python 2
             import StringIO
             class_StringIO = StringIO.StringIO
-        except:
+        except Exception:
             # this succeeds with python 3
             import io
             class_StringIO = io.StringIO
@@ -182,7 +182,7 @@ class XmlDocReader:
         sio = class_StringIO( "<foo> <bar> </foo>\n" )
         try:
             ET.parse( sio )
-        except:
+        except Exception:
             self.ET_exc_class = sys.exc_info()[0]
         else:
             # something is wrong; the drawback to this fallback is that you

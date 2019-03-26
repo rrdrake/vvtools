@@ -20,7 +20,7 @@ class BatchSLURM:
         ""
         self.runcmd = run_function
 
-    def header(self, np, qtime, workdir, outfile):
+    def header(self, np, qtime, workdir, outfile, plat_attrs):
         """
         """
         if np <= 0: np = 1
@@ -33,12 +33,17 @@ class BatchSLURM:
               '#SBATCH --output=' + outfile + '\n' + \
               '#SBATCH --error=' + outfile + '\n' + \
               '#SBATCH --workdir=' + workdir
+
+        # Add a line for Quality of Service (QoS) if the user defined it.
+        QoS = plat_attrs.get('QoS', None)
+        if QoS is not None:
+            hdr += '\n#SBATCH --qos=' + QoS
         
         return hdr
 
 
     def submit(self, fname, workdir, outfile,
-                     queue=None, account=None, confirm=False):
+                     queue=None, account=None, confirm=False, **kwargs):
         """
         Creates and executes a command to submit the given filename as a batch
         job to the resource manager.  Returns (cmd, out, job id, error message)
@@ -56,6 +61,9 @@ class BatchSLURM:
             cmdL.append('--partition='+queue)
         if account != None:
             cmdL.append('--account='+account)
+        if 'QoS' in kwargs and kwargs['QoS'] != None:
+            cmdL.append('--qos='+kwargs['QoS'])
+
         cmdL.append('--output='+outfile)
         cmdL.append('--error='+outfile)
         cmdL.append('--workdir='+workdir)

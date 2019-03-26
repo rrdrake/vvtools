@@ -238,7 +238,7 @@ class parameter_tests( vtu.vvtestTestCase ):
 
             vtu.remove_results()
 
-            vrun = vtu.runvvtest( "-p 'isize<=2 or not isize'", batch=batch )
+            vrun = vtu.runvvtest( "-p 'isize<=2'", batch=batch )
             vrun.assertCounts( total=3, npass=3 )
             tdir = vrun.resultsDir()
 
@@ -260,26 +260,26 @@ class parameter_tests( vtu.vvtestTestCase ):
     def test_using_parameterize_with_script_test(self):
         ""
         util.writescript( 'params1.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : animal = dog cat
             import os
             print ( "hello from "+os.path.basename(os.getcwd()) )
             """ )
         util.writescript( 'params2.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : A = dog cat
             #VVT: parameterize : V = carrot celery
             import os
             print ( "hello from "+os.path.basename(os.getcwd()) )
             """ )
         util.writescript( 'params3.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : B,X = dog,carrot cat,celery
             import os
             print ( "hello from "+os.path.basename(os.getcwd()) )
             """ )
         util.writescript( 'params4.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : C, Y, Z = 1 ,2,3  4,5,6
             #VVT::                         7 , 8 , 9   10, 11,12
             import os
@@ -319,9 +319,10 @@ class parameter_tests( vtu.vvtestTestCase ):
                                  'TestResults*/params1.animal=cat/execute.log' )
             assert len( sL ) == 1
 
-            vtu.runvvtest( '-ik animal' ).assertCounts( total=2, npass=2 )
-            vtu.runvvtest( '-ik dog' ).assertCounts( total=0 )
-            vtu.runvvtest( '-ik Z' ).assertCounts( total=4, npass=4 )
+            # parameter names are also keywords, but not parameter values
+            vtu.runvvtest( '-i -k animal' ).assertCounts( total=2, npass=2 )
+            vtu.runvvtest( '-i -k dog' ).assertCounts( total=0 )
+            vtu.runvvtest( '-i -k Z' ).assertCounts( total=4, npass=4 )
 
 
 #####################################################################

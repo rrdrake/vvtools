@@ -6,7 +6,6 @@
 
 import os, sys
 import time
-import fnmatch
 import glob
 
 from . import TestSpec
@@ -14,6 +13,11 @@ from . import TestExec
 from . import TestSpecCreator
 from . import CommonSpec
 from . import testlistio
+from . import FilterExpressions
+from .TestSpecError import TestSpecError
+from .filtering import TestFilter
+from .groups import ParameterizeAnalyzeGroups
+from . import depend
 
 
 class TestList:
@@ -22,10 +26,10 @@ class TestList:
     file and to read from a test XML file.
     """
 
-    version = '32'
-
-    def __init__(self, filename, runtime_config=None):
+    def __init__(self, statushandler, filename, runtime_config=None):
         ""
+        self.statushandler = statushandler
+
         if filename:
             self.filename = os.path.normpath( filename )
         else:
@@ -38,16 +42,17 @@ class TestList:
         self.datestamp = None
         self.finish = None
 
-        self.groups = {}  # (test filepath, test name) -> list of TestSpec
+        self.groups = None  # a ParameterizeAnalyzeGroups class instance
 
         self.tspecs = {}  # TestSpec xdir -> TestSpec object
-        self.active = {}  # TestSpec xdir -> TestSpec object
 
         self.xtlist = {}  # np -> list of TestExec objects
         self.started = {}  # TestSpec xdir -> TestExec object
         self.stopped = {}  # TestSpec xdir -> TestExec object
         
         self.rtconfig = runtime_config
+
+        self.testfilter = TestFilter( self.rtconfig, self.statushandler )
 
     def setResultsSuffix(self, suffix=None):
         ""
@@ -123,19 +128,16 @@ class TestList:
         ""
         assert self.filename
 
-        self.tspecs.clear()
+        if os.path.exists( self.filename ):
 
-        tlr = testlistio.TestListReader( self.filename )
-        tlr.read()
+            tlr = testlistio.TestListReader( self.filename )
+            tlr.read()
 
-        self.results_suffix = tlr.getAttr( 'results_suffix', None )
+            self.results_suffix = tlr.getAttr( 'results_suffix', None )
 
-        self.tspecs.update( tlr.getTests() )
-
-    def readTestListIfNoTestResults(self):
-        ""
-        if len( self.getResultsFilenames() ) == 0:
-            self.readTestList()
+            for xdir,tspec in tlr.getTests().items():
+                if xdir not in self.tspecs:
+                    self.tspecs[ xdir ] = tspec
 
     def readTestResults(self, resultsfilename=None):
         ""
@@ -164,11 +166,8 @@ class TestList:
             for xdir,tspec in tlr.getTests().items():
 
                 t = self.tspecs.get( xdir, None )
-                if t == None:
-                    self.tspecs[ xdir ] = tspec
-                else:
-                    for k,v in tspec.getAttrs().items():
-                        t.setAttr( k, v )
+                if t != None:
+                    self.statushandler.copyResultsExceptSkips( t, tspec )
 
     def ensureInlinedTestResultIncludes(self):
         ""
@@ -209,221 +208,40 @@ class TestList:
         """
         return self.tspecs.values()
 
-    def loadAndFilter(self, maxprocs, filter_dir=None,
-                            analyze_only=0, prune=False,
-                            baseline=False ):
-        """
-        Creates the active test list using the scanned tests and the tests
-        read in from a test list file.  A subdirectory filter is applied and
-        the filter given in the constructor.
-
-        If 'prune' is true, then analyze tests are filtered out if they have
-        inactive children that did not pass/diff in a previous run.
-
-        Returns a list of (analyze test, child test) for analyze tests that
-        were pruned.  The second item is the child that did not pass/diff.
-        """
-        self.active = {}
-
-        self._create_parameterize_analyze_group_map()
-
-        subdir = None
-        if filter_dir != None:
-          subdir = os.path.normpath( filter_dir )
-          if subdir == '' or subdir == '.':
-            subdir = None
-
-        rmD = {}
-        for xdir,t in self.tspecs.items():
-
-            # TODO: is it possible that the filter apply before refresh could
-            #       miss a test that changed since last time and now should
-            #       be included !!
-            keep = self._apply_filters( xdir, t, subdir, analyze_only )
-
-            if keep:
-                # apply runtime filtering
-                tm = testruntime(t)
-                if tm != None and not self.rtconfig.evaluate_runtime( tm ):
-                    keep = False
-                    rmD[ xdir ] = t
-
-            if keep:
-                if 'file' in t.getOrigin():
-                    self.active[ xdir ] = t
-                else:
-                    # read from test source, which double checks filtering
-                    keep = TestSpecCreator.refreshTest( t, self.rtconfig )
-                    if baseline and not t.hasBaseline():
-                        keep = False
-                    if keep:
-                        self.active[ xdir ] = t
-
-        # remove tests that do not meet runtime requirements
-        self._remove_tests( rmD )
-
-        rtsum = self.rtconfig.getAttr( 'runtime_sum', None )
-        if rtsum != None:
-            # filter by cummulative runtime; first, generate list with times
-            rmD.clear()
-            tL = []
-            for xdir,t in self.active.items():
-                tm = testruntime(t)
-                if tm == None: tm = 0
-                tL.append( (tm,xdir,t) )
-            tL.sort()
-            # accumulate tests until allowed runtime is exceeded
-            tsum = 0.
-            i = 0 ; n = len(tL)
-            while i < n:
-                tm,xdir,t = tL[i]
-                tsum += tm
-                if tsum > rtsum:
-                    break
-                i += 1
-            # put the rest of the tests in the remove dict
-            while i < n:
-                tm,xdir,t = tL[i]
-                rmD[xdir] = t
-                i += 1
-            tL = None
-            self._remove_tests( rmD )
-
-        pruneL = []
-        cntmax = 0
-        if prune:
-            
-            # remove analyze tests from the active set if they have inactive
-            # children that have a bad result
-            for xdir,t in self.tspecs.items():
-
-                pxdir = self._find_group_analyze_test( t )
-
-                # does this test have a parent and is this test inactive
-                if pxdir != None and xdir not in self.active:
-
-                    # is the parent active and does the child have a bad result
-                    if pxdir in self.active and \
-                          ( t.getAttr('state') != 'done' or \
-                            t.getAttr('result') not in ['pass','diff'] ):
-                        # remove the parent from the active set
-                        pt = self.active.pop( pxdir )
-                        pruneL.append( (pt,t) )
-
-            # Remove tests that exceed the platform resources (num processors).
-            # For execute/analyze, if an execute test exceeds the resources
-            # then the entire test set is removed.
-            rmD.clear()
-            cntmax = 0
-            for xdir,t in self.active.items():
-                np = int( t.getParameters().get( 'np', 1 ) )
-                assert maxprocs != None
-                if np > maxprocs:
-                    rmD[xdir] = t
-                    cntmax += 1
-            self._remove_tests( rmD )
-
-        rmD = None
-
-        return pruneL, cntmax
-
-    def _apply_filters(self, xdir, tspec, subdir, analyze_only):
-        """
-        """
-        if self.rtconfig.getAttr('include_all',0):
-            return True
-        
-        kwL = tspec.getResultsKeywords() + tspec.getKeywords()
-        if not self.rtconfig.satisfies_keywords( kwL ):
-            return False
-        
-        if subdir != None and subdir != xdir and not is_subdir( subdir, xdir ):
-            return False
-        
-        # want child tests to run with the "analyze only" option ?
-        # if yes, then comment this out; if no, then uncomment it
-        #if analyze_only and tspec.getParent() != None:
-        #  return 0
-        
-        if not self.rtconfig.evaluate_parameters( tspec.getParameters() ):
-            return False
-
-        if not self.rtconfig.getAttr( 'include_tdd', False ) and \
-           tspec.hasAttr( 'TDD' ):
-            return False
-
-        return True
-
-    def _remove_tests(self, removeD):
-        """
-        The 'removeD' should be a dict mapping xdir to TestSpec.  Those tests
-        will be removed from the self.tspecs and self.active sets.  If any test
-        to be removed is part of a parameterize/analyze group, then the entire
-        group is removed.
-        """
-        for xdir,t in removeD.items():
-
-            key = ( t.getFilepath(), t.getName() )
-
-            grpL = self.groups[key]
-
-            if not self._test_group_has_analyze( grpL ):
-                # not a parameterize/analyze test, so just remove the test
-                grpL = [ t ]
-
-            for grpt in grpL:
-
-                xdir = grpt.getExecuteDirectory()
-
-                if xdir in self.active:
-                    self.active.pop( xdir )
-
-                # don't remove a test from the TestResults test list if
-                # it was there previously
-                if xdir in self.tspecs and 'string' not in t.getOrigin():
-                    self.tspecs.pop( xdir )
-
-    def _create_parameterize_analyze_group_map(self):
+    def applyPermanentFilters(self):
         ""
-        self.groups.clear()
+        self._check_create_parameterize_analyze_group_map()
 
-        for xdir,t in self.tspecs.items():
+        self.testfilter.applyPermanent( self.tspecs )
 
-            # this key is common to each test in a parameterize/analyze
-            # test group (including the analyze test)
-            key = ( t.getFilepath(), t.getName() )
+        finalize_analyze_tests( self.statushandler, self.groups )
 
-            L = self.groups.get( key, None )
-            if L == None:
-                L = []
-                self.groups[ key ] = L
+        self.numactive = count_active( self.statushandler, self.tspecs )
 
-            L.append( t )
+    def determineActiveTests(self, filter_dir=None,
+                                   analyze_only=False,
+                                   baseline=False):
+        ""
+        self._check_create_parameterize_analyze_group_map()
+
+        self.testfilter.applyRuntime( self.tspecs, filter_dir )
+
+        if not baseline:
+            finalize_analyze_tests( self.statushandler, self.groups )
+
+        refresh_active_tests( self.statushandler, self.tspecs, self.rtconfig )
+
+        if baseline:
+            # baseline marking must come after TestSpecs are refreshed
+            mark_skips_for_baselining( self.statushandler, self.tspecs )
+
+        self.numactive = count_active( self.statushandler, self.tspecs )
 
     def markTestsWithDependents(self):
         ""
         for tx in self.getTestExecList():
             if tx.hasDependent():
                 tx.atest.setAttr( 'hasdependent', True )
-
-    def _test_group_has_analyze(self, grpL):
-        ""
-        for t in grpL:
-            if t.isAnalyze():
-                return True
-        return False
-
-    def _find_group_analyze_test(self, testobj):
-        ""
-        key = ( testobj.getFilepath(), testobj.getName() )
-
-        grpL = self.groups[key]
-
-        for t in grpL:
-            if t != testobj and t.isAnalyze():
-                return t.getExecuteDirectory()
-
-        return None
 
     def getActiveTests(self, sorting=''):
         """
@@ -437,34 +255,33 @@ class TestList:
                 s : test status (such as pass, fail, diff, etc)
                 r : reverse the order
         """
+        tL = []
         if not sorting:
-            tL = list( self.active.values() )
+            for tspec in self.tspecs.values():
+                if not self.statushandler.skipTest( tspec ):
+                    tL.append( tspec )
             tL.sort()
+
         else:
-            tL = []
-            for t in self.active.values():
-                L = []
-                for c in sorting:
-                    if c == 'n':
-                        L.append( t.getName() )
-                    elif c == 'x':
-                        L.append( t.getExecuteDirectory() )
-                    elif c == 't':
-                        tm = testruntime(t)
-                        if tm == None: tm = 0
-                        L.append( tm )
-                    elif c == 'd':
-                        L.append( t.getAttr( 'xdate', 0 ) )
-                    elif c == 's':
-                        st = t.getAttr( 'state', 'notrun' )
-                        if st == 'notrun':
-                            L.append( st )
-                        elif st == 'done':
-                            L.append( t.getAttr( 'result', 'unknown' ) )
-                        else:
-                            L.append( 'notdone' )
-                L.append( t )
-                tL.append( L )
+            for t in self.tspecs.values():
+                if not self.statushandler.skipTest(t):
+                    subL = []
+                    for c in sorting:
+                        if c == 'n':
+                            subL.append( t.getName() )
+                        elif c == 'x':
+                            subL.append( t.getExecuteDirectory() )
+                        elif c == 't':
+                            tm = self.statushandler.getRuntime( t, None )
+                            if tm == None: tm = 0
+                            subL.append( tm )
+                        elif c == 'd':
+                            subL.append( self.statushandler.getStartDate( t, 0 ) )
+                        elif c == 's':
+                            subL.append( self.statushandler.getResultStatus( t ) )
+
+                    subL.append( t )
+                    tL.append( subL )
             tL.sort()
             if 'r' in sorting:
                 tL.reverse()
@@ -483,7 +300,7 @@ class TestList:
         bdir = os.path.normpath( os.path.abspath(base_directory) )
         for root,dirs,files in os.walk( bdir ):
             self._scan_recurse( bdir, force_params, root, dirs, files )
-    
+
     def _scan_recurse(self, basedir, force_params, d, dirs, files):
         """
         This function is given to os.walk to recursively scan a directory
@@ -491,12 +308,12 @@ class TestList:
         sent to the os.walk function.
         """
         d = os.path.normpath(d)
-        
+
         if basedir == d:
-          reldir = '.'
+            reldir = '.'
         else:
-          assert basedir+os.sep == d[:len(basedir)+1]
-          reldir = d[len(basedir)+1:]
+            assert basedir+os.sep == d[:len(basedir)+1]
+            reldir = d[len(basedir)+1:]
 
         # scan files with extension "xml" or "vvt"; soft links to directories
         # are skipped by os.walk so special handling is performed
@@ -539,42 +356,37 @@ class TestList:
         assert relfile
         assert os.path.isabs( basepath )
         assert not os.path.isabs( relfile )
-        
+
         basepath = os.path.normpath( basepath )
         relfile  = os.path.normpath( relfile )
-        
+
         assert relfile
-        
+
         try:
-          testL = TestSpecCreator.createTestObjects(
-                        basepath, relfile, force_params, self.rtconfig )
-        except TestSpecCreator.TestSpecError:
+          testL = createTestObjects( basepath, relfile,
+                                     force_params, self.rtconfig )
+        except TestSpecError:
           print3( "*** skipping file " + os.path.join( basepath, relfile ) + \
                   ": " + str( sys.exc_info()[1] ) )
           testL = []
-        
+
         for t in testL:
             # this new test is ignored if it was already read from source
             # (or a different test source but the same relative path from root)
             xdir = t.getExecuteDirectory()
 
-            t2 = self.tspecs.get( xdir, None )
-            if t2 == None:
-                self.tspecs[xdir] = t
-            elif 'file' in t2.getOrigin():
-                # this new test is ignored because there is a previous test
-                # (generated from a file) with the same execute directory
-                pass
+            if xdir in self.tspecs:
+                tspec = self.tspecs[ xdir ]
+                print3( '*** warning:',
+                    'ignoring test with duplicate execution directory\n',
+                    '      first file :', tspec.getFilename() + '\n',
+                    '      second file:', t.getFilename() )
             else:
-                # existing test was read from a test list file; use the new
-                # test instance but take on the attributes from the previous
-                for n,v in t2.getAttrs().items():
-                    t.setAttr(n,v)
                 self.tspecs[xdir] = t
 
     def addTest(self, t):
         """
-        Add a test to the test spec list.  Will overwrite an existing test.
+        Add a test to the TestSpec list.  Will overwrite an existing test.
         """
         self.tspecs[ t.getExecuteDirectory() ] = t
     
@@ -585,75 +397,55 @@ class TestList:
         d = os.path.join( config.get('toolsdir'), 'libvvtest' )
         c = config.get('configdir')
         xdb = CommonSpec.loadCommonSpec( d, c )
-        
+
         self._createTestExecList( perms )
         
         for xt in self.getTestExecList():
-          xt.init( test_dir, platform, xdb, config )
-    
+            xt.init( test_dir, platform, xdb, config )
+
+    def _check_create_parameterize_analyze_group_map(self):
+        ""
+        if self.groups == None:
+            self.groups = ParameterizeAnalyzeGroups( self.statushandler )
+            self.groups.rebuild( self.tspecs )
+
     def _createTestExecList(self, perms):
         """
         """
         self.xtlist = {}
-        
+
         xtD = {}
-        for t in self.active.values():
+        for t in self.tspecs.values():
 
-          assert 'file' in t.getOrigin()
+            if not self.statushandler.skipTest( t ):
 
-          xt = TestExec.TestExec( t, perms )
+                assert t.constructionCompleted()
 
-          if t.getAttr( 'hasdependent', False ):
-              xt.setHasDependent()
+                xt = TestExec.TestExec( self.statushandler, t, perms )
 
-          np = int( t.getParameters().get('np', 0) )
-          if np in self.xtlist:
-            self.xtlist[np].append(xt)
-          else:
-            self.xtlist[np] = [xt]
-          
-          xtD[ t.getExecuteDirectory() ] = xt
-        
+                if t.getAttr( 'hasdependent', False ):
+                    xt.setHasDependent()
+
+                np = int( t.getParameters().get('np', 0) )
+                if np in self.xtlist:
+                    self.xtlist[np].append(xt)
+                else:
+                    self.xtlist[np] = [xt]
+
+                xtD[ t.getExecuteDirectory() ] = xt
+
         # sort tests longest running first; 
         self.sortTestExecList()
 
-        self._add_analyze_dependencies( xtD )
-        self._add_general_dependencies( xtD )
+        self._connect_execute_dependencies( xtD )
 
-    def _add_analyze_dependencies(self, xdir2testexec):
-        """
-        add dependencies of analyze tests to TestExec objects
-        """
+    def _connect_execute_dependencies(self, xdir2testexec):
+        ""
         for xt in self.getTestExecList():
-            analyze_xdir = self._find_group_analyze_test( xt.atest )
-            if analyze_xdir != None:
-                # this test has an analyze dependent
-                analyze_xt = xdir2testexec.get( analyze_xdir, None )
-                if analyze_xt != None:
-                    connect_dependency( analyze_xt, xt )
-            elif xt.atest.isAnalyze():
-                key = ( xt.atest.getFilepath(), xt.atest.getName() )
-                grpL = self.groups.get( key, None )
-                for gt in grpL:
-                    if not gt.isAnalyze():
-                        connect_dependency( xt, gt )
-
-    def _add_general_dependencies(self, xdir2testexec):
-        """
-        add general dependencies to TestExec objects
-        """
-        xdirlist = self.tspecs.keys()
-        for xt in self.getTestExecList():
-            xdir = xt.atest.getExecuteDirectory()
-            for dep_pat,expr in xt.atest.getDependencies():
-                depL = find_tests_by_execute_directory_match(
-                                                xdir, dep_pat, xdirlist )
-                for dep_xdir in depL:
-                    dep_obj = xdir2testexec.get(
-                                    dep_xdir,
-                                    self.tspecs.get( dep_xdir, None ) )
-                    if dep_obj != None:
-                        connect_dependency( xt, dep_obj, dep_pat, expr )
+            if xt.atest.isAnalyze():
+                grpL = self.groups.getGroup( xt.atest )
+                depend.connect_analyze_dependencies( xt, grpL, xdir2testexec )
+            depend.check_connect_dependencies( xt, self.tspecs, xdir2testexec )
 
     def sortTestExecList(self):
         """
@@ -666,7 +458,7 @@ class TestList:
             sortL = []
             for tx in L:
                 t = tx.atest
-                tm = testruntime(t)
+                tm = self.statushandler.getRuntime( t, None )
                 if tm == None: tm = 0
                 sortL.append( (tm,tx) )
             sortL.sort()
@@ -749,7 +541,7 @@ class TestList:
         """
         Return the total number of active tests (the tests that are to be run).
         """
-        return len(self.active)
+        return self.numactive
 
     def numDone(self):
         """
@@ -773,7 +565,7 @@ class TestList:
                 i = 0
                 while i < N:
                     tx = tL[i]
-                    if tx.getBlockingDependency() == None:
+                    if tx.getDependencySet().getBlocking() == None:
                         self._pop_test_exec( np, i )
                         return tx
                     i += 1
@@ -788,17 +580,6 @@ class TestList:
             self.xtlist.pop( np )
 
 
-def is_subdir(parent_dir, subdir):
-    """
-    TODO: test for relative paths
-    """
-    lp = len(parent_dir)
-    ls = len(subdir)
-    if ls > lp and parent_dir + '/' == subdir[0:lp+1]:
-      return subdir[lp+1:]
-    return None
-
-
 def check_make_directory_containing_file( filename ):
     ""
     d,b = os.path.split( filename )
@@ -807,70 +588,95 @@ def check_make_directory_containing_file( filename ):
             os.mkdir( d )
 
 
-def testruntime( testobj ):
+def createTestObjects( rootpath, relpath, force_params, rtconfig ):
     """
-    Get and return the test 'xtime'.  If that was not set, then get the
-    'runtime'.  If neither are set, then return None.
+    The 'rootpath' is the top directory of the file scan.  The 'relpath' is
+    the name of the test file relative to 'rootpath' (it must not be an
+    absolute path).  If 'force_params' is not None, then any parameters in
+    the test that are in the 'force_params' dictionary have their values
+    replaced for that parameter name.
+    
+    Returns a list of TestSpec objects, including a "parent" test if needed.
+
+
+    Is the following note about parameter filtering still relevant?  Is it
+    any different when filtering is performed above create/refresh?
+
+        Important: this function always applies filtering, even if the
+        "include_all" flag is present in 'rtconfig'.  This means any command
+        line parameter expressions must be passed along in batch queue mode.
+
     """
-    tm = testobj.getAttr( 'xtime', None )
-    if tm == None or tm < 0:
-        tm = testobj.getAttr( 'runtime', None )
-    return tm
+    evaluator = TestSpecCreator.ExpressionEvaluator( rtconfig.platformName(),
+                                                     rtconfig.getOptionList() )
+
+    tests = TestSpecCreator.create_unfiltered_testlist( rootpath, relpath,
+                                        force_params, evaluator )
+
+    return tests
 
 
-def find_tests_by_execute_directory_match( xdir, pattern, xdir_list ):
-    """
-    Given 'xdir' dependent execute directory, the shell glob 'pattern' is
-    matched against the execute directories in the 'xdir_list', in this order:
-
-        1. basename(xdir)/pat
-        2. basename(xdir)/*/pat
-        3. pat
-        4. *pat
-
-    The first of these that matches at least one test will be returned.
-
-    A python set of xdir is returned.
-    """
-    tbase = os.path.dirname( xdir )
-    if tbase == '.':
-        tbase = ''
-    elif tbase:
-        tbase += '/'
-
-    L1 = [] ; L2 = [] ; L3 = [] ; L4 = []
-
-    for xdir in xdir_list:
-
-        p1 = os.path.normpath( tbase+pattern )
-        if fnmatch.fnmatch( xdir, p1 ):
-            L1.append( xdir )
-
-        if fnmatch.fnmatch( xdir, tbase+'*/'+pattern ):
-            L2.append( xdir )
-
-        if fnmatch.fnmatch( xdir, pattern ):
-            L3.append( xdir )
-
-        if fnmatch.fnmatch( xdir, '*'+pattern ):
-            L4.append( xdir )
-
-    for L in [ L1, L2, L3, L4 ]:
-        if len(L) > 0:
-            return set(L)
-
-    return set()
-
-
-def connect_dependency( from_test, to_test, pattrn=None, expr=None ):
+def mark_skips_for_baselining( statushandler, tspec_map ):
     ""
-    assert isinstance( from_test, TestExec.TestExec )
+    for xdir,tspec in tspec_map.items():
+        if not statushandler.skipTest( tspec ):
+            if not tspec.hasBaseline():
+                statushandler.markSkipByBaselineHandling( tspec )
 
-    from_test.addDependency( to_test, pattrn, expr )
 
-    if isinstance( to_test, TestExec.TestExec ):
-        to_test.setHasDependent()
+def finalize_analyze_tests( statushandler, groups ):
+    ""
+    for analyze, tspecL in groups.iterateGroups():
 
+        skip_analyze = False
+        paramsets = []
+
+        for tspec in tspecL:
+            if statushandler.skipTestCausingAnalyzeSkip( tspec ):
+                skip_analyze = True
+            else:
+                paramsets.append( tspec.getParameters() )
+
+        if skip_analyze:
+            statushandler.markSkipByAnalyzeDependency( analyze )
+        else:
+            def evalfunc( paramD ):
+                for D in paramsets:
+                    if paramD == D:
+                        return True
+                return False
+            pset = analyze.getParameterSet()
+            pset.applyParamFilter( evalfunc )
+
+
+def count_active( statushandler, tspec_map ):
+    ""
+    cnt = 0
+    for tspec in tspec_map.values():
+        if not statushandler.skipTest( tspec ):
+            cnt += 1
+    return cnt
+
+
+def refresh_active_tests( statushandler, tspec_map, rtconfig ):
+    """
+    Parses the test source file and resets the settings for the given test.
+    The test name is not changed.  The parameters in the test XML file are
+    not considered; instead, the parameters already defined in the test
+    object are used.
+
+    If the test XML contains bad syntax, a TestSpecError is raised.
+    """
+    evaluator = TestSpecCreator.ExpressionEvaluator( rtconfig.platformName(),
+                                                     rtconfig.getOptionList() )
+
+    for xdir,tspec in tspec_map.items():
+        if not statushandler.skipTest( tspec ):
+            if not tspec.constructionCompleted():
+                TestSpecCreator.reparse_test_object( tspec, evaluator )
+
+
+###########################################################################
 
 def print3( *args ):
     sys.stdout.write( ' '.join( [ str(arg) for arg in args ] ) + '\n' )

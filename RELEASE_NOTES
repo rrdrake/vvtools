@@ -1,5 +1,9 @@
 Improvements:
 
+    - Add console listing of skipped tests (the tests that were filtered out
+      by -k or -p command line specifications, for example).  Using the extra
+      verbose flag, -vv, the skips will be listed as part of the test results.
+
     - Add python script_utils functions to save and read arbitrary test data.
       The data is written to a file in the test execution directory.  For
       example, consider a test named "mytest",
@@ -37,6 +41,21 @@ Fixes:
       tests coming from a general "depends on" specification.
 
 Changes:
+
+    - The -v option has changed meaning.  It now means verbose.  Can be
+      repeated for increased verbosity.
+
+    - The console output format for listing tests has changed a little.
+      Instead of
+
+          virtualCyl   Exit   diff   6s   02/08 22:30:52 path/name
+
+      it now would be
+
+          virtualCyl   diff   6s   02/08 22:30:52 path/name
+
+      and results keywords will be one of pass, diff, fail, notrun, notdone,
+      or timeout.
 
     - In python script tests, "import script_util" will no longer import all
       the symbols from the vvtest_util.py file.  That is, instead of this in

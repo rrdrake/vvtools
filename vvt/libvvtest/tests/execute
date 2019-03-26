@@ -377,6 +377,7 @@ class execute_tests( vtu.vvtestTestCase ):
 
         # the bdir test should be selected because it is scanned first
         vrun = vtu.runvvtest( 'bdir adir' )
+        assert vrun.countLines( 'arning*duplicate' ) == 1
         vrun.assertCounts( total=1, npass=1 )
 
         assert vrun.countGrepLogs( 'test bdir' ) == 1

@@ -29,20 +29,20 @@ class script_utils_tests( vtu.vvtestTestCase ):
     def test_using_the_have_diff_utility(self):
         ""
         util.writescript( 'pypass.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import os, sys
             import script_util as util
             util.if_diff_exit_diff()
             """ )
         util.writescript( 'pydiff.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import os, sys
             import script_util as util
             util.set_have_diff()
             util.if_diff_exit_diff()
             """ )
         util.writescript( 'pydiff2.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import os, sys
             import script_util as util
             util.exit_diff()
@@ -98,7 +98,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
             over the lazy dog
             """ )
         util.writescript( 'pytest.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: link = changeme.txt
             import os
             import script_util as util
@@ -136,7 +136,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
                    'the quick brown fox jumps\n' + \
                    'over the lazy dog' )
         util.writescript( 'pypass.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: link = baseline.txt
             import os
             import script_util as util
@@ -148,7 +148,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
             util.if_diff_exit_diff()
             """ )
         util.writescript( 'pydiff.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: link = baseline.txt
             import os
             import script_util as util
@@ -192,7 +192,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
     def test_the_nlinesdiff_utility(self):
         ""
         util.writescript( 'pypass.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import os
             import script_util as util
             fp = open( 'genfile.txt', 'w' )
@@ -203,7 +203,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
             util.if_diff_exit_diff()
             """ )
         util.writescript( 'pydiff.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import os
             import script_util as util
             fp = open( 'genfile.txt', 'w' )
@@ -246,7 +246,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
         platname = vtu.core_platform_name()
 
         util.writescript( 'pytest.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : A = 1 3 5
             import vvtest_util as vvt
             import script_util as util
@@ -348,7 +348,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
         platname = vtu.core_platform_name()
 
         util.writescript( 'pytest.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: parameterize : A = 1 2
             #VVT: analyze : -a
             import sys
@@ -455,28 +455,28 @@ class script_utils_tests( vtu.vvtestTestCase ):
     def test_the_runcmd_script_util(self):
         ""
         util.writescript( 'py1.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import script_util as vvt
             print3 = vvt.print3
             x = vvt.runcmd( 'ls -l' )
             assert x == 0
             """ )
         util.writescript( 'py2.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import script_util as vvt
             print3 = vvt.print3
             x = vvt.runcmd( 'failprogram', ignore_exit=True )
             assert x != 0
             """ )
         util.writescript( 'py3.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import script_util as vvt
             print3 = vvt.print3
             vvt.runcmd( 'failprogram' )
             print3( 'should not get here' )
             """ )
         util.writescript( 'py4.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import script_util as vvt
             print3 = vvt.print3
             out = vvt.runcmd( 'ls -l', capture_output=True )
@@ -492,7 +492,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
             echo "hello world"
             """ )
         util.writescript( 'py5.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: link : helloworld
             import script_util as vvt
             print3 = vvt.print3
@@ -500,7 +500,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
             """ )
 
         util.writescript( 'py6.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: link : helloworld
             import script_util as vvt
             print3 = vvt.print3
@@ -512,7 +512,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
             echo "hello mars"
             """ )
         util.writescript( 'py7.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: link : helloworld hellomars
             import script_util as vvt
             print3 = vvt.print3
@@ -520,7 +520,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
             vvt.runcmd( './hellomars', redirect='prog.out' )
             """ )
         util.writescript( 'py8.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: link : helloworld hellomars
             import script_util as vvt
             print3 = vvt.print3
@@ -564,7 +564,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
     def test_permissions_helpers_in_script_util(self):
         ""
         util.writescript( 'py1.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import script_util as util
             fp = open( 'script', 'w' )
             fp.write( '#!/bin/sh\\n' )
@@ -599,7 +599,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
             echo "hello from myscript"
             """ )
         util.writescript( 'py1.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: link : file1.txt file2.txt
             import os
             import vvtest_util as vvt
@@ -629,7 +629,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
     def test_the_user_termination_function(self):
         ""
         util.writescript( 'py1.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import script_util as util
             def lastcall():
                 util.print3( 'lastcall called' )
@@ -640,7 +640,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
                 pass
             """ )
         util.writescript( 'py2.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import script_util as util
             def lastcall():
                 util.print3( 'lastcall called' )
@@ -649,7 +649,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
             util.print3( 'should not be here' )
             """ )
         util.writescript( 'py3.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             import script_util as util
             def lastcall():
                 util.print3( 'lastcall called' )
@@ -679,7 +679,7 @@ class script_utils_tests( vtu.vvtestTestCase ):
             and line two
             """ )
         util.writescript( 'py1.vvt', """
-            #!/usr/bin/env python
+            #!"""+sys.executable+"""
             #VVT: link : file1.txt
             import os
             import script_util as util

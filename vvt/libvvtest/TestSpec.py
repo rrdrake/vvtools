@@ -5,11 +5,6 @@
 # Government retains certain rights in this software.
 
 import os
-import types
-
-results_keywords = [ 'notrun', 'notdone',
-                     'fail', 'diff', 'pass',
-                     'timeout' ]
 
 varname_chars_list = "abcdefghijklmnopqrstuvwxyz" + \
                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "0123456789_"
@@ -71,47 +66,18 @@ class TestSpec:
         else:
             return 'script'
 
-    def getOrigin(self):
+    def getKeywords(self):
         """
-        Returns a list of origin strings.  If the list is empty, only the
-        constructor was called.  Origin strings:
-            "file"   : this object was constructed or refreshed from test source
-            "string" : this object was constructed using a string
-            "copy"   : this object is a copy of another object
+        Returns the list of keyword strings.
         """
-        return []+self.origin
-
-    def getKeywords(self, result_attrs=False):
-        """
-        Returns the list of keyword strings.  If 'result_attrs' is true, the
-        attribute values for "state" and "result" are included if they exist.
-        """
-        kL = list( self.keywords )
-        if result_attrs:
-          if 'state' in self.attrs: kL.append( self.attrs['state'] )
-          if 'result' in self.attrs: kL.append( self.attrs['result'] )
-        return kL
+        return list( self.keywords )
     
     def hasKeyword(self, keyword):
         """
         Returns true if the keyword is contained in the list of keywords.
         """
         return keyword in self.keywords
-    
-    def getResultsKeywords(self):
-        """
-        Returns the keyword or keywords indicating the run state of the test.
-        """
-        state = self.getAttr('state',None)
-        if state != None:
-          if state == "notrun": return ["notrun"]
-          if state == "notdone": return ["notdone","running"]
-        result = self.getAttr('result',None)
-        if result != None:
-          if result == "timeout": return ["timeout","fail"]
-          return [result]
-        return []
-    
+
     def getParameters(self):
         """
         Returns a dictionary mapping parameter names to values.
@@ -273,6 +239,10 @@ class TestSpec:
         if len(args) > 0:
           return self.attrs.get( name, args[0] )
         return self.attrs[name]
+
+    def removeAttr(self, name):
+        ""
+        self.attrs.pop( name, None )
     
     def getAttrs(self):
         """
@@ -297,7 +267,7 @@ class TestSpec:
     
     ##########################################################
     
-    def __init__(self, name, rootpath, filepath, origin=None):
+    def __init__(self, name, rootpath, filepath):
         """
         A test object always needs a root path and file path, where the file
         path must be a relative path name.
@@ -306,9 +276,7 @@ class TestSpec:
 
         self.data = {}
 
-        self.origin = []  # strings, such as "file", "string", "copy"
-        if origin:
-            self.origin.append( origin )
+        self.ctor_done = False
 
         self.name = name
         self.rootpath = rootpath
@@ -338,11 +306,6 @@ class TestSpec:
         self.xdir = os.path.normpath( \
                         os.path.join( os.path.dirname(filepath), name ) )
 
-        # set the default attributes
-        self.attrs[ 'state' ] = 'notrun'
-        self.attrs[ 'xtime' ] = -1
-        self.attrs[ 'xdate' ] = -1
-
         # always add the test specification file to the linked file list
         self.lnfiles.append( (os.path.basename(self.filepath),None) )
 
@@ -365,6 +328,14 @@ class TestSpec:
     def __repr__(self):
         return 'TestSpec(name=' + str(self.name) + ', xdir=' + self.xdir + ')'
 
+    def setConstructionCompleted(self):
+        ""
+        self.ctor_done = True
+
+    def constructionCompleted(self):
+        ""
+        return self.ctor_done
+
     def addDataNameIfNeededAndReturnValue(self, name, data_type):
         ""
         if name not in self.data:
@@ -374,13 +345,6 @@ class TestSpec:
     ##########################################################
     
     # construction methods
-
-    def addOrigin(self, origin):
-        """
-        Appends an origin string to the orgin list for this object.
-        """
-        assert origin
-        self.origin.append( origin )
 
     def addEnablePlatformExpression(self, word_expression):
         ""
@@ -543,7 +507,7 @@ class TestSpec:
         except the parameters.  The new test instance is returned.
         """
         ts = TestSpec( self.name, self.rootpath, self.filepath )
-        ts.origin = self.origin + ["copy"]
+        ts.ctor_done = self.ctor_done
         ts.keywords = set( self.keywords )
         ts.setParameters({})  # skip ts.params
         ts.analyze_spec = self.analyze_spec

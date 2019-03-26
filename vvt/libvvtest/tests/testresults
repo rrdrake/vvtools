@@ -505,7 +505,7 @@ class test_results_tests( vtu.vvtestTestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        vrun = vtu.runvvtest( '-w -k cat tsrc' )
+        vrun = vtu.runvvtest( '-w -k cat' )
         vrun.assertCounts( total=1, npass=1 )
         vtu.runvvtest( '-i --save-results --results-tag 2nd' )
 
@@ -536,7 +536,7 @@ class test_results_tests( vtu.vvtestTestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        vrun = vtu.runvvtest()
+        vrun = vtu.runvvtest( '-w' )
         vrun.assertCounts( total=3, npass=3 )
         vtu.runvvtest( '-i --save-results --results-tag 3rd' )
         rfn3 = os.path.abspath( util.globfile( 'testing/results.*.3rd' ) )

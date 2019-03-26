@@ -28,7 +28,7 @@ class BatchMOAB:
 
         self.variation = kwargs.get( 'variation', '' )
 
-    def header(self, np, qtime, workdir, outfile):
+    def header(self, np, qtime, workdir, outfile, plat_attrs):
         """
         """
         if np <= 0: np = 1
@@ -51,7 +51,7 @@ class BatchMOAB:
 
 
     def submit(self, fname, workdir, outfile,
-                     queue=None, account=None, confirm=False):
+                     queue=None, account=None, confirm=False, **kwargs):
         """
         Creates and executes a command to submit the given filename as a batch
         job to the resource manager.  Returns (cmd, out, job id, error message)
