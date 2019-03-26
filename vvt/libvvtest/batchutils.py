@@ -378,11 +378,14 @@ class BatchAccountant:
         self.qstop  = {}
         # queue jobs whose final results have been read, qid -> BatchJob
         self.qdone  = {}
+        # Record the time of the last action taken.
+        self.timer = {}
 
     def addJob(self, qid, batchjob ):
         """
         """
         self.qtodo[ qid ] = batchjob
+        self.timer[ qid ] = time.time()
 
     def numStarted(self):
         return len( self.qstart )
@@ -422,6 +425,7 @@ class BatchAccountant:
         jb = self.popJob( qid )
         jb.start( jobid )
         self.qstart[ qid ] = jb
+        self.timer[ qid ] = time.time()
 
     def markJobStopped(self, qid):
         """
@@ -429,6 +433,7 @@ class BatchAccountant:
         jb = self.popJob( qid )
         jb.stop()
         self.qstop[ qid ] = jb
+        self.timer[ qid ] = time.time()
 
     def markJobDone(self, qid, done_mark):
         """
@@ -436,10 +441,12 @@ class BatchAccountant:
         jb = self.popJob( qid )
         jb.finished( done_mark )
         self.qdone[ qid ] = jb
+        self.timer[ qid ] = time.time()
 
     def popJob(self, qid):
         """
         """
+        if qid in self.timer: self.timer.pop( qid )
         if qid in self.qtodo: return self.qtodo.pop( qid )
         if qid in self.qstart: return self.qstart.pop( qid )
         if qid in self.qstop: return self.qstop.pop( qid )

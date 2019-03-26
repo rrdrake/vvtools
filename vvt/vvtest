@@ -1021,18 +1021,6 @@ def make_results_writer( opts, optD,
 
     return writer
 
-def print_running_tests(tlist, starttime):
-    total_runtime = datetime.timedelta(seconds=int(time.time() - starttime))
-    print("\nInformation:")
-    print("  * Total runtime: {0}".format(total_runtime))
-    _tlist = tlist.getRunning()
-    print("  * {0:d} running tests (current runtime):".format(len(_tlist)))
-    for tx in _tlist:
-        duration = time.time() - tx.atest.attrs['xdate']
-        duration = datetime.timedelta(seconds=int(duration))
-        print("    * {0} ({1})".format(tx.atest.xdir, duration))
- 
-
 def executeTestList( opts, optD, rtdata,
                      tlist, test_dir, plat, perms, tfile,
                      results_writer ):
@@ -1044,14 +1032,23 @@ def executeTestList( opts, optD, rtdata,
     starttime = time.time()
     print3( "Start time:", time.ctime() )
 
-    # Register the function that prints running test info.
-    def info_callback(signum, stack):
-        print_running_tests(tlist, starttime)
-    signal.signal(signal.SIGQUIT, info_callback)
-
     uthook = utesthooks.construct_unit_testing_hook( 'run', opts.qsub_id )
 
     rfile = tlist.initializeResultsFile()
+
+    # Define and register the function that prints running test info.
+    def info_callback(signum, stack):
+        now = time.time()
+        total_runtime = datetime.timedelta(seconds=int(now - starttime))
+        print("\nInformation:")
+        print("  * Total runtime: {0}".format(total_runtime))
+        _tlist = tlist.getRunning()
+        print("  * {0:d} running tests (current runtime):".format(len(_tlist)))
+        for tx in _tlist:
+            duration = now - tx.atest.attrs['xdate']
+            duration = datetime.timedelta(seconds=int(duration))
+            print("    * {0} ({1})".format(tx.atest.xdir, duration))
+    signal.signal(signal.SIGQUIT, info_callback)
 
     try:
 
@@ -1141,11 +1138,6 @@ def batchTestList( opts, optD, rtdata,
     starttime = time.time()
     print3( "Start time:", time.ctime() )
 
-    # Register the function that prints running test info.
-    def info_callback(signum, stack):
-        print_running_tests(tlist, starttime)
-    signal.signal(signal.SIGQUIT, info_callback)
-
     results_suffix = tlist.setResultsSuffix()
 
     # write testlist files for each qsub
@@ -1167,6 +1159,21 @@ def batchTestList( opts, optD, rtdata,
     rfile = tlist.initializeResultsFile()
     for inclf in batch.getIncludeFiles():
         tlist.addIncludeFile( inclf )
+
+    # Define and register the function that prints running test info.
+    def info_callback(signum, stack):
+        now = time.time()
+        total_runtime = datetime.timedelta(seconds=int(now - starttime))
+        print("\nInformation:")
+        print("  * Total runtime: {0}".format(total_runtime))
+        print("  * {0:d} batches submitted:".format(batch.accountant.numStarted()))
+        for qid, batch_job in batch.accountant.qstart.items():
+            duration = now - batch.accountant.timer[qid]
+            duration = datetime.timedelta(seconds=int(duration))
+            print("    * qbat.{0} (submitted {1} ago)".format(qid, duration))
+            for tx in batch_job.testL:
+                print("      * {0}".format(tx.atest.xdir))
+    signal.signal(signal.SIGQUIT, info_callback)
 
     try:
         while True:
