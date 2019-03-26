@@ -1043,7 +1043,7 @@ def executeTestList( opts, optD, rtdata,
         print("\nInformation:")
         print("  * Total runtime: {0}".format(total_runtime))
         _tlist = tlist.getRunning()
-        print("  * {0:d} running tests (current runtime):".format(len(_tlist)))
+        print("  * {0:d} running test(s):".format(len(_tlist)))
         for tx in _tlist:
             duration = now - tx.atest.attrs['xdate']
             duration = datetime.timedelta(seconds=int(duration))
@@ -1166,11 +1166,11 @@ def batchTestList( opts, optD, rtdata,
         total_runtime = datetime.timedelta(seconds=int(now - starttime))
         print("\nInformation:")
         print("  * Total runtime: {0}".format(total_runtime))
-        print("  * {0:d} batches submitted:".format(batch.accountant.numStarted()))
+        print("  * {0:d} batch job(s) in flight:".format(batch.accountant.numStarted()))
         for qid, batch_job in batch.accountant.qstart.items():
             duration = now - batch.accountant.timer[qid]
             duration = datetime.timedelta(seconds=int(duration))
-            print("    * qbat.{0} (submitted {1} ago)".format(qid, duration))
+            print("    * qbat.{0} ({1} since submitting)".format(qid, duration))
             for tx in batch_job.testL:
                 print("      * {0}".format(tx.atest.xdir))
     signal.signal(signal.SIGQUIT, info_callback)
