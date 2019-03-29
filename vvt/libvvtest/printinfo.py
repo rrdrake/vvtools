@@ -12,10 +12,12 @@ import select
 
 class TestInformationPrinter:
 
-    def __init__(self, outfile, tlist):
+    def __init__(self, outfile, tlist, batcher=None):
         ""
         self.outfile = outfile
         self.tlist = tlist
+        self.batcher = batcher
+
         self.starttime = time.time()
 
         self._check_input = standard_in_has_data
@@ -33,6 +35,13 @@ class TestInformationPrinter:
         self.println( "\nInformation:" )
         self.println( "  * Total runtime:", total_runtime )
 
+        if self.batcher == None:
+            self.writeTestListInfo( now )
+        else:
+            self.writeBatchListInfo( now )
+
+    def writeTestListInfo(self, now):
+        ""
         statushandler = self.tlist.statushandler
 
         txL = self.tlist.getRunning()
@@ -44,40 +53,8 @@ class TestInformationPrinter:
             xdir = tx.atest.getExecuteDirectory()
             self.println( "    *", xdir, duration )
 
-    def println(self, *args):
+    def writeBatchListInfo(self, now):
         ""
-        s = ' '.join( [ str(arg) for arg in args ] )
-        self.outfile.write( s + '\n' )
-
-    def setInputChecker(self, func):
-        ""
-        self._check_input = func
-
-
-class BatchInformationPrinter:
-
-    def __init__(self, outfile, tlist, batcher):
-        ""
-        self.outfile = outfile
-        self.tlist = tlist
-        self.batcher = batcher
-        self.starttime = time.time()
-
-        self._check_input = standard_in_has_data
-
-    def checkPrint(self):
-        ""
-        if self._check_input():
-            self.writeInfo()
-
-    def writeInfo(self):
-        ""
-        now = time.time()
-        total_runtime = datetime.timedelta( seconds=int(now - self.starttime) )
-
-        self.println( "\nInformation:" )
-        self.println( "  * Total runtime:", total_runtime )
-
         accnt = self.batcher.getAccountant()
 
         self.println( '  *', accnt.numStarted(), 'batch job(s) in flight:' )
@@ -93,6 +70,10 @@ class BatchInformationPrinter:
         ""
         s = ' '.join( [ str(arg) for arg in args ] )
         self.outfile.write( s + '\n' )
+
+    def setInputChecker(self, func):
+        ""
+        self._check_input = func
 
 
 def standard_in_has_data():
