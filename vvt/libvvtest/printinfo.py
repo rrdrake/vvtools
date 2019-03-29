@@ -51,17 +51,19 @@ class TestInformationPrinter:
             sdt = statushandler.getStartDate( tx.atest )
             duration = datetime.timedelta( seconds=int(now-sdt) )
             xdir = tx.atest.getExecuteDirectory()
-            self.println( "    *", xdir, duration )
+            self.println( "    *", xdir,
+                          '({0} since start)'.format(duration) )
 
     def writeBatchListInfo(self, now):
         ""
         accnt = self.batcher.getAccountant()
 
         self.println( '  *', accnt.numStarted(), 'batch job(s) in flight:' )
-        for qid, batch_job in accnt.qstart.items():
-            duration = now - accnt.timer[qid]
+        for qid, batch_job in accnt.getStarted():
+            duration = now - batch_job.tstart
             duration = datetime.timedelta( seconds=int(duration) )
-            self.println( '    * qbat.{0},'.format(qid), duration, 'since submitting' )
+            self.println( '    * qbat.{0}'.format(qid),
+                          '({0} since submitting)'.format(duration) )
             for tx in batch_job.testL:
                 xdir = tx.atest.getExecuteDirectory()
                 self.println( '      *', xdir )

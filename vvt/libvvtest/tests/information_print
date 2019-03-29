@@ -50,12 +50,18 @@ class InformationPrinter( vtu.vvtestTestCase ):
         lines = out.strip().split('\n')
 
         assert lines[0].startswith( 'Information:' )
+
         assert lines[1].strip().startswith( '* Total runtime: 0:00:0' )
         t = int( lines[1].strip()[-1] )
         assert t > 0 and t < 5
+
         assert lines[2].strip().startswith( '* 2 running' )
-        assert lines[3].strip().startswith( '* sdir/atest' )
-        assert lines[4].strip().startswith( '* sdir/atest' )
+
+        for i in [3,4]:
+            st = lines[i].strip()
+            assert st.startswith( '* sdir/atest' )
+            t = int( st.split( '0:00:0' )[1].split()[0] )
+            assert t > 0 and t < 5
 
     def test_check_for_standard_input_then_print(self):
         ""
@@ -90,7 +96,12 @@ class InformationPrinter( vtu.vvtestTestCase ):
         t = int( lines[1].strip()[-1] )
         assert t > 0 and t < 5
         assert lines[2].strip().startswith( '* 1 batch job' )
-        assert lines[3].strip().startswith( '* qbat' ) and '0:00:0' in lines[3]
+
+        st = lines[3].strip()
+        assert st.startswith( '* qbat' )
+        t = int( st.split( '0:00:0' )[1].split()[0] )
+        assert t > 0 and t < 5
+
         assert lines[4].strip().startswith( '* sdir/atest' )
         assert lines[4].strip().startswith( '* sdir/atest' )
 
