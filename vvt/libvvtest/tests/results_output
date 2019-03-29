@@ -44,8 +44,7 @@ class misc_tests( vtu.vvtestTestCase ):
 
     def makeTest(self, result=None, runtime=None, name='atest'):
         ""
-        return make_TestSpec_with_results( self.statushandler,
-                                           result, runtime, name )
+        return vtu.make_fake_TestSpec( self.statushandler, result, runtime, name )
 
     def test_make_date_stamp(self):
         ""
@@ -390,8 +389,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
     def makeTest(self, result=None, runtime=None, name='atest'):
         ""
-        return make_TestSpec_with_results( self.statushandler,
-                                           result, runtime, name )
+        return vtu.make_fake_TestSpec( self.statushandler, result, runtime, name )
 
     def test_turning_a_path_to_a_markdown_link(self):
         ""
@@ -850,43 +848,6 @@ def find_child_node( node, childname ):
 
     return child
 
-
-def make_TestSpec_with_results( statushandler, result=None,
-                                runtime=None, name='atest' ):
-    ""
-    ts = TestSpec.TestSpec( name, os.getcwd(), 'sdir/'+name+'.vvt' )
-
-    statushandler.resetResults( ts )
-
-    ts.setKeywords( ['key1','key2'] )
-
-    ts.setParameters( { 'np':'4' } )
-
-    if result:
-        if result == 'skip':
-            statushandler.markSkipByPlatform( ts )
-        elif result == 'timeout':
-            statushandler.startRunning( ts )
-            statushandler.markTimedOut( ts )
-        elif result == 'pass':
-            statushandler.startRunning( ts )
-            statushandler.markDone( ts, 0 )
-        elif result == 'diff':
-            statushandler.startRunning( ts )
-            statushandler.markDone( ts, DIFF_EXIT_STATUS )
-        elif result == 'notdone':
-            statushandler.startRunning( ts )
-        elif result == 'notrun':
-            pass
-        else:
-            assert result == 'fail', '*** error (value='+str(result)+')'
-            statushandler.startRunning( ts )
-            statushandler.markDone( ts, 1 )
-
-    if runtime != None:
-        statushandler.setRuntime( ts, runtime )
-
-    return ts
 
 
 class MockTestList:

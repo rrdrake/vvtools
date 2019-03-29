@@ -32,6 +32,7 @@ import libvvtest.consolewriter as consolewriter
 from libvvtest.outpututils import XstatusString, pretty_time, make_date_stamp
 import libvvtest.pathutil as pathutil
 from libvvtest.teststatus import TestStatusHandler, RESULTS_KEYWORDS
+from libvvtest.printinfo import TestInformationPrinter
 
 
 version = '1.2'
@@ -1037,6 +1038,8 @@ def executeTestList( opts, optD, rtdata,
 
     try:
 
+        info = TestInformationPrinter( sys.stdout, tlist )
+
         # execute tests
 
         perms.set( os.path.abspath( rfile ) )
@@ -1056,6 +1059,7 @@ def executeTestList( opts, optD, rtdata,
                 break
 
             else:
+                info.checkPrint()
                 time.sleep(1)
 
             showprogress = False
@@ -1145,6 +1149,8 @@ def batchTestList( opts, optD, rtdata,
     for inclf in batch.getIncludeFiles():
         tlist.addIncludeFile( inclf )
 
+    info = TestInformationPrinter( sys.stdout, tlist, batch )
+
     try:
         while True:
 
@@ -1155,7 +1161,7 @@ def batchTestList( opts, optD, rtdata,
             elif schedule.numInFlight() == 0:
                 break
             else:
-                time.sleep( qsleep )
+                sleep_with_info_check( info, qsleep )
 
             qidL,doneL = schedule.checkdone()
             
@@ -1216,6 +1222,13 @@ def batchTestList( opts, optD, rtdata,
     
     elapsed = pretty_time( time.time() - starttime )
     print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
+
+
+def sleep_with_info_check( info, qsleep ):
+    ""
+    for i in range( int( qsleep + 0.5 ) ):
+        info.checkPrint()
+        time.sleep( 1 )
 
 
 def loadRunTimes( statushandler, tlist, plat,
@@ -1338,6 +1351,9 @@ class Batcher:
 
     def getScheduler(self):
         return self.scheduler
+
+    def getAccountant(self):
+        return self.accountant
 
     def removeBatchDirectories(self):
         """
