@@ -52,7 +52,7 @@ class TestInformationPrinter:
             duration = datetime.timedelta( seconds=int(now-sdt) )
             xdir = tx.atest.getExecuteDirectory()
             self.println( "    *", xdir,
-                          '({0} since start)'.format(duration) )
+                          '({0} elapsed)'.format(duration) )
 
     def writeBatchListInfo(self, now):
         ""
