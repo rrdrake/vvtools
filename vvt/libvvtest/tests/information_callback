@@ -1,10 +1,11 @@
 #!/usr/bin/env python
-#
+
 # Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
 # (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
 # Government retains certain rights in this software.
-#
+
 #RUNTEST:
+
 import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
@@ -12,62 +13,142 @@ import re
 import time
 import signal
 
+try:
+    from StringIO import StringIO
+except Exception:
+    from io import StringIO
+
 import vvtestutils as vtu
 import testutils as util
 
+import libvvtest.printinfo as printinfo
+from libvvtest.teststatus import TestStatusHandler
+from libvvtest.TestExec import TestExec
+import libvvtest.batchutils as batchutils
 
-class InformationCallback( vtu.vvtestTestCase ):
 
-    def run_information_callback(self, batch):
+class InformationPrinter( vtu.vvtestTestCase ):
+
+    def setUp(self):
         ""
-        util.writescript( 'myscript2.vvt', """
-            #!/usr/bin/env python
-            import time
-            time.sleep(6)
-            print('hello from myscript')
-            """ )
-        time.sleep(1)
+        vtu.vvtestTestCase.setUp( self, cleanout=False )
 
-        out = vtu.launch_vvtest_then_terminate_it(
-            #cmd_args,
-            signum=signal.SIGQUIT,
-            seconds_before_signaling=4,
-            ligfilename='run.log',
-            batch=batch)
+        self.tlist = make_mock_TestList( TestStatusHandler() )
 
-        print(out)
-
-        if not batch:
-            print("Checking 'not batch'")
-            assert '\nInformation:\n' in out
-
-            lines = out.split('\n')
-            idx = lines.index("Information:")
-
-            assert len(re.findall(r'^Information:$',                  lines[idx+0])) == 1
-            assert len(re.findall(r'^  \* Total runtime: 0:00:0\d$',  lines[idx+1])) == 1
-            assert len(re.findall(r'^  \* 1 running test\(s\):$',     lines[idx+2])) == 1
-            assert len(re.findall(r'^    \* myscript2 \(0:00:0\d\)$', lines[idx+3])) == 1
-        else:
-            print("Checking 'batch'")
-            assert '\nInformation:\n' in out
-
-            lines = out.split('\n')
-            idx = lines.index("Information:")
-
-            assert len(re.findall(r'^Information:$',                                lines[idx+0])) == 1
-            assert len(re.findall(r'^  \* Total runtime: 0:00:0\d$',                lines[idx+1])) == 1
-            assert len(re.findall(r'^  \* 1 batch job\(s\) in flight:$',            lines[idx+2])) == 1
-            assert len(re.findall(r'^    \* qbat.0 \(0:00:0\d since submitting\)$', lines[idx+3])) == 1
-            assert len(re.findall(r'^      \* myscript2$',                          lines[idx+4])) == 1
-
-    def test_nonbatch_information_callback(self):
+    def test_print_list_information(self):
         ""
-        self.run_information_callback(batch=False)
+        sio = StringIO()
+        obj = printinfo.TestInformationPrinter( sio, self.tlist )
 
-    def test_batch_information_callback(self):
+        time.sleep(2)
+
+        obj.writeInfo()
+
+        out = sio.getvalue()
+        print ( out )
+
+        lines = out.strip().split('\n')
+
+        assert lines[0].startswith( 'Information:' )
+        assert lines[1].strip().startswith( '* Total runtime: 0:00:0' )
+        t = int( lines[1].strip()[-1] )
+        assert t > 0 and t < 5
+        assert lines[2].strip().startswith( '* 2 running' )
+        assert lines[3].strip().startswith( '* sdir/atest' )
+        assert lines[4].strip().startswith( '* sdir/atest' )
+
+    def test_check_for_standard_input_then_print(self):
         ""
-        self.run_information_callback(batch=True)
+        def fake_input_check():
+            return True
+
+        sio = StringIO()
+        obj = printinfo.TestInformationPrinter( sio, self.tlist )
+        obj.setInputChecker( fake_input_check )
+
+        obj.checkPrint()
+
+        assert 'Information:' in sio.getvalue()
+
+    def test_print_batch_information(self):
+        ""
+        sio = StringIO()
+        batch = make_mock_Batcher( self.tlist.texecs )
+        obj = printinfo.BatchInformationPrinter( sio, self.tlist, batch )
+
+        time.sleep(2)
+
+        obj.writeInfo()
+
+        out = sio.getvalue()
+        print ( out )
+
+        lines = out.strip().split('\n')
+
+        assert lines[0].startswith( 'Information:' )
+        assert lines[1].strip().startswith( '* Total runtime: 0:00:0' )
+        t = int( lines[1].strip()[-1] )
+        assert t > 0 and t < 5
+        assert lines[2].strip().startswith( '* 1 batch job' )
+        assert lines[3].strip().startswith( '* qbat' ) and '0:00:0' in lines[3]
+        assert lines[4].strip().startswith( '* sdir/atest' )
+        assert lines[4].strip().startswith( '* sdir/atest' )
+
+
+class MockTestList:
+
+    def __init__(self, statushandler, list_of_TestExec):
+        ""
+        self.statushandler = statushandler
+        self.texecs = list_of_TestExec
+
+    def getRunning(self):
+        ""
+        L = list( self.texecs )
+        self.texecs.pop( 0 )
+        return L
+
+
+def make_mock_TestList( statushandler ):
+    ""
+    txL = []
+
+    for i in range(2):
+
+        ts = vtu.make_fake_TestSpec( statushandler, 'notrun', name='atest'+str(i) )
+        tx = TestExec( statushandler, ts, None )
+
+        statushandler.resetResults( ts )
+        statushandler.startRunning( ts )
+
+        txL.append( tx )
+
+    tlist = MockTestList( statushandler, txL )
+
+    return tlist
+
+
+class MockBatcher:
+
+    def __init__(self):
+        ""
+        self.accountant = batchutils.BatchAccountant()
+
+    def getAccountant(self):
+        return self.accountant
+
+
+def make_mock_Batcher( tlist ):
+    ""
+    batch = MockBatcher()
+    bjob = batchutils.BatchJob( None, None, None, tlist, None, None )
+
+    qid = 0
+    jid = 42
+    bjob.start( jid )
+    batch.getAccountant().addJob( qid, bjob )
+    batch.getAccountant().markJobStarted( qid, jid )
+    return batch
 
 
 ############################################################################
