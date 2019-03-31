@@ -31,6 +31,9 @@ cfgdir = os.path.join( vvtdir, 'config' )
 vvtest_file = pjoin( vvtdir, 'vvtest' )
 resultspy = pjoin( vvtdir, 'results.py' )
 
+import libvvtest.TestSpec as TestSpec
+import libvvtest.teststatus as teststatus
+
 
 ##########################################################################
 
@@ -69,7 +72,7 @@ def core_platform_name():
 def launch_vvtest_then_terminate_it( *cmd_args, **options ):
     ""
     signum = options.pop( 'signum', signal.SIGTERM )
-    seconds_before_signaling = options.pop( 'seconds_before_signaling',4 )
+    seconds_before_signaling = options.pop( 'seconds_before_signaling', 4 )
     logfilename = options.pop( 'logfilename', 'run.log' )
     batch = options.pop( 'batch', False )
 
@@ -558,3 +561,41 @@ def assert_summary_string( summary_string,
     if notdone != None: assert valD['notdone'] == notdone
     if notrun  != None: assert valD['notrun']  == notrun
     if skip    != None: assert valD['skip']    == skip
+
+
+def make_fake_TestSpec( statushandler, result=None,
+                        runtime=None, name='atest' ):
+    ""
+    ts = TestSpec.TestSpec( name, os.getcwd(), 'sdir/'+name+'.vvt' )
+
+    statushandler.resetResults( ts )
+
+    ts.setKeywords( ['key1','key2'] )
+
+    ts.setParameters( { 'np':'4' } )
+
+    if result:
+        if result == 'skip':
+            statushandler.markSkipByPlatform( ts )
+        elif result == 'timeout':
+            statushandler.startRunning( ts )
+            statushandler.markTimedOut( ts )
+        elif result == 'pass':
+            statushandler.startRunning( ts )
+            statushandler.markDone( ts, 0 )
+        elif result == 'diff':
+            statushandler.startRunning( ts )
+            statushandler.markDone( ts, teststatus.DIFF_EXIT_STATUS )
+        elif result == 'notdone':
+            statushandler.startRunning( ts )
+        elif result == 'notrun':
+            pass
+        else:
+            assert result == 'fail', '*** error (value='+str(result)+')'
+            statushandler.startRunning( ts )
+            statushandler.markDone( ts, 1 )
+
+    if runtime != None:
+        statushandler.setRuntime( ts, runtime )
+
+    return ts

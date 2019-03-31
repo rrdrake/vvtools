@@ -380,8 +380,7 @@ class BatchAccountant:
         self.qdone  = {}
 
     def addJob(self, qid, batchjob ):
-        """
-        """
+        ""
         self.qtodo[ qid ] = batchjob
 
     def numStarted(self):
@@ -397,49 +396,41 @@ class BatchAccountant:
         return len( self.qstop ) + len( self.qdone )
 
     def getNotStarted(self):
-        """
-        """
+        ""
         return self.qtodo.items()
 
     def getStarted(self):
-        """
-        """
+        ""
         return self.qstart.items()
 
     def getStopped(self):
-        """
-        """
+        ""
         return self.qstop.items()
 
     def getDone(self):
-        """
-        """
+        ""
         return self.qdone.items()
 
     def markJobStarted(self, qid, jobid):
-        """
-        """
+        ""
         jb = self.popJob( qid )
         jb.start( jobid )
         self.qstart[ qid ] = jb
 
     def markJobStopped(self, qid):
-        """
-        """
+        ""
         jb = self.popJob( qid )
         jb.stop()
         self.qstop[ qid ] = jb
 
     def markJobDone(self, qid, done_mark):
-        """
-        """
+        ""
         jb = self.popJob( qid )
         jb.finished( done_mark )
         self.qdone[ qid ] = jb
 
     def popJob(self, qid):
-        """
-        """
+        ""
         if qid in self.qtodo: return self.qtodo.pop( qid )
         if qid in self.qstart: return self.qstart.pop( qid )
         if qid in self.qstop: return self.qstop.pop( qid )
