@@ -17,6 +17,42 @@ from .ScriptReader import ScriptReader, check_parse_attributes_section
 from .TestSpecError import TestSpecError
 
 
+class TestCreator:
+
+    def __init__(self, rtconfig):
+        ""
+        self.evaluator = ExpressionEvaluator( rtconfig.platformName(),
+                                              rtconfig.getOptionList() )
+
+    def fromFile(self, rootpath, relpath, force_params):
+        """
+        The 'rootpath' is the top directory of the file scan.  The 'relpath' is
+        the name of the test file relative to 'rootpath' (it must not be an
+        absolute path).  If 'force_params' is not None, then any parameters in
+        the test that are in the 'force_params' dictionary have their values
+        replaced for that parameter name.
+        
+        Returns a list of TestSpec objects, including a "parent" test if needed.
+        """
+        tests = create_testlist( self.evaluator,
+                                 rootpath,
+                                 relpath,
+                                 force_params )
+
+        return tests
+
+    def reparse(self, tspec):
+        """
+        Parses the test source file and resets the settings for the given test.
+        The test name is not changed.  The parameters in the test XML file are
+        not considered; instead, the parameters already defined in the test
+        object are used.
+
+        If the test XML contains bad syntax, a TestSpecError is raised.
+        """
+        reparse_test_object( self.evaluator, tspec )
+
+
 class ExpressionEvaluator:
     """
     Script test headers or attributes in test XML can specify a word
@@ -53,7 +89,7 @@ class ExpressionEvaluator:
         return word_expr.evaluate( self.option_list.count )
 
 
-def create_unfiltered_testlist( rootpath, relpath, force_params, evaluator ):
+def create_testlist( evaluator, rootpath, relpath, force_params ):
     """
     Can use a (nested) rtest element to cause another test to be defined.
         
@@ -232,7 +268,7 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
     return testL
 
 
-def reparse_test_object( testobj, evaluator ):
+def reparse_test_object( evaluator, testobj ):
     """
     Given a TestSpec object, this function opens the original test file,
     parses, and overwrite the test contents.

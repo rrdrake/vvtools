@@ -33,6 +33,8 @@ from libvvtest.outpututils import XstatusString, pretty_time, make_date_stamp
 import libvvtest.pathutil as pathutil
 from libvvtest.teststatus import TestStatusHandler, RESULTS_KEYWORDS
 from libvvtest.printinfo import TestInformationPrinter
+from libvvtest.TestSpecCreator import TestCreator
+from libvvtest.filtering import TestFilter
 
 
 version = '1.2'
@@ -80,7 +82,7 @@ class MainEntry:
 
         self.rtdata.setFilterPath()
 
-        self.constructRuntimeConfig()
+        self.constructRuntimeCreatorAndFilter()
 
     def execute(self):
         ""
@@ -164,11 +166,17 @@ class MainEntry:
                                     self.rtdata.getTestStatusHandler() )
         self.rtdata.setResultsWriter( resw )
 
-    def constructRuntimeConfig(self):
+    def constructRuntimeCreatorAndFilter(self):
         ""
         rtconfig = construct_RuntimeConfig( self.rtdata.getPlatformObject(),
                                             self.opts, self.optD )
         self.rtdata.setRuntimeConfig( rtconfig )
+
+        creator = TestCreator( rtconfig )
+        self.rtdata.setTestCreator( creator )
+
+        testfilter = TestFilter( rtconfig, self.rtdata.getTestStatusHandler() )
+        self.rtdata.setTestFilter( testfilter )
 
 
 class Configuration:
@@ -270,6 +278,12 @@ class RuntimeData:
 
     def setRuntimeConfig(self, rtconfig): self.rtconfig = rtconfig
     def getRuntimeConfig(self): return self.rtconfig
+
+    def setTestCreator(self, creator): self.creator = creator
+    def getTestCreator(self): return self.creator
+
+    def setTestFilter(self, testfilter): self.testfilter = testfilter
+    def getTestFilter(self): return self.testfilter
 
     def setTestSubdir(self, subdir): self.testsubdir = subdir
     def getTestSubdir(self): return self.testsubdir
@@ -411,15 +425,13 @@ class InformationMode:
 
     def createTestList(self):
         ""
-        rtconfig = self.rtdata.getRuntimeConfig()
-        statushandler = self.rtdata.getTestStatusHandler()
         test_dir = self.rtdata.getTestResultsDir()
 
         tfile = os.path.join( test_dir, testlist_name )
         if not os.path.exists( tfile ):
             tfile = None
 
-        return TestList.TestList( statushandler, tfile, rtconfig )
+        return make_TestList( self.rtdata, tfile )
 
     def printKeywordUnion(self, tlist):
         ""
@@ -452,6 +464,17 @@ class InformationMode:
             print3( d )
 
 
+def make_TestList( rtdata, filename ):
+    ""
+    rtconfig = rtdata.getRuntimeConfig()
+    statushandler = rtdata.getTestStatusHandler()
+    creator = rtdata.getTestCreator()
+    testfilter = rtdata.getTestFilter()
+
+    return TestList.TestList( statushandler, filename,
+                              rtconfig, creator, testfilter )
+
+
 ##############################################################################
 #
 # generation of tests
@@ -474,7 +497,6 @@ def scan_test_source_directories( tlist, scan_dirs, setparams ):
 def generateTestList( opts, optD, dirs, rtdata ):
     """
     """
-    rtconfig = rtdata.getRuntimeConfig()
     config = rtdata.getConfiguration()
     plat = rtdata.getPlatformObject()
     testsubdir = rtdata.getTestSubdir()
@@ -485,7 +507,7 @@ def generateTestList( opts, optD, dirs, rtdata ):
 
     tfile = os.path.join( test_dir, testlist_name )
 
-    tlist = TestList.TestList( statushandler, tfile, rtconfig )
+    tlist = make_TestList( rtdata, tfile )
 
     scan_test_source_directories( tlist, dirs, optD['param_dict'] )
 
@@ -515,10 +537,9 @@ def extractTestFiles( opts, optD, dirs, target_dir, rtdata ):
     directory.
     """
     plat = rtdata.getPlatformObject()
-    rtconfig = rtdata.getRuntimeConfig()
     statushandler = rtdata.getTestStatusHandler()
 
-    tlist = TestList.TestList( statushandler, None, rtconfig )
+    tlist = make_TestList( rtdata, None )
 
     scan_test_source_directories( tlist, dirs, optD['param_dict'] )
 
@@ -854,7 +875,6 @@ def runTests( opts, optD, rtdata, dirs ):
     Executes a list of tests.
     """
     config = rtdata.getConfiguration()
-    rtconfig = rtdata.getRuntimeConfig()
     plat = rtdata.getPlatformObject()
     testsubdir = rtdata.getTestSubdir()
     statushandler = rtdata.getTestStatusHandler()
@@ -863,7 +883,7 @@ def runTests( opts, optD, rtdata, dirs ):
     test_dir = os.path.abspath( testsubdir )
     tfile = os.path.join( test_dir, testlist_name )
 
-    tlist = TestList.TestList( statushandler, tfile, rtconfig )
+    tlist = make_TestList( rtdata, tfile )
 
     check_for_currently_running_vvtest( tlist.getResultsFilenames(), opts.force )
 
@@ -1526,7 +1546,6 @@ class Batcher:
 def restartTests( opts, optD, rtdata ):
     ""
     config = rtdata.getConfiguration()
-    rtconfig = rtdata.getRuntimeConfig()
     plat = rtdata.getPlatformObject()
     test_dir = rtdata.getTestResultsDir()
     statushandler = rtdata.getTestStatusHandler()
@@ -1544,7 +1563,7 @@ def restartTests( opts, optD, rtdata ):
         # prevent the run scripts from being written again
         config.set( 'refresh', False )
 
-    tlist = TestList.TestList( statushandler, tfile, rtconfig )
+    tlist = make_TestList( rtdata, tfile )
 
     tlist.readTestList()
     tlist.readTestResults()
@@ -1599,7 +1618,7 @@ def baselineTests( opts, optD, rtdata ):
 
     tfile = os.path.join( test_dir, testlist_name )
 
-    tlist = TestList.TestList( statushandler, tfile, rtconfig )
+    tlist = make_TestList( rtdata, tfile )
 
     tlist.readTestList()
     tlist.readTestResults()

@@ -16,7 +16,7 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
-from libvvtest.TestList import createTestObjects
+from libvvtest.TestSpecCreator import TestCreator
 from libvvtest.RuntimeConfig import RuntimeConfig
 
 import results
@@ -57,8 +57,9 @@ class runtimes_and_timings( vtu.vvtestTestCase ):
         tr.writeRuntimes( 'tests', None )
 
         # even though a rootrel directory could be determined, no runtime is available
-        tst = createTestObjects(
-                    tests, 'dir1/one.xml', None, RuntimeConfig() )[0]
+        creator = TestCreator( RuntimeConfig() )
+        tL = creator.fromFile( tests, 'dir1/one.xml', None )
+        tst = tL[0]
         cache = results.LookupCache( platname, 'cplr' )
         tm,tv = cache.getRunTime( tst )
         assert tm == None

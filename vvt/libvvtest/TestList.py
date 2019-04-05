@@ -10,12 +10,9 @@ import glob
 
 from . import TestSpec
 from . import TestExec
-from . import TestSpecCreator
 from . import CommonSpec
 from . import testlistio
-from . import FilterExpressions
 from .TestSpecError import TestSpecError
-from .filtering import TestFilter
 from .groups import ParameterizeAnalyzeGroups
 from . import depend
 
@@ -26,7 +23,10 @@ class TestList:
     file and to read from a test XML file.
     """
 
-    def __init__(self, statushandler, filename, runtime_config=None):
+    def __init__(self, statushandler, filename,
+                       runtime_config=None,
+                       testcreator=None,
+                       testfilter=None):
         ""
         self.statushandler = statushandler
 
@@ -51,8 +51,8 @@ class TestList:
         self.stopped = {}  # TestSpec xdir -> TestExec object
         
         self.rtconfig = runtime_config
-
-        self.testfilter = TestFilter( self.rtconfig, self.statushandler )
+        self.creator = testcreator
+        self.testfilter = testfilter
 
     def setResultsSuffix(self, suffix=None):
         ""
@@ -229,7 +229,7 @@ class TestList:
         if not baseline:
             finalize_analyze_tests( self.statushandler, self.groups )
 
-        refresh_active_tests( self.statushandler, self.tspecs, self.rtconfig )
+        refresh_active_tests( self.statushandler, self.tspecs, self.creator )
 
         if baseline:
             # baseline marking must come after TestSpecs are refreshed
@@ -363,8 +363,7 @@ class TestList:
         assert relfile
 
         try:
-          testL = createTestObjects( basepath, relfile,
-                                     force_params, self.rtconfig )
+            testL = self.creator.fromFile( basepath, relfile, force_params )
         except TestSpecError:
           print3( "*** skipping file " + os.path.join( basepath, relfile ) + \
                   ": " + str( sys.exc_info()[1] ) )
@@ -588,34 +587,6 @@ def check_make_directory_containing_file( filename ):
             os.mkdir( d )
 
 
-def createTestObjects( rootpath, relpath, force_params, rtconfig ):
-    """
-    The 'rootpath' is the top directory of the file scan.  The 'relpath' is
-    the name of the test file relative to 'rootpath' (it must not be an
-    absolute path).  If 'force_params' is not None, then any parameters in
-    the test that are in the 'force_params' dictionary have their values
-    replaced for that parameter name.
-    
-    Returns a list of TestSpec objects, including a "parent" test if needed.
-
-
-    Is the following note about parameter filtering still relevant?  Is it
-    any different when filtering is performed above create/refresh?
-
-        Important: this function always applies filtering, even if the
-        "include_all" flag is present in 'rtconfig'.  This means any command
-        line parameter expressions must be passed along in batch queue mode.
-
-    """
-    evaluator = TestSpecCreator.ExpressionEvaluator( rtconfig.platformName(),
-                                                     rtconfig.getOptionList() )
-
-    tests = TestSpecCreator.create_unfiltered_testlist( rootpath, relpath,
-                                        force_params, evaluator )
-
-    return tests
-
-
 def mark_skips_for_baselining( statushandler, tspec_map ):
     ""
     for xdir,tspec in tspec_map.items():
@@ -658,22 +629,12 @@ def count_active( statushandler, tspec_map ):
     return cnt
 
 
-def refresh_active_tests( statushandler, tspec_map, rtconfig ):
-    """
-    Parses the test source file and resets the settings for the given test.
-    The test name is not changed.  The parameters in the test XML file are
-    not considered; instead, the parameters already defined in the test
-    object are used.
-
-    If the test XML contains bad syntax, a TestSpecError is raised.
-    """
-    evaluator = TestSpecCreator.ExpressionEvaluator( rtconfig.platformName(),
-                                                     rtconfig.getOptionList() )
-
+def refresh_active_tests( statushandler, tspec_map, creator ):
+    ""
     for xdir,tspec in tspec_map.items():
         if not statushandler.skipTest( tspec ):
             if not tspec.constructionCompleted():
-                TestSpecCreator.reparse_test_object( tspec, evaluator )
+                creator.reparse( tspec )
 
 
 ###########################################################################
