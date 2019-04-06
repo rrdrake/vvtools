@@ -19,18 +19,36 @@ class UserPluginBridge:
         ""
         self.plugin = plugin_module
 
-    def hasValidateFunction(self):
-        ""
-        return self.plugin and hasattr( self.plugin, 'validate_test' )
+        self.validate = None
+        if self.plugin and hasattr( self.plugin, 'validate_test' ):
+            self.validate = self.plugin.validate_test
+
+        # avoid flooding output if the user plugin has an error (which
+        # raises an exception) by only printing the traceback once for
+        # each exception string
+        self.exc_uniq = set()
 
     def validateTest(self, tspec):
-        ""
+        """
+        Returns non-empty string (an explanation) if user validation failed.
+        """
         rtn = None
-        if self.hasValidateFunction():
+        if self.validate != None:
             specs = { 'keywords' : tspec.getKeywords() }
-            rtn = self.plugin.validate_test( specs )
+            try:
+                rtn = self.validate( specs )
+            except Exception:
+                xs,tb = capture_traceback( sys.exc_info() )
+                self._check_print_exc( xs, tb )
+                rtn = xs
 
         return rtn
+
+    def _check_print_exc(self, xs, tb):
+        ""
+        if xs not in self.exc_uniq:
+            sys.stdout.write( '\n' + tb + '\n' )
+            self.exc_uniq.add( xs )
 
 
 def import_module_by_name( modulename ):
