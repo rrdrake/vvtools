@@ -34,7 +34,7 @@ import libvvtest.pathutil as pathutil
 from libvvtest.teststatus import TestStatusHandler, RESULTS_KEYWORDS
 from libvvtest.printinfo import TestInformationPrinter
 from libvvtest.TestSpecCreator import TestCreator
-from libvvtest.userplugin import UserPluginBridge, import_module_by_name
+import libvvtest.userplugin as userplugin
 from libvvtest.filtering import TestFilter
 
 
@@ -43,6 +43,8 @@ version = '1.2'
 search_fnmatch = ['*.inp','*.apr','*.i']
 
 testlist_name = 'testlist'
+
+USER_PLUGIN_MODULE_NAME = 'vvtest_user_plugin'
 
 
 class MainEntry:
@@ -176,12 +178,26 @@ class MainEntry:
         creator = TestCreator( rtconfig )
         self.rtdata.setTestCreator( creator )
 
-        plugmod = import_module_by_name( 'vvtest_user_plugin' )
-        plug = UserPluginBridge( plugmod )
+        plugmod = import_plugin_module()
+        plug = userplugin.UserPluginBridge( plugmod )
 
         statushandler = self.rtdata.getTestStatusHandler()
         testfilter = TestFilter( rtconfig, statushandler, plug )
         self.rtdata.setTestFilter( testfilter )
+
+
+def import_plugin_module():
+    ""
+    try:
+        plugmod = userplugin.import_module_by_name( USER_PLUGIN_MODULE_NAME )
+
+    except userplugin.UserPluginError:
+        print3( '*** error in user plugin script:',
+                str( sys.exc_info()[1] ).strip() )
+        print3( '*** user plugin disabled\n' )
+        plugmod = None
+
+    return plugmod
 
 
 class Configuration:

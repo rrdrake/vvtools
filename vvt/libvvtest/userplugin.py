@@ -6,8 +6,10 @@
 
 import os, sys
 
+from .outpututils import capture_traceback
 
-class UserPluginError:
+
+class UserPluginError( Exception ):
     pass
 
 
@@ -33,12 +35,20 @@ class UserPluginBridge:
 
 def import_module_by_name( modulename ):
     ""
-    try:
-        code = compile( 'import '+modulename+' as newmodule', 'string', 'exec' )
-        eval( code, globals() )
-        return newmodule
+    mod = None
 
-    except Exception:
+    try:
+        code = compile( 'import '+modulename+' as newmodule',
+                        '<string>', 'exec' )
+        eval( code, globals() )
+        mod = newmodule
+
+    except ImportError:
         pass
 
-    return None
+    except Exception:
+        xs,tb = capture_traceback( sys.exc_info() )
+        sys.stdout.write( '\n' + tb + '\n' )
+        raise UserPluginError( 'failed to import '+modulename+': '+xs )
+
+    return mod

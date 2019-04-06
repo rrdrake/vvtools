@@ -32,9 +32,14 @@ class use_plugin_to_validate_tests( vtu.vvtestTestCase ):
         ""
         sys.path.insert( 0, os.getcwd() )
         try:
-            plug = UserPluginBridge( import_module_by_name('plugin1') )
+            mod, out, err = util.call_capture_output(
+                import_module_by_name, 'plugin1' )
         finally:
             sys.path.pop( 0 )
+
+        assert 'Traceback' not in out and 'Traceback' not in err
+
+        plug = UserPluginBridge( mod )
 
         assert not plug.hasValidateFunction()
         tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
@@ -57,9 +62,34 @@ class use_plugin_to_validate_tests( vtu.vvtestTestCase ):
         tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
         assert not plug.validateTest( tspec )
 
-    def test_user_validate_plugin_function(self):
+    def test_a_plugin_with_an_error_during_import(self):
         ""
         util.writefile( 'adir/plugin3.py', """
+            function_that_does_not_exist()
+            """ )
+        time.sleep(1)
+
+        sys.path.insert( 0, os.path.abspath('adir') )
+        try:
+            mod, out, err = util.call_capture_output(
+                import_module_by_name, 'plugin3' )
+        except UserPluginError:
+            sys.path.pop( 0 )
+        except Exception:
+            sys.path.pop( 0 )
+            # expected a UserPluginError
+            raise
+
+        #print ( out )
+        #print ( err )
+
+        assert 'Traceback' in out
+        assert 'function_that_does_not_exist' in out
+        assert 'UserPluginError' in err
+
+    def test_user_validate_plugin_function(self):
+        ""
+        util.writefile( 'adir/plugin4.py', """
             def validate_test( specs ):
                 ""
                 keys = specs['keywords']
@@ -70,7 +100,7 @@ class use_plugin_to_validate_tests( vtu.vvtestTestCase ):
 
         sys.path.insert( 0, os.path.abspath('adir') )
         try:
-            plug = UserPluginBridge( import_module_by_name('plugin3') )
+            plug = UserPluginBridge( import_module_by_name('plugin4') )
         finally:
             sys.path.pop( 0 )
 
@@ -138,6 +168,23 @@ class use_plugin_to_validate_tests( vtu.vvtestTestCase ):
         assert len( vrun.grepTestLines( 'testB*skip' ) ) == 1
         assert len( vrun.grepTestLines(
                     'keywords must contain fast, medium, or long' ) ) == 1
+
+    def test_integration_with_error_in_plugin(self):
+        ""
+        util.writefile( 'testA.vvt', """
+            #VVT: keywords = blue long
+            """ )
+        util.writefile( 'adir/vvtest_user_plugin.py', """
+            function_that_does_not_exist()
+            """ )
+        adir = os.path.abspath( 'adir' )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest( '-vv --config', adir )
+        vrun.assertCounts( total=1, npass=1 )
+        assert vrun.countLines( 'Traceback' ) > 0
+        assert vrun.countLines( 'function_that_does_not_exist' ) > 0
+        assert vrun.countLines( 'failed to import vvtest_user_plugin' ) == 1
 
     # def run_soft_linked_vvtest_and_expect_N_test_pass(self, N, args=''):
     #     """
