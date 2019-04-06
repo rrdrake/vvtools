@@ -9,10 +9,11 @@ import os, sys
 
 class TestFilter:
 
-    def __init__(self, rtconfig, statushandler):
+    def __init__(self, rtconfig, statushandler, user_plugin):
         ""
         self.rtconfig = rtconfig
         self.statushandler = statushandler
+        self.plugin = user_plugin
 
     def checkSubdirectory(self, tspec, subdir):
         ""
@@ -118,6 +119,16 @@ class TestFilter:
             self.statushandler.markSkipByRuntime( tspec )
         return ok
 
+    def userValidation(self, tspec):
+        ""
+        ok = True
+        reason = self.plugin.validateTest( tspec )
+        if reason:
+            ok = False
+            reason = 'validate: '+reason
+            self.statushandler.markSkipByUserValidation( tspec, reason )
+        return ok
+
     def applyPermanent(self, tspec_map):
         ""
         for xdir,tspec in tspec_map.items():
@@ -129,7 +140,8 @@ class TestFilter:
                 self.checkTDD( tspec ) and \
                 self.checkFileSearch( tspec ) and \
                 self.checkMaxProcessors( tspec ) and \
-                self.checkRuntime( tspec )
+                self.checkRuntime( tspec ) and \
+                self.userValidation( tspec )
 
         self.filterByCummulativeRuntime( tspec_map )
 
@@ -156,6 +168,7 @@ class TestFilter:
                     #   self.checkFileSearch( tspec )
                     #   self.checkPlatform( tspec )
                     #   self.checkOptions( tspec )
+                    #   self.userValidation( tspec )
 
             self.filterByCummulativeRuntime( tspec_map )
 

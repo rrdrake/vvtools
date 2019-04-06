@@ -1,0 +1,266 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+
+import vvtestutils as vtu
+import testutils as util
+
+from libvvtest.RuntimeConfig import RuntimeConfig
+from libvvtest.filtering import TestFilter
+from libvvtest.teststatus import TestStatusHandler
+from libvvtest.userplugin import UserPluginBridge, import_module_by_name
+
+
+# use cases:
+#   - a plugin syntax error
+#   - a plugin function error
+
+
+class use_plugin_to_validate_tests( vtu.vvtestTestCase ):
+
+    def test_plugin_not_found(self):
+        ""
+        sys.path.insert( 0, os.getcwd() )
+        try:
+            plug = UserPluginBridge( import_module_by_name('plugin1') )
+        finally:
+            sys.path.pop( 0 )
+
+        assert not plug.hasValidateFunction()
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        assert not plug.validateTest( tspec )
+
+    def test_empty_plugin_found(self):
+        ""
+        util.writefile( 'adir/plugin2.py', """
+            pass
+            """ )
+        time.sleep(1)
+
+        sys.path.insert( 0, os.path.abspath('adir') )
+        try:
+            plug = UserPluginBridge( import_module_by_name('plugin2') )
+        finally:
+            sys.path.pop( 0 )
+
+        assert not plug.hasValidateFunction()
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        assert not plug.validateTest( tspec )
+
+    def test_user_validate_plugin_function(self):
+        ""
+        util.writefile( 'adir/plugin3.py', """
+            def validate_test( specs ):
+                ""
+                keys = specs['keywords']
+                if not ( 'fast' in keys or 'medium' in keys or 'long' in keys ):
+                    return "keywords must contain fast, medium, or long"
+            """ )
+        time.sleep(1)
+
+        sys.path.insert( 0, os.path.abspath('adir') )
+        try:
+            plug = UserPluginBridge( import_module_by_name('plugin3') )
+        finally:
+            sys.path.pop( 0 )
+
+        assert plug.hasValidateFunction()
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler(),
+                                        keywords=['lightning','fast'] )
+        assert not plug.validateTest( tspec )
+
+        tspec.setKeywords( ['lightning','fist'] )
+        rtn = plug.validateTest( tspec )
+        assert rtn and rtn == "keywords must contain fast, medium, or long"
+
+    def test_filter_function(self):
+        ""
+        class FakePluginModule:
+            def validate_test(self, specs):
+                if 'bad' in specs['keywords']:
+                    return 'bad boys not allowed'
+
+        plug = UserPluginBridge( FakePluginModule() )
+        statushandler = TestStatusHandler()
+        tf = TestFilter( RuntimeConfig(), statushandler, plug )
+
+        tspec = vtu.make_fake_TestSpec( statushandler, keywords=['good'] )
+        assert tf.userValidation( tspec )
+        assert not statushandler.skipTest( tspec )
+
+        tspec = vtu.make_fake_TestSpec( statushandler, keywords=['good','bad'] )
+        assert not tf.userValidation( tspec )
+        assert statushandler.skipTest( tspec )
+
+        tspec = vtu.make_fake_TestSpec( statushandler, keywords=['good'] )
+        tf.applyPermanent( { tspec.getExecuteDirectory() : tspec } )
+        assert not statushandler.skipTest( tspec )
+
+        tspec = vtu.make_fake_TestSpec( statushandler, keywords=['bad','good'] )
+        tf.applyPermanent( { tspec.getExecuteDirectory() : tspec } )
+        assert statushandler.skipTest( tspec )
+
+    def test_validating_keywords(self):
+        ""
+        util.writefile( 'testA.vvt', """
+            #VVT: keywords = blue long
+            """ )
+        util.writefile( 'testB.vvt', """
+            #VVT: keywords = violet
+            """ )
+        util.writefile( 'adir/vvtest_user_plugin.py', """
+            def validate_test( specs ):
+                ""
+                keys = specs['keywords']
+                if not ( 'fast' in keys or 'medium' in keys or 'long' in keys ):
+                    return "keywords must contain fast, medium, or long"
+            """ )
+        adir = os.path.abspath( 'adir' )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=2, npass=2 )
+
+        vtu.remove_results()
+        vrun = vtu.runvvtest( '-vv --config', adir )
+        vrun.assertCounts( npass=1, skip=1 )
+        assert len( vrun.grepTestLines( 'testA*pass' ) ) == 1
+        assert len( vrun.grepTestLines( 'testB*skip' ) ) == 1
+        assert len( vrun.grepTestLines(
+                    'keywords must contain fast, medium, or long' ) ) == 1
+
+    # def run_soft_linked_vvtest_and_expect_N_test_pass(self, N, args=''):
+    #     """
+    #     This is not a test. This is a helper function that executes a soft-
+    #     linked vvtest and ensures the outcome is as expected.
+
+    #     N is the number of tests expected to pass.
+    #     args is a string of all supplementary arguments to vvtest.
+    #     """
+    #     cmd = os.path.abspath('vvtest')
+    #     cmd += ' -v --plat ' + vtu.core_platform_name()
+    #     if args:
+    #         cmd += ' ' + args
+
+    #     x, out = util.runcmd(cmd)
+    #     assert x == 0
+    #     counts = vtu.parse_vvtest_counts(out)
+    #     assert counts['npass'] == N
+
+    # def test_using_a_softlink_to_vvtest(self):
+    #     """
+    #     This test ensures that a vanilla test script can be run using a
+    #     soft-linked vvtest script. Nothing else special happens in this
+    #     script.
+    #     """
+    #     banner("test_using_a_softline_to_vvtest()")
+    #     util.writefile('hello.py.vvt', """
+    #         import os, sys
+    #         print("hello from the python test script")
+    #         """)
+    #     os.symlink(vtu.vvtest_file, 'vvtest')
+    #     time.sleep(1)
+
+    #     self.run_soft_linked_vvtest_and_expect_N_test_pass(1)
+
+    #     banner("finish")
+
+    # def test_with_a_curator_file_timeout(self):
+    #     """
+    #     This test explores behavior with a curator file that alters timeouts.
+
+    #     It does the following:
+    #     1) Run the file without the curator (should pass)
+    #     2) Write the curator file (which edits timeouts)
+    #     3) Rerun the file with the curator (should fail)
+    #     4) Rerun the file with the curator but increase the timeout by using
+    #        the --timeout-multiplier so it will then pass.
+    #     """
+    #     banner("test_with_a_curator_file_timeout()")
+    #     util.writefile('hello.py.vvt', """
+    #         import time
+    #         time.sleep(3)
+    #         print("hello from the python test script")
+    #         """)
+    #     os.symlink(vtu.vvtest_file, 'vvtest')
+
+    #     print("*** Run the base test. Should pass.")
+    #     self.run_soft_linked_vvtest_and_expect_N_test_pass(1)
+
+    #     util.writefile('vvtest_curator.py', """
+    #         def curateTestList(tlist):
+    #             print("curating")
+    #             for tspec in tlist.getTests():
+    #                 tspec.setTimeout(1)
+    #         """)
+    #     time.sleep(1)
+
+    #     print("*** Now rerun with the curator setting short timeouts (fail)")
+    #     optcfg = '-w'
+    #     self.run_soft_linked_vvtest_and_expect_N_test_pass(0, args=optcfg)
+
+    #     print("*** Now rerun with a timeout multiplier so it can pass.")
+    #     optcfg = '-w --timeout-multiplier 100'  # Increase the timeout.
+    #     self.run_soft_linked_vvtest_and_expect_N_test_pass(1, args=optcfg)
+
+    #     banner("finish")
+
+    # def test_with_a_curator_file_keyword(self):
+    #     """
+    #     This test explores behavior with a curator file that alters keywords.
+
+    #     It does the following:
+    #     1) Run the file without the curator (should pass)
+    #     2) Write the curator file (change keywords)
+    #     3) Rerun the file with the curator (should fail)
+    #     """
+    #     banner("test_with_a_curator_file_keyword()")
+
+    #     util.writefile('hello.py.vvt', """
+    #         #VVT: keywords : spam
+    #         print("hello from the python test script")
+    #         """)
+    #     os.symlink(vtu.vvtest_file, 'vvtest')
+
+    #     print("*** Run the base test. Should pass.")
+    #     optcfg = '-K eggs'
+    #     self.run_soft_linked_vvtest_and_expect_N_test_pass(1, optcfg)
+
+    #     util.writefile('vvtest_curator.py', """
+    #         import sys
+    #         def curateTestList(tlist):
+    #             print("curating")
+    #             for tspec in tlist.getTests():
+    #                 kw = tspec.getKeywords()
+    #                 if 'spam' in kw:
+    #                     idx = kw.index('spam')
+    #                     kw[idx] = 'eggs'
+    #                     tspec.setKeywords(kw)
+    #         """)
+    #     time.sleep(1)
+
+    #     print("*** Now rerun with the curator changing keyword 'spam' "
+    #           "to 'eggs' (fail)")
+    #     optcfg = '-w -K eggs'
+    #     self.run_soft_linked_vvtest_and_expect_N_test_pass(0, args=optcfg)
+
+    #     print("*** Now rerun the rerun to make sure reruns work as expected.")
+    #     optcfg = '-R -w -K eggs'
+    #     self.run_soft_linked_vvtest_and_expect_N_test_pass(0, args=optcfg)
+
+    #     banner("finish")
+
+
+############################################################################
+
+util.run_test_cases(sys.argv, sys.modules[__name__])

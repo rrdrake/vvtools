@@ -564,13 +564,14 @@ def assert_summary_string( summary_string,
 
 
 def make_fake_TestSpec( statushandler, result=None,
-                        runtime=None, name='atest' ):
+                        runtime=None, name='atest',
+                        keywords=['key1','key2'] ):
     ""
     ts = TestSpec.TestSpec( name, os.getcwd(), 'sdir/'+name+'.vvt' )
 
     statushandler.resetResults( ts )
 
-    ts.setKeywords( ['key1','key2'] )
+    ts.setKeywords( keywords )
 
     ts.setParameters( { 'np':'4' } )
 

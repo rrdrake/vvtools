@@ -34,6 +34,7 @@ import libvvtest.pathutil as pathutil
 from libvvtest.teststatus import TestStatusHandler, RESULTS_KEYWORDS
 from libvvtest.printinfo import TestInformationPrinter
 from libvvtest.TestSpecCreator import TestCreator
+from libvvtest.userplugin import UserPluginBridge, import_module_by_name
 from libvvtest.filtering import TestFilter
 
 
@@ -82,7 +83,7 @@ class MainEntry:
 
         self.rtdata.setFilterPath()
 
-        self.constructRuntimeCreatorAndFilter()
+        self.constructFilteringObjects()
 
     def execute(self):
         ""
@@ -166,7 +167,7 @@ class MainEntry:
                                     self.rtdata.getTestStatusHandler() )
         self.rtdata.setResultsWriter( resw )
 
-    def constructRuntimeCreatorAndFilter(self):
+    def constructFilteringObjects(self):
         ""
         rtconfig = construct_RuntimeConfig( self.rtdata.getPlatformObject(),
                                             self.opts, self.optD )
@@ -175,7 +176,11 @@ class MainEntry:
         creator = TestCreator( rtconfig )
         self.rtdata.setTestCreator( creator )
 
-        testfilter = TestFilter( rtconfig, self.rtdata.getTestStatusHandler() )
+        plugmod = import_module_by_name( 'vvtest_user_plugin' )
+        plug = UserPluginBridge( plugmod )
+
+        statushandler = self.rtdata.getTestStatusHandler()
+        testfilter = TestFilter( rtconfig, statushandler, plug )
         self.rtdata.setTestFilter( testfilter )
 
 
@@ -919,10 +924,10 @@ def runTests( opts, optD, rtdata, dirs ):
 
     results_writer = rtdata.getResultsWriter()
 
-    if tlist.numActive() > 0:
+    results_writer.prerun( tlist )
+    print3()
 
-        results_writer.prerun( tlist )
-        print3()
+    if tlist.numActive() > 0:
 
         tlist.createTestExecs( test_dir, plat, config, perms )
 
@@ -937,9 +942,6 @@ def runTests( opts, optD, rtdata, dirs ):
                            results_writer )
 
         print3( "Test directory:", testsubdir )
-
-    else:
-        print3( "\n--------- no tests to run -----------\n" )
 
     results_writer.final( tlist )
 
@@ -1585,10 +1587,10 @@ def restartTests( opts, optD, rtdata ):
 
     results_writer = rtdata.getResultsWriter()
 
-    if tlist.numActive() > 0:
+    results_writer.prerun( tlist )
+    print3()
 
-        results_writer.prerun( tlist )
-        print3()
+    if tlist.numActive() > 0:
 
         tlist.createTestExecs( test_dir, plat, config, perms )
 
@@ -1601,9 +1603,6 @@ def restartTests( opts, optD, rtdata ):
             batchTestList( opts, optD, rtdata,
                            tlist, test_dir, plat, perms,
                            results_writer )
-
-    else:
-        print3( "\n--------- no tests to run -----------\n" )
 
     results_writer.final( tlist )
 
@@ -1631,12 +1630,12 @@ def baselineTests( opts, optD, rtdata ):
     tlist.determineActiveTests( filter_dir=rtdata.getFilterPath(),
                                 baseline=True )
 
+    rtdata.getResultsWriter().prerun( tlist, abbreviate=False )
+    print3()
+
     if tlist.numActive() > 0:
 
         perms = rtdata.getPermissionsObject()
-
-        rtdata.getResultsWriter().prerun( tlist, abbreviate=False )
-        print3()
 
         tlist.createTestExecs( test_dir, plat, config, perms )
 
@@ -1672,9 +1671,6 @@ def baselineTests( opts, optD, rtdata ):
 
         if failures:
           print3( "\n\n !!!!!!!!!!!  THERE WERE FAILURES  !!!!!!!!!! \n\n" )
-
-    else:
-        print3( "\n--------- no tests to baseline -----------\n" )
 
 
 ###########################################################################
