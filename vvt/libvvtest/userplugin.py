@@ -40,7 +40,7 @@ class UserPluginBridge:
             except Exception:
                 xs,tb = capture_traceback( sys.exc_info() )
                 self._check_print_exc( xs, tb )
-                rtn = xs
+                rtn = xs.strip().replace( '\n', ' ' )[:160]
 
         return rtn
 
