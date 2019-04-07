@@ -26,7 +26,7 @@ from libvvtest.userplugin import UserPluginBridge, import_module_by_name
 plugin_count = 0
 
 
-class use_plugin_to_validate_tests( vtu.vvtestTestCase ):
+class validate_plugin_unit_tests( vtu.vvtestTestCase ):
 
     def test_plugin_not_found(self):
         ""
@@ -39,7 +39,7 @@ class use_plugin_to_validate_tests( vtu.vvtestTestCase ):
 
         assert 'Traceback' not in out and 'Traceback' not in err
 
-        plug = UserPluginBridge( mod )
+        plug = UserPluginBridge( RuntimeConfig(), mod )
 
         tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
         assert not plug.validateTest( tspec )
@@ -70,8 +70,7 @@ class use_plugin_to_validate_tests( vtu.vvtestTestCase ):
             sys.path.pop( 0 )
         except Exception:
             sys.path.pop( 0 )
-            # expected a UserPluginError
-            raise
+            raise  # expected a UserPluginError
 
         assert 'Traceback' in out
         assert 'function_that_does_not_exist' in out
@@ -122,7 +121,7 @@ class use_plugin_to_validate_tests( vtu.vvtestTestCase ):
                 if 'bad' in specs['keywords']:
                     return 'bad boys not allowed'
 
-        plug = UserPluginBridge( FakePluginModule() )
+        plug = UserPluginBridge( RuntimeConfig(), FakePluginModule() )
         statushandler = TestStatusHandler()
         tf = TestFilter( RuntimeConfig(), statushandler, plug )
 
@@ -141,6 +140,40 @@ class use_plugin_to_validate_tests( vtu.vvtestTestCase ):
         tspec = vtu.make_fake_TestSpec( statushandler, keywords=['bad','good'] )
         tf.applyPermanent( { tspec.getExecuteDirectory() : tspec } )
         assert statushandler.skipTest( tspec )
+
+    def test_validate_function_receives_test_parameters(self):
+        ""
+        plug = make_user_plugin( """
+            def validate_test( specs ):
+                ""
+                keys = specs['keywords']
+                params = specs['parameters']
+                if params['np'] != '4':
+                    return 'param np must be 4'
+            """ )
+
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        assert not plug.validateTest( tspec )
+
+    def test_validate_function_receives_options_and_platform_name(self):
+        ""
+        plug = make_user_plugin( """
+            def validate_test( specs ):
+                ""
+                plat = specs['platform']
+                opts = specs['options']
+                if plat == 'Atari' and 'dbg' in opts:
+                    return 'Houston, we have a problem up here'
+            """,
+            platname='Atari',
+            options=['dbg','gcc'] )
+
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        rtn = plug.validateTest( tspec )
+        assert rtn == 'Houston, we have a problem up here'
+
+
+class validate_plugin_integration_tests( vtu.vvtestTestCase ):
 
     def test_validating_keywords(self):
         ""
@@ -219,6 +252,32 @@ class use_plugin_to_validate_tests( vtu.vvtestTestCase ):
             assert vrun.countLines( 'Traceback' ) == 1
             assert vrun.countLines( 'function_that_does_not_exist' ) > 0
             assert vrun.countLines( 'skipped:* 2' ) == 1
+
+    def test_validate_function_using_options_and_platform(self):
+        ""
+        util.writefile( 'testA.vvt', """
+            #VVT: parameterize : np = 1 4
+            """ )
+        util.writefile( 'adir/vvtest_user_plugin.py', """
+            def validate_test( specs ):
+                ""
+                plat = specs['platform']
+                opts = specs['options']
+                np = int( specs['parameters'].get( 'np', 1 ) )
+                if plat == 'ATS' and 'dbg' in opts and np > 2:
+                    return 'large debug tests are excluded on ATS'
+            """ )
+        adir = os.path.abspath( 'adir' )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-vv -o dbg --plat ATS --config', adir,
+                                  batch=batch )
+            vrun.assertCounts( total=2, npass=1, skip=1 )
+            assert vrun.countTestLines( 'large debug tests are excluded on ATS' ) == 1
 
     # def run_soft_linked_vvtest_and_expect_N_test_pass(self, N, args=''):
     #     """
@@ -350,7 +409,7 @@ def make_plugin_filename():
     return 'plugin'+str(plugin_count)
 
 
-def make_user_plugin( content=None ):
+def make_user_plugin( content=None, platname=None, options=None ):
     ""
     plugname = make_plugin_filename()
 
@@ -359,13 +418,27 @@ def make_user_plugin( content=None ):
         util.writefile( subdir+'/'+plugname+'.py', content )
     time.sleep(1)
 
+    rtconfig = make_RuntimeConfig( platname, options )
+
     sys.path.insert( 0, os.path.abspath(subdir) )
     try:
-        plug = UserPluginBridge( import_module_by_name( plugname ) )
+        plug = UserPluginBridge( rtconfig, import_module_by_name( plugname ) )
     finally:
         sys.path.pop( 0 )
 
     return plug
+
+
+def make_RuntimeConfig( platname, options ):
+    ""
+    rtconfig = RuntimeConfig()
+
+    if platname:
+        rtconfig.setAttr( 'platform_name', platname )
+    if options:
+        rtconfig.setAttr( 'option_list', options )
+
+    return rtconfig
 
 
 ############################################################################

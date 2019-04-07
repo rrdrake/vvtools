@@ -15,8 +15,9 @@ class UserPluginError( Exception ):
 
 class UserPluginBridge:
 
-    def __init__(self, plugin_module):
+    def __init__(self, rtconfig, plugin_module):
         ""
+        self.rtconfig = rtconfig
         self.plugin = plugin_module
 
         self.validate = None
@@ -30,11 +31,11 @@ class UserPluginBridge:
 
     def validateTest(self, tspec):
         """
-        Returns non-empty string (an explanation) if user validation failed.
+        Returns non-empty string (an explanation) if user validation fails.
         """
         rtn = None
         if self.validate != None:
-            specs = { 'keywords' : tspec.getKeywords() }
+            specs = self._make_test_to_user_interface_dict( tspec )
             try:
                 rtn = self.validate( specs )
             except Exception:
@@ -49,6 +50,14 @@ class UserPluginBridge:
         if xs not in self.exc_uniq:
             sys.stdout.write( '\n' + tb + '\n' )
             self.exc_uniq.add( xs )
+
+    def _make_test_to_user_interface_dict(self, tspec):
+        ""
+        specs = { 'keywords'   : tspec.getKeywords(),
+                  'parameters' : tspec.getParameters(),
+                  'platform'   : self.rtconfig.platformName(),
+                  'options'    : self.rtconfig.getOptionList() }
+        return specs
 
 
 def import_module_by_name( modulename ):
