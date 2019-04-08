@@ -408,7 +408,7 @@ class TestSpec:
         Adds a timeout specification.  Sending in None will remove the timeout.
         """
         if timeout != None:
-          timeout = int(timeout)
+            timeout = int(timeout)
         self.timeout = timeout
     
     def resetExecutionList(self):

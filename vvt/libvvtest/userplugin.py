@@ -20,9 +20,7 @@ class UserPluginBridge:
         self.rtconfig = rtconfig
         self.plugin = plugin_module
 
-        self.validate = None
-        if self.plugin and hasattr( self.plugin, 'validate_test' ):
-            self.validate = self.plugin.validate_test
+        self._probe_for_functions()
 
         # avoid flooding output if the user plugin has an error (which
         # raises an exception) by only printing the traceback once for
@@ -45,6 +43,34 @@ class UserPluginBridge:
 
         return rtn
 
+    def testTimeout(self, tspec):
+        """
+        Returns None for no change or an integer value.
+        """
+        rtn = None
+        if self.timeout != None:
+            specs = self._make_test_to_user_interface_dict( tspec )
+            try:
+                rtn = self.timeout( specs )
+                if rtn != None:
+                    rtn = max( 0, int(rtn) )
+            except Exception:
+                xs,tb = capture_traceback( sys.exc_info() )
+                self._check_print_exc( xs, tb )
+                rtn = None
+
+        return rtn
+
+    def _probe_for_functions(self):
+        ""
+        self.validate = None
+        if self.plugin and hasattr( self.plugin, 'validate_test' ):
+            self.validate = self.plugin.validate_test
+
+        self.timeout = None
+        if self.plugin and hasattr( self.plugin, 'test_timeout' ):
+            self.timeout = self.plugin.test_timeout
+
     def _check_print_exc(self, xs, tb):
         ""
         if xs not in self.exc_uniq:
@@ -55,6 +81,7 @@ class UserPluginBridge:
         ""
         specs = { 'keywords'   : tspec.getKeywords(),
                   'parameters' : tspec.getParameters(),
+                  'timeout'    : tspec.getTimeout(),
                   'platform'   : self.rtconfig.platformName(),
                   'options'    : self.rtconfig.getOptionList() }
         return specs
