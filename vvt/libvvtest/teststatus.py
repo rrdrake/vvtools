@@ -127,6 +127,10 @@ class TestStatusHandler:
         ""
         tspec.setAttr( 'skip', 'tsum' )
 
+    def markSkipByUserValidation(self, tspec, reason):
+        ""
+        tspec.setAttr( 'skip', reason )
+
     def skipTestCausingAnalyzeSkip(self, tspec):
         ""
         skipit = False
@@ -149,7 +153,9 @@ class TestStatusHandler:
         ""
         skip = self.skipTest( tspec )
         assert skip
-        return self.skipreason[ skip ]
+        # a shortened skip reason is mapped to a longer description, but
+        # if not found, then just return the skip value itself
+        return self.skipreason.get( skip, skip )
 
     def isNotrun(self, tspec):
         ""

@@ -33,6 +33,9 @@ from libvvtest.outpututils import XstatusString, pretty_time, make_date_stamp
 import libvvtest.pathutil as pathutil
 from libvvtest.teststatus import TestStatusHandler, RESULTS_KEYWORDS
 from libvvtest.printinfo import TestInformationPrinter
+from libvvtest.TestSpecCreator import TestCreator
+import libvvtest.userplugin as userplugin
+from libvvtest.filtering import TestFilter
 
 
 version = '1.2'
@@ -40,6 +43,8 @@ version = '1.2'
 search_fnmatch = ['*.inp','*.apr','*.i']
 
 testlist_name = 'testlist'
+
+USER_PLUGIN_MODULE_NAME = 'vvtest_user_plugin'
 
 
 class MainEntry:
@@ -80,7 +85,7 @@ class MainEntry:
 
         self.rtdata.setFilterPath()
 
-        self.constructRuntimeConfig()
+        self.constructFilteringObjects()
 
     def execute(self):
         ""
@@ -164,11 +169,42 @@ class MainEntry:
                                     self.rtdata.getTestStatusHandler() )
         self.rtdata.setResultsWriter( resw )
 
-    def constructRuntimeConfig(self):
+    def constructFilteringObjects(self):
         ""
-        rtconfig = construct_RuntimeConfig( self.rtdata.getPlatformObject(),
-                                            self.opts, self.optD )
+        platobj = self.rtdata.getPlatformObject()
+
+        rtconfig = construct_RuntimeConfig( platobj, self.opts, self.optD )
         self.rtdata.setRuntimeConfig( rtconfig )
+
+        creator = TestCreator( rtconfig )
+        self.rtdata.setTestCreator( creator )
+
+        plugmod = import_plugin_module()
+        plug = userplugin.UserPluginBridge( rtconfig, plugmod )
+
+        statushandler = self.rtdata.getTestStatusHandler()
+        testfilter = TestFilter( rtconfig, statushandler, plug )
+        self.rtdata.setTestFilter( testfilter )
+
+        timehandler = TimeHandler( statushandler, plug, platobj,
+                                   self.opts.dash_T,
+                                   self.opts.timeout_multiplier,
+                                   self.opts.max_timeout )
+        self.rtdata.setTestTimeHandler( timehandler )
+
+
+def import_plugin_module():
+    ""
+    try:
+        plugmod = userplugin.import_module_by_name( USER_PLUGIN_MODULE_NAME )
+
+    except userplugin.UserPluginError:
+        print3( '*** error in user plugin script:',
+                str( sys.exc_info()[1] ).strip() )
+        print3( '*** user plugin disabled\n' )
+        plugmod = None
+
+    return plugmod
 
 
 class Configuration:
@@ -271,6 +307,12 @@ class RuntimeData:
     def setRuntimeConfig(self, rtconfig): self.rtconfig = rtconfig
     def getRuntimeConfig(self): return self.rtconfig
 
+    def setTestCreator(self, creator): self.creator = creator
+    def getTestCreator(self): return self.creator
+
+    def setTestFilter(self, testfilter): self.testfilter = testfilter
+    def getTestFilter(self): return self.testfilter
+
     def setTestSubdir(self, subdir): self.testsubdir = subdir
     def getTestSubdir(self): return self.testsubdir
 
@@ -302,6 +344,9 @@ class RuntimeData:
 
     def setResultsWriter(self, writer): self.results_writer = writer
     def getResultsWriter(self): return self.results_writer
+
+    def setTestTimeHandler(self, timehandler): self.timehandler = timehandler
+    def getTestTimeHandler(self): return self.timehandler
 
     def setFilterPath(self):
         ""
@@ -411,15 +456,13 @@ class InformationMode:
 
     def createTestList(self):
         ""
-        rtconfig = self.rtdata.getRuntimeConfig()
-        statushandler = self.rtdata.getTestStatusHandler()
         test_dir = self.rtdata.getTestResultsDir()
 
         tfile = os.path.join( test_dir, testlist_name )
         if not os.path.exists( tfile ):
             tfile = None
 
-        return TestList.TestList( statushandler, tfile, rtconfig )
+        return make_TestList( self.rtdata, tfile )
 
     def printKeywordUnion(self, tlist):
         ""
@@ -452,6 +495,17 @@ class InformationMode:
             print3( d )
 
 
+def make_TestList( rtdata, filename ):
+    ""
+    rtconfig = rtdata.getRuntimeConfig()
+    statushandler = rtdata.getTestStatusHandler()
+    creator = rtdata.getTestCreator()
+    testfilter = rtdata.getTestFilter()
+
+    return TestList.TestList( statushandler, filename,
+                              rtconfig, creator, testfilter )
+
+
 ##############################################################################
 #
 # generation of tests
@@ -474,23 +528,22 @@ def scan_test_source_directories( tlist, scan_dirs, setparams ):
 def generateTestList( opts, optD, dirs, rtdata ):
     """
     """
-    rtconfig = rtdata.getRuntimeConfig()
     config = rtdata.getConfiguration()
     plat = rtdata.getPlatformObject()
     testsubdir = rtdata.getTestSubdir()
     perms = rtdata.getPermissionsObject()
     statushandler = rtdata.getTestStatusHandler()
+    timehandler = rtdata.getTestTimeHandler()
 
     test_dir = os.path.abspath( testsubdir )
 
     tfile = os.path.join( test_dir, testlist_name )
 
-    tlist = TestList.TestList( statushandler, tfile, rtconfig )
+    tlist = make_TestList( rtdata, tfile )
 
     scan_test_source_directories( tlist, dirs, optD['param_dict'] )
 
-    loadRunTimes( statushandler, tlist, plat,
-                  opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
+    timehandler.load( tlist )
 
     tlist.applyPermanentFilters()
 
@@ -515,15 +568,14 @@ def extractTestFiles( opts, optD, dirs, target_dir, rtdata ):
     directory.
     """
     plat = rtdata.getPlatformObject()
-    rtconfig = rtdata.getRuntimeConfig()
     statushandler = rtdata.getTestStatusHandler()
+    timehandler = rtdata.getTestTimeHandler()
 
-    tlist = TestList.TestList( statushandler, None, rtconfig )
+    tlist = make_TestList( rtdata, None )
 
     scan_test_source_directories( tlist, dirs, optD['param_dict'] )
 
-    loadRunTimes( statushandler, tlist, plat,
-                  opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
+    timehandler.load( tlist )
 
     tlist.applyPermanentFilters()
 
@@ -854,16 +906,16 @@ def runTests( opts, optD, rtdata, dirs ):
     Executes a list of tests.
     """
     config = rtdata.getConfiguration()
-    rtconfig = rtdata.getRuntimeConfig()
     plat = rtdata.getPlatformObject()
     testsubdir = rtdata.getTestSubdir()
     statushandler = rtdata.getTestStatusHandler()
+    timehandler = rtdata.getTestTimeHandler()
 
     # determine the directory that stores the test results then create it
     test_dir = os.path.abspath( testsubdir )
     tfile = os.path.join( test_dir, testlist_name )
 
-    tlist = TestList.TestList( statushandler, tfile, rtconfig )
+    tlist = make_TestList( rtdata, tfile )
 
     check_for_currently_running_vvtest( tlist.getResultsFilenames(), opts.force )
 
@@ -883,8 +935,7 @@ def runTests( opts, optD, rtdata, dirs ):
 
     tlist.readTestList()
 
-    loadRunTimes( statushandler, tlist, plat,
-                  opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
+    timehandler.load( tlist )
 
     tlist.applyPermanentFilters()
 
@@ -899,10 +950,10 @@ def runTests( opts, optD, rtdata, dirs ):
 
     results_writer = rtdata.getResultsWriter()
 
-    if tlist.numActive() > 0:
+    results_writer.prerun( tlist )
+    print3()
 
-        results_writer.prerun( tlist )
-        print3()
+    if tlist.numActive() > 0:
 
         tlist.createTestExecs( test_dir, plat, config, perms )
 
@@ -917,9 +968,6 @@ def runTests( opts, optD, rtdata, dirs ):
                            results_writer )
 
         print3( "Test directory:", testsubdir )
-
-    else:
-        print3( "\n--------- no tests to run -----------\n" )
 
     results_writer.final( tlist )
 
@@ -1231,80 +1279,113 @@ def sleep_with_info_check( info, qsleep ):
         time.sleep( 1 )
 
 
-def loadRunTimes( statushandler, tlist, plat,
-                  opttimeout, optmult, optmaxtimeout ):
-    """
-    For each test, a 'runtimes' file will be read (if it exists) and the
-    run time for this platform extracted.  This run time is saved as the
-    test execute time.  Also, a timeout is calculated for each test and
-    placed in the 'timeout' attribute.
-    """
-    pname = plat.getName()
-    cplr = plat.getCompiler()
+class TimeHandler:
 
-    cache = results.LookupCache( pname, cplr, plat.testingDirectory() )
+    def __init__(self, statushandler, userplugin, platobj, cmdline_timeout,
+                       timeout_multiplier, max_timeout):
+        ""
+        self.statushandler = statushandler
+        self.plugin = userplugin
+        self.platobj = platobj
+        self.cmdline_timeout = cmdline_timeout
+        self.tmult = timeout_multiplier
+        self.maxtime = max_timeout
 
-    for t in tlist.getTests():
+    def load(self, tlist):
+        """
+        For each test, a 'runtimes' file will be read (if it exists) and the
+        run time for this platform extracted.  This run time is saved as the
+        test execute time.  Also, a timeout is calculated for each test and
+        placed in the 'timeout' attribute.
+        """
+        pname = self.platobj.getName()
+        cplr = self.platobj.getCompiler()
 
-        # grab explicit timeout value, if the test specifies it
-        tout = t.getTimeout()
+        cache = results.LookupCache( pname, cplr, self.platobj.testingDirectory() )
 
-        # look for a previous runtime value
-        tlen,tresult = cache.getRunTime( t )
+        for t in tlist.getTests():
 
-        if tlen != None:
-
-            rt = statushandler.getRuntime( t, None )
-            if rt == None:
-                statushandler.setRuntime( t, int(tlen) )
-
+            tout = self.plugin.testTimeout( t )
             if tout == None:
-                if tresult == "timeout":
-                    # for tests that timed out, make timeout much larger
-                    if t.hasKeyword( "long" ):
-                        # only long tests get timeouts longer than an hour
-                        if tlen < 60*60:
-                            tout = 4*60*60
-                        elif tlen < 5*24*60*60:  # even longs are capped
-                            tout = 4*tlen
+                # grab explicit timeout value, if the test specifies it
+                tout = t.getTimeout()
+
+            # look for a previous runtime value
+            tlen,tresult = cache.getRunTime( t )
+
+            if tlen != None:
+
+                rt = self.statushandler.getRuntime( t, None )
+                if rt == None:
+                    self.statushandler.setRuntime( t, int(tlen) )
+
+                if tout == None:
+                    if tresult == "timeout":
+                        tout = self._timeout_if_test_timed_out( tlen )
                     else:
-                        tout = 60*60
+                        tout = self._timeout_from_previous_runtime( tlen )
 
-                else:
-                    # pick timeout to allow for some runtime variability
-                    if tlen < 120:
-                        tout = max( 120, 2*tlen )
-                    elif tlen < 300:
-                        tout = max( 300, 1.5*tlen )
-                    elif tlen < 4*60*60:
-                        tout = int( float(tlen)*1.5 )
-                    else:
-                        tout = int( float(tlen)*1.3 )
+            elif tout == None:
+                tout = self._default_timeout( t )
 
-        else:  # no previous result
+            tout = self._apply_timeout_options( tout )
 
-            if tout != None:
-                # use the explicit timeout value as the runtime
-                tlen = tout
+            t.setAttr( 'timeout', tout )
+
+        cache = None
+
+    def _timeout_if_test_timed_out(self, runtime):
+        ""
+        # for tests that timed out, make timeout much larger
+        if t.hasKeyword( "long" ):
+            # only long tests get timeouts longer than an hour
+            if runtime < 60*60:
+                tm = 4*60*60
+            elif runtime < 5*24*60*60:  # even longs are capped
+                tm = 4*runtime
             else:
-                # with no information, the default depends on 'long' keyword
-                if t.hasKeyword("long"):
-                    tlen = 5*60*60  # five hours
-                else:
-                    tlen = 60*60  # one hour
-                tout = tlen
+                tm = 5*24*60*60
+        else:
+            tm = 60*60
 
-        if opttimeout != None:
-            tout = int( float(opttimeout) )
-        if optmult != None:
-            tout = int( float(tout) * optmult )
+        return tm
 
-        if optmaxtimeout != None:
-            tout = min( tout, float(optmaxtimeout) )
+    def _timeout_from_previous_runtime(self, runtime):
+        ""
+        # pick timeout to allow for some runtime variability
+        if runtime < 120:
+            tm = max( 120, 2*runtime )
+        elif runtime < 300:
+            tm = max( 300, 1.5*runtime )
+        elif runtime < 4*60*60:
+            tm = int( float(runtime)*1.5 )
+        else:
+            tm = int( float(runtime)*1.3 )
 
-        t.setAttr( 'timeout', tout )
+        return tm
 
-    cache = None
+    def _default_timeout(self, tspec):
+        ""
+        # with no information, the default depends on 'long' keyword
+        if tspec.hasKeyword("long"):
+            tm = 5*60*60  # five hours
+        else:
+            tm = 60*60  # one hour
+
+        return tm
+
+    def _apply_timeout_options(self, timeout):
+        ""
+        if self.cmdline_timeout != None:
+            timeout = int( float(self.cmdline_timeout) )
+
+        if self.tmult != None:
+            timeout = int( float(timeout) * self.tmult )
+
+        if self.maxtime != None:
+            timeout = min( timeout, float(self.maxtime) )
+
+        return timeout
 
 
 class Batcher:
@@ -1526,7 +1607,6 @@ class Batcher:
 def restartTests( opts, optD, rtdata ):
     ""
     config = rtdata.getConfiguration()
-    rtconfig = rtdata.getRuntimeConfig()
     plat = rtdata.getPlatformObject()
     test_dir = rtdata.getTestResultsDir()
     statushandler = rtdata.getTestStatusHandler()
@@ -1544,7 +1624,7 @@ def restartTests( opts, optD, rtdata ):
         # prevent the run scripts from being written again
         config.set( 'refresh', False )
 
-    tlist = TestList.TestList( statushandler, tfile, rtconfig )
+    tlist = make_TestList( rtdata, tfile )
 
     tlist.readTestList()
     tlist.readTestResults()
@@ -1553,8 +1633,8 @@ def restartTests( opts, optD, rtdata ):
     check_for_currently_running_vvtest( tlist.getResultsFilenames(), opts.force )
 
     if qid == None:
-        loadRunTimes( statushandler, tlist, plat,
-                      opts.dash_T, opts.timeout_multiplier, opts.max_timeout )
+        timehandler = rtdata.getTestTimeHandler()
+        timehandler.load( tlist )
 
     reld = rtdata.getFilterPath()
 
@@ -1566,10 +1646,10 @@ def restartTests( opts, optD, rtdata ):
 
     results_writer = rtdata.getResultsWriter()
 
-    if tlist.numActive() > 0:
+    results_writer.prerun( tlist )
+    print3()
 
-        results_writer.prerun( tlist )
-        print3()
+    if tlist.numActive() > 0:
 
         tlist.createTestExecs( test_dir, plat, config, perms )
 
@@ -1582,9 +1662,6 @@ def restartTests( opts, optD, rtdata ):
             batchTestList( opts, optD, rtdata,
                            tlist, test_dir, plat, perms,
                            results_writer )
-
-    else:
-        print3( "\n--------- no tests to run -----------\n" )
 
     results_writer.final( tlist )
 
@@ -1599,7 +1676,7 @@ def baselineTests( opts, optD, rtdata ):
 
     tfile = os.path.join( test_dir, testlist_name )
 
-    tlist = TestList.TestList( statushandler, tfile, rtconfig )
+    tlist = make_TestList( rtdata, tfile )
 
     tlist.readTestList()
     tlist.readTestResults()
@@ -1612,12 +1689,12 @@ def baselineTests( opts, optD, rtdata ):
     tlist.determineActiveTests( filter_dir=rtdata.getFilterPath(),
                                 baseline=True )
 
+    rtdata.getResultsWriter().prerun( tlist, abbreviate=False )
+    print3()
+
     if tlist.numActive() > 0:
 
         perms = rtdata.getPermissionsObject()
-
-        rtdata.getResultsWriter().prerun( tlist, abbreviate=False )
-        print3()
 
         tlist.createTestExecs( test_dir, plat, config, perms )
 
@@ -1653,9 +1730,6 @@ def baselineTests( opts, optD, rtdata ):
 
         if failures:
           print3( "\n\n !!!!!!!!!!!  THERE WERE FAILURES  !!!!!!!!!! \n\n" )
-
-    else:
-        print3( "\n--------- no tests to baseline -----------\n" )
 
 
 ###########################################################################

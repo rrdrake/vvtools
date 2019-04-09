@@ -560,7 +560,9 @@ def set_timeout_environ_variable( timeout ):
         if timeout < 120: t = timeout * 1.4
         else: t = timeout * 1.2
 
+        # [Apr 2019] using TIMEOUT is deprecated
         os.environ['TIMEOUT'] = str( int( t ) )
+        os.environ['VVTEST_TIMEOUT'] = str( int( t ) )
 
 
 def make_file_execute_command( srcdir, path ):

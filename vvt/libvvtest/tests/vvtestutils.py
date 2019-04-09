@@ -33,6 +33,8 @@ resultspy = pjoin( vvtdir, 'results.py' )
 
 import libvvtest.TestSpec as TestSpec
 import libvvtest.teststatus as teststatus
+from libvvtest.RuntimeConfig import RuntimeConfig
+from libvvtest.userplugin import UserPluginBridge, import_module_by_name
 
 
 ##########################################################################
@@ -564,13 +566,14 @@ def assert_summary_string( summary_string,
 
 
 def make_fake_TestSpec( statushandler, result=None,
-                        runtime=None, name='atest' ):
+                        runtime=None, name='atest',
+                        keywords=['key1','key2'] ):
     ""
     ts = TestSpec.TestSpec( name, os.getcwd(), 'sdir/'+name+'.vvt' )
 
     statushandler.resetResults( ts )
 
-    ts.setKeywords( ['key1','key2'] )
+    ts.setKeywords( keywords )
 
     ts.setParameters( { 'np':'4' } )
 
@@ -599,3 +602,47 @@ def make_fake_TestSpec( statushandler, result=None,
         statushandler.setRuntime( ts, runtime )
 
     return ts
+
+
+# python imports can get confused when importing the same module name more
+# than once, so use a counter to make a new name for each plugin
+plugin_count = 0
+
+def make_plugin_filename():
+    ""
+    global plugin_count
+    plugin_count += 1
+
+    return 'plugin'+str(plugin_count)
+
+
+def make_user_plugin( content=None, platname=None, options=None ):
+    ""
+    plugname = make_plugin_filename()
+
+    subdir = 'adir'
+    if content != None:
+        util.writefile( subdir+'/'+plugname+'.py', content )
+    time.sleep(1)
+
+    rtconfig = make_RuntimeConfig( platname, options )
+
+    sys.path.insert( 0, os.path.abspath(subdir) )
+    try:
+        plug = UserPluginBridge( rtconfig, import_module_by_name( plugname ) )
+    finally:
+        sys.path.pop( 0 )
+
+    return plug
+
+
+def make_RuntimeConfig( platname, options ):
+    ""
+    rtconfig = RuntimeConfig()
+
+    if platname:
+        rtconfig.setAttr( 'platform_name', platname )
+    if options:
+        rtconfig.setAttr( 'option_list', options )
+
+    return rtconfig

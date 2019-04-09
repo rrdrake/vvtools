@@ -29,7 +29,7 @@ import libvvtest.outpututils as outpututils
 from libvvtest.consolewriter import ConsoleWriter
 import libvvtest.gitlabwriter as gitlabwriter
 import libvvtest.TestSpec as TestSpec
-from libvvtest.TestList import createTestObjects
+from libvvtest.TestSpecCreator import TestCreator
 from libvvtest.RuntimeConfig import RuntimeConfig
 from libvvtest.teststatus import TestStatusHandler, DIFF_EXIT_STATUS
 
@@ -706,7 +706,8 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
 
         nofltr = RuntimeConfig( platform_name=vrun.platformName() )
-        tL = createTestObjects( '.', 'DiffTest.xml', None, nofltr )
+        creator = TestCreator( nofltr )
+        tL = creator.fromFile( '.', 'DiffTest.xml', None )
         tst = tL[0]
 
         self.statushandler.startRunning( tst )

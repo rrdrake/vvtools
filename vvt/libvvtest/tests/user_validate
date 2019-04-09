@@ -1,0 +1,280 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+
+import vvtestutils as vtu
+import testutils as util
+
+from libvvtest.RuntimeConfig import RuntimeConfig
+from libvvtest.filtering import TestFilter
+from libvvtest.teststatus import TestStatusHandler
+from libvvtest.userplugin import UserPluginBridge, import_module_by_name
+
+
+class validate_plugin_unit_tests( vtu.vvtestTestCase ):
+
+    def test_plugin_not_found(self):
+        ""
+        sys.path.insert( 0, os.getcwd() )
+        try:
+            mod, out, err = util.call_capture_output(
+                import_module_by_name, vtu.make_plugin_filename() )
+        finally:
+            sys.path.pop( 0 )
+
+        assert 'Traceback' not in out and 'Traceback' not in err
+
+        plug = UserPluginBridge( RuntimeConfig(), mod )
+
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        assert not plug.validateTest( tspec )
+
+    def test_empty_plugin_found(self):
+        ""
+        plug = vtu.make_user_plugin( """
+            pass
+            """ )
+
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        assert not plug.validateTest( tspec )
+
+    def test_a_plugin_with_an_error_during_import(self):
+        ""
+        plugname = vtu.make_plugin_filename()
+
+        util.writefile( 'adir/'+plugname+'.py', """
+            function_that_does_not_exist()
+            """ )
+        time.sleep(1)
+
+        sys.path.insert( 0, os.path.abspath('adir') )
+        try:
+            mod, out, err = util.call_capture_output(
+                import_module_by_name, plugname )
+        except UserPluginError:
+            sys.path.pop( 0 )
+        except Exception:
+            sys.path.pop( 0 )
+            raise  # expected a UserPluginError
+
+        assert 'Traceback' in out
+        assert 'function_that_does_not_exist' in out
+        assert 'UserPluginError' in err
+
+    def test_user_validate_plugin_function(self):
+        ""
+        plug = vtu.make_user_plugin( """
+            def validate_test( specs ):
+                ""
+                keys = specs['keywords']
+                if not ( 'fast' in keys or 'medium' in keys or 'long' in keys ):
+                    return "keywords must contain fast, medium, or long"
+            """ )
+
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler(),
+                                        keywords=['lightning','fast'] )
+        assert not plug.validateTest( tspec )
+
+        tspec.setKeywords( ['lightning','fist'] )
+        rtn = plug.validateTest( tspec )
+        assert rtn and rtn == "keywords must contain fast, medium, or long"
+
+    def test_user_validate_function_that_fails_with_an_exception(self):
+        ""
+        plug = vtu.make_user_plugin( """
+            def validate_test( specs ):
+                raise Exception( 'fake exception' )
+            """ )
+
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        rtn, out, err = util.call_capture_output( plug.validateTest, tspec )
+        assert 'Exception' in rtn and 'fake exception' in rtn
+        assert 'Exception' in out and 'fake exception' in out
+        assert 'Traceback' in out
+
+        # multiple exceptions are not printed (uniquified by exception string)
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler(), name='btest' )
+        rtn, out, err = util.call_capture_output( plug.validateTest, tspec )
+        assert 'Exception' in rtn and 'fake exception' in rtn
+        assert 'Exception' not in out and 'fake exception' not in out
+        assert 'Traceback' not in out
+
+    def test_filter_function(self):
+        ""
+        class FakePluginModule:
+            def validate_test(self, specs):
+                if 'bad' in specs['keywords']:
+                    return 'bad boys not allowed'
+
+        plug = UserPluginBridge( RuntimeConfig(), FakePluginModule() )
+        statushandler = TestStatusHandler()
+        tf = TestFilter( RuntimeConfig(), statushandler, plug )
+
+        tspec = vtu.make_fake_TestSpec( statushandler, keywords=['good'] )
+        assert tf.userValidation( tspec )
+        assert not statushandler.skipTest( tspec )
+
+        tspec = vtu.make_fake_TestSpec( statushandler, keywords=['good','bad'] )
+        assert not tf.userValidation( tspec )
+        assert statushandler.skipTest( tspec )
+
+        tspec = vtu.make_fake_TestSpec( statushandler, keywords=['good'] )
+        tf.applyPermanent( { tspec.getExecuteDirectory() : tspec } )
+        assert not statushandler.skipTest( tspec )
+
+        tspec = vtu.make_fake_TestSpec( statushandler, keywords=['bad','good'] )
+        tf.applyPermanent( { tspec.getExecuteDirectory() : tspec } )
+        assert statushandler.skipTest( tspec )
+
+    def test_validate_function_receives_test_parameters(self):
+        ""
+        plug = vtu.make_user_plugin( """
+            def validate_test( specs ):
+                ""
+                keys = specs['keywords']
+                params = specs['parameters']
+                if params['np'] != '4':
+                    return 'param np must be 4'
+            """ )
+
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        assert not plug.validateTest( tspec )
+
+    def test_validate_function_receives_options_and_platform_name(self):
+        ""
+        plug = vtu.make_user_plugin( """
+            def validate_test( specs ):
+                ""
+                plat = specs['platform']
+                opts = specs['options']
+                if plat == 'Atari' and 'dbg' in opts:
+                    return 'Houston, we have a problem up here'
+            """,
+            platname='Atari',
+            options=['dbg','gcc'] )
+
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        rtn = plug.validateTest( tspec )
+        assert rtn == 'Houston, we have a problem up here'
+
+
+class validate_plugin_integration_tests( vtu.vvtestTestCase ):
+
+    def test_validating_keywords(self):
+        ""
+        util.writefile( 'testA.vvt', """
+            #VVT: keywords = blue long
+            """ )
+        util.writefile( 'testB.vvt', """
+            #VVT: keywords = violet
+            """ )
+        util.writefile( 'adir/vvtest_user_plugin.py', """
+            def validate_test( specs ):
+                ""
+                keys = specs['keywords']
+                if not ( 'fast' in keys or 'medium' in keys or 'long' in keys ):
+                    return "keywords must contain fast, medium, or long"
+            """ )
+        adir = os.path.abspath( 'adir' )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( batch=batch )
+            vrun.assertCounts( total=2, npass=2 )
+
+            vtu.remove_results()
+            vrun = vtu.runvvtest( '-vv --config', adir, batch=batch )
+            vrun.assertCounts( npass=1, skip=1 )
+            assert len( vrun.grepTestLines( 'testA*pass' ) ) == 1
+            assert len( vrun.grepTestLines( 'testB*skip' ) ) == 1
+            assert len( vrun.grepTestLines(
+                        'keywords must contain fast, medium, or long' ) ) == 1
+
+    def test_integration_with_error_in_plugin(self):
+        ""
+        util.writefile( 'testA.vvt', """
+            #VVT: keywords = blue long
+            """ )
+        util.writefile( 'adir/vvtest_user_plugin.py', """
+            function_that_does_not_exist()
+            """ )
+        adir = os.path.abspath( 'adir' )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-vv --config', adir, batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+            assert vrun.countLines( 'Traceback' ) > 0
+            assert vrun.countLines( 'function_that_does_not_exist' ) > 0
+            assert vrun.countLines( 'failed to import vvtest_user_plugin' ) == 1
+
+    def test_integration_with_error_in_the_test_validate_function(self):
+        ""
+        util.writefile( 'testA.vvt', """
+            #VVT: keywords = blue long
+            """ )
+        util.writefile( 'testB.vvt', """
+            #VVT: keywords = pink fast
+            """ )
+        util.writefile( 'adir/vvtest_user_plugin.py', """
+            def validate_test( specs ):
+                function_that_does_not_exist()
+            """ )
+        adir = os.path.abspath( 'adir' )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-vv --config', adir, batch=batch )
+            assert vrun.countLines( 'Traceback' ) == 1
+            assert vrun.countLines( 'function_that_does_not_exist' ) > 0
+            assert vrun.countLines( 'skipped:* 2' ) == 1
+
+    def test_validate_function_using_options_and_platform(self):
+        ""
+        util.writefile( 'testA.vvt', """
+            #VVT: parameterize : np = 1 4
+            """ )
+        util.writefile( 'adir/vvtest_user_plugin.py', """
+            def validate_test( specs ):
+                ""
+                plat = specs['platform']
+                opts = specs['options']
+                np = int( specs['parameters'].get( 'np', 1 ) )
+                if plat == 'ATS' and 'dbg' in opts and np > 2:
+                    return 'large debug tests are excluded on ATS'
+            """ )
+        adir = os.path.abspath( 'adir' )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-vv -o dbg --plat ATS --config', adir,
+                                  batch=batch )
+            vrun.assertCounts( total=2, npass=1, skip=1 )
+            assert vrun.countTestLines( 'large debug tests are excluded on ATS' ) == 1
+
+
+############################################################################
+
+util.run_test_cases(sys.argv, sys.modules[__name__])

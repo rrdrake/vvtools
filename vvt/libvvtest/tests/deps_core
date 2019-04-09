@@ -16,7 +16,7 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
-from libvvtest.TestList import createTestObjects
+from libvvtest.TestSpecCreator import TestCreator
 from libvvtest.RuntimeConfig import RuntimeConfig
 from libvvtest.TestSpec import TestSpec
 from libvvtest.TestExec import TestExec
@@ -40,12 +40,12 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         nofltr = RuntimeConfig()
 
-        tL = createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+        tL = create_tests( '.', 'testX.py.vvt', nofltr )
         assert len(tL) == 1
         assert_dependencies( tL[0], 'testY' )
         assert get_depencency_expr( tL[0], 'testY' ) == None
 
-        tL = createTestObjects( '.', 'testA.py.vvt', None, nofltr )
+        tL = create_tests( '.', 'testA.py.vvt', nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testC', 'testB' )
@@ -64,7 +64,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         nofltr = RuntimeConfig()
 
-        tL = createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+        tL = create_tests( '.', 'testX.py.vvt', nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testY', 'testZ' )
@@ -75,7 +75,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
             assert not wx.evaluate( lambda word: word == "diff" )
             assert wx.evaluate( lambda word: word == "fail" )
 
-        tL = createTestObjects( '.', 'testA.py.vvt', None, nofltr )
+        tL = create_tests( '.', 'testA.py.vvt', nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testB' )
@@ -94,7 +94,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         nofltr = RuntimeConfig()
 
-        tL = createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+        tL = create_tests( '.', 'testX.py.vvt', nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testY', 'testZ' )
@@ -115,7 +115,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         nofltr = RuntimeConfig()
 
-        tL = createTestObjects( '.', 'testX.py.vvt', None, nofltr )
+        tL = create_tests( '.', 'testX.py.vvt', nofltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testB', 'testW', 'testY', 'testZ' )
@@ -143,7 +143,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         fltr = RuntimeConfig( platform_name='XBox' )
 
-        tL = createTestObjects( '.', 'testX.py.vvt', None, fltr )
+        tL = create_tests( '.', 'testX.py.vvt', fltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testY' )
@@ -155,7 +155,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         fltr = RuntimeConfig( platform_name='PlayStation' )
 
-        tL = createTestObjects( '.', 'testX.py.vvt', None, fltr )
+        tL = create_tests( '.', 'testX.py.vvt', fltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testZ' )
@@ -382,6 +382,13 @@ def has_same_values( container1, container2 ):
     L2.sort()
 
     return L1 == L2
+
+
+def create_tests( rootpath, relpath, rtconfig ):
+    ""
+    creator = TestCreator( rtconfig )
+    tL = creator.fromFile( rootpath, relpath, None )
+    return tL
 
 
 ############################################################################

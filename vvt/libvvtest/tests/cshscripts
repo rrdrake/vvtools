@@ -20,7 +20,7 @@ from testutils import print3
 import libvvtest.CommonSpec as CommonSpec
 import libvvtest.xmlwrapper as xmlwrapper
 import libvvtest.cshScriptWriter as cshScriptWriter
-from libvvtest.TestList import createTestObjects
+from libvvtest.TestSpecCreator import TestCreator
 from libvvtest.RuntimeConfig import RuntimeConfig
 
 
@@ -54,7 +54,8 @@ class writing_csh_scripts( vtu.vvtestTestCase ):
         xdb = CommonSpec.CommonSpecDB()
         CommonSpec.scanCommonSpecs( xdoc, xdb )
 
-        tL = createTestObjects( '.', 't1.xml', None, RuntimeConfig() )
+        creator = TestCreator( RuntimeConfig() )
+        tL = creator.fromFile( '.', 't1.xml', None )
         assert len(tL) == 1
 
         plat = FakePlatform()

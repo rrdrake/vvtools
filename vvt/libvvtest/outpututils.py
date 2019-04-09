@@ -162,9 +162,12 @@ def capture_traceback( excinfo ):
     exception.  Returns a pair ( the exception string, the full traceback ).
     """
     xt,xv,xtb = excinfo
-    xs = ''.join( traceback.format_exception_only( xt, xv ) )
+    # the "exception only" function may return multiple lines, but the last
+    # line is always the exception description
+    xsL = traceback.format_exception_only( xt, xv )
+    xs = xsL[-1]
     tb = 'Traceback (most recent call last):\n' + \
          ''.join( traceback.format_list(
                         traceback.extract_stack()[:-2] +
-                        traceback.extract_tb( xtb ) ) ) + xs
+                        traceback.extract_tb( xtb ) ) ) + ''.join( xsL )
     return xs,tb
