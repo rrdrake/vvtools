@@ -61,6 +61,30 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
         assert 'Exception' not in out and 'fake exception' not in out
         assert 'Traceback' not in out
 
+    def test_an_error_if_timeout_function_returns_a_string(self):
+        ""
+        plug = vtu.make_user_plugin( """
+            def test_timeout( specs ):
+                return 'abc'
+            """ )
+
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        rtn, out, err = util.call_capture_output( plug.testTimeout, tspec )
+        assert rtn == None
+        assert 'Traceback' in out
+
+    def test_a_negative_timeout_is_changed_to_zero(self):
+        ""
+        plug = vtu.make_user_plugin( """
+            def test_timeout( specs ):
+                return -1
+            """ )
+
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        rtn, out, err = util.call_capture_output( plug.testTimeout, tspec )
+        assert rtn == 0
+        assert 'Traceback' not in out
+
 
 class timeout_plugin_integration_tests( vtu.vvtestTestCase ):
 
