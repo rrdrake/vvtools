@@ -1,5 +1,25 @@
 Improvements:
 
+    - Add python plugin capability which can be used to adjust test timeouts
+      and to validate tests against project standards.  The plugin file name
+      is vvtest_user_plugin.py and can contain the function
+
+        def test_timeout( spec_dict ):
+            return 60
+
+      and/or
+
+        def validate_test( spec_dict ):
+            return "reason for invalid test"
+
+      The 'spec_dict' is a dictionary
+
+            'keywords'   : list of keywords (strings)
+            'parameters' : dictionary mapping parameter name to value
+            'timeout'    : integer if test specifies a timeout, otherwise None
+            'platform'   : platform name
+            'options'    : list of options (strings)
+
     - Add console listing of skipped tests (the tests that were filtered out
       by -k or -p command line specifications, for example).  Using the extra
       verbose flag, -vv, the skips will be listed as part of the test results.
@@ -41,6 +61,10 @@ Fixes:
       tests coming from a general "depends on" specification.
 
 Changes:
+
+    - The TIMEOUT variable is being deprecated; replaced with VVTEST_TIMEOUT.
+      This environment variable is defined for each test, and is typically
+      used to set a SIGALRM in MPI processes to ensure they shutdown.
 
     - The -v option has changed meaning.  It now means verbose.  Can be
       repeated for increased verbosity.
