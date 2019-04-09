@@ -76,6 +76,13 @@ queue_config = string one
                string two
                string three
 
+[eclipse]
+host_match = eclipse-login*
+batch_type = slurm
+queue_config = string one
+               string two
+               string three
+
 ###
 
 [doom]
