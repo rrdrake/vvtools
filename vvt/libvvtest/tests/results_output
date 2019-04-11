@@ -156,6 +156,25 @@ class misc_tests( vtu.vvtestTestCase ):
         cntD = vtu.parse_vvtest_counts( val )
         assert cntD['total'] == 3
 
+    def test_postrun_console_output_with_all_tests_passing_except_last(self):
+        ""
+        tlist = MockTestList( self.statushandler,
+                              [ self.makeTest( 'pass' ),
+                                self.makeTest( 'pass' ),
+                                self.makeTest( 'pass' ),
+                                self.makeTest( 'fail' ) ] )
+
+        sio = StringIO()
+        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
+        conwr.setMaxNonPass( 2 )
+        conwr.writeResultsList( tlist )
+        conwr.writeListSummary( tlist, 'Summary:' )
+
+        val = sio.getvalue()
+        print3( val )
+        cntD = vtu.parse_vvtest_counts( val )
+        assert cntD['total'] == 1
+
     def test_max_detail_console_list_output(self):
         ""
         tlist = MockTestList( self.statushandler, self.getFakeTestList() )

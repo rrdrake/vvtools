@@ -138,19 +138,16 @@ class ConsoleWriter:
     def _write_nonpass_notdone(self, testL, cwd):
         ""
         numwritten = 0
-        i = 0
+        numnonpass = 0
         for atest in testL:
 
-            if i > self.maxnonpass:
-                break
-
             if self._nonpass_or_notdone( atest ):
-                self.writeTest( atest, cwd )
-                numwritten += 1
+                if numwritten < self.maxnonpass:
+                    self.writeTest( atest, cwd )
+                    numwritten += 1
+                numnonpass += 1
 
-            i += 1
-
-        if i < len( testL ):
+        if numwritten < numnonpass:
             self.write( '... non-pass list too long'
                         ' (use -v for full list or run with -i later)' )
 
