@@ -188,16 +188,18 @@ class TestExec:
 
             set_timeout_environ_variable( self.timeout )
 
-            cmd_list = self._make_execute_command( baseline )
-
-            echo_test_execution_info( self.atest.getName(),
-                                      cmd_list, self.timeout )
-
             self._check_run_preclean( baseline )
             self._check_write_mpi_machine_file()
             self._check_set_working_files( baseline )
 
             self._set_environ_for_python_execution( baseline )
+
+            pyexe = self._apply_plugin_preload()
+
+            cmd_list = self._make_execute_command( baseline, pyexe )
+
+            echo_test_execution_info( self.atest.getName(),
+                                      cmd_list, self.timeout )
 
             sys.stdout.write( '\n' )
             sys.stdout.flush()
@@ -220,9 +222,13 @@ class TestExec:
             sys.stdout.flush() ; sys.stderr.flush()
             os._exit(1)
 
-    def _make_execute_command(self, baseline):
+    def _apply_plugin_preload(self):
         ""
-        maker = MakeScriptCommand( self.atest )
+        return sys.executable
+
+    def _make_execute_command(self, baseline, pyexe):
+        ""
+        maker = MakeScriptCommand( self.atest, pyexe )
         cmdL = maker.make_base_execute_command( baseline )
 
         if cmdL != None:

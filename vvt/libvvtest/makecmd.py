@@ -8,9 +8,10 @@ import os, sys
 
 class MakeScriptCommand:
 
-    def __init__(self, tspec):
+    def __init__(self, tspec, pythonexe=sys.executable):
         ""
         self.tspec = tspec
+        self.pyexe = pythonexe
 
     def make_base_execute_command(self, baseline):
         ""
@@ -41,7 +42,7 @@ class MakeScriptCommand:
             cmdL = ['/bin/csh', '-f', './runscript']
         else:
             srcdir,fname = os.path.split( self.tspec.getFilename() )
-            cmdL = make_file_execute_command( srcdir, fname )
+            cmdL = make_file_execute_command( srcdir, fname, self.pyexe )
 
         return cmdL
 
@@ -52,7 +53,7 @@ class MakeScriptCommand:
             cmdL.append( spec )
         else:
             srcdir = self.tspec.getDirectory()
-            cmdL = make_file_execute_command( srcdir, spec )
+            cmdL = make_file_execute_command( srcdir, spec, self.pyexe )
 
         return cmdL
 
@@ -97,17 +98,17 @@ class MakeScriptCommand:
         return cmdL
 
 
-def make_file_execute_command( srcdir, path ):
+def make_file_execute_command( srcdir, path, pyexe=sys.executable ):
     ""
     if os.path.isabs( path ):
         if os.access( path, os.X_OK ):
             return [ path ]
         else:
-            return [ sys.executable, path ]
+            return [ pyexe, path ]
 
     else:
         full = os.path.join( srcdir, path )
         if os.access( full, os.X_OK ):
             return [ './'+path ]
         else:
-            return [ sys.executable, path ]
+            return [ pyexe, path ]

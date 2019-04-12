@@ -54,7 +54,7 @@ class function_make_file_execute_command( vtu.vvtestTestCase ):
         cmdL = makecmd.make_file_execute_command( cwd, 'subdir/ascript' )
         assert len(cmdL) == 1 and cmdL[0] == './subdir/ascript'
 
-    def test_a_file_is_executed_using_python(self):
+    def test_a_non_executable_file_is_run_using_python(self):
         ""
         os.mkdir( 'rundir' )
         util.writefile( 'ascript', """
@@ -78,6 +78,20 @@ class function_make_file_execute_command( vtu.vvtestTestCase ):
         assert len(cmdL) == 2
         assert cmdL[0] == sys.executable
         assert cmdL[1] == 'subdir/ascript'
+
+    def test_the_python_to_use_can_be_specified(self):
+        ""
+        util.writefile( 'ascript', """
+            print ( 'hello' )
+            """ )
+        time.sleep(1)
+
+        cwd = os.getcwd()
+
+        pyexe = '/fake/python'
+        cmdL = makecmd.make_file_execute_command( cwd, 'ascript', pyexe )
+        assert cmdL[0] == pyexe
+        assert cmdL[1] == 'ascript'
 
     def test_an_executable_abs_file_ignores_srcdir(self):
         ""
