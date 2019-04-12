@@ -1,5 +1,27 @@
 Improvements:
 
+    - Add test_preload() user plugin function.  If the vvtest_user_plugin
+      file contains the function definition
+
+        def test_preload( specs ):
+
+      then it will be called just prior to each test execution. Modifications
+      it makes to the environment will be felt by the test.  If the test script
+      is NOT executable and this function returns a file path, the test will
+      be run using tha program (the main use case being to switch the python
+      that is being used to run the test.
+
+      Also, each test can define a preload label, for example
+
+        #VVT: preload : somelabel
+
+      In this case, the 'specs' dictionary argument to test_preload() will
+      contain the entry
+
+        'preload': 'somelabel'
+
+      This allows each test to influence what the preload function does.
+
     - Add python plugin capability which can be used to adjust test timeouts
       and to validate tests against project standards.  The plugin file name
       is vvtest_user_plugin.py and can contain the function
