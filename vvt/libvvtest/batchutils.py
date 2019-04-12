@@ -15,11 +15,12 @@ from . import testlistio
 
 class BatchScheduler:
 
-    def __init__(self, test_dir, tlist, statushandler,
+    def __init__(self, test_dir, tlist, xlist, statushandler,
                        accountant, namer, perms,
                        plat, maxjobs, clean_exit_marker):
         self.test_dir = test_dir
         self.tlist = tlist
+        self.xlist = xlist
         self.statushandler = statushandler
         self.accountant = accountant
         self.namer = namer
@@ -125,8 +126,7 @@ class BatchScheduler:
         return started
 
     def checkJobFinished(self, outfilename, resultsname):
-        """
-        """
+        ""
         finished = False
         if self.scanBatchOutput( outfilename ):
             finished = self.testListFinished( resultsname )
@@ -202,7 +202,7 @@ class BatchScheduler:
             for tx0 in bjob.testL:
                 notrunL.append( (tx0,tx1) )
             self.accountant.markJobDone( qid, 'notrun' )
-        
+
         # TODO: rather than only reporting the jobs left on qtodo as not run,
         #       loop on all jobs in qread and look for 'notrun' mark
 
@@ -215,13 +215,12 @@ class BatchScheduler:
         return notrun, notdone, notrunL
 
     def finalizeJob(self, qid, bjob, mark=None):
-        """
-        """
+        ""
         tL = []
 
         if not os.path.exists( bjob.outfile ):
             mark = 'notrun'
-        
+
         elif os.path.exists( bjob.resultsfile ):
             if mark == None:
                 mark = 'notdone'
@@ -239,11 +238,11 @@ class BatchScheduler:
                 tspec = jobtests.get( xdir, None )
                 if tspec and self.statushandler.isDone( tspec ):
                     tL.append( tx.atest )
-                    self.tlist.stopped[ xdir ] = tx
-        
+                    self.xlist.testDone( tx )
+
         else:
             mark = 'fail'
-        
+
         self.accountant.markJobDone( qid, mark )
 
         return tL

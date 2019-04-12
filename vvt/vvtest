@@ -21,6 +21,7 @@ import libvvtest.misc as misc
 import libvvtest.TestSpec as TestSpec
 import libvvtest.TestExec as TestExec
 import libvvtest.TestList as TestList
+from libvvtest.execlist import TestExecList
 import libvvtest.batchutils as batchutils
 import libvvtest.FilterExpressions as FilterExpressions
 from libvvtest.RuntimeConfig import RuntimeConfig
@@ -556,8 +557,9 @@ def generateTestList( opts, optD, dirs, rtdata ):
     tlist.stringFileWrite()
     perms.set( os.path.abspath( tfile ) )
 
-    tlist.createTestExecs( test_dir, plat, config, perms )
-    
+    xlist = TestExecList( statushandler, tlist )
+    xlist.createTestExecs( test_dir, plat, config, perms )
+
     print3( "Test directory:", testsubdir )
 
 
@@ -955,16 +957,17 @@ def runTests( opts, optD, rtdata, dirs ):
 
     if tlist.numActive() > 0:
 
-        tlist.createTestExecs( test_dir, plat, config, perms )
+        xlist = TestExecList( statushandler, tlist )
+        xlist.createTestExecs( test_dir, plat, config, perms )
 
         if not opts.batch:
             executeTestList( opts, optD, rtdata,
-                             tlist, test_dir, plat, perms, tfile,
+                             tlist, xlist, test_dir, plat, perms, tfile,
                              results_writer )
 
         else:
             batchTestList( opts, optD, rtdata,
-                           tlist, test_dir, plat, perms,
+                           tlist, xlist, test_dir, plat, perms,
                            results_writer )
 
         print3( "Test directory:", testsubdir )
@@ -1070,7 +1073,7 @@ def make_results_writer( opts, optD,
 
 
 def executeTestList( opts, optD, rtdata,
-                     tlist, test_dir, plat, perms, tfile,
+                     tlist, xlist, test_dir, plat, perms, tfile,
                      results_writer ):
     """
     """
@@ -1096,14 +1099,14 @@ def executeTestList( opts, optD, rtdata,
 
         while True:
 
-            tnext = tlist.popNext( plat )
+            tnext = xlist.popNext( plat )
 
             if tnext != None:
                 print3( 'Starting:', exec_path( tnext.atest, test_dir ) )
                 tnext.start()
                 tlist.appendTestResult( tnext.atest )
             
-            elif tlist.numRunning() == 0:
+            elif xlist.numRunning() == 0:
                 break
 
             else:
@@ -1111,17 +1114,17 @@ def executeTestList( opts, optD, rtdata,
                 time.sleep(1)
 
             showprogress = False
-            for tx in list( tlist.getRunning() ):
+            for tx in list( xlist.getRunning() ):
                 if tx.poll():
                     xs = XstatusString( statushandler, tx, test_dir, cwd )
                     print3( "Finished:", xs )
-                    tlist.testDone( tx )
+                    xlist.testDone( tx )
                     showprogress = True
           
-            uthook.check( tlist.numRunning(), tlist.numDone() )
+            uthook.check( xlist.numRunning(), xlist.numDone() )
 
             if showprogress:
-                ndone = tlist.numDone()
+                ndone = xlist.numDone()
                 ntot = tlist.numActive()
                 pct = 100 * float(ndone) / float(ntot)
                 div = str(ndone)+'/'+str(ntot)
@@ -1132,7 +1135,7 @@ def executeTestList( opts, optD, rtdata,
         tlist.writeFinished()
 
     # any remaining tests cannot run, so print warnings
-    tL = tlist.popRemaining()
+    tL = xlist.popRemaining()
     if len(tL) > 0:
         print3()
     for tx in tL:
@@ -1155,7 +1158,7 @@ def executeTestList( opts, optD, rtdata,
 
 
 def batchTestList( opts, optD, rtdata,
-                   tlist, test_dir, plat, perms,
+                   tlist, xlist, test_dir, plat, perms,
                    results_writer ):
     """
     The 'tlist' is a TestList class instance.
@@ -1169,7 +1172,7 @@ def batchTestList( opts, optD, rtdata,
         qsublimit = plat.getDefaultQsubLimit()
     
     batch = Batcher( rtdata, opts, optD,
-                     plat, test_dir, tlist, perms, qsublimit )
+                     plat, test_dir, tlist, xlist, perms, qsublimit )
     
     plat.display()
     starttime = time.time()
@@ -1226,7 +1229,7 @@ def batchTestList( opts, optD, rtdata,
                 jpct = 100 * float(schedule.numDone()) / float(numjobs)
                 jdiv = 'jobs '+str(schedule.numDone())+'/'+str(numjobs)
                 jflt = '(in flight '+str(schedule.numStarted())+')'
-                ndone = tlist.numDone()
+                ndone = xlist.numDone()
                 ntot = tlist.numActive()
                 tpct = 100 * float(ndone) / float(ntot)
                 tdiv = 'tests '+str(ndone)+'/'+str(ntot)
@@ -1391,7 +1394,7 @@ class TimeHandler:
 class Batcher:
     
     def __init__(self, rtdata, opts, optD,
-                       plat, test_dir, tlist, perms, maxjobs):
+                       plat, test_dir, tlist, xlist, perms, maxjobs):
         """
         The 'tlist' is a TestList class instance.
         """
@@ -1401,6 +1404,7 @@ class Batcher:
         self.plat = plat
         self.test_dir = test_dir
         self.tlist = tlist
+        self.xlist = xlist
         self.perms = perms
         self.maxjobs = maxjobs
         self.clean_exit_marker = "queue job finished cleanly"
@@ -1424,7 +1428,7 @@ class Batcher:
         self.createTestGroups()
 
         self.scheduler = batchutils.BatchScheduler(
-                            self.test_dir, self.tlist,
+                            self.test_dir, self.tlist, self.xlist,
                             self.rtdata.getTestStatusHandler(),
                             self.accountant, self.namer,
                             self.perms, self.plat, self.maxjobs,
@@ -1451,9 +1455,9 @@ class Batcher:
             qlen = 30*60
 
         qL = []
-        for np in self.tlist.getTestExecProcList():
+        for np in self.xlist.getTestExecProcList():
           xL = []
-          for tx in self.tlist.getTestExecList(np):
+          for tx in self.xlist.getTestExecList(np):
             xL.append( (tx.atest.getAttr('timeout'),tx) )
           xL.sort()
           grpL = []
@@ -1482,7 +1486,7 @@ class Batcher:
         """
         config = self.rtdata.getConfiguration()
 
-        self.tlist.markTestsWithDependents()
+        self.xlist.markTestsWithDependents()
 
         self.removeBatchDirectories()
 
@@ -1651,16 +1655,17 @@ def restartTests( opts, optD, rtdata ):
 
     if tlist.numActive() > 0:
 
-        tlist.createTestExecs( test_dir, plat, config, perms )
+        xlist = TestExecList( statushandler, tlist )
+        xlist.createTestExecs( test_dir, plat, config, perms )
 
         if not opts.batch:
             executeTestList( opts, optD, rtdata,
-                             tlist, test_dir, plat, perms, tfile,
+                             tlist, xlist, test_dir, plat, perms, tfile,
                              results_writer )
 
         else:
             batchTestList( opts, optD, rtdata,
-                           tlist, test_dir, plat, perms,
+                           tlist, xlist, test_dir, plat, perms,
                            results_writer )
 
     results_writer.final( tlist )
@@ -1696,10 +1701,11 @@ def baselineTests( opts, optD, rtdata ):
 
         perms = rtdata.getPermissionsObject()
 
-        tlist.createTestExecs( test_dir, plat, config, perms )
+        xlist = TestExecList( statushandler, tlist )
+        xlist.createTestExecs( test_dir, plat, config, perms )
 
         failures = False
-        for tx in tlist.getTestExecList():
+        for tx in xlist.getTestExecList():
 
             if isinstance(tx, TestExec.TestExec):
                 ref = tx.atest
