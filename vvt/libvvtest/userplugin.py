@@ -61,6 +61,27 @@ class UserPluginBridge:
 
         return rtn
 
+    def testPreload(self, tspec):
+        """
+        May modify os.environ and return value is either None/empty or
+        a string containing the python to use.
+        """
+        pyexe = None
+
+        if self.preload != None:
+            specs = self._make_test_to_user_interface_dict( tspec )
+            try:
+                label = tspec.getPreloadLabel()
+                if label:
+                    specs['preload'] = label
+                pyexe = self.preload( specs )
+            except Exception:
+                xs,tb = capture_traceback( sys.exc_info() )
+                sys.stdout.write( '\n' + tb + '\n' )
+                pyexe = None
+
+        return pyexe
+
     def _probe_for_functions(self):
         ""
         self.validate = None
@@ -70,6 +91,10 @@ class UserPluginBridge:
         self.timeout = None
         if self.plugin and hasattr( self.plugin, 'test_timeout' ):
             self.timeout = self.plugin.test_timeout
+
+        self.preload = None
+        if self.plugin and hasattr( self.plugin, 'test_preload' ):
+            self.preload = self.plugin.test_preload
 
     def _check_print_exc(self, xs, tb):
         ""

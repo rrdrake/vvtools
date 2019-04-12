@@ -264,6 +264,7 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
         parseTimeouts_scr     ( t, vspecs, evaluator )
         parseBaseline_scr     ( t, vspecs, evaluator )
         parseDependencies_scr ( t, vspecs, evaluator )
+        parse_preload_label   ( t, vspecs, evaluator )
 
     return testL
 
@@ -320,6 +321,7 @@ def reparse_test_object( evaluator, testobj ):
         parseTimeouts_scr ( testobj, vspecs, evaluator )
         parseBaseline_scr ( testobj, vspecs, evaluator )
         parseDependencies_scr ( testobj, vspecs, evaluator )
+        parse_preload_label   ( testobj, vspecs, evaluator )
 
     else:
         raise Exception( "invalid file extension: "+ext )
@@ -808,6 +810,19 @@ def create_dependency_result_expression( attrs ):
             wx = FilterExpressions.WordExpression( result )
 
     return wx
+
+
+def parse_preload_label( tspec, vspecs, evaluator ):
+    """
+    #VVT: preload (filters) : label
+    """
+    tname = tspec.getName()
+    params = tspec.getParameters()
+
+    for spec in vspecs.getSpecList( 'preload' ):
+        if filterAttr_scr( spec.attrs, tname, params, evaluator, spec.lineno ):
+            val = ' '.join( spec.value.strip().split() )
+            tspec.setPreloadLabel( val )
 
 
 def testname_ok_scr( attrs, tname ):

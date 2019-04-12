@@ -13,9 +13,10 @@ from . import depend
 
 class TestExecList:
 
-    def __init__(self, statushandler, tlist):
+    def __init__(self, statushandler, usrplugin, tlist):
         ""
         self.statushandler = statushandler
+        self.plugin = usrplugin
         self.tlist = tlist
 
         self.xtlist = {}  # np -> list of TestExec objects
@@ -52,7 +53,8 @@ class TestExecList:
 
                 assert t.constructionCompleted()
 
-                xt = TestExec.TestExec( self.statushandler, t, perms )
+                xt = TestExec.TestExec( self.statushandler, self.plugin,
+                                        t, perms )
 
                 if t.getAttr( 'hasdependent', False ):
                     xt.setHasDependent()

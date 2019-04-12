@@ -308,6 +308,11 @@ def add_dependency( from_test, to_test ):
     depset.addDependency( make_test_dep( to_test ) )
 
 
+def make_TestExec( tspec ):
+    ""
+    return TestExec( TestStatusHandler(), None, tspec, None )
+
+
 class dependency_related_functions( vtu.vvtestTestCase ):
 
     def setUp(self):
@@ -317,7 +322,7 @@ class dependency_related_functions( vtu.vvtestTestCase ):
     def test_addDependency_uniquifies_multiple_TestSpec(self):
         ""
         ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = TestExec( TestStatusHandler(), ts, None )
+        tx = make_TestExec( ts )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
         add_dependency( tx, ts1 )
@@ -330,14 +335,14 @@ class dependency_related_functions( vtu.vvtestTestCase ):
     def test_addDependency_uniquifies_multiple_TestExec(self):
         ""
         ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = TestExec( TestStatusHandler(), ts, None )
+        tx = make_TestExec( ts )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx1 = TestExec( TestStatusHandler(), ts1, None )
+        tx1 = make_TestExec( ts1 )
         add_dependency( tx, tx1 )
 
         ts2 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx2 = TestExec( TestStatusHandler(), ts2, None )
+        tx2 = make_TestExec( ts2 )
         add_dependency( tx, tx2 )
 
         assert tx.getDependencySet().numDependencies() == 1
@@ -345,13 +350,13 @@ class dependency_related_functions( vtu.vvtestTestCase ):
     def test_addDependency_uniquifies_TestSpec_then_TestExec(self):
         ""
         ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = TestExec( TestStatusHandler(), ts, None )
+        tx = make_TestExec( ts )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
         add_dependency( tx, ts1 )
 
         ts2 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx2 = TestExec( TestStatusHandler(), ts2, None )
+        tx2 = make_TestExec( ts2 )
         add_dependency( tx, tx2 )
 
         assert tx.getDependencySet().numDependencies() == 1
@@ -359,10 +364,10 @@ class dependency_related_functions( vtu.vvtestTestCase ):
     def test_addDependency_uniquifies_TestExec_then_TestSpec(self):
         ""
         ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = TestExec( TestStatusHandler(), ts, None )
+        tx = make_TestExec( ts )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx1 = TestExec( TestStatusHandler(), ts1, None )
+        tx1 = make_TestExec( ts1 )
         add_dependency( tx, tx1 )
 
         ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )

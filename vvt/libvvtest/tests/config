@@ -17,6 +17,10 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
+from libvvtest.teststatus import TestStatusHandler
+import libvvtest.TestSpecCreator as TestSpecCreator
+from libvvtest.ScriptReader import ScriptReader
+
 
 class config_tests( vtu.vvtestTestCase ):
 
@@ -280,18 +284,49 @@ class config_tests( vtu.vvtestTestCase ):
 
 class preload_tests( vtu.vvtestTestCase ):
 
-    def test_foobar(self):
+    def test_user_plugin_preload_function(self):
         ""
-        pass
+        plug = vtu.make_user_plugin( """
+            import os
+            def test_preload( specs ):
+                ""
+                os.environ['VVTEST_PRELOAD_PLUGIN_TEST'] = 'value'
+                return 'fakepython31'
+            """ )
 
-    def test_using_a_preload_label_in_a_test(self):
+        os.environ.pop( 'VVTEST_PRELOAD_PLUGIN_TEST', None )
+
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        try:
+            rtn = plug.testPreload( tspec )
+            assert rtn == 'fakepython31'
+            assert os.environ['VVTEST_PRELOAD_PLUGIN_TEST'] == 'value'
+        finally:
+            os.environ.pop( 'VVTEST_PRELOAD_PLUGIN_TEST', None )
+
+    def test_parsing_preload_label_in_test_specification(self):
         ""
         util.writefile( "testA.vvt", """
             #VVT: preload = fakepython
             pass
             """ )
+        time.sleep(1)
+
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        vspecs = ScriptReader( 'testA.vvt' )
+        evl = TestSpecCreator.ExpressionEvaluator( 'XBox', [] )
+
+        TestSpecCreator.parse_preload_label( tspec, vspecs, evl )
+        assert tspec.getPreloadLabel() == 'fakepython'
+
+    def test_using_a_preload_label_in_a_test(self):
+        ""
+        util.writefile( "testA.vvt", """
+            #VVT: preload = fakepython
+            print ( 'in testA' )
+            """ )
         util.writefile( "testB.vvt", """
-            pass
+            print ( 'in testB' )
             """ )
         util.writescript( 'mybin/fakepython31', """
             #!/bin/bash
@@ -299,11 +334,15 @@ class preload_tests( vtu.vvtestTestCase ):
             exec python "$@"
             """ )
         util.writefile( "cfg/vvtest_user_plugin.py", """
+            import os
             def test_preload( specs ):
                 ""
-                label = specs['preload']
-                os.environ['PATH'] += ':"""+os.path.abspath('mybin')+"""'
-                return 'fakepython31'
+                label = specs.get( 'preload', None )
+                if label:
+                    os.environ['PATH'] += ':"""+os.path.abspath('mybin')+"""'
+                    return 'fakepython31'
+                else:
+                    pass  # test does not specify a preload label
             """ )
         time.sleep(1)
 
@@ -314,9 +353,11 @@ class preload_tests( vtu.vvtestTestCase ):
             vrun = vtu.runvvtest( '--config cfg', batch=batch )
             vrun.assertCounts( total=2, npass=2 )
 
-            # magic
-            # assert vrun.countGrepLogs( 'Fake Python 3.1', 'testA' ) == 1
-            # assert vrun.countGrepLogs( 'Fake Python 3.1', 'testB' ) == 0
+            assert vrun.countGrepLogs( 'in testA', 'testA' ) == 1
+            assert vrun.countGrepLogs( 'Fake Python 3.1', 'testA' ) == 1
+
+            assert vrun.countGrepLogs( 'in testB', 'testB' ) == 1
+            assert vrun.countGrepLogs( 'Fake Python 3.1', 'testB' ) == 0
 
 
 ########################################################################

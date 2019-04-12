@@ -140,7 +140,11 @@ class TestSpec:
         not specified.
         """
         return self.timeout
-    
+
+    def getPreloadLabel(self):
+        ""
+        return self.preload
+
     def getLinkFiles(self):
         """
         Returns a list of pairs (source filename, test filename) for files
@@ -286,6 +290,7 @@ class TestSpec:
         self.params = {}           # name string to value string
         self.analyze_spec = None
         self.timeout = None        # timeout value in seconds (an integer)
+        self.preload = None        # a string label
         self.execL = []            # list of
                                    #   (name, fragment, exit status, analyze)
                                    # where name is None when the
@@ -410,7 +415,11 @@ class TestSpec:
         if timeout != None:
             timeout = int(timeout)
         self.timeout = timeout
-    
+
+    def setPreloadLabel(self, label):
+        ""
+        self.preload = label
+
     def resetExecutionList(self):
         """
         Clears the current list of execution fragments for this test.

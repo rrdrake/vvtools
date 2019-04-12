@@ -28,12 +28,13 @@ class TestExec:
     The status and test results are saved in the TestSpec object.
     """
     
-    def __init__(self, statushandler, atest, perms):
+    def __init__(self, statushandler, usrplugin, atest, perms):
         """
         Constructs a test execution object which references a TestSpec obj.
         The 'perms' argument is a PermissionsSetter object.
         """
         self.statushandler = statushandler
+        self.plugin = usrplugin
         self.atest = atest
         self.perms = perms
         self.has_dependent = False
@@ -224,7 +225,11 @@ class TestExec:
 
     def _apply_plugin_preload(self):
         ""
-        return sys.executable
+        pyexe = self.plugin.testPreload( self.atest )
+        if pyexe:
+            return pyexe
+        else:
+            return sys.executable
 
     def _make_execute_command(self, baseline, pyexe):
         ""

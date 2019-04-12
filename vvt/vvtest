@@ -182,6 +182,7 @@ class MainEntry:
 
         plugmod = import_plugin_module()
         plug = userplugin.UserPluginBridge( rtconfig, plugmod )
+        self.rtdata.setUserPlugin( plug )
 
         statushandler = self.rtdata.getTestStatusHandler()
         testfilter = TestFilter( rtconfig, statushandler, plug )
@@ -310,6 +311,9 @@ class RuntimeData:
 
     def setTestCreator(self, creator): self.creator = creator
     def getTestCreator(self): return self.creator
+
+    def setUserPlugin(self, plugin): self.plugin = plugin
+    def getUserPlugin(self): return self.plugin
 
     def setTestFilter(self, testfilter): self.testfilter = testfilter
     def getTestFilter(self): return self.testfilter
@@ -535,6 +539,7 @@ def generateTestList( opts, optD, dirs, rtdata ):
     perms = rtdata.getPermissionsObject()
     statushandler = rtdata.getTestStatusHandler()
     timehandler = rtdata.getTestTimeHandler()
+    plugin = rtdata.getUserPlugin()
 
     test_dir = os.path.abspath( testsubdir )
 
@@ -557,7 +562,7 @@ def generateTestList( opts, optD, dirs, rtdata ):
     tlist.stringFileWrite()
     perms.set( os.path.abspath( tfile ) )
 
-    xlist = TestExecList( statushandler, tlist )
+    xlist = TestExecList( statushandler, plugin, tlist )
     xlist.createTestExecs( test_dir, plat, config, perms )
 
     print3( "Test directory:", testsubdir )
@@ -912,6 +917,7 @@ def runTests( opts, optD, rtdata, dirs ):
     testsubdir = rtdata.getTestSubdir()
     statushandler = rtdata.getTestStatusHandler()
     timehandler = rtdata.getTestTimeHandler()
+    plugin = rtdata.getUserPlugin()
 
     # determine the directory that stores the test results then create it
     test_dir = os.path.abspath( testsubdir )
@@ -957,7 +963,7 @@ def runTests( opts, optD, rtdata, dirs ):
 
     if tlist.numActive() > 0:
 
-        xlist = TestExecList( statushandler, tlist )
+        xlist = TestExecList( statushandler, plugin, tlist )
         xlist.createTestExecs( test_dir, plat, config, perms )
 
         if not opts.batch:
@@ -1614,6 +1620,7 @@ def restartTests( opts, optD, rtdata ):
     plat = rtdata.getPlatformObject()
     test_dir = rtdata.getTestResultsDir()
     statushandler = rtdata.getTestStatusHandler()
+    plugin = rtdata.getUserPlugin()
 
     # this variable allows vvtest tests to run vvtest (ie, allows recursion)
     os.environ['VVTEST_TEST_ROOT'] = test_dir
@@ -1655,7 +1662,7 @@ def restartTests( opts, optD, rtdata ):
 
     if tlist.numActive() > 0:
 
-        xlist = TestExecList( statushandler, tlist )
+        xlist = TestExecList( statushandler, plugin, tlist )
         xlist.createTestExecs( test_dir, plat, config, perms )
 
         if not opts.batch:
@@ -1678,6 +1685,7 @@ def baselineTests( opts, optD, rtdata ):
     plat = rtdata.getPlatformObject()
     test_dir = rtdata.getTestResultsDir()
     statushandler = rtdata.getTestStatusHandler()
+    plugin = rtdata.getUserPlugin()
 
     tfile = os.path.join( test_dir, testlist_name )
 
@@ -1701,7 +1709,7 @@ def baselineTests( opts, optD, rtdata ):
 
         perms = rtdata.getPermissionsObject()
 
-        xlist = TestExecList( statushandler, tlist )
+        xlist = TestExecList( statushandler, plugin, tlist )
         xlist.createTestExecs( test_dir, plat, config, perms )
 
         failures = False
