@@ -91,6 +91,24 @@ class execute_analyze_filtering_behavior( vtu.vvtestTestCase ):
             vrun.assertCounts( total=2, npass=2 )
             assert vrun.getTestIds() == [ 'foo.np=1', 'foo.np=8' ]
 
+    def test_a_TDD_analyze_test_is_marked_skipped_by_TDD(self):
+        ""
+        util.writefile( 'foo.vvt', """
+            #VVT: parameterize : np = 1 2
+            #VVT: keywords : TDD
+            #VVT: analyze : --analyze
+            import os, sys
+            """ )
+        util.writefile( 'bar.vvt', """
+            pass
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest( '-vv' )
+        vrun.assertCounts( total=4, npass=1, skip=3 )
+        assert vrun.countLines( '3 due to*TDD' ) == 2
+        assert vrun.countLines( 'analyze dependency skipped' ) == 0
+
     def test_if_execute_is_excluded_by_tsum_then_the_analyze_is_not_run(self):
         ""
         util.writefile( 'foo.vvt', """

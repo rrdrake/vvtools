@@ -442,7 +442,8 @@ def finalize_analyze_tests( statushandler, groups ):
                 paramsets.append( tspec.getParameters() )
 
         if skip_analyze:
-            statushandler.markSkipByAnalyzeDependency( analyze )
+            if not statushandler.skipTest( analyze ):
+                statushandler.markSkipByAnalyzeDependency( analyze )
         else:
             def evalfunc( paramD ):
                 for D in paramsets:
