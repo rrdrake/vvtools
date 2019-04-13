@@ -72,7 +72,6 @@ class misc_tests( vtu.vvtestTestCase ):
                  self.makeTest( 'diff' ),
                  self.makeTest( 'diff' ),
                  self.makeTest( 'timeout' ),
-                 self.makeTest( 'timeout' ),
                  self.makeTest( 'notdone' ),
                  self.makeTest( 'notrun' ),
                  self.makeTest( 'notrun' ),
@@ -88,20 +87,21 @@ class misc_tests( vtu.vvtestTestCase ):
         parts = outpututils.partition_tests_by_result( self.statushandler, tL )
         sumry = outpututils.results_summary_string( parts )
         vtu.assert_summary_string( sumry, npass=1, fail=2, diff=3,
-                                          timeout=2, notdone=1, notrun=3,
+                                          timeout=1, notdone=1, notrun=3,
                                           skip=2 )
 
     def assert_test_list_summary(self, output):
         ""
-        assert re.search( 'completed.* 6', output ) != None
+        assert re.search( 'completed.* 7', output ) != None
         assert re.search( '1 pass', output ) != None
         assert re.search( '3 diff', output ) != None
         assert re.search( '2 fail', output ) != None
-        assert re.search( '2 timeout', output ) != None
+        assert re.search( '1 timeout', output ) != None
         assert re.search( 'notdone.* 1', output ) != None
         assert re.search( 'notrun.* 3', output ) != None
         assert re.search( 'skip.* 2', output ) != None
         assert re.search( '2 due to ', output ) != None
+        assert re.search( 'total.* 13', output ) != None
 
     def test_abbreviated_console_output(self):
         ""
@@ -136,12 +136,13 @@ class misc_tests( vtu.vvtestTestCase ):
         conwr.writeListSummary( tlist, 'Summary:' )
 
         val = sio.getvalue()
+        print3( val )
         self.assert_test_list_summary( val )
         cntD = vtu.parse_vvtest_counts( val )
-        assert cntD['total'] == 8
+        assert cntD['total'] == 7
         assert cntD['diff'] == 3
         assert cntD['fail'] == 2
-        assert cntD['timeout'] == 2
+        assert cntD['timeout'] == 1
         assert cntD['notdone'] == 1
 
         sio = StringIO()

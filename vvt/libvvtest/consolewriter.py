@@ -51,7 +51,10 @@ class ConsoleWriter:
         testL = atestlist.getTests()
         parts = outpututils.partition_tests_by_result( self.statushandler, testL )
 
-        n = len( parts['pass'] ) + len( parts['diff'] ) + len( parts['timeout'] )
+        n = len( parts['pass'] ) + \
+            len( parts['diff'] ) + \
+            len( parts['fail'] ) + \
+            len( parts['timeout'] )
         self.iwrite( 'completed:', n )
         if n > 0:
             self._write_part_count( parts, 'pass' )
@@ -64,6 +67,8 @@ class ConsoleWriter:
 
         self._write_part_count( parts, 'skip', indent=False, label='skipped' )
         self._write_skips( parts['skip'] )
+
+        self.iwrite( 'total:', len(testL) )
 
     def _write_skips(self, skiplist):
         ""
