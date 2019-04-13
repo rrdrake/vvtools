@@ -259,6 +259,15 @@ results to stdout/stderr without interleaving the output (the
 The -a or --analyze option will only execute the analysis portions of the
 tests (and skip running the main code again).  This is only useful if the
 tests have already been run previously.
+
+The --encode-exit-status option will encode non-passing and not-run tests
+into the program exit status.  That is, the exit status integer is filled
+like this
+>    exitstatus  = ( 2^1 if num diff > 0 )
+>    exitstatus |= ( 2^2 if num fail > 0 )
+>    exitstatus |= ( 2^3 if num timeout > 0 )
+>    exitstatus |= ( 2^4 if num notdone > 0 )
+>    exitstatus |= ( 2^5 if num notrun > 0 )
 """
 
 
@@ -534,6 +543,8 @@ def create_parser( argvlist, vvtest_version ):
         help='This option is deprecated (subhelp: deprecated).' )
     grp.add_argument( '--test-args', metavar='ARGS', action='append',
         help='Pass options and/or arguments to each test script.' )
+    grp.add_argument( '--encode-exit-status', action='store_true',
+        help='Exit nonzero if at least one test did not pass or did not run.' )
 
     # resources
     grp = psr.add_argument_group( 'Resource controls (subhelp: resources)' )

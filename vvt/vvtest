@@ -90,9 +90,11 @@ class MainEntry:
 
     def execute(self):
         ""
+        exitstat = 0
+
         if self.opts.dash_i or self.opts.keys or self.opts.files:
             mode = InformationMode( self.opts, self.optD, self.rtdata )
-            mode.run( self.dirs )
+            exitstat = mode.run( self.dirs )
 
         elif self.opts.dash_g:
             generateTestList( self.opts, self.optD, self.dirs, self.rtdata )
@@ -106,7 +108,8 @@ class MainEntry:
             baselineTests( self.opts, self.optD, self.rtdata )
 
         elif self.opts.extract:
-            extractTestFiles( self.opts, self.optD, self.dirs, self.opts.extract, self.rtdata )
+            extractTestFiles( self.opts, self.optD,
+                              self.dirs, self.opts.extract, self.rtdata )
 
         else:
 
@@ -116,9 +119,13 @@ class MainEntry:
                 rtconfig.addResultsKeywordExpression( 'notrun or notdone' )
 
             if self.rtdata.isRestartMode():
-                restartTests( self.opts, self.optD, self.rtdata )
+                exitstat = restartTests( self.opts, self.optD, self.rtdata )
             else:
-                runTests( self.opts, self.optD, self.rtdata, self.dirs )
+                exitstat = runTests( self.opts, self.optD,
+                                     self.rtdata, self.dirs )
+
+        if self.opts.encode_exit_status:
+            return exitstat
 
     def constructConfiguration(self):
         ""
@@ -419,6 +426,8 @@ class InformationMode:
 
     def run(self, scan_dirs):
         ""
+        exitcode = 0
+
         # always include tdd in info mode
         self.rtdata.getRuntimeConfig().setAttr( 'include_tdd', True )
 
@@ -436,6 +445,9 @@ class InformationMode:
 
         else:
             self.rtdata.getResultsWriter().info( tlist )
+            exitcode = tlist.encodeIntegerWarning()
+
+        return exitcode
 
     def loadTestList(self, scan_dirs):
         ""
@@ -979,6 +991,8 @@ def runTests( opts, optD, rtdata, dirs ):
         print3( "Test directory:", testsubdir )
 
     results_writer.final( tlist )
+
+    return tlist.encodeIntegerWarning()
 
 
 def check_for_currently_running_vvtest( resultsfiles, optforce ):
@@ -1677,6 +1691,8 @@ def restartTests( opts, optD, rtdata ):
 
     results_writer.final( tlist )
 
+    return tlist.encodeIntegerWarning()
+
 
 def baselineTests( opts, optD, rtdata ):
     ""
@@ -1906,4 +1922,7 @@ if __name__ == '__main__':
     ""
     main = MainEntry( sys.argv )
     main.constructObjects()
-    main.execute()
+
+    exitstat = main.execute()
+    if exitstat:
+        sys.exit( exitstat )

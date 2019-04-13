@@ -17,6 +17,8 @@ import testutils as util
 from testutils import print3
 
 from libvvtest.misc import find_vvtest_test_root_file
+from libvvtest.teststatus import TestStatusHandler
+import libvvtest.TestList as TestList
 
 
 class Function_find_vvtest_test_root_file( vtu.vvtestTestCase ):
@@ -63,6 +65,79 @@ class Function_find_vvtest_test_root_file( vtu.vvtestTestCase ):
 
         p = find_vvtest_test_root_file( startd, os.getcwd(), 'foobar.baz' )
         assert p == None
+
+
+class exit_status_controls( vtu.vvtestTestCase ):
+
+    def test_encoding_an_integer_by_tests_notrun_or_notpass(self):
+        ""
+        sh = TestStatusHandler()
+
+        tl = TestList.TestList( sh, None )
+        tl.addTest( vtu.make_fake_TestSpec( sh, 'pass' ) )
+        assert tl.encodeIntegerWarning() == 0
+
+        tl = TestList.TestList( sh, None )
+        tl.addTest( vtu.make_fake_TestSpec( sh, 'diff' ) )
+        assert tl.encodeIntegerWarning() == 2**1
+
+        tl = TestList.TestList( sh, None )
+        tl.addTest( vtu.make_fake_TestSpec( sh, 'fail' ) )
+        assert tl.encodeIntegerWarning() == 2**2
+
+        tl = TestList.TestList( sh, None )
+        tl.addTest( vtu.make_fake_TestSpec( sh, 'timeout' ) )
+        assert tl.encodeIntegerWarning() == 2**3
+
+        tl = TestList.TestList( sh, None )
+        tl.addTest( vtu.make_fake_TestSpec( sh, 'notdone' ) )
+        assert tl.encodeIntegerWarning() == 2**4
+
+        tl = TestList.TestList( sh, None )
+        tl.addTest( vtu.make_fake_TestSpec( sh, 'notrun' ) )
+        assert tl.encodeIntegerWarning() == 2**5
+
+    def test_encoding_tests_notrun_or_notpass_in_the_exit_status(self):
+        ""
+        util.writefile( 'tpass.vvt', """
+            pass
+            """ )
+        util.writefile( 'timeo.vvt', """
+            #VVT: parameterize : P = a b
+            import time
+            time.sleep( 10 )
+            """ )
+        util.writefile( 'tdiff.vvt', """
+            #VVT: parameterize : P = a b
+            import sys
+            import vvtest_util as vvt
+            sys.exit( vvt.diff_exit_status )
+            """ )
+        util.writefile( 'tfail.vvt', """
+            #VVT: parameterize : P = a b
+            raise Exception( 'fake exception' )
+            """ )
+        util.writefile( 'tnada.vvt', """
+            #VVT: parameterize : P = a b
+            #VVT: depends on : tfail*
+            """ )
+        time.sleep(1)
+
+        code = 2**1 + 2**2 + 2**3 + 2**5
+
+        vrun = vtu.runvvtest( '-T 3 --encode-exit-status',
+                              raise_on_error=False )
+        assert vrun.x == code
+        tdir = vrun.resultsDir()
+
+        vrun = vtu.runvvtest( '-i --encode-exit-status',
+                              raise_on_error=False )
+        assert vrun.x == code
+
+        vrun = vtu.runvvtest( '-R -T 3 --encode-exit-status',
+                              chdir=tdir,
+                              raise_on_error=False )
+        assert vrun.x == code
 
 
 ############################################################################
