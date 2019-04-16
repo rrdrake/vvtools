@@ -25,7 +25,7 @@ class TestStatusHandler:
                 PARAM_SKIP           : 'parameter expression failed',
                 RESTART_PARAM_SKIP   : 'parameter expression failed',
                 KEYWORD_SKIP         : 'keyword expression failed',
-                RESULTS_KEYWORD_SKIP : 'previous result',
+                RESULTS_KEYWORD_SKIP : 'previous result keyword expression',
                 SUBDIR_SKIP          : 'current working directory',
                 'platform'           : 'platform expression failed',
                 'option'             : 'option expression failed',

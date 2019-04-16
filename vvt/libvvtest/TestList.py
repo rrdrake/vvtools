@@ -296,12 +296,13 @@ class TestList:
         ""
         ival = 0
         for t in self.tspecs.values():
-            result = self.statushandler.getResultStatus( t )
-            if   result == 'diff'   : ival |= ( 2**1 )
-            elif result == 'fail'   : ival |= ( 2**2 )
-            elif result == 'timeout': ival |= ( 2**3 )
-            elif result == 'notdone': ival |= ( 2**4 )
-            elif result == 'notrun' : ival |= ( 2**5 )
+            if not self.statushandler.skipTest( t ):
+                result = self.statushandler.getResultStatus( t )
+                if   result == 'diff'   : ival |= ( 2**1 )
+                elif result == 'fail'   : ival |= ( 2**2 )
+                elif result == 'timeout': ival |= ( 2**3 )
+                elif result == 'notdone': ival |= ( 2**4 )
+                elif result == 'notrun' : ival |= ( 2**5 )
         return ival
 
     def scanDirectory(self, base_directory, force_params=None):

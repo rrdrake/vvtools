@@ -139,6 +139,28 @@ class exit_status_controls( vtu.vvtestTestCase ):
                               raise_on_error=False )
         assert vrun.x == code
 
+    def test_exit_status_encoding_does_not_consider_skips(self):
+        ""
+        util.writefile( 'testA.vvt', """
+            #VVT: keywords : one
+            """ )
+        util.writefile( 'testB.vvt', """
+            #VVT: keywords : two
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest( '-vv -k one/two --encode-exit-status',
+                              raise_on_error=False )
+        vrun.assertCounts( total=2, npass=2 )
+        assert vrun.x == 0
+
+        vtu.remove_results()
+
+        vrun = vtu.runvvtest( '-vv -k one --encode-exit-status',
+                              raise_on_error=False )
+        vrun.assertCounts( total=2, npass=1, skip=1 )
+        assert vrun.x == 0
+
 
 ############################################################################
 
