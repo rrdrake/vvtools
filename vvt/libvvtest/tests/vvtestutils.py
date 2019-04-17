@@ -593,6 +593,8 @@ def make_fake_TestSpec( statushandler, result=None,
             statushandler.startRunning( ts )
         elif result == 'notrun':
             pass
+        elif result == 'running':
+            statushandler.startRunning( ts )
         else:
             assert result == 'fail', '*** error (value='+str(result)+')'
             statushandler.startRunning( ts )

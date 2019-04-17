@@ -12,10 +12,11 @@ import select
 
 class TestInformationPrinter:
 
-    def __init__(self, outfile, tlist, batcher=None):
+    def __init__(self, statushandler, outfile, xlist, batcher=None):
         ""
+        self.statushandler = statushandler
         self.outfile = outfile
-        self.tlist = tlist
+        self.xlist = xlist
         self.batcher = batcher
 
         self.starttime = time.time()
@@ -42,13 +43,11 @@ class TestInformationPrinter:
 
     def writeTestListInfo(self, now):
         ""
-        statushandler = self.tlist.statushandler
-
-        txL = self.tlist.getRunning()
+        txL = self.xlist.getRunning()
         self.println( "  *", len(txL), "running test(s):" )
 
         for tx in txL:
-            sdt = statushandler.getStartDate( tx.atest )
+            sdt = self.statushandler.getStartDate( tx.atest )
             duration = datetime.timedelta( seconds=int(now-sdt) )
             xdir = tx.atest.getExecuteDirectory()
             self.println( "    *", xdir,

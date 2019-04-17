@@ -25,6 +25,8 @@ import libvvtest.printinfo as printinfo
 from libvvtest.teststatus import TestStatusHandler
 from libvvtest.TestExec import TestExec
 import libvvtest.batchutils as batchutils
+from libvvtest.execlist import TestExecList
+from libvvtest.TestList import TestList
 
 
 class InformationPrinter( vtu.vvtestTestCase ):
@@ -33,12 +35,14 @@ class InformationPrinter( vtu.vvtestTestCase ):
         ""
         vtu.vvtestTestCase.setUp( self, cleanout=False )
 
-        self.tlist = make_mock_TestList( TestStatusHandler() )
+        self.statushandler = TestStatusHandler()
+        self.xlist, self.xtests = make_fake_TestExecList( self.statushandler )
 
     def test_print_list_information(self):
         ""
         sio = StringIO()
-        obj = printinfo.TestInformationPrinter( sio, self.tlist )
+        obj = printinfo.TestInformationPrinter( self.statushandler,
+                                                sio, self.xlist )
 
         time.sleep(2)
 
@@ -69,7 +73,8 @@ class InformationPrinter( vtu.vvtestTestCase ):
             return True
 
         sio = StringIO()
-        obj = printinfo.TestInformationPrinter( sio, self.tlist )
+        obj = printinfo.TestInformationPrinter( self.statushandler,
+                                                sio, self.xlist )
         obj.setInputChecker( fake_input_check )
 
         obj.checkPrint()
@@ -79,8 +84,9 @@ class InformationPrinter( vtu.vvtestTestCase ):
     def test_print_batch_information(self):
         ""
         sio = StringIO()
-        batch = make_mock_Batcher( self.tlist.texecs )
-        obj = printinfo.TestInformationPrinter( sio, self.tlist, batch )
+        batch = make_mock_Batcher( self.xtests )
+        obj = printinfo.TestInformationPrinter( self.statushandler,
+                                                sio, self.xlist, batch )
 
         time.sleep(2)
 
@@ -106,37 +112,26 @@ class InformationPrinter( vtu.vvtestTestCase ):
         assert lines[4].strip().startswith( '* sdir/atest' )
 
 
-class MockTestList:
-
-    def __init__(self, statushandler, list_of_TestExec):
-        ""
-        self.statushandler = statushandler
-        self.texecs = list_of_TestExec
-
-    def getRunning(self):
-        ""
-        L = list( self.texecs )
-        self.texecs.pop( 0 )
-        return L
-
-
-def make_mock_TestList( statushandler ):
+def make_fake_TestExecList( statushandler ):
     ""
+    tlist = TestList( statushandler, None )
+
     txL = []
 
     for i in range(2):
+        ts = vtu.make_fake_TestSpec( statushandler, 'running', name='atest'+str(i) )
+        tlist.addTest( ts )
+        ts.setConstructionCompleted()
 
-        ts = vtu.make_fake_TestSpec( statushandler, 'notrun', name='atest'+str(i) )
-        tx = TestExec( statushandler, None, ts, None )
+    xlist = TestExecList( statushandler, None, tlist )
 
-        statushandler.resetResults( ts )
-        statushandler.startRunning( ts )
+    xlist._createTestExecList( None )
 
-        txL.append( tx )
+    # mark the tests as running
+    xt1 = xlist.popNext( None )
+    xt2 = xlist.popNext( None )
 
-    tlist = MockTestList( statushandler, txL )
-
-    return tlist
+    return xlist, [ xt1, xt2 ]
 
 
 class MockBatcher:
@@ -149,10 +144,10 @@ class MockBatcher:
         return self.accountant
 
 
-def make_mock_Batcher( tlist ):
+def make_mock_Batcher( xtests ):
     ""
     batch = MockBatcher()
-    bjob = batchutils.BatchJob( None, None, None, tlist, None, None )
+    bjob = batchutils.BatchJob( None, None, None, xtests, None, None )
 
     qid = 0
     jid = 42
