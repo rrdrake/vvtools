@@ -187,7 +187,11 @@ class SimpleAprepro:
             val = eval(txt, self.safe_globals, self.eval_locals)
 
         if type(val) is str:
+            # Python3 and non-unicode vars in python2.
             return val
+        elif str(type(val)) == "<type 'unicode'>":
+            # Unicode vars in python2.
+            return val.encode('ascii')
 
         return repr(val)
 
@@ -380,7 +384,7 @@ def main(args):
         realizations = []
         with open(args.parameters_jsonl, 'r') as F:
             for line in F.readlines():
-                realizations.append(json.loads(line))
+                realizations.append(json.loads(line, encoding='utf-8'))
 
         # Create each file.
         base, suffix = os.path.splitext(args.output_file)
