@@ -30,3 +30,4 @@ if cnt > 0:
 
 from .standard_utilities import *
 from .simple_aprepro import simple_aprepro
+from .simple_aprepro import main as simple_aprepro_main
