@@ -16,6 +16,9 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
+# Get access to script_utils so we can interrogate simple_aprepro's main().
+sys.path.insert(0, vtu.cfgdir)
+import script_util as su
 
 class Simple_Aprepro( vtu.vvtestTestCase ):
 
@@ -197,6 +200,34 @@ class Simple_Aprepro( vtu.vvtestTestCase ):
 
             vtu.runvvtest( batch=batch ).assertCounts( total=1, npass=1 )
 
+
+class Simple_Aprepro_Main( vtu.vvtestTestCase ):
+
+    def test_parameterize(self):
+        ""
+
+        util.writefile('params.jsonl',
+         """{"foo": "abc", "bar": 2}
+            {"foo": "xyz", "bar": 5}"""
+            )
+
+        util.writefile('template.txt', "this is foo {foo}\nthis is 2*bar {2 * bar}")
+
+        su.simple_aprepro_main(["--chatty", "--params", "params.jsonl", "template.txt", "output.dat"])
+
+        f1 = "output.bar=2.foo=abc.dat"
+        f2 = "output.bar=5.foo=xyz.dat"
+        assert os.path.isfile(f1)
+        assert os.path.isfile(f2)
+
+        with open(f1, 'r') as F:
+            txt1 = F.read()
+
+        with open(f2, 'r') as F:
+            txt2 = F.read()
+
+        assert txt1 == "this is foo abc\nthis is 2*bar 4\n"
+        assert txt2 == "this is foo xyz\nthis is 2*bar 10\n"
 
 ############################################################################
 

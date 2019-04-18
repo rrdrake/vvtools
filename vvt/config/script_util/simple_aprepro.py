@@ -111,7 +111,6 @@ class SimpleAprepro:
                              "log": math.log,
                              "log10": math.log10,
                              "log1p": math.log1p,
-                             "log1p": math.log1p,
                              "max": max,
                              "min": min,
                              "nint" : round,
@@ -348,8 +347,11 @@ def simple_aprepro(src_f, dst_f,
 
     return eval_locals
 
-if __name__ == '__main__':
+
+def main(args):
+
     import argparse
+    import json
 
     # Parse inputs
     parser = argparse.ArgumentParser("simple_aprepro.py")
@@ -357,11 +359,42 @@ if __name__ == '__main__':
                         help='File to be processed.')
     parser.add_argument('output_file', action='store', default=None,
                         help='File to be written.')
-    args = parser.parse_args(sys.argv[1:])
+    parser.add_argument('--params', dest='parameters_jsonl',
+           action='store', default=None,
+           help='Create multiple files parameterizing from a jsonl file.')
+    parser.add_argument('--chatty', dest='chatty', action='store_true', default=False,
+           help='Increase verbosity [default: %(default)s]')
+    args = parser.parse_args(args)
 
     # Check inputs
     if not os.path.isfile(args.input_file):
         sys.exit("Input file not found: {0}".format(args.input_file))
 
-    # Process file
-    simple_aprepro(args.input_file, args.output_file)
+    if args.parameters_jsonl is not None:
+
+        # Ensure that the jsonl file exists.
+        if not os.path.isfile(args.parameters_jsonl):
+            sys.exit("Parameter file not found: {0}".format(args.parameters_jsol))
+
+        # Read in all the realizations.
+        realizations = []
+        with open(args.parameters_jsonl, 'r') as F:
+            for line in F.readlines():
+                realizations.append(json.loads(line))
+
+        # Create each file.
+        base, suffix = os.path.splitext(args.output_file)
+        for realization in realizations:
+            sorted_items = sorted(realization.items(), key=lambda x: x[0])
+            param_string = ".".join(["{0}={1}".format(key, value) for key, value in sorted_items])
+            output_f = base + "." + param_string + suffix
+            simple_aprepro(args.input_file, output_f, override=realization, chatty=args.chatty)
+            print("Wrote {0}".format(output_f))
+
+    else:
+        # Process file
+        simple_aprepro(args.input_file, args.output_file, chatty=args.chatty)
+
+
+if __name__ == '__main__':
+    main(sys.argv[1:])
