@@ -5,6 +5,10 @@
 # Government retains certain rights in this software.
 
 import os, sys
+import string
+import random
+import time
+import shutil
 
 
 def compute_relative_path(d1, d2):
@@ -75,3 +79,50 @@ def issubdir( parent_dir, subdir ):
     if ls > lp and parent_dir + '/' == subdir[0:lp+1]:
         return subdir[lp+1:]
     return None
+
+
+def remove_directory_contents( path ):
+    ""
+    sys.stdout.write( 'rm -rf ' + path + '/* ...' )
+    sys.stdout.flush()
+
+    for f in os.listdir(path):
+        df = os.path.join( path, f )
+        fault_tolerant_remove( df )
+
+    print3( 'done' )
+
+
+def random_string( numchars=8 ):
+    ""
+    seq = string.ascii_uppercase + string.digits
+    cL = [ random.choice( seq ) for _ in range(numchars) ]
+    return ''.join( cL )
+
+
+def fault_tolerant_remove( path, num_attempts=5 ):
+    ""
+    dn,fn = os.path.split( path )
+
+    rmpath = os.path.join( dn, 'remove_'+fn + '_'+ random_string() )
+
+    os.rename( path, rmpath )
+
+    for i in range( num_attempts ):
+        try:
+            if os.path.islink( rmpath ):
+                os.remove( rmpath )
+            elif os.path.isdir( rmpath ):
+                shutil.rmtree( rmpath )
+            else:
+                os.remove( rmpath )
+            break
+        except Exception:
+            pass
+
+        time.sleep(1)
+
+
+def print3( *args ):
+    sys.stdout.write( ' '.join( [ str(arg) for arg in args ] ) + '\n' )
+    sys.stdout.flush()

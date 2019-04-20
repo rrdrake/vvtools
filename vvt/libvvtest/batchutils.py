@@ -11,14 +11,197 @@ import glob
 
 from . import TestList
 from . import testlistio
+from . import pathutil
+
+
+class BatchScriptWriter:
+
+    def __init__(self, rtdata, namer, accountant, perms, xlist, plat,
+                       vvtest_cmd_option_string,
+                       batch_length, max_timeout, clean_exit_marker):
+        ""
+        self.rtdata = rtdata
+        self.namer = namer
+        self.accountant = accountant
+        self.perms = perms
+        self.xlist = xlist
+        self.plat = plat
+        self.cmd_opts_string = vvtest_cmd_option_string
+        self.batch_length = batch_length
+        self.max_timeout = max_timeout
+        self.clean_exit_marker = clean_exit_marker
+
+        # TODO: make Tzero a platform plugin thing
+        self.Tzero = 21*60*60  # no timeout in batch mode is 21 hours
+
+        self.qsub_testfilenames = []
+
+        # allow these values to be set by environment variable, mainly for
+        # unit testing; if setting these is needed more regularly then a
+        # command line option should be added
+        val = int( os.environ.get( 'VVTEST_BATCH_READ_INTERVAL', 30 ) )
+        self.read_interval = val
+        val = int( os.environ.get( 'VVTEST_BATCH_READ_TIMEOUT', 5*60 ) )
+        self.read_timeout = val
+
+    def getIncludeFiles(self):
+        ""
+        return self.qsub_testfilenames
+
+    def createTestGroups(self):
+        """
+        """
+        qlen = self.batch_length
+        if qlen == None:
+            qlen = 30*60
+
+        qL = []
+        for np in self.xlist.getTestExecProcList():
+          xL = []
+          for tx in self.xlist.getTestExecList(np):
+            xL.append( (tx.atest.getAttr('timeout'),tx) )
+          xL.sort()
+          grpL = []
+          tsum = 0
+          for rt,tx in xL:
+            depset = tx.getDependencySet()
+            if depset.numDependencies() > 0 or tx.atest.getAttr('timeout') < 1:
+              # analyze tests and those with no timeout get their own group
+              qL.append( [ self.Tzero, len(qL), [tx] ] )
+            else:
+              if len(grpL) > 0 and tsum + rt > qlen:
+                qL.append( [ tsum, len(qL), grpL ] )
+                grpL = []
+                tsum = 0
+              grpL.append( tx )
+              tsum += rt
+          if len(grpL) > 0:
+            qL.append( [ tsum, len(qL), grpL ] )
+        
+        qL.sort()
+        qL.reverse()
+        self.qsublists = map( lambda L: L[2], qL )
+
+    def removeBatchDirectories(self):
+        """
+        """
+        for d in self.namer.globBatchDirectories():
+            print3( 'rm -rf '+d )
+            pathutil.fault_tolerant_remove( d )
+
+    def writeQsubScripts(self, results_suffix):
+        """
+        """
+        config = self.rtdata.getConfiguration()
+
+        self.xlist.markTestsWithDependents()
+
+        self.removeBatchDirectories()
+
+        commonopts = self.cmd_opts_string
+
+        qsubids = {}  # maps batch id to max num processors for that batch
+        
+        qid = 0
+        for qL in self.qsublists:
+          self.make_queue_batch( qid, qL, qsubids, commonopts, results_suffix )
+          qid += 1
+
+        qidL = list( qsubids.keys() )
+        qidL.sort()
+        for i in qidL:
+            incl = self.namer.getTestListName( i, relative=True )
+            self.qsub_testfilenames.append( incl )
+
+        for i in qidL:
+            d = self.namer.getSubdir( i )
+            self.perms.recurse( d )
+
+        return len( qsubids )
+
+    def make_queue_batch(self, qnumber, qlist, npD, comopts, results_suffix):
+        """
+        """
+        qidstr = str(qnumber)
+
+        testlistfname = self.namer.getTestListName( qidstr )
+        statushandler = self.rtdata.getTestStatusHandler()
+
+        tl = TestList.TestList( statushandler, testlistfname )
+        tl.setResultsSuffix( results_suffix )
+
+        tL = []
+        maxnp = 0
+        qtime = 0
+        for tx in qlist:
+          np = int( tx.atest.getParameters().get('np', 0) )
+          if np <= 0: np = 1
+          maxnp = max( maxnp, np )
+          tl.addTest(tx.atest)
+          tL.append( tx )
+          qtime += int( tx.atest.getAttr('timeout') )
+        
+        if qtime == 0:
+          qtime = self.Tzero  # give it the "no timeout" length of time
+        else:
+          # allow more time in the queue than calculated
+          if qtime < 60:
+            qtime = 120
+          elif qtime < 600:
+            qtime *= 2
+          else:
+            qtime = int( float(qtime) * 1.3 )
+
+        if self.max_timeout:
+            qtime = min( qtime, float(self.max_timeout) )
+
+        npD[qnumber] = maxnp
+        pout = self.namer.getBatchOutputName( qnumber )
+        tout = self.namer.getTestListName( qnumber ) + '.' + results_suffix
+
+        jb = BatchJob( maxnp, pout, tout, tL,
+                       self.read_interval, self.read_timeout )
+        self.accountant.addJob( qnumber, jb )
+        
+        tl.stringFileWrite( include_results_suffix=True )
+        
+        fn = self.namer.getBatchScriptName( qidstr )
+        fp = open( fn, "w" )
+
+        tdir = self.namer.getTestResultsRoot()
+        hdr = self.plat.getQsubScriptHeader( maxnp, qtime, tdir, pout )
+        fp.writelines( [ hdr + '\n\n',
+                         'cd ' + tdir + ' || exit 1\n',
+                         'echo "job start time = `date`"\n' + \
+                         'echo "job time limit = ' + str(qtime) + '"\n' ] )
+        
+        # set the environment variables from the platform into the script
+        for k,v in self.plat.getEnvironment().items():
+          fp.write( 'setenv ' + k + ' "' + v  + '"\n' )
+        
+        # collect relevant options to pass to the qsub vvtest invocation
+        taopts = '--qsub-id=' + qidstr + ' '
+        taopts += comopts
+        if len(qlist) == 1:
+          # force a timeout for batches with only one test
+          if qtime < 600: taopts += ' -T ' + str(qtime*0.90)
+          else:           taopts += ' -T ' + str(qtime-120)
+        
+        cmd = self.rtdata.getToolsDir()+'/vvtest ' + taopts + ' || exit 1'
+        fp.writelines( [ cmd+'\n\n' ] )
+        
+        # echo a marker to determine when a clean batch job exit has occurred
+        fp.writelines( [ 'echo "'+self.clean_exit_marker+'"\n' ] )
+        
+        fp.close()
 
 
 class BatchScheduler:
 
-    def __init__(self, test_dir, tlist, xlist, statushandler,
+    def __init__(self, tlist, xlist, statushandler,
                        accountant, namer, perms,
                        plat, maxjobs, clean_exit_marker):
-        self.test_dir = test_dir
+        ""
         self.tlist = tlist
         self.xlist = xlist
         self.statushandler = statushandler
@@ -62,7 +245,8 @@ class BatchScheduler:
             for qid,bjob in self.accountant.getNotStarted():
                 if self.getBlockingDependency( bjob ) == None:
                     pin = self.namer.getBatchScriptName( qid )
-                    jobid = self.plat.Qsubmit( self.test_dir, bjob.outfile, pin )
+                    tdir = self.namer.getTestResultsRoot()
+                    jobid = self.plat.Qsubmit( tdir, bjob.outfile, pin )
                     self.accountant.markJobStarted( qid, jobid )
                     return qid
         return None
@@ -319,6 +503,10 @@ class BatchFileNamer:
         self.rootdir = rootdir
         self.listbasename = listbasename
 
+    def getTestResultsRoot(self):
+        ""
+        return self.rootdir
+
     def getTestListName(self, qid, relative=False):
         """
         """
@@ -436,3 +624,7 @@ class BatchAccountant:
         if qid in self.qdone: return self.qdone.pop( qid )
         raise Exception( 'job id not found: '+str(qid) )
 
+
+def print3( *args ):
+    sys.stdout.write( ' '.join( [ str(arg) for arg in args ] ) + '\n' )
+    sys.stdout.flush()

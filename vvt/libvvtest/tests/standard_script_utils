@@ -719,6 +719,8 @@ class removing_paths( vtu.vvtestTestCase ):
         ""
         import script_util.standard_utilities as stdutil
 
+        assert len( os.listdir('.') ) == 0
+
         util.writefile( 'topfile', 'file' )
         util.writefile( 'subdir/file.txt', 'data' )
         os.symlink( 'subdir/file.txt', 'softlink' )
@@ -730,9 +732,17 @@ class removing_paths( vtu.vvtestTestCase ):
 
         time.sleep(1)
 
-        assert len( glob.glob( '*topfile*' ) ) == 0
-        assert len( glob.glob( '*subdir*' ) ) == 0
-        assert len( glob.glob( '*softlink*' ) ) == 0
+        assert len( glob.glob( 'topfile' ) ) == 0
+        assert len( glob.glob( 'subdir' ) ) == 0
+        assert len( glob.glob( 'softlink' ) ) == 0
+
+        N = 20
+        for i in range(N):
+            if len( os.listdir('.') ) == 0:
+                break
+            else:
+                assert i+1 < N, 'failed to remove paths: '+str(os.listdir('.'))
+            time.sleep(1)
 
     def test_move_aside_a_path(self):
         ""

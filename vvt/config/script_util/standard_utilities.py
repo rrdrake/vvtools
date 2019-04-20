@@ -757,31 +757,7 @@ def move_aside_existing_path( path, keep=1 ):
             os.rename( path, path+'.old0' )
 
 
-def random_string( numchars=8 ):
-    ""
-    seq = string.ascii_uppercase + string.digits
-    cL = [ random.choice( seq ) for _ in range(numchars) ]
-    return ''.join( cL )
-
-
 def fault_tolerant_remove( path, num_attempts=5 ):
     ""
-    dn,fn = os.path.split( path )
-
-    rmpath = os.path.join( dn, 'remove_'+fn + '_'+ random_string() )
-
-    os.rename( path, rmpath )
-
-    for i in range( num_attempts ):
-        try:
-            if os.path.islink( rmpath ):
-                os.remove( rmpath )
-            elif os.path.isdir( rmpath ):
-                shutil.rmtree( rmpath )
-            else:
-                os.remove( rmpath )
-            break
-        except Exception:
-            pass
-
-        time.sleep(1)
+    import libvvtest.pathutil as pathutil
+    return pathutil.fault_tolerant_remove( path, num_attempts )
