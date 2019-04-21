@@ -33,8 +33,7 @@ class ResultsWriter:
 
     def prerun(self, atestlist, abbreviate=True):
         ""
-        if not abbreviate:
-            self.conobj.writeActiveList( atestlist )
+        self.conobj.writeActiveList( atestlist, abbreviate )
         self.conobj.writeListSummary( atestlist, 'Test list:' )
 
         self.check_write_testlist( atestlist, inprogress=True )
@@ -42,7 +41,7 @@ class ResultsWriter:
     def info(self, atestlist):
         ""
         if not self.htmlobj and not self.junitobj and not self.gitlabobj:
-            self.conobj.writeActiveList( atestlist )
+            self.conobj.writeActiveList( atestlist, abbreviate=False )
             self.conobj.writeListSummary( atestlist, 'Summary:' )
 
         self.check_write_html( atestlist )

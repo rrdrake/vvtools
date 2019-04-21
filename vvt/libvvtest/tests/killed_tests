@@ -34,7 +34,8 @@ class running_after_vvtest_is_killed( vtu.vvtestTestCase ):
             vtu.remove_results()
 
             out = vtu.launch_vvtest_then_terminate_it( batch=batch,
-                                                       signum=signal.SIGINT )
+                                                       signum=signal.SIGINT,
+                                                       addverbose=False )
             print3( out )
 
             counts = vtu.parse_vvtest_counts( out )
@@ -56,7 +57,8 @@ class running_after_vvtest_is_killed( vtu.vvtestTestCase ):
 
             vtu.remove_results()
 
-            out = vtu.launch_vvtest_then_terminate_it( batch=batch )
+            out = vtu.launch_vvtest_then_terminate_it( batch=batch,
+                                                       addverbose=False )
             print3( out )
 
             counts = vtu.parse_vvtest_counts( out )
@@ -74,7 +76,7 @@ class running_after_vvtest_is_killed( vtu.vvtestTestCase ):
             </rtest>""" )
         time.sleep(1)
 
-        out = vtu.launch_vvtest_then_terminate_it()
+        out = vtu.launch_vvtest_then_terminate_it( addverbose=False )
         print3( out )
 
         tdir = util.globfile( 'TestResults*' )

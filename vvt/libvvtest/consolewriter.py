@@ -38,9 +38,12 @@ class ConsoleWriter:
         self.write( label )
         self._write_summary( atestlist )
 
-    def writeActiveList(self, atestlist):
+    def writeActiveList(self, atestlist, abbreviate):
         ""
-        self._write_test_list_results( atestlist, 2 )
+        if self.verbose > 1:
+            self._write_test_list_results( atestlist, 1 )
+        elif not abbreviate:
+            self._write_test_list_results( atestlist, 2 )
 
     def writeResultsList(self, atestlist):
         ""

@@ -77,8 +77,9 @@ def launch_vvtest_then_terminate_it( *cmd_args, **options ):
     seconds_before_signaling = options.pop( 'seconds_before_signaling', 4 )
     logfilename = options.pop( 'logfilename', 'run.log' )
     batch = options.pop( 'batch', False )
+    addverbose = options.pop( 'addverbose', True )
 
-    cmd = vvtest_command_line( *cmd_args, batch=batch )
+    cmd = vvtest_command_line( *cmd_args, batch=batch, addverbose=addverbose )
 
     fp = open( logfilename, 'w' )
     try:
@@ -313,13 +314,14 @@ def vvtest_command_line( *cmd_args, **options ):
     """
     Options:  batch=True (default=False)
               addplatform=True
+              addverbose=True
     """
     argstr = ' '.join( cmd_args )
     argL = shlex.split( argstr )
 
     cmdL = [ sys.executable, vvtest_file ]
 
-    if need_to_add_verbose_flag( argL ):
+    if need_to_add_verbose_flag( argL, options ):
         # add -v when running in order to extract the full test list
         cmdL.append( '-v' )
 
@@ -347,12 +349,16 @@ def vvtest_command_line( *cmd_args, **options ):
     return cmd
 
 
-def need_to_add_verbose_flag( vvtest_args ):
+def need_to_add_verbose_flag( vvtest_args, options ):
     ""
-    if '-i' in vvtest_args: return False
-    if '-g' in vvtest_args: return False
-    if '-v' in vvtest_args: return False
-    return True
+    if options.get( 'addverbose', True ):
+        if '-i' in vvtest_args: return False
+        if '-g' in vvtest_args: return False
+        if '-v' in vvtest_args: return False
+        if '-vv' in vvtest_args: return False
+        return True
+    else:
+        return False
 
 
 def parse_vvtest_counts( out ):
@@ -360,7 +366,7 @@ def parse_vvtest_counts( out ):
     ntot = 0
     np = 0 ; nf = 0 ; nd = 0 ; nn = 0 ; nt = 0 ; nr = 0 ; ns = 0
 
-    for line in testlines( out ):
+    for line in extract_testlines( out ):
 
         lineL = line.strip().split()
 
@@ -405,7 +411,7 @@ def parse_test_ids( vvtest_output, results_dir ):
     tdir = os.path.basename( results_dir )
 
     tlist = []
-    for line in testlines( vvtest_output ):
+    for line in extract_testlines( vvtest_output ):
         s = line.strip().split()[-1]
         d1 = util.first_path_segment( s )+os.sep
         if d1.startswith( 'TestResults.' ):
@@ -479,20 +485,21 @@ def greptestlist( shell_pattern, vvtest_output ):
     pattern = util.adjust_shell_pattern_to_work_with_fnmatch( shell_pattern )
 
     matchlines = []
-    for line in testlines( vvtest_output ):
+    for line in extract_testlines( vvtest_output ):
         if fnmatch.fnmatch( line, pattern ):
             matchlines.append( line )
 
     return matchlines
 
 
-def testlines( vvtest_output ):
+def extract_testlines( vvtest_output ):
     ""
     lineL = []
     mark = False
     for line in vvtest_output.splitlines():
         if mark:
             if line.startswith( "==========" ) or \
+               line.startswith( 'Test list:' ) or \
                line.startswith( 'Summary:' ):  # happens if test list is empty
                 mark = False
             else:
@@ -514,7 +521,7 @@ def testtimes(out):
     timesL = []
 
     fmt = '%Y %m/%d %H:%M:%S'
-    for line in testlines(out):
+    for line in extract_testlines(out):
         L = line.strip().split()
         try:
             s = time.strftime('%Y ')+L[3]+' '+L[4]
