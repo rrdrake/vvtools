@@ -489,9 +489,13 @@ def assert_TestSpec_same_as_fake( tspec, rootdir=None ):
     assert tspec.getRootpath() == rootdir
     assert tspec.getFilename() == os.path.join( rootdir, 'atest.xml' )
 
-    kL = tspec.getKeywords()
+    kL = tspec.getKeywords( include_implicit=False )
     kL.sort()
     assert kL == [ 'key1', 'key2' ]
+
+    kL = tspec.getKeywords()
+    kL.sort()
+    assert kL == [ 'P1', 'P2', 'atest', 'key1', 'key2' ]
 
     pD = {}
     for n,v in tspec.getParameters().items():

@@ -66,23 +66,35 @@ class TestSpec:
         else:
             return 'script'
 
-    def getKeywords(self):
+    def getKeywords(self, include_implicit=True):
         """
-        Returns the list of keyword strings.
+        Returns the list of keyword strings.  If 'include_implicit' is True,
+        the parameter names and the test name itself is included in the list.
         """
-        return list( self.keywords )
-    
+        if include_implicit:
+            kwset = set( self.getParameterNames() )
+            kwset.add( self.name )
+            for n,s,x,b in self.execL:
+                if n:
+                    kwset.add( n )
+            kwset.update( self.keywords )
+        else:
+            kwset = self.keywords
+
+        return list( kwset )
+
     def hasKeyword(self, keyword):
         """
         Returns true if the keyword is contained in the list of keywords.
         """
-        return keyword in self.keywords
+        return keyword in self.getKeywords()
 
     def getParameters(self):
         """
         Returns a dictionary mapping parameter names to values.
         """
-        D = self.__copy_dictionary(self.params)
+        D = {}
+        D.update( self.params )
         return D
     
     def getParameterNames(self):
@@ -378,25 +390,26 @@ class TestSpec:
         # transfer TDD marks to the attributes
         if 'TDD' in self.keywords:
             self.setAttr( 'TDD', True )
-    
+
     def setParameters(self, param_dict):
         """
         Set the key/value pairs for this test and reset the execute directory.
         """
-        self.params = self.__copy_dictionary(param_dict)
-        
+        self.params.clear()
+        self.params.update( param_dict )
+
         b = self.getName()
         if len(self.params) > 0:
-          L = []
-          for n,v in self.params.items():
-            L.append( n + '=' + v )
-          L.sort()
-          b = b + '.' + '.'.join(L)
-        
+            L = []
+            for n,v in self.params.items():
+                L.append( n + '=' + v )
+            L.sort()
+            b = b + '.' + '.'.join(L)
+
         d = os.path.dirname( self.getFilepath() )
-        
+
         self.xdir = os.path.normpath( os.path.join( d, b ) )
-    
+
     def setParameterSet(self, param_set):
         """
         Set the ParameterSet instance, which maps parameter names to a list of
@@ -491,25 +504,6 @@ class TestSpec:
         ""
         self.deps.append( (xdir_pattern, result_word_expr) )
 
-    def __copy_list(self, L):
-        newL = None
-        if L != None:
-          newL = []
-          uniq = {}
-          for i in L:
-            if i not in uniq:
-              newL.append(i)
-              uniq[i] = None
-        return newL
-    
-    def __copy_dictionary(self, D):
-        newD = None
-        if D != None:
-          newD = {}
-          for (n,v) in D.items():
-            newD[n] = v
-        return newD
-    
     def makeParent(self):
         """
         Creates a TestSpec instance and copies all data members of this test
@@ -521,13 +515,13 @@ class TestSpec:
         ts.setParameters({})  # skip ts.params
         ts.analyze_spec = self.analyze_spec
         ts.timeout = self.timeout
-        ts.execL = self.__copy_list(self.execL)
-        ts.lnfiles = self.__copy_list(self.lnfiles)
-        ts.cpfiles = self.__copy_list(self.cpfiles)
-        ts.baseline_files = self.__copy_list(self.baseline_files)
+        ts.execL = list( self.execL )
+        ts.lnfiles = list( self.lnfiles )
+        ts.cpfiles = list( self.cpfiles )
+        ts.baseline_files = list( self.baseline_files )
         ts.baseline_spec = self.baseline_spec
-        ts.deps = self.__copy_list( self.deps )
-        ts.attrs = self.__copy_dictionary(self.attrs)
+        ts.deps = list( self.deps )
+        ts.attrs.clear() ; self.attrs.update( self.attrs )
         return ts
 
 for c in varname_chars_list:

@@ -407,7 +407,7 @@ def parseKeywords_scr( tspec, vspecs, tname ):
     Also includes the test name and the parameterize names.
     TODO: what other implicit keywords ??
     """
-    keys = [ tname ]
+    keys = []
 
     for spec in vspecs.getSpecList( 'keywords' ):
 
@@ -430,15 +430,6 @@ def parseKeywords_scr( tspec, vspecs, tname ):
             else:
                 raise TestSpecError( 'invalid keyword: "'+key+'", line ' + \
                                      str(spec.lineno) )
-
-    # the parameter names are included in the test keywords
-    for spec in vspecs.getSpecList( 'parameterize' ):
-        if not testname_ok_scr( spec.attrs, tname ):
-            continue
-        L = spec.value.split( '=', 1 )
-        if len(L) == 2 and L[0].strip():
-            for k in [ n.strip() for n in L[0].strip().split(',') ]:
-                keys.append( k )
 
     tspec.setKeywords( keys )
 
@@ -1077,35 +1068,16 @@ def parseKeywords( tspec, filedoc, tname ):
     Also includes the name="..." on <execute> blocks and the parameter names
     in <parameterize> blocks.
     """
-    keys = [ tname ]
+    keys = []
 
     for nd in filedoc.matchNodes(['keywords$']):
-      if not testname_ok( nd, tname ):
-        # skip this keyword set (filtered out based on test name)
-        continue
-      for key in nd.getContent().split():
-        if allowableString(key):
-          keys.append( key )
-        else:
-          raise TestSpecError( 'invalid keyword: "' + key + '", line ' + \
-                               str(nd.getLineNumber()) )
-    
-    for nd in filedoc.getSubNodes():
-      if not testname_ok( nd, tname ):
-        continue
-      if nd.getName() == 'parameterize':
-        # the parameter names are included in the test keywords
-        for n,v in nd.getAttrs().items():
-          if n in ['parameter','parameters','testname'
-                   'platform','platforms','option','options']:
-            pass
-          elif allowableVariable(n):
-            keys.append( str(n) )
-      elif nd.getName() == 'execute':
-        # the execute name is included in the test keywords
-        n = nd.getAttr('name', None)
-        if n != None:
-          keys.append( str(n) )
+        if testname_ok( nd, tname ):
+            for key in nd.getContent().split():
+                if allowableString(key):
+                    keys.append( key )
+                else:
+                    raise TestSpecError( 'invalid keyword: "' + key + \
+                                         '", line ' + str(nd.getLineNumber()) )
 
     tspec.setKeywords( keys )
 
@@ -1303,7 +1275,7 @@ def parseExecuteList( t, filedoc, evaluator ):
     If a name is given, the content is arguments to the named executable.
     Otherwise, the content is a script fragment.
     """
-    t.resetExecutionList()
+    t.resetExecutionList()  # magic: get rid of this?
     
     for nd in filedoc.matchNodes(["execute$"]):
       
@@ -1359,12 +1331,6 @@ def variableExpansion( tname, platname, paramD, fL ):
     or a list of [string 1, string 2] pairs.  Dollar signs preceeded by a
     backslash are not expanded and the backslash is removed.
     """
-    # these patterns are not needed but I was so happy with myself for
-    # figuring out how to match csh style variables with regex that I
-    # can't get myself to delete them :)
-    # p1 = re.compile( '(?<![\\\\])[$][a-zA-Z]+[a-zA-Z0-9]*' )
-    # p2 = re.compile( '(?<![\\\\])[$][{][a-zA-Z]+[a-zA-Z0-9]*[}]' )
-    
     if platname == None: platname = ''
     
     if len(fL) > 0:

@@ -290,7 +290,7 @@ def test_to_string( tspec ):
     testdict['name'] = tspec.getName()
     testdict['root'] = tspec.getRootpath()
     testdict['path'] = tspec.getFilepath()
-    testdict['keywords'] = tspec.getKeywords()
+    testdict['keywords'] = tspec.getKeywords( include_implicit=False )
 
     if tspec.isAnalyze():
         testdict['paramset'] = tspec.getParameterSet().getParameters()
