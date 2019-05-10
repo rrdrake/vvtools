@@ -22,14 +22,11 @@ class GitInterfaceError( Exception ):
 
 class GitInterface:
 
-    def __init__(self, clone_from=None, **options):
+    def __init__(self, origin_url=None, directory=None, **options):
         ""
-        self._pop_option_values( options )
-
         self.root = None
 
-        if clone_from:
-            self.clone( clone_from )
+        self._initialize( origin_url, directory, options )
 
     def getRootPath(self):
         ""
@@ -66,20 +63,23 @@ class GitInterface:
 
         self.root = root
 
-    def clone(self, url, directory=None, branch=None):
+    def clone(self, url, directory=None, branch=None, bare=False):
         """
         If 'branch' is None, all branches are fetched.  If a branch name, such
-        as "master", then only that branch is fetched.
+        as "master", then only that branch is fetched.  Returns the url to
+        the local clone.
         """
         self.root = None
 
-        name = os.path.basename( url ).rstrip( '.git' )
-        assert name
+        if branch and bare:
+            raise GitInterfaceError( 'cannot bare clone a single branch' )
 
         if branch:
-            self._branch_clone( url, name, directory, branch )
+            self._branch_clone( url, directory, branch )
         else:
-            self._full_clone( url, name, directory )
+            self._full_clone( url, directory, bare )
+
+        return 'file://'+self.root
 
     def add(self, *files, **kwargs):
         ""
@@ -91,12 +91,39 @@ class GitInterface:
         ""
         self.run( 'commit -m', pipes.quote(message) )
 
-    def push(self):
-        ""
-        self.run( 'push' )
+    def push(self, all_branches=False, all_tags=False, repository=None):
+        """
+        Pushes current branch by default.
+            all_branches=True : push all branches
+            all_tags=True : push all tags
+            repository=URL : push to this repository (defaults to origin)
+        """
+        cmd = 'push'
+
+        if all_branches or all_tags:
+            if all_branches: cmd += ' --all'
+            if all_tags:     cmd += ' --tags'
+
+            if repository:
+                cmd += ' '+repository
+
+        else:
+            br = self.currentBranch()
+            if not br:
+                raise GitInterfaceError( 'you must be on a branch to push' )
+
+            if repository:
+                cmd += ' '+repository+' '+br
+            else:
+                cmd += ' origin '+br
+
+        self.run( cmd )
 
     def pull(self):
         ""
+        if self.isBare():
+            raise GitInterfaceError( 'cannot pull into a bare repository' )
+
         curbranch = self.currentBranch()
 
         if curbranch == None:
@@ -267,26 +294,74 @@ class GitInterface:
 
         self.run( 'push --delete origin', branchname )
 
+    def listTags(self):
+        ""
+        x,out = self.runout( 'tag --list --no-column' )
+
+        tagL = []
+
+        for line in out.strip().splitlines():
+            tag = line.strip()
+            if tag:
+                tagL.append( tag )
+
+        tagL.sort()
+
+        return tagL
+
     def gitVersion(self):
         ""
         x,out = self.runout( '--version' )
         return [ int(s) for s in out.strip().split()[2].split('.') ]
 
-    def _full_clone(self, url, name, directory):
+    def isBare(self):
         ""
+        x,out = self.run( 'rev-parse --is-bare-repository' )
+
+        val = out.strip().lower()
+        if val == 'true':
+            return True
+        elif val == 'false':
+            return False
+        else:
+            raise GitInterfaceError(
+                        'unexpected response from rev-parse: '+str(out) )
+
+    def _full_clone(self, url, directory, bare):
+        ""
+        cmd = 'clone'
+        if bare:
+            cmd += ' --bare'
+        cmd += ' ' + url
+
         if directory:
             with make_and_change_directory( directory ):
-                self.run( 'clone', url, '.' )
+                self.run( cmd, '.' )
                 self.root = os.getcwd()
         else:
-            self.run( 'clone', url )
-            assert os.path.isdir( name )
-            self.root = os.path.abspath( name )
+            self.run( cmd )
 
-    def _branch_clone(self, url, name, directory, branch):
+            dname = self._repo_directory_from_url( url, bare )
+
+            assert os.path.isdir( dname )
+            self.root = os.path.abspath( dname )
+
+    def _repo_name_from_url(self, url):
+        ""
+        return os.path.basename( url ).rstrip( '.git' )
+
+    def _repo_directory_from_url(self, url, bare=False):
+        ""
+        name = self._repo_name_from_url( url )
+        if bare:
+            return name+'.git'
+        else:
+            return name
+
+    def _branch_clone(self, url, directory, branch):
         ""
         if not directory:
-            directory = name
+            directory = self._repo_name_from_url( url )
 
         with make_and_change_directory( directory ):
             self.run( 'init' )
@@ -322,7 +397,7 @@ class GitInterface:
                 raise GitInterfaceError( 'branch appears on remote but ' + \
                                 'fetch plus checkout failed: '+branchname )
 
-    def _pop_option_values(self, options):
+    def _initialize(self, origin_url, directory, options):
         ""
         self.envars = {}
 
@@ -335,6 +410,9 @@ class GitInterface:
 
         if len( options ) > 0:
             raise GitInterfaceError( "unknown options: "+str(options) )
+
+        if origin_url:
+            self.clone( origin_url, directory=directory )
 
     def run(self, arg0, *args):
         ""
@@ -355,6 +433,50 @@ class GitInterface:
             x,out = runcmd( cmd, chdir=self.root, raise_on_error=roe )
 
         return x,out
+
+
+def safe_repository_mirror( from_url, to_url, work_clone=None ):
+    ""
+    work_git = GitInterface()
+
+    if work_clone:
+
+        if os.path.isdir( work_clone ):
+            with change_directory( work_clone ):
+                mirror_remote_repo_into_pwd( from_url )
+                push_branches_and_tags( work_git, to_url )
+
+        else:
+            work_git.clone( from_url, directory=work_clone, bare=True )
+            push_branches_and_tags( work_git, to_url )
+
+    else:
+        tdir = tempfile.mkdtemp( dir=os.getcwd() )
+
+        try:
+            work_git.clone( from_url, directory=tdir, bare=True )
+            push_branches_and_tags( work_git, to_url )
+
+        finally:
+            shutil.rmtree( tdir )
+
+
+def mirror_remote_repo_into_pwd( remote_url ):
+    ""
+    git = GitInterface()
+
+    if not git.isBare():
+        raise GitInterfaceError( 'work_clone must be a bare repository' )
+
+    git.run( 'fetch', remote_url,
+             '"refs/heads/*:refs/heads/*"',
+             '"refs/tags/*:refs/tags/*"' )
+
+
+def push_branches_and_tags( work_git, to_url ):
+    ""
+    work_git.push( all_branches=True, repository=to_url )
+    work_git.push( all_tags=True, repository=to_url )
 
 
 ########################################################################

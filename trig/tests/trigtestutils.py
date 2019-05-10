@@ -76,11 +76,14 @@ def find_process_in_list( proclist, pid ):
     return None
 
 
-def create_bare_repo_with_topic_branch():
+def create_bare_repo_with_topic_branch( subdir='subdir', tag=None ):
     ""
-    url = create_local_bare_repository( 'subdir' )
+    url = create_local_bare_repository( subdir )
     push_file_to_repo( url, 'file.txt', 'file contents' )
     push_new_branch_with_file( url, 'topic', 'file.txt', 'new contents' )
+
+    if tag:
+        push_tag_to_repo( url, tag )
 
     return url
 
@@ -130,6 +133,27 @@ def push_file_to_repo( url, filename, filecontents ):
         os.chdir( cwd )
 
     shutil.rmtree( 'addfiletemp' )
+
+
+def push_tag_to_repo( url, tagname ):
+    ""
+    os.mkdir( 'tagtemp' )
+    cwd = os.getcwd()
+    os.chdir( 'tagtemp' )
+    try:
+        util.runcmd( 'git clone '+url, print_output=False )
+
+        pL = os.listdir( '.' )
+        assert len( pL ) == 1
+        os.chdir( pL[0] )
+
+        util.runcmd( 'git tag '+tagname, print_output=False )
+        util.runcmd( 'git push origin '+tagname, print_output=False )
+
+    finally:
+        os.chdir( cwd )
+
+    shutil.rmtree( 'tagtemp' )
 
 
 def push_new_branch_with_file( url, branchname, filename, filecontents ):
