@@ -150,6 +150,32 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
         tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
         assert not plug.validateTest( tspec )
 
+    def test_validate_function_keywords_do_not_include_parameters(self):
+        ""
+        plug = vtu.make_user_plugin( """
+            def validate_test( specs ):
+                ""
+                kwds = specs['keywords']
+                assert 'np' not in kwds
+            """ )
+
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        assert not plug.validateTest( tspec )
+
+    def test_validate_function_receives_test_name_and_its_not_in_keywords(self):
+        ""
+        plug = vtu.make_user_plugin( """
+            def validate_test( specs ):
+                ""
+                tname = specs['name']
+                assert tname == 'atest'
+                kwds = specs['keywords']
+                assert tname not in kwds
+            """ )
+
+        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
+        assert not plug.validateTest( tspec )
+
     def test_validate_function_receives_options_and_platform_name(self):
         ""
         plug = vtu.make_user_plugin( """

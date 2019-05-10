@@ -104,7 +104,8 @@ class UserPluginBridge:
 
     def _make_test_to_user_interface_dict(self, tspec):
         ""
-        specs = { 'keywords'   : tspec.getKeywords(),
+        specs = { 'name'       : tspec.getName(),
+                  'keywords'   : tspec.getKeywords( include_implicit=False ),
                   'parameters' : tspec.getParameters(),
                   'timeout'    : tspec.getTimeout(),
                   'platform'   : self.rtconfig.platformName(),
