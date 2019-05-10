@@ -134,6 +134,18 @@ class info_tests( vtu.vvtestTestCase ):
         vrun = vtu.runvvtest( '-i --files', chdir=tdir+'/sdir' )
         assert_files( vrun, [ 'sdir/skeys.xml'] )
 
+    def test_command_line_keyword_dump_does_not_include_parameters(self):
+        ""
+        util.writefile( 'keys.vvt', """
+              #VVT: keywords = jupiter mars
+              #VVT: parameterize : np = 1 4
+              pass
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest( '--keys' )
+        assert_keywords( vrun, ['jupiter', 'mars'] )
+
     def test_sorting_the_test_listing(self):
         ""
         util.writefile( "one/zebra.xml", """
@@ -300,15 +312,18 @@ def extract_keywords( out ):
     start = False
     kL = []
     for line in out.split( '\n' ):
-      if start:
-        kL.extend( line.split() )
-      elif line.strip()[:14] == 'test keywords:':
-        start = True
+        if start:
+            kL.extend( line.split() )
+        elif line.strip()[:14] == 'test keywords:':
+            start = True
+
     D = {}
     for k in kL:
-      D[k] = None
+        D[k] = None
+
     L = list( D.keys() )
     L.sort()
+
     return L
 
 
@@ -316,14 +331,17 @@ def extract_files( out, rootd ):
     ""
     D = {}
     for line in out.split( '\n' ):
-      line = line.strip()
-      if line and line[0] == '/':
-        D[line] = None
+        line = line.strip()
+        if line and line[0] == '/':
+            D[line] = None
     fL = list( D.keys() )
+
     lend = len(rootd)
     for i in range(len(fL)):
-      fL[i] = fL[i][lend+1:]
+        fL[i] = fL[i][lend+1:]
+
     fL.sort()
+
     return fL
 
 
