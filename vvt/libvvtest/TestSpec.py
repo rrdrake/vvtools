@@ -433,12 +433,6 @@ class TestSpec:
         ""
         self.preload = label
 
-    def resetExecutionList(self):
-        """
-        Clears the current list of execution fragments for this test.
-        """
-        self.execL = []
-    
     def appendExecutionFragment(self, fragment, exit_status, analyze ):
         """
         Append a raw execution fragment to this test.  The exit_status is any

@@ -1275,52 +1275,50 @@ def parseExecuteList( t, filedoc, evaluator ):
     If a name is given, the content is arguments to the named executable.
     Otherwise, the content is a script fragment.
     """
-    t.resetExecutionList()  # magic: get rid of this?
-    
     for nd in filedoc.matchNodes(["execute$"]):
-      
-      skip = 0
-      for n,v in nd.getAttrs().items():
-        isfa, istrue = filterAttr( n, v, t.getName(), t.getParameters(),
-                                   evaluator, str(nd.getLineNumber()) )
-        if isfa and not istrue:
-          skip = 1
-          break
-      
-      if nd.hasAttr('ifdef'):
-        L = nd.getAttr('ifdef').split()
-        for n in L:
-          if not allowableVariable(n):
-            raise TestSpecError( 'invalid environment variable name: "' + \
-                                 n + '"' + ', line ' + str(nd.getLineNumber()) )
-        for n in L:
-          if n not in os.environ:
-            skip = 1
-            break
-      
-      if not skip:
-        
-        xname = nd.getAttr('name', None)
-        
-        analyze = False
-        if xname == None:
-          if nd.getAttr('analyze','').strip().lower() == 'yes':
-            analyze = True
-        else:
-          if not xname or not allowableString(xname):
-            raise TestSpecError( 'invalid name value: "' + xname + \
-                                 '", line ' + str(nd.getLineNumber()) )
 
-        xstatus = nd.getAttr( 'expect', None )
-        
-        content = nd.getContent()
-        if content == None: content = ''
-        else:               content = content.strip()
-        
-        if xname == None:
-          t.appendExecutionFragment( content, xstatus, analyze )
-        else:
-          t.appendNamedExecutionFragment( xname, content, xstatus )
+        skip = 0
+        for n,v in nd.getAttrs().items():
+            isfa, istrue = filterAttr( n, v, t.getName(), t.getParameters(),
+                                       evaluator, str(nd.getLineNumber()) )
+            if isfa and not istrue:
+                skip = 1
+                break
+
+        if nd.hasAttr('ifdef'):
+            L = nd.getAttr('ifdef').split()
+            for n in L:
+                if not allowableVariable(n):
+                    raise TestSpecError( 'invalid environment variable name: "' + \
+                                         n + '"' + ', line ' + str(nd.getLineNumber()) )
+            for n in L:
+                if n not in os.environ:
+                    skip = 1
+                    break
+
+        if not skip:
+
+            xname = nd.getAttr('name', None)
+
+            analyze = False
+            if xname == None:
+                if nd.getAttr('analyze','').strip().lower() == 'yes':
+                    analyze = True
+            else:
+                if not xname or not allowableString(xname):
+                    raise TestSpecError( 'invalid name value: "' + xname + \
+                                         '", line ' + str(nd.getLineNumber()) )
+
+            xstatus = nd.getAttr( 'expect', None )
+
+            content = nd.getContent()
+            if content == None: content = ''
+            else:               content = content.strip()
+
+            if xname == None:
+                t.appendExecutionFragment( content, xstatus, analyze )
+            else:
+                t.appendNamedExecutionFragment( xname, content, xstatus )
 
 
 def variableExpansion( tname, platname, paramD, fL ):

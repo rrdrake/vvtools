@@ -1208,39 +1208,6 @@ class XML_test_specifications( vtu.vvtestTestCase ):
           lnL.sort()
           assert lnL[0] == ("lnfile","file")
           assert lnL[1] == ("ok34.xml",None)
-        print3( "===========" )
-        util.writefile( 'ok34.xml', """
-            <rtest name="atest">
-              <keywords> key3 key1 key2 </keywords>
-              <parameterize np="1 4"/>
-              <include platforms="not SunOS"/>
-              <execute> fragment </execute>
-              <copy_files> file1.C </copy_files>
-              <link_files> lnfile </link_files>
-            </rtest>""" )
-
-        uf = RuntimeConfig( platform_name='Linux' )
-        tL = create_tests( '.', 'ok34.xml', uf )
-        for t in tL:
-          reparse_test( t, uf )
-          print3( t )
-          kL = t.getKeywords()
-          kL.sort()
-          assert kL == ["atest", "key1", "key2", "key3", "np"]
-          assert t.getTimeout() == None
-          xL = t.getExecutionList()
-          assert len(xL) == 1
-          assert xL[0][0] == None
-          assert xL[0][1] == "fragment"
-          cpL = t.getCopyFiles()
-          assert len(cpL) == 1
-          cpL.sort()
-          assert cpL[0] == ("file1.C",None)
-          lnL = t.getLinkFiles()
-          assert len(lnL) == 2
-          lnL.sort()
-          assert lnL[0] == ("lnfile",None)
-          assert lnL[1] == ("ok34.xml",None)
 
     def test_build_option_specifications(self):
         ""
