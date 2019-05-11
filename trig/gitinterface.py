@@ -447,15 +447,15 @@ class GitInterface:
         return x, out
 
 
-def safe_repository_mirror( from_url, to_url, work_clone=None ):
+def safe_repository_mirror( from_url, to_url, work_clone=None, verbose=False ):
     ""
-    work_git = GitInterface()
+    work_git = GitInterface( verbose=verbose )
 
     if work_clone:
 
         if os.path.isdir( work_clone ):
             with change_directory( work_clone ):
-                mirror_remote_repo_into_pwd( from_url )
+                mirror_remote_repo_into_pwd( from_url, verbose=verbose )
                 push_branches_and_tags( work_git, to_url )
 
         else:
@@ -473,9 +473,9 @@ def safe_repository_mirror( from_url, to_url, work_clone=None ):
             shutil.rmtree( tdir )
 
 
-def mirror_remote_repo_into_pwd( remote_url ):
+def mirror_remote_repo_into_pwd( remote_url, verbose=False ):
     ""
-    git = GitInterface()
+    git = GitInterface( verbose=verbose )
 
     if not git.isBare():
         raise GitInterfaceError( 'work_clone must be a bare repository' )
