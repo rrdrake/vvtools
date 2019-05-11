@@ -175,6 +175,21 @@ class create_and_clone( unittest.TestCase ):
         assert len( util.grepfiles( 'example', 'example/.git/config' ) ) > 0
         assert len( util.grepfiles( 'file contents', 'example/file.txt' ) ) == 1
 
+    def test_setting_root_directory_in_constructor(self):
+        ""
+        os.mkdir( 'adir' )
+        time.sleep(1)
+
+        bare_url = trigutil.create_local_bare_repository( 'subdir' )
+        trigutil.push_file_to_repo( bare_url, 'file.txt', 'file contents' )
+
+        with change_directory( 'adir' ):
+            GitInterface( bare_url )
+
+        git2 = GitInterface( rootdir='adir/example' )
+        assert not git2.isBare()
+        assert git2.currentBranch() == 'master'
+
     def test_clone_master_branch_only(self):
         ""
         url = trigutil.create_bare_repo_with_topic_branch()
@@ -198,12 +213,12 @@ class create_and_clone( unittest.TestCase ):
         url = trigutil.create_bare_repo_with_topic_branch()
 
         git1 = GitInterface()
-        url1 = git1.clone( url, directory='ex1' )
+        url1 = git1.clone( url, rootdir='ex1' )
 
-        git2 = GitInterface( url, directory='ex2' )
+        git2 = GitInterface( url, rootdir='ex2' )
 
         git3 = GitInterface()
-        url3 = git3.clone( url, directory='ex3', branch='topic' )
+        url3 = git3.clone( url, rootdir='ex3', branch='topic' )
 
         fL = glob.glob( 'ex*/.git/config' )
         fL.sort()
@@ -216,7 +231,7 @@ class create_and_clone( unittest.TestCase ):
     def test_getting_root_directory_without_clone(self):
         ""
         url = trigutil.create_bare_repo_with_topic_branch()
-        git1 = GitInterface( url, directory='ex1' )
+        git1 = GitInterface( url, rootdir='ex1' )
         util.writefile( 'ex1/subdir/afile', 'my file' )
         git1.add( 'subdir' )
         git1.commit( 'add subdir' )
@@ -229,13 +244,13 @@ class create_and_clone( unittest.TestCase ):
         git = GitInterface()
 
         os.chdir( 'example' )
-        assert os.path.samefile( git.getRootPath(), root )
+        assert os.path.samefile( git.getRootDir(), root )
 
         os.chdir( 'subdir' )
-        assert os.path.samefile( git.getRootPath(), root )
+        assert os.path.samefile( git.getRootDir(), root )
 
         os.chdir( '/' )
-        self.assertRaises( GitInterfaceError, git.getRootPath )
+        self.assertRaises( GitInterfaceError, git.getRootDir )
 
     def test_a_bare_clone_can_be_cloned(self):
         ""
@@ -258,19 +273,19 @@ class create_and_clone( unittest.TestCase ):
         with change_directory( subdir ):
             git_bare.clone( origin_url, bare=True )
 
-        return 'file://'+git_bare.getRootPath()
+        return 'file://'+git_bare.getRootDir()
 
     def test_a_bare_clone_into_a_specified_directory(self):
         ""
         url = trigutil.create_bare_repo_with_topic_branch()
 
         git_bare = GitInterface()
-        git_bare.clone( url, directory='bare_clone_subdir', bare=True )
+        git_bare.clone( url, rootdir='bare_clone_subdir', bare=True )
         assert os.path.isdir( 'bare_clone_subdir' )
         assert not os.path.exists( 'bare_clone_subdir/.git' )
-        bare_url = 'file://'+git_bare.getRootPath()
+        bare_url = 'file://'+git_bare.getRootDir()
 
-        git = GitInterface( bare_url, directory='checkrepo' )
+        git = GitInterface( bare_url, rootdir='checkrepo' )
         assert util.readfile( 'checkrepo/file.txt' ).strip() == 'file contents'
 
     def test_can_push_to_a_bare_clone(self):
@@ -289,7 +304,7 @@ class create_and_clone( unittest.TestCase ):
         git.commit( 'cool message' )
         git.push()
 
-        git2 = GitInterface( bare_url, directory='checkrepo' )
+        git2 = GitInterface( bare_url, rootdir='checkrepo' )
         assert util.readfile( 'checkrepo/file.txt' ).strip() == 'yep ;)'
 
     def test_can_push_from_a_bare_clone(self):
@@ -297,10 +312,10 @@ class create_and_clone( unittest.TestCase ):
         orig_url = trigutil.create_bare_repo_with_topic_branch()
 
         bare_git = GitInterface()
-        bare_git.clone( orig_url, directory='bareclone', bare=True )
-        bare_url = 'file://'+bare_git.getRootPath()
+        bare_git.clone( orig_url, rootdir='bareclone', bare=True )
+        bare_url = 'file://'+bare_git.getRootDir()
 
-        git = GitInterface( bare_url, directory='pushclone' )
+        git = GitInterface( bare_url, rootdir='pushclone' )
         util.writefile( 'pushclone/file.txt', "make a mod" )
         git.add( 'file.txt' )
         git.commit( 'a msg' )
@@ -308,7 +323,7 @@ class create_and_clone( unittest.TestCase ):
 
         bare_git.push()
 
-        GitInterface( orig_url, directory='checkrepo' )
+        GitInterface( orig_url, rootdir='checkrepo' )
         assert util.readfile( 'checkrepo/file.txt' ).strip() == 'make a mod'
 
     def test_a_bare_clone_gets_all_branches_and_tags(self):
@@ -316,8 +331,8 @@ class create_and_clone( unittest.TestCase ):
         orig_url = trigutil.create_bare_repo_with_topic_branch( tag='atag' )
 
         bare_git = GitInterface()
-        bare_git.clone( orig_url, directory='bareclone', bare=True )
-        bare_url = 'file://'+bare_git.getRootPath()
+        bare_git.clone( orig_url, rootdir='bareclone', bare=True )
+        bare_url = 'file://'+bare_git.getRootDir()
 
         branchL = bare_git.listBranches()
         assert branchL == [ 'master', 'topic' ]
@@ -330,15 +345,15 @@ class create_and_clone( unittest.TestCase ):
         orig_url = trigutil.create_bare_repo_with_topic_branch()
 
         bare_git = GitInterface()
-        bare_git.clone( orig_url, directory='bareclone', bare=True )
-        bare_url = 'file://'+bare_git.getRootPath()
+        bare_git.clone( orig_url, rootdir='bareclone', bare=True )
+        bare_url = 'file://'+bare_git.getRootDir()
 
         trigutil.push_new_branch_with_file( bare_url, 'whatever',
                                             'file2.md', 'some content' )
 
         bare_git.push( all_branches=True )
 
-        git2 = GitInterface( orig_url, directory='checkrepo' )
+        git2 = GitInterface( orig_url, rootdir='checkrepo' )
         git2.checkoutBranch( 'whatever' )
         assert util.readfile( 'checkrepo/file2.md' ).strip() == 'some content'
         git2.checkoutBranch( 'topic' )
@@ -350,15 +365,15 @@ class create_and_clone( unittest.TestCase ):
         orig_url = trigutil.create_bare_repo_with_topic_branch( tag='atag' )
 
         bare_git = GitInterface()
-        bare_git.clone( orig_url, directory='bareclone', bare=True )
-        bare_url = 'file://'+bare_git.getRootPath()
+        bare_git.clone( orig_url, rootdir='bareclone', bare=True )
+        bare_url = 'file://'+bare_git.getRootDir()
 
         trigutil.push_file_to_repo( bare_url, 'newfile.txt', 'new junk' )
         trigutil.push_tag_to_repo( bare_url, 'sosad' )
 
         bare_git.push( all_tags=True )
 
-        git2 = GitInterface( orig_url, directory='checkrepo' )
+        git2 = GitInterface( orig_url, rootdir='checkrepo' )
         tagL = git2.listTags()
         assert tagL == [ 'atag', 'sosad' ]
 
@@ -367,20 +382,20 @@ class create_and_clone( unittest.TestCase ):
         orig_url = trigutil.create_bare_repo_with_topic_branch()
 
         bare_git = GitInterface()
-        bare_git.clone( orig_url, directory='bareclone', bare=True )
-        bare_url = 'file://'+bare_git.getRootPath()
+        bare_git.clone( orig_url, rootdir='bareclone', bare=True )
+        bare_url = 'file://'+bare_git.getRootDir()
 
-        git = GitInterface( bare_url, directory='workclone' )
+        git = GitInterface( bare_url, rootdir='workclone' )
         util.writefile( 'workclone/file.txt', 'modify this guy' )
         git.add( 'file.txt' )
         git.commit( 'a mod' )
 
         git.push( repository=orig_url )
 
-        GitInterface( orig_url, directory='checkclone' )
+        GitInterface( orig_url, rootdir='checkclone' )
         assert util.readfile( 'checkclone/file.txt' ).strip() == 'modify this guy'
 
-        GitInterface( bare_url, directory='checktwo' )
+        GitInterface( bare_url, rootdir='checktwo' )
         assert util.readfile( 'checktwo/file.txt' ).strip() == 'file contents'
 
         git.createRemoteBranch( 'newbranch' )
@@ -390,7 +405,7 @@ class create_and_clone( unittest.TestCase ):
 
         git.push( all_branches=True, repository=orig_url )
 
-        chkit = GitInterface( orig_url, directory='checkclone2' )
+        chkit = GitInterface( orig_url, rootdir='checkclone2' )
         chkit.checkoutBranch( 'newbranch' )
         assert util.readfile( 'checkclone2/file.txt' ).strip() == 'branch mod'
 
@@ -452,8 +467,7 @@ class commit_and_push( unittest.TestCase ):
         git.push()
 
         time.sleep(1)
-        git2 = GitInterface()
-        git2.clone( url, 'check' )
+        git2 = GitInterface( url, 'check' )
         assert os.path.isfile( 'check/adir/deep/file.txt' )
         assert util.readfile( 'check/adir/afile.txt' ).strip() == 'changed'
 
@@ -516,7 +530,7 @@ class branches( unittest.TestCase ):
         trigutil.push_file_to_repo( self.url, 'file.txt', 'new contents' )
 
         git = GitInterface( self.url )
-        trigutil.checkout_to_previous_sha1( git.getRootPath() )
+        trigutil.checkout_to_previous_sha1( git.getRootDir() )
         assert git.currentBranch() == None
 
     def test_current_branch_fails_if_done_right_after_git_init(self):
@@ -535,7 +549,7 @@ class branches( unittest.TestCase ):
         trigutil.push_file_to_repo( self.url, 'file.txt', 'new contents' )
 
         git = GitInterface( self.url )
-        trigutil.checkout_to_previous_sha1( git.getRootPath() )
+        trigutil.checkout_to_previous_sha1( git.getRootDir() )
         assert git.currentBranch() == None
         self.assertRaises( GitInterfaceError, git.push )
 
@@ -570,8 +584,7 @@ class branches( unittest.TestCase ):
         git = GitInterface( self.url )
         git.createRemoteBranch( 'nasa' )
 
-        git = GitInterface()
-        git.clone( self.url, 'check' )
+        git = GitInterface( self.url, 'check' )
         git.checkoutBranch( 'nasa' )
         assert util.readfile( 'check/file.txt' ).strip() == 'file contents'
 
@@ -583,8 +596,7 @@ class branches( unittest.TestCase ):
         git.commit( 'add file to new branch' )
         git.push()
 
-        git = GitInterface()
-        git.clone( self.url, 'check' )
+        git = GitInterface( self.url, 'check' )
         git.checkoutBranch( 'nasa' )
         assert util.readfile( 'check/newfile.txt' ).strip() == 'new contents'
 
@@ -607,8 +619,7 @@ class branches( unittest.TestCase ):
         git1.commit( 'modify file' )
         git1.createRemoteBranch( 'nasa' )
 
-        git2 = GitInterface()
-        git2.clone( self.url, 'check1' )
+        git2 = GitInterface( self.url, 'check1' )
         git2.checkoutBranch( 'nasa' )
         assert util.readfile( 'check1/file.txt' ).strip() == 'file contents'
 
@@ -623,8 +634,7 @@ class branches( unittest.TestCase ):
         git1.clone( self.url, branch='master' )
         git1.createRemoteBranch( 'nasa' )
 
-        git2 = GitInterface()
-        git2.clone( self.url, 'check1' )
+        git2 = GitInterface( self.url, 'check1' )
         git2.checkoutBranch( 'nasa' )
         assert util.readfile( 'check1/file.txt' ).strip() == 'file contents'
 
@@ -662,8 +672,7 @@ class branches( unittest.TestCase ):
         git.add( 'file.txt' )
         git.createRemoteBranch( 'nasa' )
 
-        git = GitInterface()
-        git.clone( self.url, 'check' )
+        git = GitInterface( self.url, 'check' )
         git.checkoutBranch( 'nasa' )
         assert util.readfile( 'check/file.txt' ).strip() == 'file contents'
 
@@ -673,8 +682,7 @@ class branches( unittest.TestCase ):
         util.writefile( 'example/file.txt', 'modified contents' )
         git.createRemoteBranch( 'nasa' )
 
-        git = GitInterface()
-        git.clone( self.url, 'check' )
+        git = GitInterface( self.url, 'check' )
         git.checkoutBranch( 'nasa' )
         assert util.readfile( 'check/file.txt' ).strip() == 'file contents'
 
@@ -687,8 +695,7 @@ class branches( unittest.TestCase ):
         assert 'topic' not in git.listBranches( remotes=True )
         assert 'topic' not in git.listRemoteBranches()
 
-        git = GitInterface()
-        git.clone( self.url, 'ex2' )
+        git = GitInterface( self.url, 'ex2' )
         assert 'topic' not in git.listBranches( remotes=True )
         assert 'topic' not in git.listRemoteBranches()
 
@@ -704,8 +711,7 @@ class branches( unittest.TestCase ):
         assert 'topic' not in git.listBranches( remotes=True )
         assert 'topic' not in git.listRemoteBranches()
 
-        git = GitInterface()
-        git.clone( self.url, 'ex2' )
+        git = GitInterface( self.url, 'ex2' )
         assert 'topic' not in git.listBranches( remotes=True )
         assert 'topic' not in git.listRemoteBranches()
 
@@ -727,11 +733,8 @@ class pulling( unittest.TestCase ):
 
     def clone_twice_and_modify_and_push_file_txt(self):
         ""
-        git1 = GitInterface()
-        git1.clone( self.url, 'ex1' )
-
-        git2 = GitInterface()
-        git2.clone( self.url, 'ex2' )
+        git1 = GitInterface( self.url, 'ex1' )
+        git2 = GitInterface( self.url, 'ex2' )
 
         util.writefile( 'ex2/file.txt', 'modified contents' )
         git2.add( 'file.txt' )
@@ -875,7 +878,7 @@ class orphan_branches( unittest.TestCase ):
         time.sleep(1)
 
         git = GitInterface( url )
-        trigutil.checkout_to_previous_sha1( git.getRootPath() )
+        trigutil.checkout_to_previous_sha1( git.getRootDir() )
 
         self.assertRaises( GitInterfaceError,
             git.createRemoteOrphanBranch, 'loner', 'start it', 'readme.txt' )
@@ -912,14 +915,14 @@ class mirroring_repositories( unittest.TestCase ):
         trigutil.push_file_to_repo( src_url, 'file.txt', 'file contents' )
 
         git1 = GitInterface()
-        cpy_url = git1.clone( src_url, directory='cpy', bare=True )
+        cpy_url = git1.clone( src_url, rootdir='cpy', bare=True )
 
         trigutil.push_file_to_repo( src_url, 'file.txt', 'new contents' )
 
         safe_repository_mirror( src_url, cpy_url )
 
         time.sleep(1)
-        git2 = GitInterface( cpy_url, directory='checkclone' )
+        git2 = GitInterface( cpy_url, rootdir='checkclone' )
         assert util.readfile( 'checkclone/file.txt' ).strip() == 'new contents'
 
     def test_that_branches_and_tags_are_copied(self):
@@ -933,7 +936,7 @@ class mirroring_repositories( unittest.TestCase ):
 
         time.sleep(1)
         git = GitInterface()
-        git.clone( cpy_url, directory='checkclone1', bare=True )
+        git.clone( cpy_url, rootdir='checkclone1', bare=True )
         assert git.listBranches() == ['master', 'topic']
         assert git.listTags() == ['FANCYTAG']
 
@@ -945,7 +948,7 @@ class mirroring_repositories( unittest.TestCase ):
 
         time.sleep(1)
         git = GitInterface()
-        git.clone( cpy_url, directory='checkclone2', bare=True )
+        git.clone( cpy_url, rootdir='checkclone2', bare=True )
         assert git.listBranches() == ['coolbranch', 'master', 'topic']
         assert git.listTags() == ['COOLTAG', 'FANCYTAG']
 
@@ -957,8 +960,8 @@ class mirroring_repositories( unittest.TestCase ):
         cpy_url = trigutil.create_local_bare_repository( 'cpyrepo' )
 
         git = GitInterface()
-        git.clone( src_url, directory='wrkclone', bare=True )
-        wrkdir = git.getRootPath()
+        git.clone( src_url, rootdir='wrkclone', bare=True )
+        wrkdir = git.getRootDir()
 
         # make work clone out-of-date
         trigutil.push_file_to_repo( src_url, 'file.txt', 'my contents' )
@@ -969,8 +972,7 @@ class mirroring_repositories( unittest.TestCase ):
         safe_repository_mirror( src_url, cpy_url, work_clone=wrkdir )
 
         time.sleep(1)
-        git = GitInterface()
-        git.clone( cpy_url, directory='checkclone' )
+        git = GitInterface( cpy_url, rootdir='checkclone' )
         assert git.listRemoteBranches() == ['coolbranch', 'master', 'topic']
         assert git.listTags() == ['FANCYTAG', 'NEWTAG']
         assert util.readfile( 'checkclone/file.txt' ).strip() == 'my contents'
@@ -982,9 +984,8 @@ class mirroring_repositories( unittest.TestCase ):
 
         cpy_url = trigutil.create_local_bare_repository( 'cpyrepo' )
 
-        git = GitInterface()
-        git.clone( src_url, directory='wrkclone' )
-        wrkdir = git.getRootPath()
+        git = GitInterface( src_url, rootdir='wrkclone' )
+        wrkdir = git.getRootDir()
 
         self.assertRaises( GitInterfaceError,
                 safe_repository_mirror, src_url, cpy_url, work_clone=wrkdir )
@@ -999,8 +1000,7 @@ class mirroring_repositories( unittest.TestCase ):
         wrkdir = 'workclone'
         safe_repository_mirror( src_url, cpy_url, work_clone=wrkdir )
 
-        os.chdir( wrkdir )
-        git = GitInterface()
+        git = GitInterface( rootdir=wrkdir )
         assert git.isBare()
 
     def test_an_update_fails_if_history_would_be_changed(self):

@@ -22,13 +22,15 @@ class GitInterfaceError( Exception ):
 
 class GitInterface:
 
-    def __init__(self, origin_url=None, directory=None, **options):
-        ""
+    def __init__(self, origin_url=None, rootdir=None, **options):
+        """
+        If 'origin_url' is not None, then same as clone( origin_url, rootdir ).
+        If 'rootdir' is not None, then define it as the root directory on disk.
+        """
         self.root = None
+        self._initialize( origin_url, rootdir, options )
 
-        self._initialize( origin_url, directory, options )
-
-    def getRootPath(self):
+    def getRootDir(self):
         ""
         if self.root:
             return self.root
@@ -41,9 +43,9 @@ class GitInterface:
 
         return root.strip()
 
-    def create(self, directory=None, bare=False):
+    def create(self, rootdir=None, bare=False):
         """
-        If 'directory' is not None, it is created and will contain the repo.
+        If 'rootdir' is not None, it is created and will contain the repo.
         """
         self.root = None
 
@@ -51,10 +53,10 @@ class GitInterface:
         if bare:
             cmd += ' --bare'
 
-        if directory:
-            cd, name = split_and_create_directory( directory )
+        if rootdir:
+            cd, name = split_and_create_directory( rootdir )
             cmd += ' '+name
-            root = normpath( abspath( directory ) )
+            root = normpath( abspath( rootdir ) )
         else:
             cd = None
             root = os.getcwd()
@@ -63,11 +65,13 @@ class GitInterface:
 
         self.root = root
 
-    def clone(self, url, directory=None, branch=None, bare=False):
+    def clone(self, url, rootdir=None, branch=None, bare=False):
         """
         If 'branch' is None, all branches are fetched.  If a branch name, such
         as "master", then only that branch is fetched.  Returns the url to
         the local clone.
+
+        If 'rootdir' is not None, it will contain the repo on disk.
         """
         self.root = None
 
@@ -75,9 +79,9 @@ class GitInterface:
             raise GitInterfaceError( 'cannot bare clone a single branch' )
 
         if branch:
-            self._branch_clone( url, directory, branch )
+            self._branch_clone( url, rootdir, branch )
         else:
-            self._full_clone( url, directory, bare )
+            self._full_clone( url, rootdir, bare )
 
         return 'file://'+self.root
 
@@ -270,7 +274,7 @@ class GitInterface:
             with change_directory( tmpdir ):
                 create_repo_with_these_files( self.gitexe, message, pathL )
 
-            with change_directory( self.getRootPath() ):
+            with change_directory( self.getRootDir() ):
                 self.run( 'fetch', tmpdir, 'master:'+branchname )
                 self.run( 'checkout', branchname )
                 self.run( 'push -u origin', branchname )
@@ -327,15 +331,15 @@ class GitInterface:
             raise GitInterfaceError(
                         'unexpected response from rev-parse: '+str(out) )
 
-    def _full_clone(self, url, directory, bare):
+    def _full_clone(self, url, rootdir, bare):
         ""
         cmd = 'clone'
         if bare:
             cmd += ' --bare'
         cmd += ' ' + url
 
-        if directory:
-            with make_and_change_directory( directory ):
+        if rootdir:
+            with make_and_change_directory( rootdir ):
                 self.run( cmd, '.' )
                 self.root = os.getcwd()
         else:
@@ -358,12 +362,12 @@ class GitInterface:
         else:
             return name
 
-    def _branch_clone(self, url, directory, branch):
+    def _branch_clone(self, url, rootdir, branch):
         ""
-        if not directory:
-            directory = self._repo_name_from_url( url )
+        if not rootdir:
+            rootdir = self._repo_name_from_url( url )
 
-        with make_and_change_directory( directory ):
+        with make_and_change_directory( rootdir ):
             self.run( 'init' )
             self.root = os.getcwd()
             self.run( 'remote add -f -t', branch, '-m', branch, 'origin', url )
@@ -397,7 +401,7 @@ class GitInterface:
                 raise GitInterfaceError( 'branch appears on remote but ' + \
                                 'fetch plus checkout failed: '+branchname )
 
-    def _initialize(self, origin_url, directory, options):
+    def _initialize(self, origin_url, rootdir, options):
         ""
         self.envars = {}
 
@@ -412,7 +416,9 @@ class GitInterface:
             raise GitInterfaceError( "unknown options: "+str(options) )
 
         if origin_url:
-            self.clone( origin_url, directory=directory )
+            self.clone( origin_url, rootdir=rootdir )
+        elif rootdir:
+            self.root = os.path.abspath( rootdir )
 
     def run(self, arg0, *args):
         ""
@@ -447,14 +453,14 @@ def safe_repository_mirror( from_url, to_url, work_clone=None ):
                 push_branches_and_tags( work_git, to_url )
 
         else:
-            work_git.clone( from_url, directory=work_clone, bare=True )
+            work_git.clone( from_url, rootdir=work_clone, bare=True )
             push_branches_and_tags( work_git, to_url )
 
     else:
         tdir = tempfile.mkdtemp( dir=os.getcwd() )
 
         try:
-            work_git.clone( from_url, directory=tdir, bare=True )
+            work_git.clone( from_url, rootdir=tdir, bare=True )
             push_branches_and_tags( work_git, to_url )
 
         finally:

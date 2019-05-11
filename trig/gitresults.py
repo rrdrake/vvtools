@@ -30,7 +30,7 @@ class ResultsHandler:
         Create or checkout results directory according to the naming scheme.
         Returns absolute path to the results directory.
         """
-        with change_directory( self.git.getRootPath() ):
+        with change_directory( self.git.getRootDir() ):
 
             if self.branch in self.git.listRemoteBranches():
 
