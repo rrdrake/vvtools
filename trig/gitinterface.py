@@ -26,6 +26,7 @@ class GitInterface:
         """
         If 'origin_url' is not None, then same as clone( origin_url, rootdir ).
         If 'rootdir' is not None, then define it as the root directory on disk.
+        Use verbose=True to print the Git commands and output.
         """
         self.root = None
         self._initialize( origin_url, rootdir, options )
@@ -35,8 +36,9 @@ class GitInterface:
         if self.root:
             return self.root
 
-        x,root = self.runout( 'rev-parse --show-toplevel',
-                              raise_on_error=False )
+        x,root = self.run( 'rev-parse --show-toplevel',
+                           raise_on_error=False, capture=True )
+
         if x != 0 or not root.strip():
             raise GitInterfaceError( 'could not determine root '
                                      '(are you in a Git repo?)' )
@@ -153,7 +155,7 @@ class GitInterface:
         """
         loc = ( self.root if self.root else os.getcwd() )
 
-        x,out = self.runout( 'branch' )
+        x,out = self.run( 'branch', capture=True )
 
         for line in out.splitlines():
             if line.startswith( '* (' ):
@@ -171,7 +173,7 @@ class GitInterface:
         if remotes:
             cmd += ' -r'
 
-        x,out = self.runout( cmd )
+        x,out = self.run( cmd, capture=True )
 
         for line in out.splitlines():
             if line.startswith( '* (' ):
@@ -199,7 +201,7 @@ class GitInterface:
 
         bL = []
 
-        x,out = self.runout( 'ls-remote --heads', url )
+        x,out = self.run( 'ls-remote --heads', url, capture=True )
 
         for line in out.strip().splitlines():
             lineL = line.strip().split( None, 1 )
@@ -224,8 +226,8 @@ class GitInterface:
 
     def getRemoteURL(self):
         ""
-        x,out = self.runout( 'config --get remote.origin.url',
-                             raise_on_error=False )
+        x,out = self.run( 'config --get remote.origin.url',
+                          raise_on_error=False, capture=True )
         if x != 0:
             return None
         return out.strip()
@@ -300,7 +302,7 @@ class GitInterface:
 
     def listTags(self):
         ""
-        x,out = self.runout( 'tag --list --no-column' )
+        x,out = self.run( 'tag --list --no-column', capture=True )
 
         tagL = []
 
@@ -315,12 +317,12 @@ class GitInterface:
 
     def gitVersion(self):
         ""
-        x,out = self.runout( '--version' )
+        x,out = self.run( '--version', capture=True )
         return [ int(s) for s in out.strip().split()[2].split('.') ]
 
     def isBare(self):
         ""
-        x,out = self.run( 'rev-parse --is-bare-repository' )
+        x,out = self.run( 'rev-parse --is-bare-repository', capture=True )
 
         val = out.strip().lower()
         if val == 'true':
@@ -377,23 +379,24 @@ class GitInterface:
         ""
         self.run( 'fetch origin' )
 
-        x,out = self.runout( 'checkout --track origin/'+branchname,
-                             raise_on_error=False )
+        x,out = self.run( 'checkout --track origin/'+branchname,
+                          raise_on_error=False, capture=True )
         if x != 0:
             # try adding the branch in the fetch list
-            x,out2 = self.runout( 'config --add remote.origin.fetch ' + \
-                                  '+refs/heads/'+branchname + \
-                                  ':refs/remotes/origin/'+branchname,
-                                  raise_on_error=False )
+            x,out2 = self.run( 'config --add remote.origin.fetch ' + \
+                               '+refs/heads/'+branchname + \
+                               ':refs/remotes/origin/'+branchname,
+                               raise_on_error=False, capture=True )
             out += out2
 
             if x == 0:
-                x,out3 = self.runout( 'fetch origin', raise_on_error=False )
+                x,out3 = self.run( 'fetch origin',
+                                   raise_on_error=False, capture=True )
                 out += out3
 
                 if x == 0:
-                    x,out4 = self.runout( 'checkout --track origin/'+branchname,
-                                          raise_on_error=False )
+                    x,out4 = self.run( 'checkout --track origin/'+branchname,
+                                       raise_on_error=False, capture=True )
                     out += out4
 
             if x != 0:
@@ -406,6 +409,7 @@ class GitInterface:
         self.envars = {}
 
         self.gitexe = options.pop( 'gitexe', 'git' )
+        self.verbose = options.pop( 'verbose', False )
 
         prox = options.pop( 'https_proxy', None )
         if prox:
@@ -420,25 +424,27 @@ class GitInterface:
         elif rootdir:
             self.root = os.path.abspath( rootdir )
 
-    def run(self, arg0, *args):
-        ""
-        cmd = self.gitexe + ' ' + ' '.join( (arg0,)+args )
-
-        with set_environ( **self.envars ):
-            x,out = runcmd( cmd, chdir=self.root, raise_on_error=True )
-
-        return x, out
-
-    def runout(self, arg0, *args, **kwargs):
+    def run(self, arg0, *args, **kwargs):
         ""
         roe = kwargs.pop( 'raise_on_error', True )
+        cap = kwargs.pop( 'capture', False )
+
+        cmdcapture = True
+        if not cap and self.verbose:
+            cmdcapture = False
 
         cmd = self.gitexe + ' ' + ' '.join( (arg0,)+args )
 
         with set_environ( **self.envars ):
-            x,out = runcmd( cmd, chdir=self.root, raise_on_error=roe )
+            x,out = runcmd( cmd,
+                            chdir=self.root,
+                            raise_on_error=roe,
+                            capture=cmdcapture )
 
-        return x,out
+        if cmdcapture and self.verbose:
+            print3( cmd + '\n' + out )
+
+        return x, out
 
 
 def safe_repository_mirror( from_url, to_url, work_clone=None ):
@@ -583,15 +589,19 @@ def create_repo_with_these_files( gitexe, message, pathL ):
     runcmd( gitexe + ' commit -m ' + pipes.quote( message ) )
 
 
-def runcmd( cmd, chdir=None, raise_on_error=True ):
+def runcmd( cmd, chdir=None, raise_on_error=True, capture=True ):
     ""
     out = ''
     x = 1
 
     with change_directory( chdir ):
 
-        po = subprocess.Popen( cmd, shell=True, stdout=subprocess.PIPE,
-                                                stderr=subprocess.STDOUT )
+        if capture:
+            po = subprocess.Popen( cmd, shell=True, stdout=subprocess.PIPE,
+                                                    stderr=subprocess.STDOUT )
+        else:
+            print3( cmd )
+            po = subprocess.Popen( cmd, shell=True )
 
         sout,serr = po.communicate()
         x = po.returncode

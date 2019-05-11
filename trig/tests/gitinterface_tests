@@ -409,6 +409,27 @@ class create_and_clone( unittest.TestCase ):
         chkit.checkoutBranch( 'newbranch' )
         assert util.readfile( 'checkclone2/file.txt' ).strip() == 'branch mod'
 
+    def test_verbose_prints_git_command_and_output(self):
+        ""
+        orig_url = trigutil.create_bare_repo_with_topic_branch()
+
+        git,out,err = util.call_capture_output( GitInterface,
+                                                orig_url, verbose=True )
+        out += err
+        print3( out )
+        assert 'clone' in out and 'example' in out
+
+        rtn,out,err = util.call_capture_output( git.checkoutBranch, 'topic' )
+        out += err
+        print3( out )
+        assert 'checkout' in out and 'topic' in out
+
+        rtn,out,err = util.call_capture_output( git.currentBranch )
+        out += err
+        print3( out )
+        assert rtn == 'topic'
+        assert 'branch' in out and 'topic' in out
+
 
 class commit_and_push( unittest.TestCase ):
 
