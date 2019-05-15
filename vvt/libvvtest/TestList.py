@@ -160,7 +160,7 @@ class TestList:
 
                 t = self.tspecs.get( xdir, None )
                 if t != None:
-                    self.statushandler.copyResultsExceptSkips( t, tspec )
+                    self.statushandler.copyResults( t, tspec )
 
     def ensureInlinedTestResultIncludes(self):
         ""

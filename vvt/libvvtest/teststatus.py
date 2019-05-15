@@ -228,10 +228,10 @@ class TestStatusHandler:
         self.markDone( tspec, 1 )
         tspec.setAttr( 'result', 'timeout' )
 
-    def copyResultsExceptSkips(self, to_tspec, from_tspec):
+    def copyResults(self, to_tspec, from_tspec):
         ""
         for k,v in from_tspec.getAttrs().items():
-            if k != 'skip':
+            if k in ['state','xtime','xdate','result']:
                 to_tspec.setAttr( k, v )
 
 

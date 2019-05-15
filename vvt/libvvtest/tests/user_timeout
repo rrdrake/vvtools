@@ -136,6 +136,38 @@ class timeout_plugin_integration_tests( vtu.vvtestTestCase ):
             tm = parse_timeout( vrun.greplogs( 'TIMEOUT', 'fast' )[0]  )
             assert tm >= 500 and tm < 1000
 
+    def test_the_timeout_takes_effect_on_restarts(self):
+        ""
+        util.writefile( 'atest.vvt', """
+            import time
+            time.sleep(5)
+            """ )
+        time.sleep(1)
+
+        adir = os.path.abspath( 'adir' )
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            util.writefile( 'adir/vvtest_user_plugin.py', """
+                def test_timeout( specs ):
+                    return 2
+                """ )
+            time.sleep(1)
+
+            vrun = vtu.runvvtest( '--config', adir, batch=batch )
+            vrun.assertCounts( total=1, timeout=1 )
+
+            util.writefile( 'adir/vvtest_user_plugin.py', """
+                def test_timeout( specs ):
+                    return 10
+                """ )
+            time.sleep(1)
+
+            vrun = vtu.runvvtest( '-R --config', adir, batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+
 
 def parse_timeout( timeout_string ):
     ""
