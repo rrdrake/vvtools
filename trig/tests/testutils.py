@@ -481,7 +481,7 @@ def rmallfiles( not_these=None ):
 
 def random_string( numchars=8 ):
     ""
-    seq = string.ascii_uppercase + string.digits
+    seq = string.ascii_letters + string.digits
     cL = [ random.choice( seq ) for _ in range(numchars) ]
     return ''.join( cL )
 
@@ -645,6 +645,28 @@ def list_all_directories( rootpath ):
     pL.sort()
 
     return pL
+
+
+class change_directory:
+    """
+    with change_directory( 'subdir' ):
+        pass
+    """
+
+    def __init__(self, directory):
+        ""
+        self.cwd = os.getcwd()
+        self.directory = directory
+
+    def __enter__(self):
+        ""
+        if self.directory:
+            assert os.path.isdir( self.directory )
+            os.chdir( self.directory )
+
+    def __exit__(self, type, value, traceback):
+        ""
+        os.chdir( self.cwd )
 
 
 def has_owner_execute( path ):

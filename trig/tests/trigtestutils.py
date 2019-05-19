@@ -19,6 +19,17 @@ testsrcdir = os.path.dirname( os.path.abspath( sys.argv[0] ) )
 sys.path.insert( 0, os.path.dirname( testsrcdir ) )
 
 
+class trigTestCase( unittest.TestCase ):
+
+    def setUp(self, cleanout=True):
+        ""
+        util.setup_test( cleanout )
+
+    def tearDown(self):
+        ""
+        pass
+
+
 def get_process_list():
     """
     Return a python list of all processes on the current machine, where each
@@ -76,9 +87,9 @@ def find_process_in_list( proclist, pid ):
     return None
 
 
-def create_bare_repo_with_topic_branch( subdir='subdir', tag=None ):
+def create_bare_repo_with_topic_branch( reponame, subdir=None, tag=None ):
     ""
-    url = create_local_bare_repository( subdir )
+    url = create_local_bare_repository( reponame )
     push_file_to_repo( url, 'file.txt', 'file contents' )
     push_new_branch_with_file( url, 'topic', 'file.txt', 'new contents' )
 
@@ -88,39 +99,36 @@ def create_bare_repo_with_topic_branch( subdir='subdir', tag=None ):
     return url
 
 
-def create_local_bare_repository( subdir='.', name='example' ):
+def create_local_bare_repository( reponame, subdir=None ):
     ""
+    if not subdir:
+        subdir = 'bare_repo_'+util.random_string()
+
     if not os.path.exists( subdir ):
         os.makedirs( subdir )
 
-    cwd = os.getcwd()
-    os.chdir( subdir )
+    with util.change_directory( subdir ):
 
-    try:
-        if not name.endswith( '.git' ):
-            name += '.git'
+        if not reponame.endswith( '.git' ):
+            reponame += '.git'
 
-        util.runcmd( 'git init --bare '+name, print_output=False )
+        util.runcmd( 'git init --bare '+reponame, print_output=False )
 
-        url = 'file://'+os.getcwd()+'/'+name
-
-    finally:
-        os.chdir( cwd )
+        url = 'file://'+os.getcwd()+'/'+reponame
 
     return url
 
 
 def push_file_to_repo( url, filename, filecontents ):
     ""
-    os.mkdir( 'addfiletemp' )
-    cwd = os.getcwd()
-    os.chdir( 'addfiletemp' )
-    try:
+    workdir = 'wrkdir_'+util.random_string()
+    os.mkdir( workdir )
+
+    with util.change_directory( workdir ):
+
         util.runcmd( 'git clone '+url, print_output=False )
 
-        pL = os.listdir( '.' )
-        assert len( pL ) == 1
-        os.chdir( pL[0] )
+        os.chdir( util.globfile( '*' ) )
 
         util.writefile( filename, filecontents )
 
@@ -129,44 +137,32 @@ def push_file_to_repo( url, filename, filecontents ):
                      print_output=False )
         util.runcmd( 'git push origin master', print_output=False )
 
-    finally:
-        os.chdir( cwd )
-
-    shutil.rmtree( 'addfiletemp' )
-
 
 def push_tag_to_repo( url, tagname ):
     ""
-    os.mkdir( 'tagtemp' )
-    cwd = os.getcwd()
-    os.chdir( 'tagtemp' )
-    try:
+    workdir = 'wrkdir_'+util.random_string()
+    os.mkdir( workdir )
+
+    with util.change_directory( workdir ):
+
         util.runcmd( 'git clone '+url, print_output=False )
 
-        pL = os.listdir( '.' )
-        assert len( pL ) == 1
-        os.chdir( pL[0] )
+        os.chdir( util.globfile( '*' ) )
 
         util.runcmd( 'git tag '+tagname, print_output=False )
         util.runcmd( 'git push origin '+tagname, print_output=False )
 
-    finally:
-        os.chdir( cwd )
-
-    shutil.rmtree( 'tagtemp' )
-
 
 def push_new_branch_with_file( url, branchname, filename, filecontents ):
     ""
-    os.mkdir( 'addfiletemp' )
-    cwd = os.getcwd()
-    os.chdir( 'addfiletemp' )
-    try:
+    workdir = 'wrkdir_'+util.random_string()
+    os.mkdir( workdir )
+
+    with util.change_directory( workdir ):
+
         util.runcmd( 'git clone '+url, print_output=False )
 
-        pL = os.listdir( '.' )
-        assert len( pL ) == 1
-        os.chdir( pL[0] )
+        os.chdir( util.globfile( '*' ) )
 
         util.runcmd( 'git checkout -b '+branchname, print_output=False )
 
@@ -178,28 +174,14 @@ def push_new_branch_with_file( url, branchname, filename, filecontents ):
                       print_output=False )
         util.runcmd( 'git push -u origin '+branchname, print_output=False )
 
-    finally:
-        os.chdir( cwd )
-
-    shutil.rmtree( 'addfiletemp' )
-
 
 def create_local_branch( local_directory, branchname ):
     ""
-    cwd = os.getcwd()
-    os.chdir( local_directory )
-    try:
+    with util.change_directory( local_directory ):
         util.runcmd( 'git checkout -b '+branchname, print_output=False )
-    finally:
-        os.chdir( cwd )
 
 
 def checkout_to_previous_sha1( directory ):
     ""
-    cwd = os.getcwd()
-    os.chdir( directory )
-    try:
+    with util.change_directory( directory ):
         util.runcmd( 'git checkout HEAD^1', print_output=False )
-
-    finally:
-        os.chdir( cwd )
