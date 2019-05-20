@@ -89,7 +89,7 @@ def find_process_in_list( proclist, pid ):
 
 def create_bare_repo_with_topic_branch( reponame, subdir=None, tag=None ):
     ""
-    url = create_local_bare_repository( reponame )
+    url = create_local_bare_repository( reponame, subdir )
     push_file_to_repo( url, 'file.txt', 'file contents' )
     push_new_branch_with_file( url, 'topic', 'file.txt', 'new contents' )
 

@@ -352,13 +352,9 @@ class GitInterface:
             assert os.path.isdir( dname )
             self.root = os.path.abspath( dname )
 
-    def _repo_name_from_url(self, url):
-        ""
-        return os.path.basename( url ).rstrip( '.git' )
-
     def _repo_directory_from_url(self, url, bare=False):
         ""
-        name = self._repo_name_from_url( url )
+        name = repo_name_from_url( url )
         if bare:
             return name+'.git'
         else:
@@ -367,7 +363,7 @@ class GitInterface:
     def _branch_clone(self, url, rootdir, branch):
         ""
         if not rootdir:
-            rootdir = self._repo_name_from_url( url )
+            rootdir = repo_name_from_url( url )
 
         with make_and_change_directory( rootdir ):
             self.run( 'init' )
@@ -491,7 +487,31 @@ def push_branches_and_tags( work_git, to_url ):
     work_git.push( all_tags=True, repository=to_url )
 
 
+def is_a_local_repository( directory ):
+    ""
+    try:
+        with change_directory( directory ):
+            git = GitInterface()
+            x,out = git.run( 'rev-parse --is-bare-repository',
+                             raise_on_error=False, capture=True )
+    except Exception:
+        return False
+
+    if x == 0 and out.strip().lower() in ['true','false']:
+        return True
+
+    return False
+
+
 ########################################################################
+
+def repo_name_from_url( url ):
+    ""
+    name = os.path.basename( url )
+    if name.endswith( '.git' ):
+        name = name[:-4]
+    return name
+
 
 class change_directory:
 
