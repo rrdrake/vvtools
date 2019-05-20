@@ -1,0 +1,211 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+from os.path import abspath
+from os.path import join as pjoin
+import time
+import unittest
+
+
+import trigtestutils as trigutil
+import testutils as util
+from testutils import print3
+
+import mrgitlib as mrlib
+
+mrgit_dir = os.path.dirname( trigutil.testsrcdir )
+mrgit_file = os.path.join( mrgit_dir, 'mrgit' )
+
+
+from gitinterface import GitInterface
+
+
+class help_message( trigutil.trigTestCase ):
+
+    def test_exercise_printing_of_help_message(self):
+        ""
+        x,out = util.runcmd( mrgit_file+' help' )
+        assert 'SYNOPSIS' in out
+
+        x,out = util.runcmd( mrgit_file+' -h' )
+        assert 'SYNOPSIS' in out
+
+        x,out = util.runcmd( mrgit_file+' --help' )
+        assert 'SYNOPSIS' in out
+
+
+class helper_functions( trigutil.trigTestCase ):
+
+    def test_recognizing_a_repository_url(self):
+        ""
+        os.makedirs( 'subdir/deep' )
+        os.mkdir( 'sub:dir' )
+        url = trigutil.create_bare_repo_with_topic_branch( 'cool', 'barerepo' )
+        GitInterface( url )
+        time.sleep(1)
+
+        assert mrlib.is_a_repository_url( 'file:///foo/bar' )
+        assert mrlib.is_a_repository_url( 'http://host.xx/path' )
+        assert mrlib.is_a_repository_url( 'https://host.xx/path' )
+        assert mrlib.is_a_repository_url( 'ssh://host.xx/path' )
+        assert mrlib.is_a_repository_url( 'git://host.xx/path' )
+        assert mrlib.is_a_repository_url( 'ftp://host.xx/path' )
+        assert mrlib.is_a_repository_url( 'ftps://host.xx/path' )
+
+        assert not mrlib.is_a_repository_url( 'sub:dir' )
+        assert mrlib.is_a_repository_url( 'host.xx:path/to/repo.git' )
+        assert mrlib.is_a_repository_url( 'usrname@host.xx:/path/to/repo.git' )
+
+        assert mrlib.is_a_repository_url( 'barerepo/cool.git' )
+        assert mrlib.is_a_repository_url( abspath( 'barerepo/cool.git' ) )
+        assert mrlib.is_a_repository_url( 'cool' )
+        assert mrlib.is_a_repository_url( abspath( 'cool' ) )
+        assert not mrlib.is_a_repository_url( 'subdir' )
+        assert not mrlib.is_a_repository_url( 'subdir/deep' )
+
+
+class cloning( trigutil.trigTestCase ):
+
+    def test_clone_a_single_repository(self):
+        ""
+        src_url = trigutil.create_bare_repo_with_topic_branch( 'cool' )
+
+        mrlib.clone( [ src_url ] )
+
+        assert os.path.isdir( 'cool' )
+        git = GitInterface( rootdir='cool' )
+        assert 'topic' in git.listRemoteBranches()
+
+    def test_cloning_a_repository_specified_on_the_command_line(self):
+        ""
+        src_url = trigutil.create_bare_repo_with_topic_branch( 'cool' )
+
+        x,out = util.runcmd( mrgit_file+' clone '+src_url+' myclone' )
+
+        assert x == 0
+        assert os.path.isdir( 'myclone' )
+        git = GitInterface( rootdir='myclone' )
+        assert 'topic' in git.listRemoteBranches()
+
+    def test_cloning_two_repositories_puts_second_under_the_first(self):
+        ""
+        cool_url, ness_url = self.make_coolness_repositories()
+
+        mrlib.clone( [ cool_url, ness_url ] )
+
+        assert os.path.isdir( 'cool' )
+        git = GitInterface( rootdir='cool' )
+        assert 'nessie' not in git.listTags()
+        git = GitInterface( rootdir='cool/ness' )
+        assert 'nessie' in git.listTags()
+
+    def make_coolness_repositories(self):
+        ""
+        cool_url = trigutil.create_bare_repo_with_topic_branch( 'cool' )
+        ness_url = trigutil.create_bare_repo_with_topic_branch( 'ness',
+                                                                tag='nessie' )
+        return cool_url, ness_url
+
+    def test_cloning_multiple_repos_from_the_command_line(self):
+        ""
+        cool_url, ness_url = self.make_coolness_repositories()
+
+        x,out = util.runcmd( mrgit_file+' clone ' + \
+                             ness_url+' '+cool_url+' myclone' )
+
+        assert os.path.isdir( 'myclone' )
+        git = GitInterface( rootdir='myclone' )
+        assert 'nessie' in git.listTags()
+        git = GitInterface( rootdir='myclone/cool' )
+        assert 'nessie' not in git.listTags()
+
+    def test_clone_an_mrgit_clone(self):
+        ""
+        cool_url, ness_url = self.make_coolness_repositories()
+
+        mrlib.clone( [ cool_url, ness_url, 'clone1' ] )
+
+        mrlib.clone( [ 'clone1', 'clone2' ] )
+
+        assert os.path.isdir( 'clone2' )
+        git = GitInterface( rootdir='clone2' )
+        assert 'nessie' not in git.listTags()
+        git = GitInterface( rootdir='clone2/ness' )
+        # magic: assert 'nessie' in git.listTags()
+
+    # def test_specifying_server_and_repo_basenames(self):
+    #     ""
+    #     util.runcmd( mrgit_file, 'clone --server', srv, 'code,plug' )
+
+    # def test_specify_the_server_with_environ_variable(self):
+    #     ""
+    #     os.environ['MRGIT_SERVER'] = srv
+    #     util.runcmd( mrgit_file, 'clone code,plug' )
+
+    # def test_clone_then_update(self):
+    #     ""
+    #     util.runcmd( mrgit_file, 'clone --server', srv, 'code,plug' )
+    #     # TODO: make change
+    #     util.runcmd( mrgit_file, 'pull' )
+
+    # def test_cloning_from_a_manifest_file(self):
+    #     """
+    #     if a server is not specified, the repositories are relative to
+    #     the manifest file
+    #     """
+    #     util.writefile( 'repos/mymanifest', """
+    #         repo=base, path=code
+    #         repo=plug, path=code/plugin
+    #         """ )
+    #     time.sleep(1)
+
+    #     util.runcmd( mrgit_file, 'clone -m repos/mymanifest' )
+
+    # def test_the_first_group_is_the_default(self):
+    #     ""
+    #     util.writefile( 'repos/mymanifest', """
+    #         [ code ]
+    #             repo=base, path=code
+    #             repo=plug, path=code/plugin
+    #         [ tests ]
+    #             repo=base_tests, path=tests
+    #             repo=plug_tests, path=tests/plugins
+    #         """ )
+    #     time.sleep(1)
+
+    #     util.runcmd( mrgit_file, 'clone -m repos/mymanifest' )
+
+    # def test_clone_a_specific_group(self):
+    #     ""
+    #     util.writefile( 'repos/mymanifest', """
+    #         [ code ]
+    #             repo=base, path=code
+    #             repo=plug, path=code/plugin
+    #         [ tests ]
+    #             repo=base_tests, path=tests
+    #             repo=plug_tests, path=tests/plugins
+    #         """ )
+    #     time.sleep(1)
+
+    #     util.runcmd( mrgit_file, 'clone -m repos/mymanifest tests' )
+
+
+class updating( trigutil.trigTestCase ):
+
+    def test_(self):
+        ""
+        src_url = trigutil.create_bare_repo_with_topic_branch( 'cool' )
+
+
+#######################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
