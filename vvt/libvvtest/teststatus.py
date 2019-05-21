@@ -22,15 +22,15 @@ class TestStatusHandler:
     def __init__(self):
         ""
         self.skipreason = {
-                PARAM_SKIP           : 'parameter expression failed',
-                RESTART_PARAM_SKIP   : 'parameter expression failed',
-                KEYWORD_SKIP         : 'keyword expression failed',
+                PARAM_SKIP           : 'excluded by parameter expression',
+                RESTART_PARAM_SKIP   : 'excluded by parameter expression',
+                KEYWORD_SKIP         : 'excluded by keyword expression',
                 RESULTS_KEYWORD_SKIP : 'previous result keyword expression',
                 SUBDIR_SKIP          : 'current working directory',
-                'platform'           : 'platform expression failed',
-                'option'             : 'option expression failed',
+                'platform'           : 'excluded by platform expression',
+                'option'             : 'excluded by option expression',
                 'tdd'                : 'TDD test',
-                'search'             : 'file search expression failed',
+                'search'             : 'excluded by file search expression',
                 'maxprocs'           : 'exceeds max processors',
                 'runtime'            : 'runtime too low or too high',
                 'nobaseline'         : 'no rebaseline specification',
