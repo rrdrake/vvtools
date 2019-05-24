@@ -224,6 +224,13 @@ class GitInterface:
             else:
                 raise GitInterfaceError( 'branch does not exist: '+branchname )
 
+    def createBranch(self, branchname):
+        ""
+        if branchname in self.listBranches():
+            raise GitInterfaceError( 'branch already exists: '+branchname )
+
+        self.run( 'checkout -b '+branchname )
+
     def getRemoteURL(self):
         ""
         x,out = self.run( 'config --get remote.origin.url',
@@ -269,7 +276,7 @@ class GitInterface:
         # implementation here creates a temporary repo with an initial
         # commit then fetches that into the current repository
 
-        pathL = [ os.path.abspath(p) for p in (path0,)+paths ]
+        pathL = [ abspath(p) for p in (path0,)+paths ]
 
         tmpdir = tempfile.mkdtemp( '.gitinterface' )
         try:
@@ -338,19 +345,22 @@ class GitInterface:
         cmd = 'clone'
         if bare:
             cmd += ' --bare'
-        cmd += ' ' + url
 
         if rootdir:
+            if os.path.isdir( url ) and is_a_local_repository( url ):
+                url = abspath( url )
+
             with make_and_change_directory( rootdir ):
-                self.run( cmd, '.' )
+                self.run( cmd+' '+url, '.' )
                 self.root = os.getcwd()
+
         else:
-            self.run( cmd )
+            self.run( cmd+' '+url )
 
             dname = self._repo_directory_from_url( url, bare )
 
             assert os.path.isdir( dname )
-            self.root = os.path.abspath( dname )
+            self.root = abspath( dname )
 
     def _repo_directory_from_url(self, url, bare=False):
         ""
@@ -418,7 +428,7 @@ class GitInterface:
         if origin_url:
             self.clone( origin_url, rootdir=rootdir )
         elif rootdir:
-            self.root = os.path.abspath( rootdir )
+            self.root = abspath( rootdir )
 
     def run(self, arg0, *args, **kwargs):
         ""
@@ -507,7 +517,7 @@ def is_a_local_repository( directory ):
 
 def repo_name_from_url( url ):
     ""
-    name = os.path.basename( url )
+    name = os.path.basename( normpath(url) )
     if name.endswith( '.git' ):
         name = name[:-4]
     return name
@@ -571,7 +581,7 @@ class set_environ:
 
 def split_and_create_directory( repo_path ):
     ""
-    path,name = os.path.split( os.path.normpath( repo_path ) )
+    path,name = os.path.split( normpath( repo_path ) )
 
     if path == '.':
         path = ''

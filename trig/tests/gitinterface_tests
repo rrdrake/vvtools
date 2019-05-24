@@ -27,13 +27,14 @@ from gitinterface import copy_path_to_current_directory
 from gitinterface import runcmd
 from gitinterface import safe_repository_mirror
 from gitinterface import is_a_local_repository
+from gitinterface import repo_name_from_url
 
 
 class with_set_environ( trigutil.trigTestCase ):
 
     def setUp(self):
         ""
-        trigutil.trigTestCase.setUp( cleanout=False )
+        trigutil.trigTestCase.setUp( self, cleanout=False )
 
     def test_setting_no_names_should_not_change_environ(self):
         ""
@@ -493,7 +494,7 @@ class branches( trigutil.trigTestCase ):
 
     def setUp(self):
         ""
-        trigutil.trigTestCase.setUp()
+        trigutil.trigTestCase.setUp( self )
 
         self.url = trigutil.create_bare_repo_with_topic_branch( 'example' )
         time.sleep(1)
@@ -596,7 +597,33 @@ class branches( trigutil.trigTestCase ):
         git.checkoutBranch( 'topic' )
         self.assertRaises( GitInterfaceError, git.checkoutBranch, 'foobar' )
 
-    def test_creating_a_branch(self):
+    def test_creating_a_local_branch(self):
+        ""
+        git = GitInterface( self.url )
+        git.createBranch( 'justme' )
+        assert git.currentBranch() == 'justme'
+
+        util.writefile( 'example/file.txt', 'branch contents' )
+        git.add( 'file.txt' )
+        git.commit( 'mod to file on branch' )
+        git.checkoutBranch( 'master' )
+
+        git2 = GitInterface( 'example', 'checkrepo' )
+        assert 'justme' not in git2.listBranches()
+        assert 'justme' in git2.listRemoteBranches()
+        git2.checkoutBranch( 'justme' )
+        assert util.readfile( 'checkrepo/file.txt' ).strip() == 'branch contents'
+
+    def test_create_local_branch_fails_if_branch_already_exists(self):
+        ""
+        git = GitInterface( self.url )
+        git.checkoutBranch( 'topic' )
+        git.checkoutBranch( 'master' )
+
+        self.assertRaises( GitInterfaceError, git.createBranch, 'topic' )
+        assert git.currentBranch() == 'master'
+
+    def test_creating_a_remote_branch(self):
         ""
         git = GitInterface( self.url )
         git.createRemoteBranch( 'nasa' )
@@ -605,7 +632,7 @@ class branches( trigutil.trigTestCase ):
         git.checkoutBranch( 'nasa' )
         assert util.readfile( 'check/file.txt' ).strip() == 'file contents'
 
-    def create_a_branch_and_push_a_change(self, git):
+    def create_a_remote_branch_and_push_a_change(self, git):
         ""
         git.createRemoteBranch( 'nasa' )
         util.writefile( 'example/newfile.txt', 'new contents' )
@@ -617,18 +644,18 @@ class branches( trigutil.trigTestCase ):
         git.checkoutBranch( 'nasa' )
         assert util.readfile( 'check/newfile.txt' ).strip() == 'new contents'
 
-    def test_creating_a_branch_and_pushing_a_change(self):
+    def test_creating_a_remote_branch_and_pushing_a_change(self):
         ""
         git = GitInterface( self.url )
-        self.create_a_branch_and_push_a_change( git )
+        self.create_a_remote_branch_and_push_a_change( git )
 
-    def test_clone_specific_branch_then_create_a_branch_and_push(self):
+    def test_clone_specific_branch_then_create_a_remote_branch_and_push(self):
         ""
         git = GitInterface()
         git.clone( self.url, branch='master' )
-        self.create_a_branch_and_push_a_change( git )
+        self.create_a_remote_branch_and_push_a_change( git )
 
-    def test_create_branch_does_not_push_local_changes(self):
+    def test_create_remote_branch_does_not_push_local_changes(self):
         ""
         git1 = GitInterface( self.url )
         util.writefile( 'example/file.txt', 'modified contents' )
@@ -645,7 +672,7 @@ class branches( trigutil.trigTestCase ):
         git2.pull()
         assert util.readfile( 'check1/file.txt' ).strip() == 'modified contents'
 
-    def test_create_branch_within_a_single_branch_clone(self):
+    def test_create_remote_branch_within_a_single_branch_clone(self):
         ""
         git1 = GitInterface()
         git1.clone( self.url, branch='master' )
@@ -663,26 +690,26 @@ class branches( trigutil.trigTestCase ):
         git2.pull()
         assert util.readfile( 'check1/file.txt' ).strip() == 'modified contents'
 
-    def test_create_branch_that_already_exists_is_an_error(self):
+    def test_create_remote_branch_that_already_exists_is_an_error(self):
         ""
         git = GitInterface( self.url )
         self.assertRaises( GitInterfaceError, git.createRemoteBranch, 'topic' )
 
-    def test_create_branch_fails_if_current_branch_is_not_tracked(self):
+    def test_create_remote_branch_fails_if_current_branch_is_not_tracked(self):
         ""
         git = GitInterface( self.url )
         trigutil.create_local_branch( 'example', 'proximus' )
         assert git.currentBranch() == 'proximus'
         self.assertRaises( GitInterfaceError, git.createRemoteBranch, 'nasa' )
 
-    def test_create_branch_of_same_name_as_current_branch_is_an_error(self):
+    def test_create_remote_branch_of_same_name_as_current_branch_is_an_error(self):
         ""
         git = GitInterface( self.url )
         git.checkoutBranch( 'topic' )
         assert git.currentBranch() == 'topic'
         self.assertRaises( GitInterfaceError, git.createRemoteBranch, 'topic' )
 
-    def test_create_branch_with_added_files_should_succeed(self):
+    def test_create_remote_branch_with_added_files_should_succeed(self):
         ""
         git = GitInterface( self.url )
         util.writefile( 'example/file.txt', 'modified contents' )
@@ -693,7 +720,7 @@ class branches( trigutil.trigTestCase ):
         git.checkoutBranch( 'nasa' )
         assert util.readfile( 'check/file.txt' ).strip() == 'file contents'
 
-    def test_create_branch_with_modified_but_not_added_files_should_succeed(self):
+    def test_create_remote_branch_with_modified_but_not_added_files_should_succeed(self):
         ""
         git = GitInterface( self.url )
         util.writefile( 'example/file.txt', 'modified contents' )
@@ -743,7 +770,7 @@ class pulling( trigutil.trigTestCase ):
 
     def setUp(self):
         ""
-        trigutil.trigTestCase.setUp()
+        trigutil.trigTestCase.setUp( self )
 
         self.url = trigutil.create_bare_repo_with_topic_branch( 'example' )
         time.sleep(1)
@@ -1033,6 +1060,13 @@ class mirroring_repositories( trigutil.trigTestCase ):
 
 
 class misc_functions( trigutil.trigTestCase ):
+
+    def test_repo_name_from_url(self):
+        ""
+        assert repo_name_from_url( 'foo/bar.git' ) == 'bar'
+        assert repo_name_from_url( 'foo/bar' ) == 'bar'
+        assert repo_name_from_url( 'foo/bar.git/' ) == 'bar'
+        assert repo_name_from_url( 'foo/bar/' ) == 'bar'
 
     def test_function_is_a_repository_url(self):
         ""

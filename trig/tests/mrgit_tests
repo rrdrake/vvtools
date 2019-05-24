@@ -199,9 +199,93 @@ class cloning( trigutil.trigTestCase ):
     #     util.runcmd( mrgit_file, 'clone -m repos/mymanifest tests' )
 
 
+class mrgit_repository_tests( trigutil.trigTestCase ):
+
+    def test_create_config_and_check_layout(self):
+        ""
+        cfg = mrlib.Configuration()
+
+        man = mrlib.Manifests()
+        man.addRepo( 'cool', 'cool', 'cool' )
+        man.addRepo( 'cool', 'ness', 'cool/ness' )
+        cfg.setManifests( man )
+
+        cfg.setRepoURL( 'cool', '/my/cool.git' )
+        cfg.setRepoURL( 'ness', '/theirs/ness.git' )
+
+        repos = list( cfg.getLayout() )
+        assert len( repos ) == 2
+        assert list( repos[0] ) == [ '/my/cool.git', '.' ]
+        assert list( repos[1] ) == [ '/theirs/ness.git', 'ness' ]
+
+    def test_create_config_from_a_single_url(self):
+        ""
+        cfg = mrlib.create_config_from_url_list( [ 'file:///one/repo.git' ] )
+
+        repos = cfg.getLayout()
+        assert len( repos ) == 1
+        assert list( repos[0] ) == [ 'file:///one/repo.git', '.' ]
+        assert cfg.getRootDir() == 'repo'
+
+    def test_create_config_from_two_urls(self):
+        ""
+        cfg = mrlib.create_config_from_url_list( [ 'file:///one/repo.git',
+                                                   'ssh:///and/two.git' ] )
+
+        repos = cfg.getLayout()
+        assert len( repos ) == 2
+        assert list( repos[0] ) == [ 'file:///one/repo.git', '.' ]
+        assert list( repos[1] ) == [ 'ssh:///and/two.git', 'two' ]
+        assert cfg.getRootDir() == 'repo'
+
+    def test_create_mrgit_repository(self):
+        ""
+        return
+        mrlib.create_mrgit_repository( '.mrgit' )
+
+        git = GitInterface( '.mrgit', 'checkrepo' )
+        assert os.path.isfile( 'checkrepo/manifests' )
+        assert not os.path.isfile( 'checkrepo/config' )
+
+        assert 'mrgit_config' in git.listRemoteBranches()
+        git.checkoutBranch( 'mrgit_config' )
+        assert os.path.isfile( 'checkrepo/config' )
+
+    def test_exercise_RemoteConfig_interface(self):
+        ""
+        return
+        remote = mrlib.RemoteConfig( 'origin' )
+
+        remote.setManifestsURL( '/my/url' )
+        remote.addBaseURL( '/my/base0.git' )
+        remote.addBaseURL( '/my/base1.git' )
+
+        assert remote.getManifestsURL() == '/my/url'
+
+    def test_exercise_RepoGroup_interface(self):
+        ""
+        return
+        grp = mrlib.RepoGroup( 'base' )
+
+        grp.addRepo( 'cool', 0, 'cool' )
+        grp.addRepo( 'ness', 1, 'cool/ness' )
+
+    def test_write_and_read_config_file(self):
+        ""
+        pass
+        # cfg = mrlib.Configuration()
+
+        # cfg.addRemote( 'origin' )
+        # cfg.setManifests( 'origin', '/my/url' )
+        # cfg.addBaseURL( 'origin', '/my/base0.git' )
+        # cfg.addBaseURL( 'origin', '/my/base1.git' )
+
+        # cfg.writeFile( 'outfile' )
+
+
 class updating( trigutil.trigTestCase ):
 
-    def test_(self):
+    def test_foo(self):
         ""
         src_url = trigutil.create_bare_repo_with_topic_branch( 'cool' )
 
