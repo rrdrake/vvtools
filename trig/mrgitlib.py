@@ -110,7 +110,7 @@ class Configuration:
 
     def setRootDir(self, directory):
         ""
-        self.rootdir = directory
+        self.rootdir = os.path.abspath( directory )
 
     def getRootDir(self):
         ""
@@ -140,6 +140,18 @@ class Configuration:
         adjust_repo_paths( repolist )
 
         return repolist
+
+    def writeManifestsToFile(self, fileobj):
+        ""
+        self.mfest.writeToFile( fileobj )
+
+    def writeConfigToFile(self, fileobj):
+        ""
+        for name,url in self.repomap.items():
+            fileobj.write( 'repo='+name )
+            fileobj.write( ', url='+url )
+            fileobj.write( '\n' )
+        fileobj.write( '\n' )
 
 
 def adjust_repo_paths( repolist ):
@@ -187,6 +199,17 @@ class Manifests:
 
         return None
 
+    def writeToFile(self, fileobj):
+        ""
+        for grp in self.groups:
+            fileobj.write( '[ group '+grp.getName()+' ]\n' )
+            for spec in grp.getRepoList():
+                fileobj.write( '    repo='+spec['name'] )
+                fileobj.write( ', path='+spec['path'] )
+                fileobj.write( '\n' )
+
+            fileobj.write( '\n' )
+
 
 class RepoGroup:
 
@@ -222,24 +245,23 @@ class RepoGroup:
         return None
 
 
-def create_mrgit_repository( repodir ):
+def create_mrgit_repository( repodir, cfg ):
     ""
     git = gititf.GitInterface()
     git.create( repodir )
 
     with open( repodir+'/manifests', 'w' ) as fp:
-        fp.write( '\n' )
+        cfg.writeManifestsToFile( fp )
 
     git.add( 'manifests' )
     git.commit( 'init manifests' )
 
     git.createBranch( 'mrgit_config' )
     with open( repodir+'/config', 'w' ) as fp:
-        fp.write( '\n' )
+        cfg.writeConfigToFile( fp )
 
     git.add( 'config' )
     git.commit( 'init config' )
-
     git.checkoutBranch( 'master' )
 
 
