@@ -44,33 +44,7 @@ class help_message( trigutil.trigTestCase ):
 
 
 class helper_functions( trigutil.trigTestCase ):
-
-    def test_recognizing_a_repository_url(self):
-        ""
-        os.makedirs( 'subdir/deep' )
-        os.mkdir( 'sub:dir' )
-        url = trigutil.create_bare_repo_with_topic_branch( 'cool', 'barerepo' )
-        GitInterface( url )
-        time.sleep(1)
-
-        assert mrlib.is_a_repository_url( 'file:///foo/bar' )
-        assert mrlib.is_a_repository_url( 'http://host.xx/path' )
-        assert mrlib.is_a_repository_url( 'https://host.xx/path' )
-        assert mrlib.is_a_repository_url( 'ssh://host.xx/path' )
-        assert mrlib.is_a_repository_url( 'git://host.xx/path' )
-        assert mrlib.is_a_repository_url( 'ftp://host.xx/path' )
-        assert mrlib.is_a_repository_url( 'ftps://host.xx/path' )
-
-        assert not mrlib.is_a_repository_url( 'sub:dir' )
-        assert mrlib.is_a_repository_url( 'host.xx:path/to/repo.git' )
-        assert mrlib.is_a_repository_url( 'usrname@host.xx:/path/to/repo.git' )
-
-        assert mrlib.is_a_repository_url( 'barerepo/cool.git' )
-        assert mrlib.is_a_repository_url( abspath( 'barerepo/cool.git' ) )
-        assert mrlib.is_a_repository_url( 'cool' )
-        assert mrlib.is_a_repository_url( abspath( 'cool' ) )
-        assert not mrlib.is_a_repository_url( 'subdir' )
-        assert not mrlib.is_a_repository_url( 'subdir/deep' )
+    pass
 
 
 class cloning( trigutil.trigTestCase ):
@@ -141,6 +115,12 @@ class cloning( trigutil.trigTestCase ):
         assert 'nessie' not in git.listTags()
         git = GitInterface( rootdir='clone2/ness' )
         # magic: assert 'nessie' in git.listTags()
+
+    # magic: use case:
+    #           - have an mrgit clone with no top level git repo (because
+    #             two groups were cloned that have distinct root directories)
+    #           - then do a clone of that clone by specifying the top level
+    #             directory as the url
 
     # def test_specifying_server_and_repo_basenames(self):
     #     ""

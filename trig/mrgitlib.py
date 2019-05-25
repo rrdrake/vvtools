@@ -7,8 +7,11 @@
 import os, sys
 import getopt
 import re
+import tempfile
+import shutil
 from os.path import join as pjoin
 from os.path import abspath
+from os.path import normpath
 
 import gitinterface as gititf
 
@@ -28,8 +31,12 @@ def clone( argv ):
     if len( argL ) > 0:
 
         urls, directory = parse_url_list( argL )
-        cfg = create_config_from_url_list( urls, directory )
-        clone_repositories( cfg )
+        assert len( urls ) > 0
+        if len( urls ) == 1:
+            cfg = clone_from_single_url( urls[0], directory )
+        else:
+            cfg = create_config_from_url_list( urls, directory )
+            clone_repositories( cfg )
 
 
 def clone_repositories( cfg ):
@@ -44,20 +51,36 @@ def clone_repositories( cfg ):
         for url,loc in cfg.getLayout():
             git.clone( url, loc )
 
+    create_mrgit_repository( pjoin( root, '.mrgit' ), cfg )
 
 def parse_url_list( args ):
     ""
     directory = None
 
-    if len(args) == 1 or is_a_repository_url( args[-1] ):
+    if len( args ) <= 1 or \
+       gititf.repository_url_match( args[-1] ) or \
+       gititf.is_a_local_repository( args[-1] ) or \
+       gititf.is_a_local_repository( args[-1]+'/.mrgit' ):
         urls = list( args )
     else:
-        urls = args[:-1]
         directory = args[-1]
+        urls = args[:-1]
 
-    urls = adjust_local_repository_urls( urls )
+    urls = abspath_local_repository_urls( urls )
 
     return urls, directory
+
+
+def abspath_local_repository_urls( urls ):
+    ""
+    newurls = []
+    for url in urls:
+        if gititf.is_a_local_repository( url ):
+            newurls.append( abspath( url ) )
+        else:
+            newurls.append( url )
+
+    return newurls
 
 
 def create_config_from_url_list( urls, directory=None ):
@@ -65,7 +88,7 @@ def create_config_from_url_list( urls, directory=None ):
     cfg = Configuration()
 
     if directory:
-        cfg.setRootDir( directory )
+        cfg.setRootDir( abspath( normpath( directory ) ) )
 
     mfest = Manifests()
     cfg.setManifests( mfest )
@@ -84,6 +107,59 @@ def create_config_from_url_list( urls, directory=None ):
 
     return cfg
 
+
+def clone_from_single_url( url, directory ):
+    ""
+    if directory and not os.path.exists( directory ):
+        os.mkdir( directory )
+
+    tmprepo = make_temp_repo_dir( directory )
+
+    git = gititf.GitInterface( url, tmprepo )
+
+    cfg = create_config_from_url_list( [ url ], directory )
+
+    rootdir = cfg.getRootDir()
+    move_repo( tmprepo, rootdir )
+
+    if not directory:
+        shutil.rmtree( os.path.dirname( tmprepo ) )
+
+    create_mrgit_repository( pjoin( rootdir, '.mrgit' ), cfg )
+
+    # tmprepo = directory / random string
+    # or
+    # tmprepo = random string / random string
+    # quietly checkout url+'/.mrgit' into tmprepo
+    # if ok:
+    #     construct Configuration from mrgit data
+    #     move tmprepo to .mrgit subdir
+    # else:
+    #     pass
+    # try checking out urls[0]+'/.mrgit' or '/.mrgit.git'
+    # else checkout urls[0]
+
+
+def move_repo( fromdir, todir ):
+    ""
+    if not os.path.exists( todir ):
+        os.rename( fromdir, todir )
+    else:
+        for fn in os.listdir( fromdir ):
+            frompath = pjoin( fromdir, fn )
+            shutil.move( frompath, todir )
+        shutil.rmtree( fromdir )
+
+
+def make_temp_repo_dir( directory ):
+    ""
+    if directory:
+        tmpdir = tempfile.mkdtemp( '', 'mrgit_tempclone_', abspath(directory) )
+    else:
+        tmpdir1 = tempfile.mkdtemp( '', 'mrgit_tempclone_', os.getcwd() )
+        tmpdir  = tempfile.mkdtemp( '', 'mrgit_tempclone_', tmpdir1 )
+
+    return tmpdir
 
 
 # create .mrgit repository
@@ -110,7 +186,7 @@ class Configuration:
 
     def setRootDir(self, directory):
         ""
-        self.rootdir = os.path.abspath( directory )
+        self.rootdir = directory
 
     def getRootDir(self):
         ""
@@ -163,7 +239,7 @@ def adjust_repo_paths( repolist ):
 
 def remove_top_level_directory( path ):
     ""
-    pL = os.path.normpath( path ).split( os.sep )
+    pL = normpath( path ).split( os.sep )
     if len(pL) == 1:
         return '.'
     else:
@@ -263,37 +339,3 @@ def create_mrgit_repository( repodir, cfg ):
     git.add( 'config' )
     git.commit( 'init config' )
     git.checkoutBranch( 'master' )
-
-
-def adjust_local_repository_urls( urls ):
-    ""
-    newurls = []
-    for url in urls:
-        if os.path.isdir( url ) and gititf.is_a_local_repository( url ):
-            newurls.append( abspath( url ) )
-        else:
-            newurls.append( url )
-
-    return newurls
-
-
-# match the form [user@]host.xz:path/to/repo.git/
-scp_like_url = re.compile( r'([a-zA-Z0-9_]+@)?[a-zA-Z0-9_]+([.][a-zA-Z0-9_]*)*:' )
-
-def is_a_repository_url( url ):
-    ""
-    if os.path.isdir( url ):
-        if gititf.is_a_local_repository( url ):
-            return True
-
-    elif url.startswith( 'http://' ) or url.startswith( 'https://' ) or \
-         url.startswith( 'ftp://' ) or url.startswith( 'ftps://' ) or \
-         url.startswith( 'ssh://' ) or \
-         url.startswith( 'git://' ) or \
-         url.startswith( 'file://' ):
-        return True
-
-    elif scp_like_url.match( url ):
-        return True
-
-    return False
