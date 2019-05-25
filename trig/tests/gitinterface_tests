@@ -26,7 +26,9 @@ from gitinterface import set_environ, change_directory
 from gitinterface import copy_path_to_current_directory
 from gitinterface import runcmd
 from gitinterface import safe_repository_mirror
+from gitinterface import repository_url_match
 from gitinterface import is_a_local_repository
+from gitinterface import verify_repository_url
 from gitinterface import repo_name_from_url
 
 
@@ -1068,7 +1070,45 @@ class misc_functions( trigutil.trigTestCase ):
         assert repo_name_from_url( 'foo/bar.git/' ) == 'bar'
         assert repo_name_from_url( 'foo/bar/' ) == 'bar'
 
-    def test_function_is_a_repository_url(self):
+    def test_function_repository_url_match(self):
+        ""
+        os.makedirs( 'subdir/deep' )
+        os.mkdir( 'sub:dir' )
+        url = trigutil.create_bare_repo_with_topic_branch( 'cool', 'barerepo' )
+        GitInterface( url )
+        GitInterface( url, 'mrdir/.mrgit' )
+        git = GitInterface()
+        git.clone( url, 'bare_mrdir/.mrgit.git', bare=True )
+        time.sleep(1)
+
+        assert repository_url_match( 'file:///foo/bar' )
+        assert repository_url_match( 'http://host.xx/path' )
+        assert repository_url_match( 'https://host.xx/path' )
+        assert repository_url_match( 'ssh://host.xx/path' )
+        assert repository_url_match( 'git://host.xx/path' )
+        assert repository_url_match( 'ftp://host.xx/path' )
+        assert repository_url_match( 'ftps://host.xx/path' )
+
+        assert repository_url_match( 'sub:dir' )
+        assert not repository_url_match( './sub:dir' )
+        assert repository_url_match( 'host.xx:path/to/repo.git' )
+        assert repository_url_match( 'usrname@host.xx:/path/to/repo.git' )
+
+        assert not repository_url_match( 'barerepo/cool.git' )
+        assert not repository_url_match( abspath( 'barerepo/cool.git' ) )
+        assert not repository_url_match( 'cool' )
+        assert not repository_url_match( abspath( 'cool' ) )
+        assert not repository_url_match( 'subdir' )
+        assert not repository_url_match( 'subdir/deep' )
+
+        assert not os.path.exists( 'mrdir/.git' )
+        assert not os.path.exists( 'mrdir/config' )
+        assert not repository_url_match( 'mrdir' )
+        assert not os.path.exists( 'bare_mrdir/.git' )
+        assert not os.path.exists( 'bare_mrdir/config' )
+        assert not repository_url_match( 'bare_mrdir' )
+
+    def test_function_is_a_local_repository(self):
         ""
         url = trigutil.create_bare_repo_with_topic_branch( 'cool', 'barerepo' )
         GitInterface( url )
@@ -1077,9 +1117,40 @@ class misc_functions( trigutil.trigTestCase ):
         assert not is_a_local_repository( 'barerepo' )
         assert is_a_local_repository( 'barerepo/cool.git' )
         assert is_a_local_repository( abspath( 'barerepo/cool.git' ) )
+        assert is_a_local_repository( 'barerepo/cool' )
+        assert is_a_local_repository( abspath( 'barerepo/cool' ) )
 
         assert is_a_local_repository( 'cool' )
         assert is_a_local_repository( abspath( 'cool' ) )
+
+    def test_function_verify_repository_url(self):
+        ""
+        url = trigutil.create_bare_repo_with_topic_branch( 'cool', 'barerepo' )
+        git = GitInterface()
+        git.clone( url, rootdir='dir1/coolclone' )
+        git.clone( url, rootdir='dir2/bareclone.git', bare=True )
+        time.sleep(1)
+
+        assert os.path.isdir( 'dir1/coolclone' )
+        assert os.path.isdir( 'dir2/bareclone.git' )
+
+        pre = 'file://'+os.getcwd()
+
+        assert not verify_repository_url( 'barerepo' )
+        assert not verify_repository_url( pre+'/barerepo' )
+        assert not verify_repository_url( 'dir1' )
+        assert not verify_repository_url( pre+'/dir1' )
+        assert not verify_repository_url( 'dir2' )
+        assert not verify_repository_url( pre+'/dir2' )
+
+        assert verify_repository_url( 'dir1/coolclone' )
+        assert verify_repository_url( os.path.abspath('dir1/coolclone') )
+        assert verify_repository_url( 'dir2/bareclone' )
+        assert verify_repository_url( os.path.abspath('dir2/bareclone') )
+
+        assert verify_repository_url( pre+'/dir1/coolclone' )
+        assert verify_repository_url( pre+'/dir2/bareclone.git' )
+        assert verify_repository_url( pre+'/dir2/bareclone' )
 
 
 #######################################################################

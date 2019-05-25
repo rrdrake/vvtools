@@ -14,6 +14,7 @@ import pipes
 import shutil
 import tempfile
 import subprocess
+import re
 
 
 class GitInterfaceError( Exception ):
@@ -347,7 +348,7 @@ class GitInterface:
             cmd += ' --bare'
 
         if rootdir:
-            if os.path.isdir( url ) and is_a_local_repository( url ):
+            if not repository_url_match( url ) and is_a_local_repository( url ):
                 url = abspath( url )
 
             with make_and_change_directory( rootdir ):
@@ -497,10 +498,33 @@ def push_branches_and_tags( work_git, to_url ):
     work_git.push( all_tags=True, repository=to_url )
 
 
+# match the form [user@]host.xz:path/to/repo.git/
+scp_like_url = re.compile( r'([a-zA-Z0-9_]+@)?[a-zA-Z0-9_]+([.][a-zA-Z0-9_]*)*:' )
+
+def repository_url_match( url ):
+    ""
+    if url.startswith( 'http://' ) or url.startswith( 'https://' ) or \
+       url.startswith( 'ftp://' ) or url.startswith( 'ftps://' ) or \
+       url.startswith( 'ssh://' ) or \
+       url.startswith( 'git://' ) or \
+       url.startswith( 'file://' ):
+        return True
+
+    elif scp_like_url.match( url ):
+        return True
+
+    return False
+
+
 def is_a_local_repository( directory ):
     ""
+    if not os.path.isdir( directory ) and os.path.isdir( directory+'.git' ):
+        rootdir = directory+'.git'
+    else:
+        rootdir = directory
+
     try:
-        with change_directory( directory ):
+        with change_directory( rootdir ):
             git = GitInterface()
             x,out = git.run( 'rev-parse --is-bare-repository',
                              raise_on_error=False, capture=True )
@@ -509,6 +533,21 @@ def is_a_local_repository( directory ):
 
     if x == 0 and out.strip().lower() in ['true','false']:
         return True
+
+    return False
+
+
+def verify_repository_url( url ):
+    ""
+    if is_a_local_repository( url ):
+        return True
+
+    else:
+        git = GitInterface()
+        x,out = git.run( 'ls-remote', url,
+                         raise_on_error=False, capture=True )
+        if x == 0:
+            return True
 
     return False
 
