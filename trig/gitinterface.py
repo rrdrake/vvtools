@@ -198,7 +198,7 @@ class GitInterface:
         if url == None:
             url = self.getRemoteURL()
             if not url:
-                raise GitInterfaceError( 'url not given and no local url found' )
+                raise GitInterfaceError( 'url not given and no local remote found' )
 
         bL = []
 
