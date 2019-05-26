@@ -104,17 +104,16 @@ class cloning( trigutil.trigTestCase ):
 
     def test_clone_an_mrgit_clone_by_pointing_to_the_manifests(self):
         ""
-        return # magic
         cool_url, ness_url = self.make_coolness_repositories()
 
         mrlib.clone( [ cool_url, ness_url, 'clone1' ] )
 
         mrlib.clone( [ 'clone1/.mrgit', 'clone2' ] )
 
-        assert os.path.isdir( 'clone2' )
-        git = GitInterface( rootdir='clone2' )
-        assert 'nessie' not in git.listTags()
-        git = GitInterface( rootdir='clone2/ness' )
+        # assert os.path.isdir( 'clone2' )
+        # git = GitInterface( rootdir='clone2' )
+        # assert 'nessie' not in git.listTags()
+        # git = GitInterface( rootdir='clone2/ness' )
         # magic: assert 'nessie' in git.listTags()
 
     def test_clone_an_mrgit_clone(self):
@@ -200,36 +199,22 @@ class cloning( trigutil.trigTestCase ):
 
 class mrgit_configuration_tests( trigutil.trigTestCase ):
 
-    def test_create_config_and_check_layout(self):
-        ""
-        cfg = mrlib.Configuration()
-
-        cfg.mfest.addRepo( 'cool', 'cool', 'cool' )
-        cfg.mfest.addRepo( 'cool', 'ness', 'cool/ness' )
-
-        cfg.rmap.setRepoURL( 'cool', '/my/cool.git' )
-        cfg.rmap.setRepoURL( 'ness', '/theirs/ness.git' )
-
-        repos = list( mrlib.get_repo_layout( cfg ) )
-        assert len( repos ) == 2
-        assert list( repos[0] ) == [ '/my/cool.git', '.' ]
-        assert list( repos[1] ) == [ '/theirs/ness.git', 'ness' ]
-
     def create_config_with_two_urls(self):
         ""
         cfg = mrlib.Configuration()
-        mrlib.create_local_config_from_url_list( cfg,
-                                                 [ 'file:///one/repo.git',
-                                                   'ssh:///and/two.git' ] )
+        cfg.createRemoteConfig( [ 'file:///one/repo.git',
+                                  'ssh:///and/two.git' ] )
+        cfg.setTopDir( None )
+
         return cfg
 
     def test_create_config_from_a_single_url(self):
         ""
         cfg = mrlib.Configuration()
-        mrlib.create_local_config_from_url_list( cfg,
-                                                 [ 'file:///one/repo.git' ] )
+        cfg.createRemoteConfig( [ 'file:///one/repo.git' ] )
+        cfg.setTopDir( None )
 
-        repos = mrlib.get_repo_layout( cfg )
+        repos = cfg.getRemoteRepoList()
         assert len( repos ) == 1
         assert list( repos[0] ) == [ 'file:///one/repo.git', '.' ]
         assert cfg.getTopDir() == abspath( 'repo' )
@@ -238,7 +223,7 @@ class mrgit_configuration_tests( trigutil.trigTestCase ):
         ""
         cfg = self.create_config_with_two_urls()
 
-        repos = mrlib.get_repo_layout( cfg )
+        repos = cfg.getRemoteRepoList()
         assert len( repos ) == 2
         assert list( repos[0] ) == [ 'file:///one/repo.git', '.' ]
         assert list( repos[1] ) == [ 'ssh:///and/two.git', 'two' ]
@@ -255,21 +240,6 @@ class mrgit_configuration_tests( trigutil.trigTestCase ):
         assert len( util.grepfiles( 'repo=repo', 'mfests' ) ) == 1
         assert len( util.grepfiles( 'repo=two', 'mfests' ) ) == 1
 
-    def test_write_config_file(self):
-        ""
-        cfg = self.create_config_with_two_urls()
-
-        with open( 'config', 'w' ) as fp:
-            cfg.rmap.writeToFile( fp )
-
-        lines = util.grepfiles( 'repo=repo', 'config' )
-        assert len( lines ) == 1
-        assert 'one/repo.git' in lines[0]
-
-        lines = util.grepfiles( 'repo=two', 'config' )
-        assert len( lines ) == 1
-        assert 'and/two.git' in lines[0]
-
     def test_create_initial_mrgit_repository(self):
         ""
         cfg = self.create_config_with_two_urls()
@@ -284,6 +254,14 @@ class mrgit_configuration_tests( trigutil.trigTestCase ):
         git.checkoutBranch( 'mrgit_config' )
         assert os.path.isfile( 'checkrepo/config' )
 
+        lines = util.grepfiles( 'repo=repo', 'checkrepo/config' )
+        assert len( lines ) == 1
+        assert 'one/repo.git' in lines[0]
+
+        lines = util.grepfiles( 'repo=two', 'checkrepo/config' )
+        assert len( lines ) == 1
+        assert 'and/two.git' in lines[0]
+
     def test_load_config_from_mrgit_checkout(self):
         ""
         cfg = self.create_config_with_two_urls()
@@ -291,9 +269,9 @@ class mrgit_configuration_tests( trigutil.trigTestCase ):
 
         rmap = mrlib.RepoMap()
         git = GitInterface( rootdir='.mrgit' )
-        mrlib.check_load_mrgit_repo( cfg, git, None )
+        mrlib.check_load_mrgit_repo( cfg, git )
 
-        repos = mrlib.get_repo_layout( cfg )
+        repos = cfg.getRemoteRepoList()
         assert len( repos ) == 2
         assert list( repos[0] ) == [ 'file:///one/repo.git', '.' ]
         assert list( repos[1] ) == [ 'ssh:///and/two.git', 'two' ]

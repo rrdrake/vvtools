@@ -37,11 +37,13 @@ def clone( argv ):
 
         if len( urls ) == 1:
             clone_from_single_url( cfg, urls[0], directory )
+
         else:
-            create_local_config_from_url_list( cfg, urls, directory )
+            cfg.createRemoteConfig( urls )
+            cfg.setTopDir( directory )
             clone_repositories( cfg )
 
-        cfg.commitState()
+        cfg.commitLocalRepoMap()
 
 
 # magic: overlap
@@ -60,7 +62,7 @@ def clone_repositories( cfg ):
 
     with gititf.change_directory( topdir ):
         git = gititf.GitInterface()
-        for url,loc in get_repo_layout( cfg ):
+        for url,loc in cfg.getRemoteRepoList():
             git.clone( url, loc )
 
     cfg.createRepo()
@@ -96,26 +98,6 @@ def abspath_local_repository_urls( urls ):
     return newurls
 
 
-def create_local_config_from_url_list( cfg, urls, directory=None ):
-    ""
-    rmap = cfg.rmap
-    mfest = cfg.mfest
-
-    groupname = None
-    for i,url in enumerate(urls):
-        name = gititf.repo_name_from_url( url )
-        if i == 0:
-            groupname = name
-            path = name
-        else:
-            path = pjoin( groupname, name )
-
-        mfest.addRepo( groupname, name, path )
-        rmap.setRepoURL( name, url )
-
-    cfg.setTopDir( directory )
-
-
 def clone_from_single_url( cfg, url, directory ):
     ""
     if directory and not os.path.exists( directory ):
@@ -125,11 +107,9 @@ def clone_from_single_url( cfg, url, directory ):
 
     git = gititf.GitInterface( url, tmprepo )
 
-    if check_load_mrgit_repo( cfg, git, directory ):
+    if check_load_mrgit_repo( cfg, git ):
 
-        cfg.setTopDir( directory )
-
-        topdir = cfg.getTopDir()
+        topdir = cfg.setTopDir( directory )
 
         if not os.path.exists( topdir ):
             os.mkdir( topdir )
@@ -139,6 +119,7 @@ def clone_from_single_url( cfg, url, directory ):
         if not directory:
             shutil.rmtree( os.path.dirname( tmprepo ) )
 
+        cfg.commitLocalRepoMap()
         # magic: need to checkout, modify the config, and commit
 
         # print ( 'magic: root', rootdir )
@@ -146,9 +127,11 @@ def clone_from_single_url( cfg, url, directory ):
         #     print ( 'magic: url path', url, path )
 
     else:
-        create_local_config_from_url_list( cfg, [ url ], directory )
 
-        move_repo( tmprepo, cfg.getTopDir() )
+        cfg.createRemoteConfig( [ url ] )
+        topdir = cfg.setTopDir( directory )
+
+        move_repo( tmprepo, topdir )
 
         if not directory:
             shutil.rmtree( os.path.dirname( tmprepo ) )
@@ -168,28 +151,15 @@ def clone_from_single_url( cfg, url, directory ):
     # else checkout urls[0]
 
 
-def check_load_mrgit_repo( cfg, git, directory ):
+def check_load_mrgit_repo( cfg, git ):
     ""
-    rmap = cfg.rmap
-    mfest = cfg.mfest
-
     mfestfn = pjoin( git.getRootDir(), 'manifests' )
-    rmapfn = pjoin( git.getRootDir(), 'config' )
 
     if os.path.isfile( mfestfn ):
         if 'mrgit_config' in git.listBranches() or \
            'mrgit_config' in git.listRemoteBranches():
 
-            with open( mfestfn, 'r' ) as fp:
-                mfest.readFromFile( fp )
-
-            try:
-                git.checkoutBranch( 'mrgit_config' )
-                with open( rmapfn, 'r' ) as fp:
-                    rmap.readFromFile( fp )
-
-            finally:
-                git.checkoutBranch( 'master' )
+            cfg.readRepo( git )
 
             return True
 
@@ -237,7 +207,7 @@ class Configuration:
     def __init__(self):
         ""
         self.topdir = None
-        self.rmap = RepoMap()
+        self.remotes = RepoMap()
         self.mfest = Manifests()
 
     def setTopDir(self, directory):
@@ -248,13 +218,52 @@ class Configuration:
             grp = self.mfest.findGroup( None )
             self.topdir = abspath( grp.getName() )
 
+        return self.topdir
+
     def getTopDir(self):
         ""
         return self.topdir
 
-    def commitState(self):
+    def createRemoteConfig(self, urls):
         ""
-        pass
+        groupname = None
+        for i,url in enumerate(urls):
+            name = gititf.repo_name_from_url( url )
+            if i == 0:
+                groupname = name
+                path = name
+            else:
+                path = pjoin( groupname, name )
+
+            self.mfest.addRepo( groupname, name, path )
+            self.remotes.setRepoURL( name, url )
+
+    def getRemoteRepoList(self):
+        ""
+        grp = self.mfest.findGroup( None )
+
+        repolist = []
+        for spec in grp.getRepoList():
+            url = self.remotes.getRepoURL( spec['repo'] )
+            repolist.append( [ url, spec['path'] ] )
+
+        adjust_repo_paths( repolist )
+
+        return repolist
+
+    def commitLocalRepoMap(self):
+        ""
+        repodir = pjoin( self.topdir, '.mrgit' )
+        git = gititf.GitInterface( rootdir=repodir )
+        git.checkoutBranch( 'mrgit_config' )
+
+        try:
+            pass
+
+        finally:
+            git.checkoutBranch( 'master' )
+
+
         # topdir = rmap.getTopDir()
 
         # git = GitInterface( rootdir=topdir+'/.mrgit' )
@@ -280,11 +289,26 @@ class Configuration:
 
         git.createBranch( 'mrgit_config' )
         with open( repodir+'/config', 'w' ) as fp:
-            self.rmap.writeToFile( fp )
+            self.remotes.writeToFile( fp )
 
         git.add( 'config' )
         git.commit( 'init config' )
         git.checkoutBranch( 'master' )
+
+    def readRepo(self, git):
+        ""
+        fn = pjoin( git.getRootDir(), 'manifests' )
+        with open( fn, 'r' ) as fp:
+            self.mfest.readFromFile( fp )
+
+        git.checkoutBranch( 'mrgit_config' )
+        try:
+            fn = pjoin( git.getRootDir(), 'config' )
+            with open( fn, 'r' ) as fp:
+                self.remotes.readFromFile( fp )
+
+        finally:
+            git.checkoutBranch( 'master' )
 
 
 class RepoMap:
@@ -319,23 +343,6 @@ class RepoMap:
                 attrs = parse_attribute_line( line )
                 if 'repo' in attrs and 'url' in attrs:
                     self.setRepoURL( attrs['repo'], attrs['url'] )
-
-
-def get_repo_layout( cfg ):
-    ""
-    rmap = cfg.rmap
-    mfest = cfg.mfest
-
-    grp = mfest.findGroup( None )
-
-    repolist = []
-    for spec in grp.getRepoList():
-        url = rmap.getRepoURL( spec['repo'] )
-        repolist.append( [ url, spec['path'] ] )
-
-    adjust_repo_paths( repolist )
-
-    return repolist
 
 
 def adjust_repo_paths( repolist ):
