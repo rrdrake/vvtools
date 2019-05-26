@@ -202,46 +202,43 @@ class mrgit_configuration_tests( trigutil.trigTestCase ):
 
     def test_create_config_and_check_layout(self):
         ""
-        rmap = mrlib.RepoMap()
+        cfg = mrlib.Configuration()
 
-        mfest = mrlib.Manifests()
-        mfest.addRepo( 'cool', 'cool', 'cool' )
-        mfest.addRepo( 'cool', 'ness', 'cool/ness' )
+        cfg.mfest.addRepo( 'cool', 'cool', 'cool' )
+        cfg.mfest.addRepo( 'cool', 'ness', 'cool/ness' )
 
-        rmap.setRepoURL( 'cool', '/my/cool.git' )
-        rmap.setRepoURL( 'ness', '/theirs/ness.git' )
+        cfg.rmap.setRepoURL( 'cool', '/my/cool.git' )
+        cfg.rmap.setRepoURL( 'ness', '/theirs/ness.git' )
 
-        repos = list( mrlib.get_repo_layout( rmap, mfest ) )
+        repos = list( mrlib.get_repo_layout( cfg ) )
         assert len( repos ) == 2
         assert list( repos[0] ) == [ '/my/cool.git', '.' ]
         assert list( repos[1] ) == [ '/theirs/ness.git', 'ness' ]
 
     def create_config_with_two_urls(self):
         ""
-        rmap = mrlib.RepoMap()
-        mfest = mrlib.Manifests()
-        rootdir = mrlib.create_local_config_from_url_list( rmap, mfest,
+        cfg = mrlib.Configuration()
+        rootdir = mrlib.create_local_config_from_url_list( cfg,
                                                  [ 'file:///one/repo.git',
                                                    'ssh:///and/two.git' ] )
-        return rmap, mfest, rootdir
+        return cfg, rootdir
 
     def test_create_config_from_a_single_url(self):
         ""
-        rmap = mrlib.RepoMap()
-        mfest = mrlib.Manifests()
-        rootdir = mrlib.create_local_config_from_url_list( rmap, mfest,
+        cfg = mrlib.Configuration()
+        rootdir = mrlib.create_local_config_from_url_list( cfg,
                                                  [ 'file:///one/repo.git' ] )
 
-        repos = mrlib.get_repo_layout( rmap, mfest )
+        repos = mrlib.get_repo_layout( cfg )
         assert len( repos ) == 1
         assert list( repos[0] ) == [ 'file:///one/repo.git', '.' ]
         assert rootdir == abspath( 'repo' )
 
     def test_create_config_from_two_urls(self):
         ""
-        rmap, mfest, rootdir = self.create_config_with_two_urls()
+        cfg, rootdir = self.create_config_with_two_urls()
 
-        repos = mrlib.get_repo_layout( rmap, mfest )
+        repos = mrlib.get_repo_layout( cfg )
         assert len( repos ) == 2
         assert list( repos[0] ) == [ 'file:///one/repo.git', '.' ]
         assert list( repos[1] ) == [ 'ssh:///and/two.git', 'two' ]
@@ -249,10 +246,10 @@ class mrgit_configuration_tests( trigutil.trigTestCase ):
 
     def test_write_manifests_file(self):
         ""
-        rmap, mfest, rootdir = self.create_config_with_two_urls()
+        cfg, rootdir = self.create_config_with_two_urls()
 
         with open( 'mfests', 'w' ) as fp:
-            mfest.writeToFile( fp )
+            cfg.mfest.writeToFile( fp )
 
         assert len( util.grepfiles( 'group repo', 'mfests' ) ) == 1
         assert len( util.grepfiles( 'repo=repo', 'mfests' ) ) == 1
@@ -260,10 +257,10 @@ class mrgit_configuration_tests( trigutil.trigTestCase ):
 
     def test_write_config_file(self):
         ""
-        rmap, mfest, rootdir = self.create_config_with_two_urls()
+        cfg, rootdir = self.create_config_with_two_urls()
 
         with open( 'config', 'w' ) as fp:
-            rmap.writeToFile( fp )
+            cfg.rmap.writeToFile( fp )
 
         lines = util.grepfiles( 'repo=repo', 'config' )
         assert len( lines ) == 1
@@ -275,9 +272,9 @@ class mrgit_configuration_tests( trigutil.trigTestCase ):
 
     def test_create_initial_mrgit_repository(self):
         ""
-        rmap, mfest, rootdir = self.create_config_with_two_urls()
+        cfg, rootdir = self.create_config_with_two_urls()
 
-        mrlib.create_mrgit_repository( 'my_mrgit', rmap, mfest )
+        mrlib.create_mrgit_repository( 'my_mrgit', cfg )
 
         git = GitInterface( 'my_mrgit', 'checkrepo' )
         assert os.path.isfile( 'checkrepo/manifests' )
@@ -289,14 +286,14 @@ class mrgit_configuration_tests( trigutil.trigTestCase ):
 
     def test_load_config_from_mrgit_checkout(self):
         ""
-        rmap, mfest, rootdir = self.create_config_with_two_urls()
-        mrlib.create_mrgit_repository( 'my_mrgit', rmap, mfest )
+        cfg, rootdir = self.create_config_with_two_urls()
+        mrlib.create_mrgit_repository( 'my_mrgit', cfg )
 
         rmap = mrlib.RepoMap()
         git = GitInterface( rootdir='my_mrgit' )
-        mrlib.check_load_mrgit_repo( rmap, mfest, git, None )
+        mrlib.check_load_mrgit_repo( cfg, git, None )
 
-        repos = mrlib.get_repo_layout( rmap, mfest )
+        repos = mrlib.get_repo_layout( cfg )
         assert len( repos ) == 2
         assert list( repos[0] ) == [ 'file:///one/repo.git', '.' ]
         assert list( repos[1] ) == [ 'ssh:///and/two.git', 'two' ]

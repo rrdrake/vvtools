@@ -32,15 +32,16 @@ def clone( argv ):
 
         urls, directory = parse_url_list( argL )
         assert len( urls ) > 0
+
+        cfg = Configuration()
+
         if len( urls ) == 1:
-            rmap = clone_from_single_url( urls[0], directory )
-            modify_and_commit_local_config( rmap )
+            clone_from_single_url( cfg, urls[0], directory )
+            modify_and_commit_local_config( cfg.rmap )
         else:
-            rmap = RepoMap()
-            mfest = Manifests()
-            rootdir = create_local_config_from_url_list( rmap, mfest, urls, directory )
-            clone_repositories( rmap, mfest, rootdir )
-            modify_and_commit_local_config( rmap )
+            rootdir = create_local_config_from_url_list( cfg, urls, directory )
+            clone_repositories( cfg, rootdir )
+            modify_and_commit_local_config( cfg.rmap )
 
 
 def modify_and_commit_local_config( rmap ):
@@ -63,17 +64,17 @@ def modify_and_commit_local_config( rmap ):
 #   - maybe having the repo map and manifests in the same object, the
 #     Configuration, is the wrong concept; keep those two seperate
 
-def clone_repositories( rmap, mfest, rootdir ):
+def clone_repositories( cfg, rootdir ):
     ""
     if not os.path.isdir( rootdir ):
         os.mkdir( rootdir )
 
     with gititf.change_directory( rootdir ):
         git = gititf.GitInterface()
-        for url,loc in get_repo_layout( rmap, mfest ):
+        for url,loc in get_repo_layout( cfg ):
             git.clone( url, loc )
 
-    create_mrgit_repository( pjoin( rootdir, '.mrgit' ), rmap, mfest )
+    create_mrgit_repository( pjoin( rootdir, '.mrgit' ), cfg )
 
 
 def parse_url_list( args ):
@@ -106,8 +107,11 @@ def abspath_local_repository_urls( urls ):
     return newurls
 
 
-def create_local_config_from_url_list( rmap, mfest, urls, directory=None ):
+def create_local_config_from_url_list( cfg, urls, directory=None ):
     ""
+    rmap = cfg.rmap
+    mfest = cfg.mfest
+
     groupname = None
     for i,url in enumerate(urls):
         name = gititf.repo_name_from_url( url )
@@ -120,13 +124,15 @@ def create_local_config_from_url_list( rmap, mfest, urls, directory=None ):
         mfest.addRepo( groupname, name, path )
         rmap.setRepoURL( name, url )
 
-    rootdir = determine_clone_root( rmap, mfest, directory )
+    rootdir = determine_clone_root( cfg, directory )
 
     return rootdir
 
 
-def determine_clone_root( rmap, mfest, directory ):
+def determine_clone_root( cfg, directory ):
     ""
+    mfest = cfg.mfest
+
     if directory:
         rootdir = abspath( normpath( directory ) )
     else:
@@ -136,7 +142,7 @@ def determine_clone_root( rmap, mfest, directory ):
     return rootdir
 
 
-def clone_from_single_url( url, directory ):
+def clone_from_single_url( cfg, url, directory ):
     ""
     if directory and not os.path.exists( directory ):
         os.mkdir( directory )
@@ -145,12 +151,9 @@ def clone_from_single_url( url, directory ):
 
     git = gititf.GitInterface( url, tmprepo )
 
-    rmap = RepoMap()
-    mfest = Manifests()
+    if check_load_mrgit_repo( cfg, git, directory ):
 
-    if check_load_mrgit_repo( rmap, mfest, git, directory ):
-
-        rootdir = determine_clone_root( rmap, mfest, directory )
+        rootdir = determine_clone_root( cfg, directory )
 
         if not os.path.exists( rootdir ):
             os.mkdir( rootdir )
@@ -167,14 +170,14 @@ def clone_from_single_url( url, directory ):
         #     print ( 'magic: url path', url, path )
 
     else:
-        rootdir = create_local_config_from_url_list( rmap, mfest, [ url ], directory )
+        rootdir = create_local_config_from_url_list( cfg, [ url ], directory )
 
         move_repo( tmprepo, rootdir )
 
         if not directory:
             shutil.rmtree( os.path.dirname( tmprepo ) )
 
-        create_mrgit_repository( pjoin( rootdir, '.mrgit' ), rmap, mfest )
+        create_mrgit_repository( pjoin( rootdir, '.mrgit' ), cfg )
 
     # tmprepo = directory / random string
     # or
@@ -189,8 +192,11 @@ def clone_from_single_url( url, directory ):
     # else checkout urls[0]
 
 
-def check_load_mrgit_repo( rmap, mfest, git, directory ):
+def check_load_mrgit_repo( cfg, git, directory ):
     ""
+    rmap = cfg.rmap
+    mfest = cfg.mfest
+
     mfestfn = pjoin( git.getRootDir(), 'manifests' )
     rmapfn = pjoin( git.getRootDir(), 'config' )
 
@@ -292,8 +298,11 @@ class RepoMap:
                     self.setRepoURL( attrs['repo'], attrs['url'] )
 
 
-def get_repo_layout( rmap, mfest ):
+def get_repo_layout( cfg ):
     ""
+    rmap = cfg.rmap
+    mfest = cfg.mfest
+
     grp = mfest.findGroup( None )
 
     repolist = []
@@ -428,8 +437,11 @@ class RepoGroup:
         return None
 
 
-def create_mrgit_repository( repodir, rmap, mfest ):
+def create_mrgit_repository( repodir, cfg ):
     ""
+    rmap = cfg.rmap
+    mfest = cfg.mfest
+
     git = gititf.GitInterface()
     git.create( repodir )
 
