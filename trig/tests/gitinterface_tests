@@ -192,6 +192,29 @@ class create_and_clone( trigutil.trigTestCase ):
         assert not git2.isBare()
         assert git2.currentBranch() == 'master'
 
+    def test_using_quiet_option_to_repress_clone_error_message(self):
+        ""
+        url = 'file://'+abspath('fakerepo')
+        os.mkdir( 'curdir' )
+        time.sleep(1)
+        os.chdir( 'curdir' )
+
+        git = GitInterface()
+
+        redir = util.RedirectStdout( 'stdout.log', 'stderr.log' )
+        try:
+            git.clone( url, quiet=True )
+        except GitInterfaceError:
+            caught = True
+        except:
+            redir.close()
+            raise
+        redir.close()
+
+        assert caught
+        assert not util.readfile( 'stdout.log' ).strip()
+        assert not util.readfile( 'stderr.log' ).strip()
+
     def test_clone_master_branch_only(self):
         ""
         url = trigutil.create_bare_repo_with_topic_branch( 'example' )

@@ -68,13 +68,15 @@ class GitInterface:
 
         self.root = root
 
-    def clone(self, url, rootdir=None, branch=None, bare=False):
+    def clone(self, url, rootdir=None, branch=None, bare=False, quiet=False):
         """
         If 'branch' is None, all branches are fetched.  If a branch name, such
         as "master", then only that branch is fetched.  Returns the url to
         the local clone.
 
         If 'rootdir' is not None, it will contain the repo on disk.
+
+        If 'quiet' is True, then no output is printed.
         """
         self.root = None
 
@@ -82,9 +84,9 @@ class GitInterface:
             raise GitInterfaceError( 'cannot bare clone a single branch' )
 
         if branch:
-            self._branch_clone( url, rootdir, branch )
+            self._branch_clone( url, rootdir, branch, quiet )
         else:
-            self._full_clone( url, rootdir, bare )
+            self._full_clone( url, rootdir, bare, quiet )
 
         return 'file://'+self.root
 
@@ -341,7 +343,7 @@ class GitInterface:
             raise GitInterfaceError(
                         'unexpected response from rev-parse: '+str(out) )
 
-    def _full_clone(self, url, rootdir, bare):
+    def _full_clone(self, url, rootdir, bare, quiet):
         ""
         cmd = 'clone'
         if bare:
@@ -352,11 +354,11 @@ class GitInterface:
                 url = abspath( url )
 
             with make_and_change_directory( rootdir ):
-                self.run( cmd+' '+url, '.' )
+                self.run( cmd+' '+url, '.', quiet=quiet )
                 self.root = os.getcwd()
 
         else:
-            self.run( cmd+' '+url )
+            self.run( cmd+' '+url, quiet=quiet )
 
             dname = self._repo_directory_from_url( url, bare )
 
@@ -371,16 +373,17 @@ class GitInterface:
         else:
             return name
 
-    def _branch_clone(self, url, rootdir, branch):
+    def _branch_clone(self, url, rootdir, branch, quiet):
         ""
         if not rootdir:
             rootdir = repo_name_from_url( url )
 
         with make_and_change_directory( rootdir ):
-            self.run( 'init' )
+            self.run( 'init', quiet=quiet )
             self.root = os.getcwd()
-            self.run( 'remote add -f -t', branch, '-m', branch, 'origin', url )
-            self.run( 'checkout', branch )
+            self.run( 'remote add -f -t', branch, '-m', branch, 'origin', url,
+                      quiet=quiet )
+            self.run( 'checkout', branch, quiet=quiet )
 
     def _fetch_then_checkout_branch(self, branchname):
         ""
@@ -435,6 +438,7 @@ class GitInterface:
         ""
         roe = kwargs.pop( 'raise_on_error', True )
         cap = kwargs.pop( 'capture', False )
+        quiet = kwargs.pop( 'quiet', False )
 
         cmdcapture = True
         if not cap and self.verbose:
@@ -446,7 +450,8 @@ class GitInterface:
             x,out = runcmd( cmd,
                             chdir=self.root,
                             raise_on_error=roe,
-                            capture=cmdcapture )
+                            capture=cmdcapture,
+                            quiet=quiet )
 
         if cmdcapture and self.verbose:
             print3( cmd + '\n' + out )
@@ -658,14 +663,14 @@ def create_repo_with_these_files( gitexe, message, pathL ):
     runcmd( gitexe + ' commit -m ' + pipes.quote( message ) )
 
 
-def runcmd( cmd, chdir=None, raise_on_error=True, capture=True ):
+def runcmd( cmd, chdir=None, raise_on_error=True, capture=True, quiet=False ):
     ""
     out = ''
     x = 1
 
     with change_directory( chdir ):
 
-        if capture:
+        if capture or quiet:
             po = subprocess.Popen( cmd, shell=True, stdout=subprocess.PIPE,
                                                     stderr=subprocess.STDOUT )
         else:
@@ -679,7 +684,8 @@ def runcmd( cmd, chdir=None, raise_on_error=True, capture=True ):
             out = _STRING_(sout)
 
     if x != 0 and raise_on_error:
-        print3( cmd + '\n' + out )
+        if not quiet:
+            print3( cmd + '\n' + out )
         raise GitInterfaceError( 'Command failed: '+cmd )
 
     return x,out
