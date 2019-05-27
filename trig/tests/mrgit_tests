@@ -116,17 +116,39 @@ class cloning( trigutil.trigTestCase ):
         git = GitInterface( rootdir='clone2/ness' )
         assert 'nessie' in git.listTags()
 
+    def test_clone_an_mrgit_clone_via_manifests_with_only_one_repo(self):
+        ""
+        cool_url, ness_url = self.make_coolness_repositories()
+
+        mrlib.clone( [ ness_url, 'clone1' ] )
+
+        mrlib.clone( [ 'clone1/.mrgit', 'clone2' ] )
+
+        assert os.path.isdir( 'clone2' )
+        git = GitInterface( rootdir='clone2' )
+        assert 'nessie' in git.listTags()
+
     def test_clone_an_mrgit_clone(self):
         ""
-        # magic: this one still fails because it does not check for
-        #        clone1/.mrgit to exist
-
-        return  # magic
         cool_url, ness_url = self.make_coolness_repositories()
 
         mrlib.clone( [ cool_url, ness_url, 'clone1' ] )
 
         mrlib.clone( [ 'clone1', 'clone2' ] )
+
+        assert os.path.isdir( 'clone2' )
+        git = GitInterface( rootdir='clone2' )
+        assert 'nessie' not in git.listTags()
+        git = GitInterface( rootdir='clone2/ness' )
+        assert 'nessie' in git.listTags()
+
+    def test_clone_an_mrgit_clone_using_a_file_url(self):
+        ""
+        cool_url, ness_url = self.make_coolness_repositories()
+
+        mrlib.clone( [ cool_url, ness_url, 'clone1' ] )
+
+        mrlib.clone( [ 'file://'+abspath('clone1'), 'clone2' ] )
 
         assert os.path.isdir( 'clone2' )
         git = GitInterface( rootdir='clone2' )

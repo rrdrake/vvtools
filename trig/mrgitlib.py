@@ -14,6 +14,7 @@ from os.path import join as pjoin
 from os.path import abspath
 from os.path import normpath
 from os.path import basename
+from os.path import dirname
 
 import gitinterface as gititf
 
@@ -105,7 +106,13 @@ def clone_from_single_url( cfg, url, directory ):
 
     tmprepo = make_temp_repo_dir( directory )
 
-    git = gititf.GitInterface( url, tmprepo )
+    git = gititf.GitInterface()
+
+    try:
+        git.clone( url+'/.mrgit', rootdir=tmprepo, quiet=True )
+    except gititf.GitInterfaceError:
+        clear_directory( tmprepo )
+        git.clone( url, tmprepo )
 
     if check_load_mrgit_repo( cfg, git ):
 
@@ -119,7 +126,7 @@ def clone_from_single_url( cfg, url, directory ):
         os.rename( tmprepo, topdir+'/.mrgit' )
 
         if not directory:
-            shutil.rmtree( os.path.dirname( tmprepo ) )
+            shutil.rmtree( dirname( tmprepo ) )
 
         clone_repositories( cfg )
 
@@ -133,7 +140,7 @@ def clone_from_single_url( cfg, url, directory ):
         move_repo( tmprepo, topdir )
 
         if not directory:
-            shutil.rmtree( os.path.dirname( tmprepo ) )
+            shutil.rmtree( dirname( tmprepo ) )
 
         cfg.createRepo()
 
@@ -163,6 +170,16 @@ def check_load_mrgit_repo( cfg, git ):
             return True
 
     return False
+
+
+def clear_directory( path ):
+    ""
+    for fn in os.listdir( path ):
+        dfn = pjoin( path, fn )
+        if os.path.isdir( dfn ):
+            shutil.rmtree( dfn )
+        else:
+            os.remove( dfn )
 
 
 def move_repo( fromdir, todir ):
@@ -354,9 +371,24 @@ class RepoMap:
                     if 'url' in attrs:
                         url = attrs['url']
                     else:
-                        url = normpath( pjoin( baseurl, attrs['path'] ) )
+                        url = append_path_to_url( baseurl, attrs['path'] )
 
                     self.setRepoLocation( attrs['repo'], url=url )
+
+
+def append_path_to_url( url, path ):
+    ""
+    url = url.rstrip('/').rstrip(os.sep)
+    path = normpath( path )
+
+    if not path or path == '.':
+        return url
+    elif path == '..':
+        return dirname( url )
+    elif path.startswith('../') or path.startswith('..'+os.sep):
+        return pjoin( dirname( url ), path[3:] )
+    else:
+        return pjoin( url, path )
 
 
 def adjust_repo_paths( repolist ):
