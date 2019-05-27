@@ -110,11 +110,11 @@ class cloning( trigutil.trigTestCase ):
 
         mrlib.clone( [ 'clone1/.mrgit', 'clone2' ] )
 
-        # assert os.path.isdir( 'clone2' )
-        # git = GitInterface( rootdir='clone2' )
-        # assert 'nessie' not in git.listTags()
-        # git = GitInterface( rootdir='clone2/ness' )
-        # magic: assert 'nessie' in git.listTags()
+        assert os.path.isdir( 'clone2' )
+        git = GitInterface( rootdir='clone2' )
+        assert 'nessie' not in git.listTags()
+        git = GitInterface( rootdir='clone2/ness' )
+        assert 'nessie' in git.listTags()
 
     def test_clone_an_mrgit_clone(self):
         ""
@@ -202,8 +202,7 @@ class mrgit_configuration_tests( trigutil.trigTestCase ):
     def create_config_with_two_urls(self):
         ""
         cfg = mrlib.Configuration()
-        cfg.createRemoteConfig( [ 'file:///one/repo.git',
-                                  'ssh:///and/two.git' ] )
+        cfg.createFromURLs( [ 'file:///one/repo.git', 'ssh:///and/two.git' ] )
         cfg.setTopDir( None )
 
         return cfg
@@ -211,7 +210,7 @@ class mrgit_configuration_tests( trigutil.trigTestCase ):
     def test_create_config_from_a_single_url(self):
         ""
         cfg = mrlib.Configuration()
-        cfg.createRemoteConfig( [ 'file:///one/repo.git' ] )
+        cfg.createFromURLs( [ 'file:///one/repo.git' ] )
         cfg.setTopDir( None )
 
         repos = cfg.getRemoteRepoList()
