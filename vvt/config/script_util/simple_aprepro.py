@@ -6,6 +6,29 @@ import math
 import random
 import re
 
+class AlarmDict:
+
+    def __getitem__(self, key):
+        if key in self.access_history:
+            self.access_history[key] = True
+        return self.input_dict.__getitem__(key)
+
+    def __setitem__(self, key, value):
+        try:
+            value = value.replace("\n", "\\n")
+        except AttributeError:
+            pass  # Turns out 'value' wasn't a string.
+
+        if key not in self.access_history:
+            self.access_history[key] = False
+        self.input_dict.__setitem__(key, value)
+
+    def __init__(self, input_dict):
+        self.input_dict = dict(input_dict.items())
+        self.access_history = {}
+        for key in self.input_dict:
+            self.access_history[key] = False
+
 class SimpleAprepro:
     """
     This class is a scaled-down version of Aprepro, a text preprocessor
@@ -73,6 +96,16 @@ class SimpleAprepro:
         self.immutable = immutable
         self.src_txt = []
         self.dst_txt = []
+        self.defined_variables = set()
+        self.possibly_unused_defined_variables = set()
+
+        # This is a special function that will be stored in 'safe_globals`.
+        def aprepro_include(filename):
+            with open(filename, 'r') as F:
+                txt = F.read()
+                if not txt.endswith("\n"):
+                    txt += "\n"
+                return txt
 
         # These are defined here so that each time process() is called
         # it gets a new version of the locals and globals so that there
@@ -144,11 +177,14 @@ class SimpleAprepro:
                              "E": math.e,
                              "GAMMA": 0.57721566490153286060651209008240243,
                              "PHI": (math.sqrt(5.0) + 1.0) / 2.0,
+
+                             # Other variables and functionality
+                             'include': aprepro_include,
                             }
-        self.eval_locals = {}
+        self.eval_locals = AlarmDict(self.override)
 
 
-    def safe_eval(self, txt):
+    def safe_eval(self, txt, is_comment):
         """
         Evaluate the text given in 'txt'. If it has an assignment operator
         assign the value to the appropriately named key in 'eval_locals'.
@@ -158,12 +194,9 @@ class SimpleAprepro:
         of the computed value.
         """
 
-        # For each call, make sure the override variables are in place.
-        self.eval_locals.update(self.override)
-
         if "^" in txt:
             raise Exception("simple_aprepro() only supports exponentiation via **" +
-                  " and not ^. As aprepro supports both, please use ** instead." + 
+                  " and not ^. As aprepro supports both, please use ** instead." +
                   " Encountered while processing '{0}'".format(txt))
 
         if "=" in txt:
@@ -182,11 +215,22 @@ class SimpleAprepro:
                                               self.safe_globals,
                                               self.eval_locals)
 
-            val = self.eval_locals[name]
+            self.defined_variables.add(name)
+            if is_comment:
+                self.possibly_unused_defined_variables.add(name)
+            val = self.eval_locals.input_dict[name]
         else:
-            val = eval(txt, self.safe_globals, self.eval_locals)
+            try:
+                val = eval(txt, self.safe_globals, self.eval_locals)
+            except NameError:
+                print("eval() failed. eval_locals = {0}".format(self.eval_locals.input_dict))
+                raise
 
-        if type(val) is str:
+
+        if type(val) is list:
+            # This is for {include("stuff")}
+            return val
+        elif type(val) is str:
             # Python3 and non-unicode vars in python2.
             return val
         elif str(type(val)) == "<type 'unicode'>":
@@ -203,7 +247,7 @@ class SimpleAprepro:
         occur without actual files.
         """
         with open(self.src_f, 'r') as src:
-            self.src_txt = src.readlines()
+            self.src_txt = src.read().splitlines()
 
     def dump_file(self):
         """
@@ -237,23 +281,67 @@ class SimpleAprepro:
             print("*   override = {0}".format(self.override))
 
         # Process the input file line-by-line
-        for jdx, line in enumerate(self.src_txt):
+        jdx = 0
+        while True:
+            if jdx >= len(self.src_txt):
+                break
+            line = self.src_txt[jdx]
 
             # Process escaped curly braces.
             clean_line = line.replace("\{", "{").replace("\}", "}")
 
             # Process the aprepro directive blocks.
             split_line = re.split(r"({[^{]*?})", clean_line)
+            is_comment = False
             for idx, chunk in enumerate(split_line):
                 if chunk.startswith("{") and chunk.endswith("}"):
                     # Found a chunk to evaluate.
-                    split_line[idx] = self.safe_eval(chunk[1:-1])
+                    split_line[idx] = self.safe_eval(chunk[1:-1], is_comment)
+                else:
+                    if "#" in chunk:
+                        is_comment = True
+
             joined_line = "".join(split_line)
+
+            # Sometimes when you {include("stuff")} a file, you can get an
+            # extra trailing linebreak. Remove it.
+            if joined_line.endswith("\n"):
+                joined_line = joined_line.rstrip("\n")
+
+            # If there are any linebreaks, expand them and edit the
+            # src_txt. Then reprocess this line.
+            if joined_line.count("\n") > 0:
+                resplit_line = joined_line.splitlines()
+                self.src_txt = self.src_txt[:jdx] + resplit_line + self.src_txt[jdx+1:]
+                continue
+
+            self.dst_txt.append(joined_line)
             if self.chatty:
-                print("* {0: 4d}: {1}".format(jdx, repr(joined_line)))
-            self.dst_txt.append("".join(split_line))
+                print("* {0: 4d}: {1}".format(jdx, repr(self.dst_txt[-1])))
+
+            jdx += 1
 
         if self.chatty:
+            print("* --- Usage summary")
+
+            keys = [key for key in self.override if self.eval_locals.access_history[key]]
+            print("*   Used override variables: {0:d}".format(len(keys)))
+            for key in sorted(keys):
+                print("*     {0}".format(key))
+
+            keys = [key for key in self.override if not self.eval_locals.access_history[key]]
+            print("*   Unused override variables: {0:d}".format(len(keys)))
+            for key in sorted(keys):
+                print("*     {0}".format(key))
+
+            print("*   Internally-defined variables: {0:d} (! is possibly unused)".format(len(self.defined_variables)))
+            for key in sorted(self.defined_variables):
+
+                if not self.eval_locals.access_history[key] and key in self.possibly_unused_defined_variables:
+                    print("*   ! {0}".format(key))
+                else:
+                    print("*     {0}".format(key))
+
             print("* End call to SimpleAprepro.process()")
             print("*" * 72 + "\n")
 
@@ -266,7 +354,7 @@ def test0():
     """
     processor = SimpleAprepro("", "")
     processor.src_txt = ["# abc = {abc = 123}", "# abc = { abc }"]
-    out = processor.process()
+    out = processor.process().input_dict
     assert processor.dst_txt == ["# abc = 123", "# abc = 123"]
     assert out == {"abc": 123}
 
@@ -276,7 +364,7 @@ def test1():
     """
     processor = SimpleAprepro("", "")
     processor.src_txt = ["# abc = {abc = 123.456}", "# abc = { abc }"]
-    out = processor.process()
+    out = processor.process().input_dict
     assert processor.dst_txt == ["# abc = 123.456", "# abc = 123.456"]
     assert out == {"abc": 123.456}
 
@@ -286,7 +374,7 @@ def test2():
     """
     processor = SimpleAprepro("", "")
     processor.src_txt = ["# abc = {abc = PI}", "# abc = { abc }"]
-    out = processor.process()
+    out = processor.process().input_dict
     assert processor.dst_txt == ["# abc = 3.141592653589793",
                                  "# abc = 3.141592653589793"]
     assert out == {"abc": math.pi}
@@ -297,20 +385,115 @@ def test3():
     """
     processor = SimpleAprepro("", "")
     processor.src_txt = ["# abc = {abc = 1 / 3}"]
-    out = processor.process()
+    out = processor.process().input_dict
     assert out == {"abc": float(1.0) / float(3.0)}  # all floats, in case you were unsure
     #                                    12345678901234567
     assert processor.dst_txt[0][:17] == "# abc = 0.3333333"
 
 def test4():
     """
-    Test for wrong exponentiation.
+    Test for exponentiation.
     """
     processor = SimpleAprepro("", "")
-    processor.src_txt = ["# abc = {abc = 2 ^ 2}"]
-    out = processor.process()
+    processor.src_txt = ["# abc = {abc = 2 ** 2}"]
+    out = processor.process().input_dict
     assert out == {"abc": 4}
     assert processor.dst_txt == ["# abc = 4",]
+
+def test5a():
+    """
+    Test for {include("file.txt")}
+    """
+    with open('to_include.apr', 'w') as F:
+        F.write("# iam = {iam = \"teapot\"}\n")
+        F.write("This is being included.")
+
+    processor = SimpleAprepro('to_include.apr', '')
+    processor.load_file()
+    processor.process()
+
+    comp = processor.dst_txt
+    gold = ["# iam = teapot", "This is being included."]
+
+    assert len(comp) == len(gold)
+    for idx in range(len(comp)):
+        assert comp[idx] == gold[idx]
+
+def test5b():
+    """
+    Test for {include("file.txt")}
+    """
+    with open('to_include.apr', 'w') as F:
+        F.write("middle\n")
+        F.write("middle middle\n")
+        F.write("middle")
+
+    with open('does_including.apr', 'w') as F:
+        F.write("beginning\n")
+        F.write("beginning beginning\n")
+        F.write("pre{include(\"to_include.apr\")}post\n")
+        F.write("end end\n")
+        F.write("end")
+
+    processor = SimpleAprepro('does_including.apr', '')
+    processor.load_file()
+    processor.process()
+
+    comp = processor.dst_txt
+    gold = ["beginning", "beginning beginning",
+            "premiddle", "middle middle", "middle",
+            "post",
+            "end end", "end"]
+
+    assert len(comp) == len(gold)
+    for idx in range(len(comp)):
+        assert comp[idx] == gold[idx]
+
+
+
+def test5():
+    """
+    Test for {include("file.txt")}
+    """
+    with open('to_include.apr', 'w') as F:
+        F.write("# iam = {iam = \"teapot\"}\n")
+        F.write("This is being included.")
+
+    with open('does_including.apr', 'w') as F:
+        F.write("This is before.\n")
+        F.write("{include(\"to_include.apr\")}\n")
+        F.write("I'm a little {iam}")
+
+    processor = SimpleAprepro('does_including.apr', '')
+    processor.load_file()
+    processor.process()
+
+    comp = processor.dst_txt
+    gold = ["This is before.", "# iam = teapot", "This is being included.", "I'm a little teapot"]
+
+    assert len(comp) == len(gold)
+    for idx in range(len(comp)):
+        assert comp[idx] == gold[idx]
+
+def test6():
+    """
+    Aprepro doesn't expand linebreaks in variables.
+    """
+    with open('newlines.apr', 'w') as F:
+        F.write("# txt = {txt = \"hello\\nworld\"}\n")
+        F.write("{txt}")
+
+    processor = SimpleAprepro('newlines.apr', '')
+    processor.load_file()
+    processor.process()
+
+    comp = processor.dst_txt
+    gold = ["# txt = hello\\nworld", "hello\\nworld"]
+
+    assert len(comp) == len(gold)
+    for idx in range(len(comp)):
+        assert comp[idx] == gold[idx]
+
 
 
 def simple_aprepro(src_f, dst_f,
