@@ -287,11 +287,8 @@ class SimpleAprepro:
                 break
             line = self.src_txt[jdx]
 
-            # Process escaped curly braces.
-            clean_line = line.replace("\{", "{").replace("\}", "}")
-
             # Process the aprepro directive blocks.
-            split_line = re.split(r"({[^{]*?})", clean_line)
+            split_line = re.split(r"({[^{]*?})", line)
             is_comment = False
             for idx, chunk in enumerate(split_line):
                 if chunk.startswith("{") and chunk.endswith("}"):
@@ -375,8 +372,8 @@ def test2():
     processor = SimpleAprepro("", "")
     processor.src_txt = ["# abc = {abc = PI}", "# abc = { abc }"]
     out = processor.process().input_dict
-    assert processor.dst_txt == ["# abc = 3.141592653589793",
-                                 "# abc = 3.141592653589793"]
+    assert (processor.dst_txt == ["# abc = 3.141592653589793", "# abc = 3.141592653589793"]
+         or processor.dst_txt == ["# abc = 3.1415926535897931", "# abc = 3.1415926535897931"])
     assert out == {"abc": math.pi}
 
 def test3():
