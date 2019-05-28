@@ -46,7 +46,7 @@ def clone( argv ):
             cfg.setLocalRepoMap()
             cfg.setTopDir( directory )
             clone_repositories( cfg )
-            cfg.createRepo()
+            cfg.createMRGitRepo()
 
         cfg.commitLocalRepoMap()
 
@@ -55,8 +55,7 @@ def clone_repositories( cfg ):
     ""
     topdir = cfg.getTopDir()
 
-    if not os.path.isdir( topdir ):
-        os.mkdir( topdir )
+    check_make_directory( topdir )
 
     with gititf.change_directory( topdir ):
         git = gititf.GitInterface()
@@ -64,7 +63,7 @@ def clone_repositories( cfg ):
             if loc == '.':
                 tmp = tempfile.mkdtemp( '', 'mrgit_tempclone_', os.getcwd() )
                 git.clone( url, basename(tmp) )
-                move_repo( tmp, loc )
+                move_directory_contents( tmp, loc )
             else:
                 git.clone( url, loc )
 
@@ -101,18 +100,15 @@ def abspath_local_repository_urls( urls ):
 
 def clone_from_single_url( cfg, url, directory ):
     ""
-    if directory and not os.path.exists( directory ):
-        os.mkdir( directory )
-
-    tmprepo = make_temp_repo_dir( directory )
+    tmpd = TempDirectory( directory )
 
     git = gititf.GitInterface()
 
     try:
-        git.clone( url+'/.mrgit', rootdir=tmprepo, quiet=True )
+        git.clone( url+'/.mrgit', rootdir=tmpd.getDir(), quiet=True )
     except gititf.GitInterfaceError:
-        clear_directory( tmprepo )
-        git.clone( url, tmprepo )
+        tmpd.removeAllFiles()
+        git.clone( url, tmpd.getDir() )
 
     if check_load_mrgit_repo( cfg, git ):
 
@@ -120,13 +116,7 @@ def clone_from_single_url( cfg, url, directory ):
 
         topdir = cfg.setTopDir( directory )
 
-        if not os.path.exists( topdir ):
-            os.mkdir( topdir )
-
-        os.rename( tmprepo, topdir+'/.mrgit' )
-
-        if not directory:
-            shutil.rmtree( dirname( tmprepo ) )
+        tmpd.moveTo( topdir+'/.mrgit' )
 
         clone_repositories( cfg )
 
@@ -137,24 +127,47 @@ def clone_from_single_url( cfg, url, directory ):
 
         topdir = cfg.setTopDir( directory )
 
-        move_repo( tmprepo, topdir )
+        tmpd.moveTo( topdir )
 
-        if not directory:
-            shutil.rmtree( dirname( tmprepo ) )
+        cfg.createMRGitRepo()
 
-        cfg.createRepo()
 
-    # tmprepo = directory / random string
-    # or
-    # tmprepo = random string / random string
-    # quietly checkout url+'/.mrgit' into tmprepo
-    # if ok:
-    #     construct Configuration from mrgit data
-    #     move tmprepo to .mrgit subdir
-    # else:
-    #     pass
-    # try checking out urls[0]+'/.mrgit' or '/.mrgit.git'
-    # else checkout urls[0]
+class TempDirectory:
+
+    def __init__(self, top_level_dir):
+        ""
+        self.topdir = top_level_dir
+        self._create()
+
+    def getDir(self):
+        ""
+        return self.tmpdir
+
+    def removeAllFiles(self):
+        ""
+        clear_directory( self.tmpdir )
+
+    def moveTo(self, todir):
+        ""
+        if os.path.exists( todir ):
+            move_directory_contents( self.tmpdir, todir )
+        else:
+            check_make_directory( dirname( todir ) )
+            os.rename( self.tmpdir, todir )
+
+        if not self.topdir:
+            shutil.rmtree( dirname( self.tmpdir ) )
+
+    def _create(self):
+        ""
+        check_make_directory( self.topdir )
+
+        if self.topdir:
+            tdir = abspath( self.topdir )
+            self.tmpdir = tempfile.mkdtemp( '', 'mrgit_tempclone_', tdir )
+        else:
+            tmpdir1 = tempfile.mkdtemp( '', 'mrgit_tempclone_', os.getcwd() )
+            self.tmpdir  = tempfile.mkdtemp( '', 'mrgit_tempclone_', tmpdir1 )
 
 
 def check_load_mrgit_repo( cfg, git ):
@@ -182,7 +195,7 @@ def clear_directory( path ):
             os.remove( dfn )
 
 
-def move_repo( fromdir, todir ):
+def move_directory_contents( fromdir, todir ):
     ""
     if not os.path.exists( todir ):
         os.rename( fromdir, todir )
@@ -193,29 +206,10 @@ def move_repo( fromdir, todir ):
         shutil.rmtree( fromdir )
 
 
-def make_temp_repo_dir( directory ):
+def check_make_directory( path ):
     ""
-    if directory:
-        tmpdir = tempfile.mkdtemp( '', 'mrgit_tempclone_', abspath(directory) )
-    else:
-        tmpdir1 = tempfile.mkdtemp( '', 'mrgit_tempclone_', os.getcwd() )
-        tmpdir  = tempfile.mkdtemp( '', 'mrgit_tempclone_', tmpdir1 )
-
-    return tmpdir
-
-
-# create .mrgit repository
-# create mrgit_config branch
-# create & commit .mrgit/config file on the mrgit_config branch
-#    [ remote "origin" ]
-#        manifests = git@gitlab.sandia.gov:rrdrake/manifests.git
-#        base-url-0 = sierra-git.sandia.gov:/git/
-#    but manifests is None (because was not cloned from a manifests)
-#    and the base-urls are the ones from the command line
-# create & commit .mrgit/manifests file on the master branch
-#    [ group cool ]
-#        repo=cool, base-url=0, path=cool
-#        repo=ness, base-url=1, path=cool/ness
+    if path and not os.path.isdir( path ):
+        os.mkdir( path )
 
 
 class Configuration:
@@ -311,7 +305,7 @@ class Configuration:
         finally:
             git.checkoutBranch( 'master' )
 
-    def createRepo(self):
+    def createMRGitRepo(self):
         ""
         repodir = pjoin( self.topdir, '.mrgit' )
 
