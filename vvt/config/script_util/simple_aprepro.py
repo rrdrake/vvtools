@@ -98,9 +98,11 @@ class SimpleAprepro:
         self.dst_txt = []
         self.defined_variables = set()
         self.possibly_unused_defined_variables = set()
+        self.include_was_used = False
 
         # This is a special function that will be stored in 'safe_globals`.
         def aprepro_include(filename):
+            self.include_was_used = True
             with open(filename, 'r') as F:
                 txt = F.read()
                 if not txt.endswith("\n"):
@@ -194,6 +196,8 @@ class SimpleAprepro:
         of the computed value.
         """
 
+        self.include_was_used = False  # Reset for each call
+
         if "^" in txt:
             raise Exception("simple_aprepro() only supports exponentiation via **" +
                   " and not ^. As aprepro supports both, please use ** instead." +
@@ -223,7 +227,7 @@ class SimpleAprepro:
             try:
                 val = eval(txt, self.safe_globals, self.eval_locals)
             except NameError:
-                print("eval() failed. eval_locals = {0}".format(self.eval_locals.input_dict))
+                print("eval() failed. eval_locals = {0}, txt={1}".format(self.eval_locals.input_dict, repr(txt)))
                 raise
 
 
@@ -290,10 +294,13 @@ class SimpleAprepro:
             # Process the aprepro directive blocks.
             split_line = re.split(r"({[^{]*?})", line)
             is_comment = False
+            reprocess = False
             for idx, chunk in enumerate(split_line):
                 if chunk.startswith("{") and chunk.endswith("}"):
                     # Found a chunk to evaluate.
                     split_line[idx] = self.safe_eval(chunk[1:-1], is_comment)
+                    if self.include_was_used:
+                        reprocess = True
                 else:
                     if "#" in chunk:
                         is_comment = True
@@ -307,7 +314,7 @@ class SimpleAprepro:
 
             # If there are any linebreaks, expand them and edit the
             # src_txt. Then reprocess this line.
-            if joined_line.count("\n") > 0:
+            if reprocess:
                 resplit_line = joined_line.splitlines()
                 self.src_txt = self.src_txt[:jdx] + resplit_line + self.src_txt[jdx+1:]
                 continue
@@ -491,6 +498,57 @@ def test6():
     for idx in range(len(comp)):
         assert comp[idx] == gold[idx]
 
+def test7():
+    """
+    nested includes with extra text in each file.
+    """
+    with open('nest1.apr', 'w') as F:
+        F.write("nest1\n")
+        F.write("{include(\"nest2.apr\")}")
+    with open('nest2.apr', 'w') as F:
+        F.write("nest2\n")
+        F.write("{include(\"nest3.apr\")}")
+    with open('nest3.apr', 'w') as F:
+        F.write("nest3\n")
+        F.write("abc = {abc = 123}")
+    with open('base.apr', 'w') as F:
+        F.write("base\n")
+        F.write("{include(\"nest1.apr\")}\n")
+        F.write("{abc}")
+
+    processor = SimpleAprepro('base.apr', '')
+    processor.load_file()
+    processor.process()
+
+    comp = processor.dst_txt
+    gold = ["base", "nest1", "nest2", "nest3", "abc = 123", "123"]
+
+    assert len(comp) == len(gold)
+    for idx in range(len(comp)):
+        assert comp[idx] == gold[idx]
+
+def test8():
+    """
+    nested includes without extra text.
+    """
+    with open('nest1.apr', 'w') as F:
+        F.write("{include(\"nest2.apr\")}")
+    with open('nest2.apr', 'w') as F:
+        F.write("abc = {abc = 123}")
+    with open('base.apr', 'w') as F:
+        F.write("{include(\"nest1.apr\")}\n")
+        F.write("{abc}")
+
+    processor = SimpleAprepro('base.apr', '')
+    processor.load_file()
+    processor.process()
+
+    comp = processor.dst_txt
+    gold = ["abc = 123", "123"]
+
+    assert len(comp) == len(gold)
+    for idx in range(len(comp)):
+        assert comp[idx] == gold[idx]
 
 
 def simple_aprepro(src_f, dst_f,
