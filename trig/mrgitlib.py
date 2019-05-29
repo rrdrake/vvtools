@@ -40,32 +40,10 @@ def clone( argv ):
 
         if len( urls ) == 1:
             clone_from_single_url( cfg, urls[0], directory )
-
         else:
-            cfg.createFromURLs( urls )
-            cfg.setLocalRepoMap()
-            cfg.setTopDir( directory )
-            clone_repositories( cfg )
-            cfg.createMRGitRepo()
+            clone_from_multiple_urls( cfg, urls, directory )
 
         cfg.commitLocalRepoMap()
-
-
-def clone_repositories( cfg ):
-    ""
-    topdir = cfg.getTopDir()
-
-    check_make_directory( topdir )
-
-    with gititf.change_directory( topdir ):
-        git = gititf.GitInterface()
-        for url,loc in cfg.getRemoteRepoList():
-            if loc == '.':
-                tmp = tempfile.mkdtemp( '', 'mrgit_tempclone_', os.getcwd() )
-                git.clone( url, basename(tmp) )
-                move_directory_contents( tmp, loc )
-            else:
-                git.clone( url, loc )
 
 
 def parse_url_list( args ):
@@ -102,34 +80,70 @@ def clone_from_single_url( cfg, url, directory ):
     ""
     tmpd = TempDirectory( directory )
 
-    git = gititf.GitInterface()
-
     try:
-        git.clone( url+'/.mrgit', rootdir=tmpd.getDir(), quiet=True )
+        # prefer an .mrgit repo under the given url
+        git = clone_repo( url+'/.mrgit', tmpd.path(), quiet=True )
+
     except gititf.GitInterfaceError:
+        # that failed, so just clone the given url
         tmpd.removeAllFiles()
-        git.clone( url, tmpd.getDir() )
+        git = clone_repo( url, tmpd.path() )
 
     if check_load_mrgit_repo( cfg, git ):
 
-        cfg.setLocalRepoMap()
-
+        # we just cloned an mrgit manifests repo
+        cfg.computeLocalRepoMap()
         topdir = cfg.setTopDir( directory )
-
         tmpd.moveTo( topdir+'/.mrgit' )
-
-        clone_repositories( cfg )
+        clone_from_remote( cfg )
 
     else:
-
+        # assume a simple Git repo was given
         cfg.createFromURLs( [ url ] )
-        cfg.setLocalRepoMap()
-
+        cfg.computeLocalRepoMap()
         topdir = cfg.setTopDir( directory )
-
         tmpd.moveTo( topdir )
-
         cfg.createMRGitRepo()
+
+
+def clone_from_multiple_urls( cfg, urls, directory ):
+    ""
+    cfg.createFromURLs( urls )
+    cfg.computeLocalRepoMap()
+    cfg.setTopDir( directory )
+    clone_from_remote( cfg )
+    cfg.createMRGitRepo()
+
+
+def clone_from_remote( cfg ):
+    ""
+    topdir = cfg.getTopDir()
+
+    check_make_directory( topdir )
+
+    with gititf.change_directory( topdir ):
+        for url,loc in cfg.getRemoteRepoList():
+            clone_repo( url, loc )
+
+
+def clone_repo( url, into_dir, quiet=False ):
+    ""
+    git = gititf.GitInterface()
+
+    if os.path.exists( into_dir ):
+
+        assert '.git' not in os.listdir( into_dir )
+
+        tmp = tempfile.mkdtemp( '', 'mrgit_tempclone_', abspath( into_dir ) )
+        git.clone( url, tmp, quiet=quiet )
+        move_directory_contents( tmp, into_dir )
+
+        git = gititf.GitInterface( rootdir=into_dir )
+
+    else:
+        git.clone( url, into_dir, quiet=quiet )
+
+    return git
 
 
 class TempDirectory:
@@ -137,9 +151,9 @@ class TempDirectory:
     def __init__(self, top_level_dir):
         ""
         self.topdir = top_level_dir
-        self._create()
+        self.tmpdir = self._create()
 
-    def getDir(self):
+    def path(self):
         ""
         return self.tmpdir
 
@@ -164,10 +178,12 @@ class TempDirectory:
 
         if self.topdir:
             tdir = abspath( self.topdir )
-            self.tmpdir = tempfile.mkdtemp( '', 'mrgit_tempclone_', tdir )
+            tmpdir = tempfile.mkdtemp( '', 'mrgit_tempclone_', tdir )
         else:
             tmpdir1 = tempfile.mkdtemp( '', 'mrgit_tempclone_', os.getcwd() )
-            self.tmpdir  = tempfile.mkdtemp( '', 'mrgit_tempclone_', tmpdir1 )
+            tmpdir  = tempfile.mkdtemp( '', 'mrgit_tempclone_', tmpdir1 )
+
+        return tmpdir
 
 
 def check_load_mrgit_repo( cfg, git ):
@@ -250,7 +266,7 @@ class Configuration:
         finally:
             git.checkoutBranch( 'master' )
 
-    def setLocalRepoMap(self):
+    def computeLocalRepoMap(self):
         ""
         grp = self.mfest.findGroup( None )
 
