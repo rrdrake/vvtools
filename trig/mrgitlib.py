@@ -86,7 +86,7 @@ def clone_from_single_url( cfg, url, directory ):
 
     except gititf.GitInterfaceError:
         # that failed, so just clone the given url
-        tmpd.removeAllFiles()
+        tmpd.removeFiles()
         git = clone_repo( url, tmpd.path() )
 
     if check_load_mrgit_repo( cfg, git ):
@@ -95,10 +95,10 @@ def clone_from_single_url( cfg, url, directory ):
         cfg.computeLocalRepoMap()
         topdir = cfg.setTopDir( directory )
         tmpd.moveTo( topdir+'/.mrgit' )
-        clone_from_remote( cfg )
+        clone_repositories_from_config( cfg )
 
     else:
-        # assume a simple Git repo was given
+        # repo is not an mrgit manifests
         cfg.createFromURLs( [ url ] )
         cfg.computeLocalRepoMap()
         topdir = cfg.setTopDir( directory )
@@ -111,11 +111,11 @@ def clone_from_multiple_urls( cfg, urls, directory ):
     cfg.createFromURLs( urls )
     cfg.computeLocalRepoMap()
     cfg.setTopDir( directory )
-    clone_from_remote( cfg )
+    clone_repositories_from_config( cfg )
     cfg.createMRGitRepo()
 
 
-def clone_from_remote( cfg ):
+def clone_repositories_from_config( cfg ):
     ""
     topdir = cfg.getTopDir()
 
@@ -148,36 +148,41 @@ def clone_repo( url, into_dir, quiet=False ):
 
 class TempDirectory:
 
-    def __init__(self, top_level_dir):
-        ""
-        self.topdir = top_level_dir
+    def __init__(self, subdir):
+        """
+        if 'subdir' is None, create tmpdir1/tmpdir2
+        else, create subdir/tmpdir
+        """
+        self.subdir = subdir
         self.tmpdir = self._create()
 
     def path(self):
         ""
         return self.tmpdir
 
-    def removeAllFiles(self):
+    def removeFiles(self):
         ""
-        clear_directory( self.tmpdir )
+        remove_all_files_in_directory( self.tmpdir )
 
     def moveTo(self, todir):
-        ""
+        """
+        contents of temp dir are moved inside 'todir', and temp dir is removed
+        """
         if os.path.exists( todir ):
             move_directory_contents( self.tmpdir, todir )
         else:
             check_make_directory( dirname( todir ) )
             os.rename( self.tmpdir, todir )
 
-        if not self.topdir:
+        if not self.subdir:
             shutil.rmtree( dirname( self.tmpdir ) )
 
     def _create(self):
         ""
-        check_make_directory( self.topdir )
+        check_make_directory( self.subdir )
 
-        if self.topdir:
-            tdir = abspath( self.topdir )
+        if self.subdir:
+            tdir = abspath( self.subdir )
             tmpdir = tempfile.mkdtemp( '', 'mrgit_tempclone_', tdir )
         else:
             tmpdir1 = tempfile.mkdtemp( '', 'mrgit_tempclone_', os.getcwd() )
@@ -195,13 +200,12 @@ def check_load_mrgit_repo( cfg, git ):
            'mrgit_config' in git.listRemoteBranches():
 
             cfg.loadFromCheckout( git )
-
             return True
 
     return False
 
 
-def clear_directory( path ):
+def remove_all_files_in_directory( path ):
     ""
     for fn in os.listdir( path ):
         dfn = pjoin( path, fn )
@@ -213,13 +217,14 @@ def clear_directory( path ):
 
 def move_directory_contents( fromdir, todir ):
     ""
-    if not os.path.exists( todir ):
-        os.rename( fromdir, todir )
-    else:
+    if os.path.exists( todir ):
         for fn in os.listdir( fromdir ):
             frompath = pjoin( fromdir, fn )
             shutil.move( frompath, todir )
         shutil.rmtree( fromdir )
+
+    else:
+        os.rename( fromdir, todir )
 
 
 def check_make_directory( path ):
@@ -259,10 +264,7 @@ class Configuration:
 
         git.checkoutBranch( 'mrgit_config' )
         try:
-            fn = pjoin( git.getRootDir(), 'config' )
-            with open( fn, 'r' ) as fp:
-                self.remote.readFromFile( fp, git.getRemoteURL() )
-
+            self.remote.loadFromRepo( git )
         finally:
             git.checkoutBranch( 'master' )
 
@@ -271,7 +273,7 @@ class Configuration:
         grp = self.mfest.findGroup( None )
 
         for spec in grp.getRepoList():
-            gitpath = remove_top_level_directory( spec['path'] )
+            gitpath = remove_first_directory_segment( spec['path'] )
             gitpath = normpath( pjoin( '..', gitpath ) )
             self.local.setRepoLocation( spec['repo'], path=gitpath )
 
@@ -296,28 +298,19 @@ class Configuration:
         repolist = []
         for spec in grp.getRepoList():
             url = self.remote.getRepoURL( spec['repo'] )
-            repolist.append( [ url, spec['path'] ] )
-
-        adjust_repo_paths( repolist )
+            path = remove_first_directory_segment( spec['path'] )
+            repolist.append( [ url, path ] )
 
         return repolist
 
     def commitLocalRepoMap(self):
         ""
-        repodir = pjoin( self.topdir, '.mrgit' )
-        git = gititf.GitInterface( rootdir=repodir )
+        mrgit = pjoin( self.topdir, '.mrgit' )
+        git = gititf.GitInterface( rootdir=mrgit )
         git.checkoutBranch( 'mrgit_config' )
 
         try:
-            fn = pjoin( repodir, 'config' )
-            tmpfn = pjoin( repodir, 'config.tmp' )
-            with open( tmpfn, 'w' ) as fp:
-                self.local.writeToFile( fp )
-            if not filecmp.cmp( fn, tmpfn ):
-                os.rename( tmpfn, fn )
-                git.add( 'config' )
-                git.commit( 'commitLocalRepoMap' )
-
+            self.local.commitToRepo( git )
         finally:
             git.checkoutBranch( 'master' )
 
@@ -328,93 +321,13 @@ class Configuration:
         git = gititf.GitInterface()
         git.create( repodir )
 
-        with open( repodir+'/manifests', 'w' ) as fp:
-            self.mfest.writeToFile( fp )
-
+        self.mfest.writeToFile( repodir+'/manifests' )
         git.add( 'manifests' )
         git.commit( 'init manifests' )
 
         git.createBranch( 'mrgit_config' )
-        with open( repodir+'/config', 'w' ) as fp:
-            self.remote.writeToFile( fp )
-
-        git.add( 'config' )
-        git.commit( 'init config' )
+        self.remote.commitToRepo( git )
         git.checkoutBranch( 'master' )
-
-
-class RepoMap:
-
-    def __init__(self):
-        ""
-        self.repomap = {}
-
-    def setRepoLocation(self, reponame, url=None, path=None):
-        ""
-        self.repomap[ reponame ] = ( url, path )
-
-    def getRepoURL(self, reponame):
-        ""
-        return self.repomap[ reponame ][0]
-
-    def writeToFile(self, fileobj):
-        ""
-        for name,loc in self.repomap.items():
-            url = loc[0]
-            fileobj.write( 'repo='+name )
-            if loc[0]:
-                fileobj.write( ', url='+loc[0] )
-            if loc[1]:
-                fileobj.write( ', path='+loc[1] )
-            fileobj.write( '\n' )
-        fileobj.write( '\n' )
-
-    def readFromFile(self, fileobj, baseurl):
-        ""
-        for line in fileobj:
-            line = line.strip()
-            if line.startswith('#'):
-                pass
-            elif line:
-                attrs = parse_attribute_line( line )
-                if 'repo' in attrs:
-                    if 'url' in attrs:
-                        url = attrs['url']
-                    else:
-                        url = append_path_to_url( baseurl, attrs['path'] )
-
-                    self.setRepoLocation( attrs['repo'], url=url )
-
-
-def append_path_to_url( url, path ):
-    ""
-    url = url.rstrip('/').rstrip(os.sep)
-    path = normpath( path )
-
-    if not path or path == '.':
-        return url
-    elif path == '..':
-        return dirname( url )
-    elif path.startswith('../') or path.startswith('..'+os.sep):
-        return pjoin( dirname( url ), path[3:] )
-    else:
-        return pjoin( url, path )
-
-
-def adjust_repo_paths( repolist ):
-    ""
-    for i in range( len( repolist ) ):
-        path = remove_top_level_directory( repolist[i][1] )
-        repolist[i][1] = path
-
-
-def remove_top_level_directory( path ):
-    ""
-    pL = normpath( path ).split( os.sep )
-    if len(pL) == 1:
-        return '.'
-    else:
-        return os.sep.join( pL[1:] )
 
 
 class Manifests:
@@ -430,32 +343,35 @@ class Manifests:
 
     def findGroup(self, groupname, create=False):
         ""
+        grp = None
+
         if not groupname:
             if len( self.groups ) > 0:
-                return self.groups[0]
+                grp = self.groups[0]
 
         else:
-            for grp in self.groups:
-                if grp.getName() == groupname:
-                    return grp
+            for igrp in self.groups:
+                if igrp.getName() == groupname:
+                    grp = igrp
+                    break
 
-            if create:
+            if not grp and create:
                 grp = RepoGroup( groupname )
                 self.groups.append( grp )
-                return grp
 
-        return None
+        return grp
 
-    def writeToFile(self, fileobj):
+    def writeToFile(self, filename):
         ""
-        for grp in self.groups:
-            fileobj.write( '[ group '+grp.getName()+' ]\n' )
-            for spec in grp.getRepoList():
-                fileobj.write( '    repo='+spec['repo'] )
-                fileobj.write( ', path='+spec['path'] )
-                fileobj.write( '\n' )
+        with open( filename, 'w' ) as fp:
+            for grp in self.groups:
+                fp.write( '[ group '+grp.getName()+' ]\n' )
+                for spec in grp.getRepoList():
+                    fp.write( '    repo='+spec['repo'] )
+                    fp.write( ', path='+spec['path'] )
+                    fp.write( '\n' )
 
-            fileobj.write( '\n' )
+                fp.write( '\n' )
 
     def readFromFile(self, fileobj):
         ""
@@ -474,19 +390,6 @@ class Manifests:
                 attrs = parse_attribute_line( line )
                 if 'repo' in attrs and 'path' in attrs:
                     self.addRepo( groupname, attrs['repo'], attrs['path'] )
-
-
-def parse_attribute_line( line ):
-    ""
-    attrs = {}
-
-    kvL = [ s.strip() for s in line.split(',') ]
-    for kvstr in kvL:
-        kv = [ s.strip() for s in kvstr.split( '=', 1 ) ]
-        if len(kv) == 2 and kv[0]:
-            attrs[ kv[0] ] = kv[1]
-
-    return attrs
 
 
 class RepoGroup:
@@ -521,3 +424,121 @@ class RepoGroup:
             return spec
 
         return None
+
+
+CONFIG_FILENAME = 'config'
+CONFIG_TEMPFILE = 'config.tmp'
+
+class RepoMap:
+
+    def __init__(self):
+        ""
+        self.repomap = {}
+
+    def setRepoLocation(self, reponame, url=None, path=None):
+        ""
+        self.repomap[ reponame ] = ( url, path )
+
+    def getRepoURL(self, reponame):
+        ""
+        return self.repomap[ reponame ][0]
+
+    def commitToRepo(self, git):
+        ""
+        with gititf.change_directory( git.getRootDir() ):
+
+            if os.path.exists( CONFIG_FILENAME ):
+                self.writeToFile( CONFIG_TEMPFILE )
+                self._commit_if_changed( git )
+
+            else:
+                self.writeToFile( CONFIG_FILENAME )
+                git.add( CONFIG_FILENAME )
+                git.commit( 'init config' )
+
+    def loadFromRepo(self, git):
+        ""
+        with gititf.change_directory( git.getRootDir() ):
+            self.readFromFile( git.getRemoteURL() )
+
+    def writeToFile(self, filename):
+        ""
+        with open( filename, 'w' ) as fp:
+            for name,loc in self.repomap.items():
+                url = loc[0]
+                fp.write( 'repo='+name )
+                if loc[0]:
+                    fp.write( ', url='+loc[0] )
+                if loc[1]:
+                    fp.write( ', path='+loc[1] )
+                fp.write( '\n' )
+
+            fp.write( '\n' )
+
+    def readFromFile(self, baseurl):
+        ""
+        with open( CONFIG_FILENAME, 'r' ) as fp:
+
+            for line in fp:
+                line = line.strip()
+
+                if line.startswith('#'):
+                    pass
+
+                elif line:
+                    attrs = parse_attribute_line( line )
+                    if 'repo' in attrs:
+                        if 'url' in attrs:
+                            url = attrs['url']
+                        else:
+                            url = append_path_to_url( baseurl, attrs['path'] )
+
+                        self.setRepoLocation( attrs['repo'], url=url )
+
+    def _commit_if_changed(self, git):
+        ""
+        if not filecmp.cmp( CONFIG_FILENAME, CONFIG_TEMPFILE ):
+            os.rename( CONFIG_TEMPFILE, CONFIG_FILENAME )
+            git.add( CONFIG_FILENAME )
+            git.commit( 'changed config' )
+        else:
+            os.remove( CONFIG_FILENAME )
+
+
+def append_path_to_url( url, path ):
+    ""
+    url = url.rstrip('/').rstrip(os.sep)
+    path = normpath( path )
+
+    if not path or path == '.':
+        return url
+    elif path == '..':
+        return dirname( url )
+    elif path.startswith('../') or path.startswith('..'+os.sep):
+        return pjoin( dirname( url ), path[3:] )
+    else:
+        return pjoin( url, path )
+
+
+def remove_first_directory_segment( path ):
+    ""
+    assert not os.path.isabs( path )
+
+    pL = normpath( path ).split( os.sep )
+    if len(pL) == 1:
+        return '.'
+    else:
+        return os.sep.join( pL[1:] )
+
+
+def parse_attribute_line( line ):
+    ""
+    attrs = {}
+
+    kvL = [ s.strip() for s in line.split(',') ]
+    for kvstr in kvL:
+        kv = [ s.strip() for s in kvstr.split( '=', 1 ) ]
+        if len(kv) == 2 and kv[0]:
+            attrs[ kv[0] ] = kv[1]
+
+    return attrs
