@@ -156,39 +156,25 @@ class cloning( trigutil.trigTestCase ):
         git = GitInterface( rootdir='clone2/ness' )
         assert 'nessie' in git.listTags()
 
-    # magic: use case:
-    #           - have an mrgit clone with no top level git repo (because
-    #             two groups were cloned that have distinct root directories)
-    #           - then do a clone of that clone by specifying the top level
-    #             directory as the url
 
-    # def test_specifying_server_and_repo_basenames(self):
-    #     ""
-    #     util.runcmd( mrgit_file, 'clone --server', srv, 'code,plug' )
+    #   - use case:
+    #       - have an mrgit clone with no top level git repo (because
+    #         two groups were cloned that have distinct root directories)
+    #       - then do a clone of that clone by specifying the top level
+    #         directory as the url
+    #   - use case: use MRGIT_MANIFESTS to specify the clone url
+    #   - use case: use MRGIT_GOOGLE_MANIFESTS to specify the clone url
 
-    # def test_specify_the_server_with_environ_variable(self):
-    #     ""
-    #     os.environ['MRGIT_SERVER'] = srv
-    #     util.runcmd( mrgit_file, 'clone code,plug' )
+    # magic: change to top level in a group to be "."
+    #           - the issue before was what to do if two groups both had a
+    #             "." and you wanted to checkout both
+    #           - but the group name can be used instead - right?
 
     # def test_clone_then_update(self):
     #     ""
     #     util.runcmd( mrgit_file, 'clone --server', srv, 'code,plug' )
     #     # TODO: make change
     #     util.runcmd( mrgit_file, 'pull' )
-
-    # def test_cloning_from_a_manifest_file(self):
-    #     """
-    #     if a server is not specified, the repositories are relative to
-    #     the manifest file
-    #     """
-    #     util.writefile( 'repos/mymanifest', """
-    #         repo=base, path=code
-    #         repo=plug, path=code/plugin
-    #         """ )
-    #     time.sleep(1)
-
-    #     util.runcmd( mrgit_file, 'clone -m repos/mymanifest' )
 
     # def test_the_first_group_is_the_default(self):
     #     ""
@@ -218,6 +204,242 @@ class cloning( trigutil.trigTestCase ):
 
     #     util.runcmd( mrgit_file, 'clone -m repos/mymanifest tests' )
 
+
+class google_repo_manifests( trigutil.trigTestCase ):
+
+    def create_google_repo_set(self):
+        ""
+        self.man_url = trigutil.create_local_bare_repository( 'manifests',
+                                                              'central' )
+
+        contents = defaults_xml.replace( 'CENTRALPATH', abspath('central') )
+        trigutil.push_file_to_repo( self.man_url, 'default.xml', contents )
+
+        for repo in ['service','navy','army','airforce','afrl','marines']:
+            url = trigutil.create_local_bare_repository( repo+'.git', 'central' )
+            trigutil.push_file_to_repo( url, 'file.txt', """
+                file in """+repo+""" repository
+                """ )
+
+    def test_parse_prefix_urls(self):
+        ""
+        util.writefile( 'example.xml', example_xml )
+
+        gmr = mrlib.GoogleManifestReader( 'example.xml' )
+
+        remotes = gmr._collect_remote_prefix_urls()
+
+        assert len( remotes ) == 2
+        assert remotes['origin'] == 'file:///some/path/'
+        assert remotes['other'] == 'file:///some/other/path'
+
+        name = gmr._get_default_remote_name()
+        assert name and name == 'origin'
+
+    def test_collect_repo_name_to_url_map(self):
+        ""
+        util.writefile( 'example.xml', example_xml )
+
+        gmr = mrlib.GoogleManifestReader( 'example.xml' )
+        gmr.createRepoNameToURLMap()
+
+        names = list( gmr.getRepoNames() )
+        assert len( names ) == 3
+        assert gmr.getRepoURL( 'service.git' ) == 'file:///some/path/service.git'
+        assert gmr.getRepoURL( 'airforce.git' ) == 'file:///some/path/airforce.git'
+        assert gmr.getRepoURL( 'afrl.git' ) == 'file:///some/other/path/afrl.git'
+
+    def test_primary_url_logic(self):
+        ""
+        fs = defaults_xml.replace( 'CENTRALPATH', 'file:///default/path/' )
+        util.writefile( 'default.xml', fs )
+        util.writefile( 'proj1.xml', proj1_xml )
+        util.writefile( 'proj2.xml', proj2_xml )
+        util.writefile( 'proj3.xml', proj3_xml )
+
+        gconv = mrlib.GoogleConverter( '.' )
+        gconv.readManifestFiles()
+
+        gconv.getPrimaryURL( 'service.git' ) == 'file:///default/path/service.git'
+        gconv.getPrimaryURL( 'bar.git' ) == 'file:///server/path/bar.git'
+        gconv.getPrimaryURL( 'baz.git' ) == 'file:///special/path/baz.git'
+
+    def test_get_list_of_repos_from_manifest_file(self):
+        ""
+        util.writefile( 'example.xml', example_xml )
+
+        gmr = mrlib.GoogleManifestReader( 'example.xml' )
+        gmr.createRepoNameToURLMap()
+
+        projL = list( gmr.getProjectList() )
+
+        projL.sort()
+        assert len( projL ) == 3
+
+        assert projL[0][0] == 'afrl.git'
+        assert projL[0][1] == 'file:///some/other/path/afrl.git'
+        assert projL[0][2] == 'airforce/afrl'
+
+        assert projL[1][0] == 'airforce.git'
+        assert projL[1][1] == 'file:///some/path/airforce.git'
+        assert projL[1][2] == 'airforce'
+
+        assert projL[2][0] == 'service.git'
+        assert projL[2][1] == 'file:///some/path/service.git'
+        assert projL[2][2] == '.'
+
+    def test_creation_of_repo_url_map(self):
+        ""
+        fs = defaults_xml.replace( 'CENTRALPATH', '/special/path/' )
+        util.writefile( 'default.xml', fs )
+        util.writefile( 'proj1.xml', proj1_xml )
+
+        gconv = mrlib.GoogleConverter( '.' )
+        gconv.readManifestFiles()
+
+        cfg = mrlib.Configuration()
+        gconv.createRemoteURLMap( cfg )
+
+        rmap = cfg.getRemoteRepoMap()
+        assert rmap.getRepoURL( 'service.git' ) == 'file:///special/path/service.git'
+        assert rmap.getRepoURL( 'afrl.git' ) == 'file:///special/path/afrl.git'
+        assert rmap.getRepoURL( 'bar.git' ) == 'file:///special/path/bar.git'
+        assert rmap.getRepoURL( 'baz.git' ) == 'file:///server/path/baz.git'
+
+    def test_creation_of_repo_groups(self):
+        ""
+        fs = defaults_xml.replace( 'CENTRALPATH', '/special/path/' )
+        util.writefile( 'default.xml', fs )
+        util.writefile( 'proj1.xml', proj1_xml )
+
+        gconv = mrlib.GoogleConverter( '.' )
+        gconv.readManifestFiles()
+
+        cfg = mrlib.Configuration()
+        gconv.createRepoGroups( cfg )
+
+        mfest = cfg.getManifests()
+
+        rgrp = mfest.findGroup( 'default' )
+        repoL = rgrp.getRepoNames()
+        repoL.sort()
+        assert repoL == [ 'afrl.git', 'airforce.git', 'navy.git', 'service.git' ]
+        assert rgrp.getRepoPath( 'afrl.git' ) == 'airforce/afrl'
+        assert rgrp.getRepoPath( 'airforce.git' ) == 'airforce'
+        assert rgrp.getRepoPath( 'navy.git' ) == 'navy'
+        assert rgrp.getRepoPath( 'service.git' ) == '.'
+
+        rgrp = mfest.findGroup( 'proj1' )
+        repoL = rgrp.getRepoNames()
+        repoL.sort()
+        assert repoL == [ 'bar.git', 'baz.git', 'service.git' ]
+        assert rgrp.getRepoPath( 'bar.git' ) == 'bar'
+        assert rgrp.getRepoPath( 'baz.git' ) == 'baz'
+        assert rgrp.getRepoPath( 'service.git' ) == '.'
+
+    def test_a_group_is_skipped_if_one_of_the_urls_is_not_primary(self):
+        ""
+        fs = defaults_xml.replace( 'CENTRALPATH', '/some/path/' )
+        util.writefile( 'default.xml', fs )
+        util.writefile( 'example.xml', example_xml )
+
+        gconv = mrlib.GoogleConverter( '.' )
+        gconv.readManifestFiles()
+
+        cfg = mrlib.Configuration()
+        gconv.createRepoGroups( cfg )
+
+        mfest = cfg.getManifests()
+
+        assert mfest.findGroup( 'default' ) != None
+        assert mfest.findGroup( 'example' ) == None
+
+    def test_clone_from_a_google_repo_manifests(self):
+        ""
+        self.create_google_repo_set()
+
+        mrlib.clone( [ '-G', self.man_url, 'clone1' ] )
+
+        assert 'service' in util.readfile( 'clone1/file.txt' )
+        assert 'navy' in util.readfile( 'clone1/navy/file.txt' )
+        assert 'airforce' in util.readfile( 'clone1/airforce/file.txt' )
+        assert 'afrl' in util.readfile( 'clone1/airforce/afrl/file.txt' )
+
+    def test_if_G_option_given_then_only_one_url_can_be_cloned(self):
+        ""
+        pass
+
+
+defaults_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <default remote="origin"
+           sync-j="4"
+           sync-s="true"
+           dest-branch="master"
+           revision="master" />
+
+  <remote name="origin"
+          fetch="file://CENTRALPATH/" />
+
+  <project name="service.git" path="." />
+  <project name="navy.git" path="navy" />
+  <project name="airforce.git" path="airforce" />
+  <project name="afrl.git" path="airforce/afrl" />
+</manifest>
+"""
+
+example_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <default remote="origin" revision="master" />
+
+  <remote name="origin"
+          fetch="file:///some/path/ " />
+  <remote name="other"
+          fetch="file:///some/other/path" />
+
+  <project name="service.git" path="." />
+  <project name="airforce.git" path="airforce" />
+  <project name="afrl.git" path="airforce/afrl" remote="other" />
+</manifest>
+"""
+
+proj1_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <default remote="origin" revision="master" />
+  <remote name="origin" fetch="file:///special/path/ " />
+  <remote name="server" fetch="file:///server/path/ " />
+  <project name="service.git" path="." />
+  <project name="bar.git" path="bar" />
+  <project name="baz.git" path="baz" remote="server" />
+</manifest>
+"""
+
+proj2_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <default remote="origin" revision="master" />
+  <remote name="origin" fetch="file:///special/path/ " />
+  <remote name="server" fetch="file:///server/path/ " />
+  <project name="service.git" path="." />
+  <project name="bar.git" path="bar" remote="server" />
+  <project name="baz.git" path="baz" />
+</manifest>
+"""
+
+proj3_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <default remote="origin" revision="master" />
+  <remote name="origin" fetch="file:///special/path/ " />
+  <remote name="server" fetch="file:///server/path/ " />
+  <project name="service.git" path="." />
+  <project name="bar.git" path="bar" remote="server" />
+  <project name="baz.git" path="baz" />
+</manifest>
+"""
 
 class mrgit_configuration_tests( trigutil.trigTestCase ):
 

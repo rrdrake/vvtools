@@ -54,7 +54,7 @@ def main():
 
     if len(argL) == 0:
         print3( help_mrgit.strip() )
-        errorexit( 'no command given' )
+        mrgitlib.errorexit( 'no command given' )
 
     cmd = argL[0]
 
@@ -65,7 +65,7 @@ def main():
         mrgitlib.clone( argL[1:] )
 
     else:
-        errorexit( '*** unknown mrgit command:', cmd )
+        mrgitlib.errorexit( '*** unknown mrgit command:', cmd )
 
 
 # def determine_repositories( setnames ):
@@ -106,14 +106,6 @@ def print3( *args ):
     ""
     sys.stdout.write( ' '.join( [ str(arg) for arg in args ] ) + '\n' )
     sys.stdout.flush()
-
-
-def errorexit( *args ):
-    ""
-    err = '*** mrgit error: '+' '.join( [ str(arg) for arg in args ] )
-    sys.stderr.write( err + '\n' )
-    sys.stderr.flush()
-    sys.exit(1)
 
 
 ####################################################################

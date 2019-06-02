@@ -10,6 +10,7 @@ import re
 import tempfile
 import shutil
 import filecmp
+import glob
 from os.path import join as pjoin
 from os.path import abspath
 from os.path import normpath
@@ -25,7 +26,7 @@ class MRGitError( Exception ):
 
 def clone( argv ):
     ""
-    optL,argL = getopt.getopt( argv, '', [] )
+    optL,argL = getopt.getopt( argv, 'G', [] )
 
     optD = {}
     for n,v in optL:
@@ -38,12 +39,26 @@ def clone( argv ):
 
         cfg = Configuration()
 
-        if len( urls ) == 1:
+        if '-G' in optD:
+            if len(urls) != 1:
+                errorexit( 'must specify exactly one URL with the -G option' )
+            clone_from_google_repo_manifests( cfg, urls[0], directory )
+
+        elif len( urls ) == 1:
             clone_from_single_url( cfg, urls[0], directory )
+
         else:
             clone_from_multiple_urls( cfg, urls, directory )
 
         cfg.commitLocalRepoMap()
+
+
+def errorexit( *args ):
+    ""
+    err = '*** mrgit error: '+' '.join( [ str(arg) for arg in args ] )
+    sys.stderr.write( err + '\n' )
+    sys.stderr.flush()
+    sys.exit(1)
 
 
 def parse_url_list( args ):
@@ -113,6 +128,215 @@ def clone_from_multiple_urls( cfg, urls, directory ):
     cfg.setTopDir( directory )
     clone_repositories_from_config( cfg )
     cfg.createMRGitRepo()
+
+
+def clone_from_google_repo_manifests( cfg, url, directory ):
+    ""
+    tmpd = TempDirectory( directory )
+
+    git = clone_repo( url, tmpd.path() )
+
+    gconv = GoogleConverter( tmpd.path() )
+    gconv.readManifestFiles()
+    gconv.createRemoteURLMap( cfg )
+    gconv.createRepoGroups( cfg )
+
+    cfg.computeLocalRepoMap()
+    topdir = cfg.setTopDir( directory )
+    cfg.createMRGitRepo()
+    tmpd.moveTo( pjoin( topdir, '.mrgit', 'google_manifests' ) )
+    clone_repositories_from_config( cfg )
+
+
+def load_config_from_google_manifests( cfg, git ):
+    ""
+    import xml.etree.ElementTree as ET
+
+    with gititf.change_directory( git.getRootDir() ):
+
+        parse_google_manifest_file( 'default.xml' )
+
+        for fn in glob.glob( '*.xml' ):
+
+            groupname = os.path.splitext(fn)[0]
+
+            root = ET.parse( fn ).getroot()
+            baseurl = get_xml_remote_url( root )
+
+        for nd in root:
+            if nd.tag == 'project':
+                name = nd.attrib['name']
+                path = nd.attrib['path']
+                cfg.addManifestRepo( groupname, name, path )
+
+
+class GoogleConverter:
+
+    def __init__(self, manifests_directory):
+        ""
+        self.srcdir = manifests_directory
+
+    def readManifestFiles(self):
+        ""
+        fn = pjoin( self.srcdir, 'default.xml' )
+        self.default = GoogleManifestReader( fn )
+        self.default.createRepoNameToURLMap()
+
+        self.manifests = []
+        for fn in glob.glob( pjoin( self.srcdir, '*.xml' ) ):
+            gmr = GoogleManifestReader( fn )
+            gmr.createRepoNameToURLMap()
+            self.manifests.append( gmr )
+
+    def getPrimaryURL(self, repo_name):
+        ""
+        url = self.default.getRepoURL( repo_name, None )
+
+        if not url:
+            url2cnt = self._count_urls( repo_name )
+            sortL = [ (T[1],T[0]) for T in url2cnt.items() ]
+            sortL.sort()
+            url = sortL[-1][1]
+
+        return url
+
+    def createRemoteURLMap(self, cfg):
+        ""
+        for gmr in [ self.default ] + self.manifests:
+            for reponame in gmr.getRepoNames():
+                url = self.getPrimaryURL( reponame )
+                cfg.addRepoURL( reponame, url )
+
+    def createRepoGroups(self, cfg):
+        ""
+        for gmr in [ self.default ] + self.manifests:
+            self._create_group_from_manifest( gmr, cfg )
+
+    def _create_group_from_manifest(self, gmr, cfg):
+        ""
+        if self._all_urls_are_primary( gmr ):
+            for name,url,path in gmr.getProjectList():
+                groupname = gmr.getGroupName()
+                cfg.addManifestRepo( groupname, name, path )
+
+    def _all_urls_are_primary(self, gmr):
+        ""
+        for name,url,path in gmr.getProjectList():
+            primary = self.getPrimaryURL( name )
+            if url != primary:
+                return False
+
+        return True
+
+    def _count_urls(self, repo_name):
+        ""
+        url2cnt = {}
+
+        for mfest in self.manifests:
+            url = mfest.getRepoURL( repo_name, None )
+            if url:
+                url2cnt[ url ] = url2cnt.get( url, 0 ) + 1
+
+        return url2cnt
+
+
+class GoogleManifestReader:
+
+    def __init__(self, filename):
+        ""
+        # put this here instead of the top of this file because reading Google
+        # manifests is not core to mrgit, but if it was at the top and the
+        # import failed, then the application would crash
+        import xml.etree.ElementTree as ET
+
+        self.name = os.path.splitext( basename( filename ) )[0]
+        self.urlmap = {}
+
+        self.xmlroot = ET.parse( filename ).getroot()
+
+    def createRepoNameToURLMap(self):
+        ""
+        self.urlmap = {}
+
+        self.default_remote = self._get_default_remote_name()
+        self.remotes = self._collect_remote_prefix_urls()
+
+        for nd in self.xmlroot:
+            if nd.tag == 'project':
+                url = self._get_project_url( nd )
+                name = self._get_project_name( nd )
+
+                assert name not in self.urlmap
+                self.urlmap[name] = url
+
+        return self.urlmap
+
+    def getGroupName(self):
+        ""
+        return self.name
+
+    def getRepoNames(self):
+        ""
+        return self.urlmap.keys()
+
+    def getRepoURL(self, repo_name, *default):
+        ""
+        if len(default) > 0:
+            return self.urlmap.get( repo_name, default[0] )
+        return self.urlmap[repo_name]
+
+    def getProjectList(self):
+        ""
+        projects = []
+
+        for nd in self.xmlroot:
+            if nd.tag == 'project':
+                name = self._get_project_name( nd )
+                url = self.urlmap[ name ]
+                path = self._get_project_path( nd )
+
+                projects.append( ( name, url, path ) )
+
+        return projects
+
+    def _collect_remote_prefix_urls(self):
+        ""
+        remotes = {}
+
+        for nd in self.xmlroot:
+            if nd.tag == 'remote':
+                name = nd.attrib['name'].strip()
+                prefix = nd.attrib['fetch'].strip()
+                remotes[name] = prefix
+
+        return remotes
+
+    def _get_project_name(self, xmlnd):
+        ""
+        return xmlnd.attrib['name'].strip()
+
+    def _get_project_url(self, xmlnd):
+        ""
+        name = self._get_project_name( xmlnd )
+        remote = xmlnd.attrib.get( 'remote', self.default_remote ).strip()
+        prefix = self.remotes[remote]
+        url = append_path_to_url( prefix, name )
+
+        return url
+
+    def _get_project_path(self, xmlnd):
+        ""
+        path = xmlnd.attrib.get( 'path', '.' )
+        if not path: path = '.'
+        path = normpath( path )
+
+        return path
+
+    def _get_default_remote_name(self):
+        ""
+        for nd in self.xmlroot:
+            if nd.tag == 'default':
+                return nd.attrib['remote'].strip()
 
 
 def clone_repositories_from_config( cfg ):
@@ -249,9 +473,9 @@ class Configuration:
             name = gititf.repo_name_from_url( url )
             if i == 0:
                 groupname = name
-                path = name
+                path = '.'
             else:
-                path = pjoin( groupname, name )
+                path = name
 
             self.mfest.addRepo( groupname, name, path )
             self.remote.setRepoLocation( name, url=url )
@@ -268,13 +492,20 @@ class Configuration:
         finally:
             git.checkoutBranch( 'master' )
 
+    def addRepoURL(self, reponame, url):
+        ""
+        self.remote.setRepoLocation( reponame, url )
+
+    def addManifestRepo(self, groupname, reponame, path):
+        ""
+        self.mfest.addRepo( groupname, reponame, path )
+
     def computeLocalRepoMap(self):
         ""
         grp = self.mfest.findGroup( None )
 
         for spec in grp.getRepoList():
-            gitpath = remove_first_directory_segment( spec['path'] )
-            gitpath = normpath( pjoin( '..', gitpath ) )
+            gitpath = normpath( pjoin( '..', spec['path'] ) )
             self.local.setRepoLocation( spec['repo'], path=gitpath )
 
     def setTopDir(self, directory):
@@ -298,7 +529,7 @@ class Configuration:
         repolist = []
         for spec in grp.getRepoList():
             url = self.remote.getRepoURL( spec['repo'] )
-            path = remove_first_directory_segment( spec['path'] )
+            path = spec['path']
             repolist.append( [ url, path ] )
 
         return repolist
@@ -328,6 +559,14 @@ class Configuration:
         git.createBranch( 'mrgit_config' )
         self.remote.commitToRepo( git )
         git.checkoutBranch( 'master' )
+
+    def getRemoteRepoMap(self):
+        ""
+        return self.remote
+
+    def getManifests(self):
+        ""
+        return self.mfest
 
 
 class Manifests:
@@ -425,6 +664,16 @@ class RepoGroup:
 
         return None
 
+    def getRepoNames(self):
+        ""
+        nameL = [ spec['repo'] for spec in self.repos ]
+        return nameL
+
+    def getRepoPath(self, reponame):
+        ""
+        spec = self.findRepo( reponame )
+        return spec['path']
+
 
 CONFIG_FILENAME = 'config'
 CONFIG_TEMPFILE = 'config.tmp'
@@ -518,17 +767,6 @@ def append_path_to_url( url, path ):
         return pjoin( dirname( url ), path[3:] )
     else:
         return pjoin( url, path )
-
-
-def remove_first_directory_segment( path ):
-    ""
-    assert not os.path.isabs( path )
-
-    pL = normpath( path ).split( os.sep )
-    if len(pL) == 1:
-        return '.'
-    else:
-        return os.sep.join( pL[1:] )
 
 
 def parse_attribute_line( line ):
