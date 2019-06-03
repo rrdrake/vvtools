@@ -1,0 +1,113 @@
+#!/usr/bin/python
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import getopt
+
+import mrgitlib
+
+
+help_mrgit = \
+"""
+SYNOPSIS
+    Multi-Repository GIT.
+
+COMMANDS:
+    mrgit clone [<repository>] [<directory>]
+
+    The <repository> can be a manifests URL or another mrgit clone URL.
+    If more than one <repository> is given, an mrgit repository is created
+    and populated with those.
+
+    mrgit init ???
+"""
+
+notes = """
+
+    mrgit [OPTIONS] clone [repo[,repo,...]] [directory]
+
+Upon clone, set/add to .git/info/exclude
+    - the .mrgit subdirectory
+    - sub-repositories
+
+multiple repository version control git manager utility tool
+tie combine coordinate 
+mrgit
+git wrapper for multiple repository managment
+grap = Git wRAPper
+mrgrap
+"""
+
+
+def main():
+    ""
+    optL,argL = getopt.getopt( sys.argv[1:], 'h', ['help'] )
+
+    optD = {}
+    for n,v in optL:
+        if n == '-h' or n == '--help':
+            print3( help_mrgit.strip() )
+            return
+        optD[n] = v
+
+    if len(argL) == 0:
+        print3( help_mrgit.strip() )
+        mrgitlib.errorexit( 'no command given' )
+
+    cmd = argL[0]
+
+    if cmd == 'help':
+        print3( help_mrgit.strip() )
+
+    elif cmd == 'clone':
+        mrgitlib.clone( argL[1:] )
+
+    else:
+        mrgitlib.errorexit( '*** unknown mrgit command:', cmd )
+
+
+# def determine_repositories( setnames ):
+#     ""
+#     reposet = {}
+
+#     for setname in setnames:
+#         if setname == 'awe':
+#             reposet[ 'sierra.base.git' ] = 'code'
+#             reposet[ 'sierra.plato_engine.git' ] = 'code/plato/engine'
+#             reposet[ 'sierra.itar.git' ] = 'code/itar'
+#             reposet[ 'sierra.awe.git' ] = 'code/awe'
+#         elif setname == 'base':
+#             reposet[ 'sierra.base.git' ] = 'code'
+#             reposet[ 'sierra.plato_engine.git' ] = 'code/plato/engine'
+#         elif setname == 'base_tests':
+#             reposet[ 'sierra.tests.git' ] = 'tests'
+#         else:
+#             raise Exception( 'unknown repository set name: '+setname )
+
+#     repolist = []
+#     for name,path in reposet.items():
+#         repolist.append( [ path, name ] )
+#     repolist.sort()
+
+#     assert repolist[0][0] == '.'
+
+#     return repolist
+
+
+# def clone_repositories( repolist ):
+#     ""
+#     for path, name in repolist:
+#         pass
+
+
+def print3( *args ):
+    ""
+    sys.stdout.write( ' '.join( [ str(arg) for arg in args ] ) + '\n' )
+    sys.stdout.flush()
+
+
+####################################################################
+
+main()

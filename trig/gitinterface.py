@@ -14,6 +14,7 @@ import pipes
 import shutil
 import tempfile
 import subprocess
+import re
 
 
 class GitInterfaceError( Exception ):
@@ -67,13 +68,15 @@ class GitInterface:
 
         self.root = root
 
-    def clone(self, url, rootdir=None, branch=None, bare=False):
+    def clone(self, url, rootdir=None, branch=None, bare=False, quiet=False):
         """
         If 'branch' is None, all branches are fetched.  If a branch name, such
         as "master", then only that branch is fetched.  Returns the url to
         the local clone.
 
         If 'rootdir' is not None, it will contain the repo on disk.
+
+        If 'quiet' is True, then no output is printed.
         """
         self.root = None
 
@@ -81,9 +84,9 @@ class GitInterface:
             raise GitInterfaceError( 'cannot bare clone a single branch' )
 
         if branch:
-            self._branch_clone( url, rootdir, branch )
+            self._branch_clone( url, rootdir, branch, quiet )
         else:
-            self._full_clone( url, rootdir, bare )
+            self._full_clone( url, rootdir, bare, quiet )
 
         return 'file://'+self.root
 
@@ -197,7 +200,7 @@ class GitInterface:
         if url == None:
             url = self.getRemoteURL()
             if not url:
-                raise GitInterfaceError( 'url not given and no local url found' )
+                raise GitInterfaceError( 'url not given and no local remote found' )
 
         bL = []
 
@@ -223,6 +226,13 @@ class GitInterface:
                 self._fetch_then_checkout_branch( branchname )
             else:
                 raise GitInterfaceError( 'branch does not exist: '+branchname )
+
+    def createBranch(self, branchname):
+        ""
+        if branchname in self.listBranches():
+            raise GitInterfaceError( 'branch already exists: '+branchname )
+
+        self.run( 'checkout -b '+branchname )
 
     def getRemoteURL(self):
         ""
@@ -269,7 +279,7 @@ class GitInterface:
         # implementation here creates a temporary repo with an initial
         # commit then fetches that into the current repository
 
-        pathL = [ os.path.abspath(p) for p in (path0,)+paths ]
+        pathL = [ abspath(p) for p in (path0,)+paths ]
 
         tmpdir = tempfile.mkdtemp( '.gitinterface' )
         try:
@@ -333,47 +343,47 @@ class GitInterface:
             raise GitInterfaceError(
                         'unexpected response from rev-parse: '+str(out) )
 
-    def _full_clone(self, url, rootdir, bare):
+    def _full_clone(self, url, rootdir, bare, quiet):
         ""
         cmd = 'clone'
         if bare:
             cmd += ' --bare'
-        cmd += ' ' + url
 
         if rootdir:
+            if not repository_url_match( url ) and is_a_local_repository( url ):
+                url = abspath( url )
+
             with make_and_change_directory( rootdir ):
-                self.run( cmd, '.' )
+                self.run( cmd+' '+url, '.', quiet=quiet )
                 self.root = os.getcwd()
+
         else:
-            self.run( cmd )
+            self.run( cmd+' '+url, quiet=quiet )
 
             dname = self._repo_directory_from_url( url, bare )
 
             assert os.path.isdir( dname )
-            self.root = os.path.abspath( dname )
-
-    def _repo_name_from_url(self, url):
-        ""
-        return os.path.basename( url ).rstrip( '.git' )
+            self.root = abspath( dname )
 
     def _repo_directory_from_url(self, url, bare=False):
         ""
-        name = self._repo_name_from_url( url )
+        name = repo_name_from_url( url )
         if bare:
             return name+'.git'
         else:
             return name
 
-    def _branch_clone(self, url, rootdir, branch):
+    def _branch_clone(self, url, rootdir, branch, quiet):
         ""
         if not rootdir:
-            rootdir = self._repo_name_from_url( url )
+            rootdir = repo_name_from_url( url )
 
         with make_and_change_directory( rootdir ):
-            self.run( 'init' )
+            self.run( 'init', quiet=quiet )
             self.root = os.getcwd()
-            self.run( 'remote add -f -t', branch, '-m', branch, 'origin', url )
-            self.run( 'checkout', branch )
+            self.run( 'remote add -f -t', branch, '-m', branch, 'origin', url,
+                      quiet=quiet )
+            self.run( 'checkout', branch, quiet=quiet )
 
     def _fetch_then_checkout_branch(self, branchname):
         ""
@@ -422,12 +432,13 @@ class GitInterface:
         if origin_url:
             self.clone( origin_url, rootdir=rootdir )
         elif rootdir:
-            self.root = os.path.abspath( rootdir )
+            self.root = abspath( rootdir )
 
     def run(self, arg0, *args, **kwargs):
         ""
         roe = kwargs.pop( 'raise_on_error', True )
         cap = kwargs.pop( 'capture', False )
+        quiet = kwargs.pop( 'quiet', False )
 
         cmdcapture = True
         if not cap and self.verbose:
@@ -439,7 +450,8 @@ class GitInterface:
             x,out = runcmd( cmd,
                             chdir=self.root,
                             raise_on_error=roe,
-                            capture=cmdcapture )
+                            capture=cmdcapture,
+                            quiet=quiet )
 
         if cmdcapture and self.verbose:
             print3( cmd + '\n' + out )
@@ -491,7 +503,69 @@ def push_branches_and_tags( work_git, to_url ):
     work_git.push( all_tags=True, repository=to_url )
 
 
+# match the form [user@]host.xz:path/to/repo.git/
+scp_like_url = re.compile( r'([a-zA-Z0-9_]+@)?[a-zA-Z0-9_]+([.][a-zA-Z0-9_]*)*:' )
+
+def repository_url_match( url ):
+    ""
+    if url.startswith( 'http://' ) or url.startswith( 'https://' ) or \
+       url.startswith( 'ftp://' ) or url.startswith( 'ftps://' ) or \
+       url.startswith( 'ssh://' ) or \
+       url.startswith( 'git://' ) or \
+       url.startswith( 'file://' ):
+        return True
+
+    elif scp_like_url.match( url ):
+        return True
+
+    return False
+
+
+def is_a_local_repository( directory ):
+    ""
+    if not os.path.isdir( directory ) and os.path.isdir( directory+'.git' ):
+        rootdir = directory+'.git'
+    else:
+        rootdir = directory
+
+    try:
+        with change_directory( rootdir ):
+            git = GitInterface()
+            x,out = git.run( 'rev-parse --is-bare-repository',
+                             raise_on_error=False, capture=True )
+    except Exception:
+        return False
+
+    if x == 0 and out.strip().lower() in ['true','false']:
+        return True
+
+    return False
+
+
+def verify_repository_url( url ):
+    ""
+    if is_a_local_repository( url ):
+        return True
+
+    else:
+        git = GitInterface()
+        x,out = git.run( 'ls-remote', url,
+                         raise_on_error=False, capture=True )
+        if x == 0:
+            return True
+
+    return False
+
+
 ########################################################################
+
+def repo_name_from_url( url ):
+    ""
+    name = os.path.basename( normpath(url) )
+    if name.endswith( '.git' ):
+        name = name[:-4]
+    return name
+
 
 class change_directory:
 
@@ -551,7 +625,7 @@ class set_environ:
 
 def split_and_create_directory( repo_path ):
     ""
-    path,name = os.path.split( os.path.normpath( repo_path ) )
+    path,name = os.path.split( normpath( repo_path ) )
 
     if path == '.':
         path = ''
@@ -589,14 +663,14 @@ def create_repo_with_these_files( gitexe, message, pathL ):
     runcmd( gitexe + ' commit -m ' + pipes.quote( message ) )
 
 
-def runcmd( cmd, chdir=None, raise_on_error=True, capture=True ):
+def runcmd( cmd, chdir=None, raise_on_error=True, capture=True, quiet=False ):
     ""
     out = ''
     x = 1
 
     with change_directory( chdir ):
 
-        if capture:
+        if capture or quiet:
             po = subprocess.Popen( cmd, shell=True, stdout=subprocess.PIPE,
                                                     stderr=subprocess.STDOUT )
         else:
@@ -610,7 +684,8 @@ def runcmd( cmd, chdir=None, raise_on_error=True, capture=True ):
             out = _STRING_(sout)
 
     if x != 0 and raise_on_error:
-        print3( cmd + '\n' + out )
+        if not quiet:
+            print3( cmd + '\n' + out )
         raise GitInterfaceError( 'Command failed: '+cmd )
 
     return x,out
