@@ -405,6 +405,16 @@ def runcmd( cmd, echo=True, ignore_exit=False, capture_output=False,
     
     opts['shell'] = True
 
+    # Setting `stdin` to something is necessary because if it is left unset,
+    # it inherits the file handles from the parent. So, sometimes when you use
+    # `subprocess.call()` to run something with mpiexec, the process will hang
+    # after finishing and never return. Close devnull after call().
+    #
+    # If we only supported python3.3+, we could just set it to
+    # `subprocess.DEVNULL` and be done with it.
+    infp = open(os.devnull, 'r')
+    opts['stdin'] = infp
+
     if capture_output:
         proc = subprocess.Popen( cmd, **opts )
         out = proc.communicate()[0]
@@ -414,6 +424,7 @@ def runcmd( cmd, echo=True, ignore_exit=False, capture_output=False,
     else:
         x = subprocess.call( cmd, **opts )
 
+    infp.close()
     if outfp != None:
         outfp.close()
     outfp = fdout = None
