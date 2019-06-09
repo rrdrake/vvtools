@@ -73,7 +73,17 @@ class DependencySet:
         If one or more dependencies did not run, did not finish, or failed,
         then that offending TestSpec is returned.  Otherwise, None is returned.
         """
+        # print ( 'magic: getblock enter' )
+        # for tdep in self.deps:
+        #     tspec = tdep.getTestSpec()
+        #     print ( 'magic: getblock dep', tspec.getExecuteDirectory(),
+        #         self.statushandler.isDone( tspec ),
+        #         self.statushandler.getResultStatus( tspec ),
+        #         self.statushandler.skipTest( tspec ) )
+
+
         for tdep in self.deps:
+
             tspec = tdep.getTestSpec()
 
             if not self.statushandler.isDone( tspec ):
@@ -85,6 +95,55 @@ class DependencySet:
                 return tspec
 
         return None
+
+    def getBlockingDependency(self):
+        ""
+        for tdep in self.deps:
+
+            tspec = tdep.getTestSpec()
+
+            if self.statushandler.isDone( tspec ):
+                result = self.statushandler.getResultStatus( tspec )
+                if not tdep.satisfiesResult( result ):
+                    return tspec
+
+            elif self.statushandler.skipTest( tspec ):
+                result = self.statushandler.getResultStatus( tspec )
+                if not tdep.satisfiesResult( result ):
+                    return tspec
+
+            elif self.statushandler.isNotDone( tspec ):
+                return tspec
+
+            else:
+                assert self.statushandler.isNotrun( tspec )
+
+                pass
+
+        return None
+
+    # def getBlocking(self, allow_notrun=False):
+    #     """
+    #     If one or more dependencies did not run, did not finish, or failed,
+    #     then that offending TestSpec is returned.  Otherwise, None is returned.
+    #     """
+    #     for tdep in self.deps:
+
+    #         tspec = tdep.getTestSpec()
+
+    #         if self.statushandler.isNotrun( tspec ):
+    #             if not allow_notrun:
+    #                 return tspec
+
+    #         elif not self.statushandler.isDone( tspec ):
+    #             return tspec
+
+    #         result = self.statushandler.getResultStatus( tspec )
+
+    #         if not tdep.satisfiesResult( result ):
+    #             return tspec
+
+    #     return None
 
     def getMatchDirectories(self):
         ""

@@ -17,6 +17,11 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
+from libvvtest.teststatus import TestStatusHandler
+import libvvtest.depend as depend
+
+import libvvtest.FilterExpressions as FilterExpressions
+
 
 class dependency_result_expressions( vtu.vvtestTestCase ):
 
@@ -93,6 +98,141 @@ class dependency_result_expressions( vtu.vvtestTestCase ):
 
             lineL = util.grepfiles( 'time=', 'TestResults*/testX/execute.log' )
             assert len( lineL ) == 1
+
+    def test_get_blocking_dependencies_that_are_done(self):
+        ""
+        st = TestStatusHandler()
+
+        depset,tspec = make_DependencySet_with_a_dependency( st, 'pass' )
+        assert depset.getBlockingDependency() == None
+
+        depset,tspec = make_DependencySet_with_a_dependency( st, 'fail' )
+        assert depset.getBlockingDependency() != None
+
+        depset,tspec = make_DependencySet_with_a_dependency( st, 'fail', '*' )
+        assert depset.getBlockingDependency() == None
+
+        depset,tspec = make_DependencySet_with_a_dependency( st, 'fail',
+                                                             'pass or fail' )
+        assert depset.getBlockingDependency() == None
+
+    def test_get_blocking_dependencies_that_are_running(self):
+        ""
+        st = TestStatusHandler()
+
+        depset,tspec = make_DependencySet_with_a_dependency( st, 'running' )
+        assert depset.getBlockingDependency() != None
+
+        depset,tspec = make_DependencySet_with_a_dependency( st, 'pass' )
+        assert depset.getBlockingDependency() == None
+        append_to_DependencySet( st, depset, 'running' )
+        assert depset.getBlockingDependency() != None
+
+    def test_get_blocking_dependencies_that_are_skipped(self):
+        ""
+        st = TestStatusHandler()
+
+        depset,tspec = make_DependencySet_with_a_dependency( st, 'skip' )
+        assert depset.getBlockingDependency() != None
+
+        depset,tspec = make_DependencySet_with_a_dependency( st, 'skip', '*' )
+        assert depset.getBlockingDependency() == None
+
+    def test_get_blocking_dependencies_that_have_not_run_yet(self):
+        ""
+        return # magic: still working on getBlockingDependency() method
+
+        st = TestStatusHandler()
+
+        depset,tspec = make_DependencySet_with_a_dependency( st, 'notrun' )
+        assert depset.getBlockingDependency() != None
+
+    # def test_a_notrun_may_or_may_not_be_a_blocking_dependency(self):
+    #     ""
+    #     st = TestStatusHandler()
+    #     depset,tspec = make_DependencySet_with_a_dependency( st, 'notrun' )
+
+    #     assert depset.getBlocking() != None
+
+    #     assert depset.getBlocking( allow_notrun=True ) == None
+
+    #     st.startRunning( tspec )
+    #     st.markDone( tspec, 0 )
+    #     assert depset.getBlocking() == None
+
+    # def test_a_notdone_is_a_blocking_dependency(self):
+    #     ""
+    #     st = TestStatusHandler()
+    #     depset,tspec = make_DependencySet_with_a_dependency( st, 'notdone' )
+
+    #     assert depset.getBlocking() != None
+    #     assert depset.getBlocking( allow_notrun=True ) != None
+
+    def test_a_result_wildcard_will_ignore_a_skipped_dependency(self):
+        ""
+        return # magic: still working to fix result="*" on skipped tests
+
+        util.writefile( 'testA.vvt', """
+            #VVT: depends on (result="*") : testB testC
+            import os
+            import vvtest_util as vvt
+            print ( vvt.DEPDIRS )
+            assert len( vvt.DEPDIRS ) == 1
+            """ )
+        util.writefile( 'testB.vvt', """
+            import os, time
+            time.sleep(5)
+            with open( 'checkfile', 'w' ) as fp:
+                fp.write( 'hello'+os.linesep )
+            """ )
+        util.writefile( 'testC.vvt', """
+            pass
+            """ )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-vv -k testA/testB', batch=batch )
+            vrun.assertCounts( total=3, npass=2, skip=1 )
+
+            lineL = util.grepfiles( 'time=', 'TestResults*/testX/execute.log' )
+            assert len( lineL ) == 1
+
+
+def make_DependencySet_with_a_dependency( statushandler, test_result,
+                                          result_expr=None ):
+    ""
+    depset = depend.DependencySet( statushandler )
+    tspec = vtu.make_fake_TestSpec( statushandler, test_result )
+
+    wordexpr = make_word_expression( result_expr )
+
+    tdep = depend.TestDependency( tspec, None, wordexpr )
+    depset.addDependency( tdep )
+
+    return depset, tspec
+
+
+def append_to_DependencySet( statushandler, depset, test_result ):
+    ""
+    tspec = vtu.make_fake_TestSpec( statushandler, test_result )
+
+    tdep = depend.TestDependency( tspec, None, None )
+    depset.addDependency( tdep )
+
+
+def make_word_expression( string_expr ):
+    ""
+    if string_expr == None:
+        wx = None
+    elif string_expr == '*':
+        wx = FilterExpressions.WordExpression()
+    else:
+        wx = FilterExpressions.WordExpression( string_expr )
+
+    return wx
 
 
 ############################################################################
