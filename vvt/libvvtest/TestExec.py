@@ -15,6 +15,7 @@ from . import cshScriptWriter
 from . import ScriptWriter
 from . import pgexec
 from .makecmd import MakeScriptCommand
+from .testcase import TestCase  # magic
 
 
 # if a test times out, it receives a SIGINT.  if it doesn't finish up
@@ -225,7 +226,7 @@ class TestExec:
 
     def _apply_plugin_preload(self):
         ""
-        pyexe = self.plugin.testPreload( self.atest )
+        pyexe = self.plugin.testPreload( TestCase( self.atest ) )  # magic
         if pyexe:
             return pyexe
         else:

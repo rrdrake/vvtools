@@ -12,11 +12,11 @@ from . import TestExec
 from . import pathutil
 
 
-def XstatusString( statushandler, t, test_dir, cwd ):
+def XstatusString( statushandler, tcase, test_dir, cwd ):
     """
     Returns a formatted string containing the job and its status.
     """
-    ref = ensure_TestSpec( t )
+    ref = tcase.getSpec()
 
     s =  '%-20s' % ref.getName()
 
@@ -77,18 +77,19 @@ def make_date_stamp( testdate, optrdate, timefmt="%Y_%m_%d" ):
     return datestr
 
 
-def partition_tests_by_result( statushandler, testL ):
+def partition_tests_by_result( statushandler, tcaseL ):
     ""
     parts = { 'fail':[], 'timeout':[], 'diff':[],
               'pass':[], 'notrun':[], 'notdone':[],
               'skip':[] }
 
-    for tst in testL:
-        if statushandler.skipTest( tst ):
-            parts[ 'skip' ].append( tst )
+    for tcase in tcaseL:
+        tspec = tcase.getSpec()
+        if statushandler.skipTest( tspec ):
+            parts[ 'skip' ].append( tcase )
         else:
-            result = statushandler.getResultStatus( ensure_TestSpec( tst ) )
-            parts[ result ].append( tst )
+            result = statushandler.getResultStatus( tspec )
+            parts[ result ].append( tcase )
 
     return parts
 

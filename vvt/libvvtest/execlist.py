@@ -7,7 +7,7 @@
 import os, sys
 
 from . import CommonSpec
-from . import TestExec
+from .TestExec import TestExec
 from . import depend
 
 
@@ -19,9 +19,9 @@ class TestExecList:
         self.plugin = usrplugin
         self.tlist = tlist
 
-        self.xtlist = {}  # np -> list of TestExec objects
-        self.started = {}  # TestSpec xdir -> TestExec object
-        self.stopped = {}  # TestSpec xdir -> TestExec object
+        self.xtlist = {}  # np -> list of TestCase objects
+        self.started = {}  # TestSpec xdir -> TestCase object
+        self.stopped = {}  # TestSpec xdir -> TestCase object
 
     def createTestExecs(self, test_dir, platform, config, perms):
         """
@@ -33,39 +33,42 @@ class TestExecList:
 
         self._createTestExecList( perms )
         
-        for xt in self.getTestExecList():
+        for tcase in self.getTestExecList():
+            xt = tcase.getExec()
             xt.init( test_dir, platform, xdb, config )
 
     def markTestsWithDependents(self):
         ""
-        for tx in self.getTestExecList():
-            if tx.hasDependent():
-                tx.atest.setAttr( 'hasdependent', True )
+        for tcase in self.getTestExecList():
+            if tcase.getExec().hasDependent():
+                tcase.getSpec().setAttr( 'hasdependent', True )
 
     def _createTestExecList(self, perms):
         ""
         self.xtlist = {}
 
         xtD = {}
-        for t in self.tlist.getTests():
+        for tcase in self.tlist.getTests():
 
-            if not self.statushandler.skipTest( t ):
+            tspec = tcase.getSpec()
 
-                assert t.constructionCompleted()
+            if not self.statushandler.skipTest( tspec ):
 
-                xt = TestExec.TestExec( self.statushandler, self.plugin,
-                                        t, perms )
+                assert tspec.constructionCompleted()
 
-                if t.getAttr( 'hasdependent', False ):
+                xt = TestExec( self.statushandler, self.plugin, tspec, perms )
+                tcase.setExec( xt )
+
+                if tspec.getAttr( 'hasdependent', False ):
                     xt.setHasDependent()
 
-                np = int( t.getParameters().get('np', 0) )
+                np = int( tspec.getParameters().get('np', 0) )
                 if np in self.xtlist:
-                    self.xtlist[np].append(xt)
+                    self.xtlist[np].append( tcase )
                 else:
-                    self.xtlist[np] = [xt]
+                    self.xtlist[np] = [ tcase ]
 
-                xtD[ t.getExecuteDirectory() ] = xt
+                xtD[ tspec.getExecuteDirectory() ] = tcase
 
         # sort tests longest running first; 
         self.sortTestExecList()
@@ -77,13 +80,15 @@ class TestExecList:
         tmap = self.tlist.getTestMap()
         groups = self.tlist.getGroupMap()
 
-        for xt in self.getTestExecList():
+        for tcase in self.getTestExecList():
 
-            if xt.atest.isAnalyze():
-                grpL = groups.getGroup( xt.atest )
-                depend.connect_analyze_dependencies( xt, grpL, xdir2testexec )
+            tspec = tcase.getSpec()
 
-            depend.check_connect_dependencies( xt, tmap, xdir2testexec )
+            if tspec.isAnalyze():
+                grpL = groups.getGroup( tcase )
+                depend.connect_analyze_dependencies( tcase, grpL, xdir2testexec )
+
+            depend.check_connect_dependencies( tcase, tmap, xdir2testexec )
 
     def sortTestExecList(self):
         """
@@ -92,16 +97,15 @@ class TestExecList:
         of the testing sequence, which can add significantly to the total wall
         time.
         """
-        for np,L in self.xtlist.items():
+        for np,tcaseL in self.xtlist.items():
             sortL = []
-            for tx in L:
-                t = tx.atest
-                tm = self.statushandler.getRuntime( t, None )
+            for tcase in tcaseL:
+                tm = self.statushandler.getRuntime( tcase.getSpec(), None )
                 if tm == None: tm = 0
-                sortL.append( (tm,tx) )
+                sortL.append( (tm,tcase) )
             sortL.sort()
             sortL.reverse()
-            L[:] = [ tx for tm,tx in sortL ]
+            tcaseL[:] = [ tcase for tm,tcase in sortL ]
 
     def getTestExecProcList(self):
         """
@@ -116,13 +120,15 @@ class TestExecList:
         is not None, a list of TestExec objects is returned each of which need
         that number of processors to run.
         """
-        L = []
+        xL = []
+
         if numprocs == None:
-          for txL in self.xtlist.values():
-            L.extend( txL )
+            for tcaseL in self.xtlist.values():
+                xL.extend( tcaseL )
         else:
-          L.extend( self.xtlist.get(numprocs,[]) )
-        return L
+            xL.extend( self.xtlist.get(numprocs,[]) )
+
+        return xL
     
     def popNext(self, platform):
         """
@@ -140,39 +146,39 @@ class TestExecList:
         npL.reverse()
 
         # find longest runtime test such that the num procs is available
-        tx = self._pop_next_test( npL, platform )
-        if tx == None and len(self.started) == 0:
+        tcase = self._pop_next_test( npL, platform )
+        if tcase == None and len(self.started) == 0:
             # search for tests that need more processors than platform has
-            tx = self._pop_next_test( npL )
+            tcase = self._pop_next_test( npL )
 
-        if tx != None:
-            self.started[ tx.atest.getExecuteDirectory() ] = tx
+        if tcase != None:
+            self.started[ tcase.getSpec().getExecuteDirectory() ] = tcase
 
-        return tx
+        return tcase
 
     def popRemaining(self):
         """
         All remaining tests are removed from the run list and returned.
         """
         tL = []
-        for np,L in list( self.xtlist.items() ):
-            tL.extend( L )
-            del L[:]
+        for np,tcaseL in list( self.xtlist.items() ):
+            tL.extend( tcaseL )
+            del tcaseL[:]
             self.xtlist.pop( np )
         return tL
 
     def getRunning(self):
         """
-        Return the list of tests that are still running.
+        Return the list of TestCase that are still running.
         """
         return self.started.values()
 
-    def testDone(self, tx):
+    def testDone(self, tcase):
         ""
-        xdir = tx.atest.getExecuteDirectory()
-        self.tlist.appendTestResult( tx.atest )
+        xdir = tcase.getSpec().getExecuteDirectory()
+        self.tlist.appendTestResult( tcase )
         self.started.pop( xdir, None )
-        self.stopped[ xdir ] = tx
+        self.stopped[ xdir ] = tcase
 
     def numDone(self):
         """
@@ -190,20 +196,21 @@ class TestExecList:
         ""
         for np in npL:
             if platform == None or platform.queryProcs(np):
-                tL = self.xtlist[np]
-                N = len(tL)
+                tcaseL = self.xtlist[np]
+                N = len(tcaseL)
                 i = 0
                 while i < N:
-                    tx = tL[i]
+                    tcase = tcaseL[i]
+                    tx = tcase.getExec()
                     if tx.getDependencySet().getBlocking() == None:
                         self._pop_test_exec( np, i )
-                        return tx
+                        return tcase
                     i += 1
         return None
 
     def _pop_test_exec(self, np, i):
         ""
-        L = self.xtlist[np]
-        del L[i]
-        if len(L) == 0:
+        tcaseL = self.xtlist[np]
+        del tcaseL[i]
+        if len(tcaseL) == 0:
             self.xtlist.pop( np )

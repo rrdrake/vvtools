@@ -15,10 +15,11 @@ class TestFilter:
         self.statushandler = statushandler
         self.plugin = user_plugin
 
-    def checkSubdirectory(self, tspec, subdir):
+    def checkSubdirectory(self, tcase, subdir):
         ""
         ok = True
 
+        tspec = tcase.getSpec()
         xdir = tspec.getExecuteDirectory()
         if subdir and subdir != xdir and not is_subdir( subdir, xdir ):
             ok = False
@@ -26,17 +27,21 @@ class TestFilter:
 
         return ok
 
-    def checkPlatform(self, tspec):
+    def checkPlatform(self, tcase):
         ""
+        tspec = tcase.getSpec()
+
         pev = PlatformEvaluator( tspec.getPlatformEnableExpressions() )
         ok = self.rtconfig.evaluate_platform_include( pev.satisfies_platform )
         if not ok:
             self.statushandler.markSkipByPlatform( tspec )
         return ok
 
-    def checkOptions(self, tspec):
+    def checkOptions(self, tcase):
         ""
         ok = True
+
+        tspec = tcase.getSpec()
         for opexpr in tspec.getOptionEnableExpressions():
             if not self.rtconfig.evaluate_option_expr( opexpr ):
                 ok = False
@@ -45,8 +50,10 @@ class TestFilter:
             self.statushandler.markSkipByOption( tspec )
         return ok
 
-    def checkKeywords(self, tspec, results_keywords=True):
+    def checkKeywords(self, tcase, results_keywords=True):
         ""
+        tspec = tcase.getSpec()
+
         kwlist = tspec.getKeywords() + \
                  self.statushandler.getResultsKeywords( tspec )
 
@@ -71,8 +78,10 @@ class TestFilter:
 
         return ok
 
-    def checkTDD(self, tspec):
+    def checkTDD(self, tcase):
         ""
+        tspec = tcase.getSpec()
+
         if self.rtconfig.getAttr( 'include_tdd', False ):
             ok = True
         else:
@@ -81,8 +90,10 @@ class TestFilter:
             self.statushandler.markSkipByTDD( tspec )
         return ok
 
-    def checkParameters(self, tspec, permanent=True):
+    def checkParameters(self, tcase, permanent=True):
         ""
+        tspec = tcase.getSpec()
+
         if tspec.isAnalyze():
             # analyze tests are not excluded by parameter expressions
             ok = True
@@ -94,58 +105,69 @@ class TestFilter:
 
         return ok
 
-    def checkFileSearch(self, tspec):
+    def checkFileSearch(self, tcase):
         ""
+        tspec = tcase.getSpec()
+
         ok = self.rtconfig.file_search( tspec )
         if not ok:
             self.statushandler.markSkipByFileSearch( tspec )
         return ok
 
-    def checkMaxProcessors(self, tspec):
+    def checkMaxProcessors(self, tcase):
         ""
+        tspec = tcase.getSpec()
+
         np = int( tspec.getParameters().get( 'np', 1 ) )
         ok = self.rtconfig.evaluate_maxprocs( np )
         if not ok:
             self.statushandler.markSkipByMaxProcessors( tspec )
+
         return ok
 
-    def checkRuntime(self, tspec):
+    def checkRuntime(self, tcase):
         ""
         ok = True
+
+        tspec = tcase.getSpec()
         tm = self.statushandler.getRuntime( tspec, None )
         if tm != None and not self.rtconfig.evaluate_runtime( tm ):
             ok = False
         if not ok:
             self.statushandler.markSkipByRuntime( tspec )
+
         return ok
 
-    def userValidation(self, tspec):
+    def userValidation(self, tcase):
         ""
         ok = True
-        reason = self.plugin.validateTest( tspec )
+
+        reason = self.plugin.validateTest( tcase )
         if reason:
             ok = False
             reason = 'validate: '+reason
+            tspec = tcase.getSpec()
             self.statushandler.markSkipByUserValidation( tspec, reason )
+
         return ok
 
-    def applyPermanent(self, tspec_map):
+    def applyPermanent(self, tcase_map):
         ""
-        for xdir,tspec in tspec_map.items():
+        for xdir,tcase in tcase_map.items():
 
-            self.checkParameters( tspec, permanent=True ) and \
-                self.checkKeywords( tspec, results_keywords=False ) and \
-                self.checkPlatform( tspec ) and \
-                self.checkOptions( tspec ) and \
-                self.checkTDD( tspec ) and \
-                self.checkFileSearch( tspec ) and \
-                self.checkMaxProcessors( tspec ) and \
-                self.checkRuntime( tspec ) and \
-                self.userValidation( tspec )
+            self.checkParameters( tcase, permanent=True ) and \
+                self.checkKeywords( tcase, results_keywords=False ) and \
+                self.checkPlatform( tcase ) and \
+                self.checkOptions( tcase ) and \
+                self.checkTDD( tcase ) and \
+                self.checkFileSearch( tcase ) and \
+                self.checkMaxProcessors( tcase ) and \
+                self.checkRuntime( tcase ) and \
+                self.userValidation( tcase )
 
-        self.filterByCummulativeRuntime( tspec_map )
+        self.filterByCummulativeRuntime( tcase_map )
 
-    def applyRuntime(self, tspec_map, filter_dir):
+    def applyRuntime(self, tcase_map, filter_dir):
         ""
         include_all = self.rtconfig.getAttr( 'include_all', False )
 
@@ -153,47 +175,50 @@ class TestFilter:
 
             subdir = clean_up_filter_directory( filter_dir )
 
-            for xdir,tspec in tspec_map.items():
+            for xdir,tcase in tcase_map.items():
+
+                tspec = tcase.getSpec()
 
                 if not self.statushandler.skipTest( tspec ):
 
-                    self.checkSubdirectory( tspec, subdir ) and \
-                        self.checkKeywords( tspec, results_keywords=True ) and \
-                        self.checkParameters( tspec, permanent=False ) and \
-                        self.checkTDD( tspec ) and \
-                        self.checkMaxProcessors( tspec ) and \
-                        self.checkRuntime( tspec )
+                    self.checkSubdirectory( tcase, subdir ) and \
+                        self.checkKeywords( tcase, results_keywords=True ) and \
+                        self.checkParameters( tcase, permanent=False ) and \
+                        self.checkTDD( tcase ) and \
+                        self.checkMaxProcessors( tcase ) and \
+                        self.checkRuntime( tcase )
 
                     # these don't work in restart mode
-                    #   self.checkFileSearch( tspec )
-                    #   self.checkPlatform( tspec )
-                    #   self.checkOptions( tspec )
-                    #   self.userValidation( tspec )
+                    #   self.checkFileSearch( tcase )
+                    #   self.checkPlatform( tcase )
+                    #   self.checkOptions( tcase )
+                    #   self.userValidation( tcase )
 
-            self.filterByCummulativeRuntime( tspec_map )
+            self.filterByCummulativeRuntime( tcase_map )
 
-    def filterByCummulativeRuntime(self, tspec_map):
+    def filterByCummulativeRuntime(self, tcase_map):
         ""
         rtsum = self.rtconfig.getAttr( 'runtime_sum', None )
         if rtsum != None:
 
             # first, generate list with times
             tL = []
-            for xdir,t in tspec_map.items():
-                tm = self.statushandler.getRuntime( t, None )
+            for xdir,tcase in tcase_map.items():
+                tm = self.statushandler.getRuntime( tcase.getSpec(), None )
                 if tm == None: tm = 0
-                tL.append( (tm,xdir,t) )
+                tL.append( (tm,xdir,tcase) )
             tL.sort()
 
             # accumulate tests until allowed runtime is exceeded
             tsum = 0.
             i = 0 ; n = len(tL)
             while i < n:
-                tm,xdir,t = tL[i]
-                if not self.statushandler.skipTest( t ):
+                tm,xdir,tcase = tL[i]
+                tspec = tcase.getSpec()
+                if not self.statushandler.skipTest( tspec ):
                     tsum += tm
                     if tsum > rtsum:
-                        self.statushandler.markSkipByCummulativeRuntime( t )
+                        self.statushandler.markSkipByCummulativeRuntime( tspec )
 
                 i += 1
 

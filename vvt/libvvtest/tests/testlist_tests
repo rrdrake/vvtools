@@ -22,6 +22,7 @@ from testutils import print3
 import libvvtest.testlistio as tio
 import libvvtest.TestList as TestList
 import libvvtest.TestSpec as TestSpec
+from libvvtest.testcase import TestCase
 from libvvtest.teststatus import TestStatusHandler
 
 
@@ -32,13 +33,13 @@ class TestSpec_to_and_from_string( vtu.vvtestTestCase ):
 
     def test_converting_a_test_to_a_string_and_back(self):
         ""
-        ts = make_fake_TestSpec()
+        tcase = make_fake_TestCase()
 
-        sid = tio.test_to_string( ts )
+        sid = tio.test_to_string( tcase )
         assert '\n' not in sid
         ts2 = tio.string_to_test(sid)
 
-        assert_TestSpec_same_as_fake( ts2 )
+        assert_TestCase_same_as_fake( ts2 )
 
 
 class test_list_file_read_write( vtu.vvtestTestCase ):
@@ -82,15 +83,15 @@ class test_list_file_read_write( vtu.vvtestTestCase ):
         tlr = tio.TestListReader( 'tests.out' )
         tlr.read()
 
-        tspec = get_single_test_from_test_list( tlr )
-        assert_TestSpec_same_as_fake( tspec )
+        tcase = get_single_test_from_test_list( tlr )
+        assert_TestCase_same_as_fake( tcase )
 
     def test_read_an_unfinished_test_results_file(self):
         ""
         tlw = tio.TestListWriter( 'tests.out' )
         tlw.start()
-        tspec = make_fake_TestSpec()
-        tlw.append( tspec )
+        tcase = make_fake_TestCase()
+        tlw.append( tcase )
 
         time.sleep(1)
 
@@ -100,8 +101,8 @@ class test_list_file_read_write( vtu.vvtestTestCase ):
         tm = time.time()
         assert tm - tlr.getStartDate() < 5
         assert tlr.getFinishDate() == None
-        tspec = get_single_test_from_test_list( tlr )
-        assert_TestSpec_same_as_fake( tspec )
+        tcase = get_single_test_from_test_list( tlr )
+        assert_TestCase_same_as_fake( tcase )
 
     def test_write_and_read_using_an_include_file(self):
         ""
@@ -125,8 +126,8 @@ class test_list_file_read_write( vtu.vvtestTestCase ):
         tlr = tio.TestListReader( 'tests.out' )
         tlr.read()
 
-        tspec = get_single_test_from_test_list( tlr )
-        assert_TestSpec_same_as_fake( tspec )
+        tcase = get_single_test_from_test_list( tlr )
+        assert_TestCase_same_as_fake( tcase )
 
         tm = tlr.getStartDate()
         assert t1 >= tm and t1-tm < 2
@@ -146,8 +147,8 @@ class test_list_file_read_write( vtu.vvtestTestCase ):
         tlr = tio.TestListReader( tfile )
         tlr.read()
 
-        tspec = get_single_test_from_test_list( tlr )
-        assert_TestSpec_same_as_fake( tspec, rootdir )
+        tcase = get_single_test_from_test_list( tlr )
+        assert_TestCase_same_as_fake( tcase, rootdir )
 
     def test_write_a_test_file_then_scan_it_for_the_finish_date(self):
         ""
@@ -166,8 +167,8 @@ class test_list_file_read_write( vtu.vvtestTestCase ):
         ""
         tlw = tio.TestListWriter( 'tests.out' )
         tlw.start()
-        tspec = make_fake_TestSpec_with_results()
-        tlw.append( tspec )
+        tcase = make_fake_TestCase_with_results()
+        tlw.append( tcase )
 
         time.sleep(1)
 
@@ -183,8 +184,8 @@ class test_list_file_read_write( vtu.vvtestTestCase ):
         tlr = tio.TestListReader( 'tests.out' )
         tlr.read()
 
-        tspec = get_single_test_from_test_list( tlr )
-        assert_TestSpec_same_as_fake( tspec )
+        tcase = get_single_test_from_test_list( tlr )
+        assert_TestCase_same_as_fake( tcase )
 
         tm = tlr.getStartDate()
         assert tm != None and time.time() - tm < 10
@@ -268,8 +269,8 @@ class inlining_includes( vtu.vvtestTestCase ):
 
         tlr = tio.TestListReader( 'tests.out' )
         tlr.read()
-        tspec = get_single_test_from_test_list( tlr )
-        assert_TestSpec_same_as_fake( tspec )
+        tcase = get_single_test_from_test_list( tlr )
+        assert_TestCase_same_as_fake( tcase )
 
     def test_a_test_list_with_include_is_overwritten_without_include(self):
         ""
@@ -291,9 +292,9 @@ class inlining_includes( vtu.vvtestTestCase ):
 
         tlr = tio.TestListReader( tfile )
         tlr.read()
-        tspec = get_single_test_from_test_list( tlr )
-        assert_TestSpec_same_as_fake( tspec, rootdir=rootdir )
-        assert tspec.getAttr( 'aname5' ) == 23
+        tcase = get_single_test_from_test_list( tlr )
+        assert_TestCase_same_as_fake( tcase, rootdir=rootdir )
+        assert tcase.getSpec().getAttr( 'aname5' ) == 23
 
 
 class TestList_results_file( vtu.vvtestTestCase ):
@@ -343,10 +344,10 @@ class TestList_results_file( vtu.vvtestTestCase ):
         sfx = tl.setResultsSuffix()
 
         # write include test list file containing suffix attribute
-        ts = list( tl.getTests() )[0]
+        tcase = list( tl.getTests() )[0]
         tlincl = TestList.TestList( TestStatusHandler(), 'subtests' )
         tlincl.setResultsSuffix( sfx )
-        tl.addTest( ts )
+        tl.addTest( tcase )
         tlincl.stringFileWrite( include_results_suffix=True )
         time.sleep(1)
 
@@ -371,8 +372,8 @@ class TestList_results_file( vtu.vvtestTestCase ):
         ""
         tl = TestList.TestList( TestStatusHandler(), 'testlist' )
         rfile = tl.initializeResultsFile()
-        tspec = make_fake_TestSpec()
-        tl.appendTestResult( tspec )
+        tcase = make_fake_TestCase()
+        tl.appendTestResult( tcase )
 
         time.sleep(1)
 
@@ -389,8 +390,8 @@ class TestList_results_file( vtu.vvtestTestCase ):
         ""
         tl = TestList.TestList( TestStatusHandler(), 'testlist' )
         rfile = tl.initializeResultsFile()
-        tspec = make_fake_TestSpec()
-        tl.appendTestResult( tspec )
+        tcase = make_fake_TestCase()
+        tl.appendTestResult( tcase )
 
         time.sleep(1)
 
@@ -480,10 +481,18 @@ def make_fake_TestSpec():
     return ts
 
 
-def assert_TestSpec_same_as_fake( tspec, rootdir=None ):
+def make_fake_TestCase():
+    ""
+    ts = make_fake_TestSpec()
+    return TestCase( testspec=ts )
+
+
+def assert_TestCase_same_as_fake( tcase, rootdir=None ):
     ""
     if not rootdir:
         rootdir = os.getcwd()
+
+    tspec = tcase.getSpec()
 
     assert tspec.getName() == 'atest'
     assert tspec.getRootpath() == rootdir
@@ -511,15 +520,16 @@ def assert_TestSpec_same_as_fake( tspec, rootdir=None ):
     assert tspec.getAttr('aname7') == None
 
 
-def make_fake_TestSpec_with_results():
+def make_fake_TestCase_with_results():
     ""
-    ts = make_fake_TestSpec()
+    tcase = make_fake_TestCase()
+    ts = tcase.getSpec()
 
     ts.setAttr( 'state', "notdone" )
     ts.setAttr( 'xtime', -1 )
     ts.setAttr( 'xdate', int(time.time()) )
 
-    return ts
+    return tcase
 
 
 def write_test_list_with_include( testfile, inclpath, finish=True ):
@@ -543,18 +553,18 @@ def get_single_test_from_test_list( testlist ):
     ""
     tD = testlist.getTests()
     assert len(tD) == 1
-    tspec = list( tD.values() )[0]
-    return tspec
+    tcase = list( tD.values() )[0]
+    return tcase
 
 
 def write_test_list_with_fake_test( filename, **kwargs ):
     ""
     tlw = tio.TestListWriter( filename )
     tlw.start()
-    tspec = make_fake_TestSpec()
+    tcase = make_fake_TestCase()
     for k,v in kwargs.items():
-        tspec.setAttr( k, v )
-    tlw.append( tspec )
+        tcase.getSpec().setAttr( k, v )
+    tlw.append( tcase )
     tlw.finish()
 
 
@@ -567,10 +577,10 @@ def write_TestList_with_fake_test( filename, **kwargs ):
     if dosuffix:
         tl.setResultsSuffix()
 
-    tspec = make_fake_TestSpec()
+    tcase = make_fake_TestCase()
     for k,v in kwargs.items():
-        tspec.setAttr( k, v )
-    tl.addTest( tspec )
+        tcase.getSpec().setAttr( k, v )
+    tl.addTest( tcase )
 
     tl.stringFileWrite( include_results_suffix=dosuffix )
 
@@ -580,8 +590,8 @@ def write_TestList_with_fake_test( filename, **kwargs ):
 def write_TestList_fake_results( testlistobj ):
     ""
     rfile = testlistobj.initializeResultsFile()
-    tsr = make_fake_TestSpec_with_results()
-    testlistobj.appendTestResult( tsr )
+    tcase = make_fake_TestCase_with_results()
+    testlistobj.appendTestResult( tcase )
     testlistobj.writeFinished()
 
     return rfile
@@ -593,7 +603,7 @@ def read_TestList_and_check_fake_test( filename ):
     tl.readTestList()
     tL = list( tl.getTests() )
     assert len(tL) == 1
-    assert_TestSpec_same_as_fake( tL[0] )
+    assert_TestCase_same_as_fake( tL[0] )
 
 
 ############################################################################

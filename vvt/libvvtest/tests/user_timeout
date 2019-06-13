@@ -32,14 +32,14 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
                 else: return None
             """ )
 
-        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
-        assert plug.testTimeout( tspec ) == 10
+        tcase = vtu.make_fake_TestCase( TestStatusHandler() )
+        assert plug.testTimeout( tcase ) == 10
 
-        tspec.setTimeout( 20 )
-        assert plug.testTimeout( tspec ) == 30
+        tcase.getSpec().setTimeout( 20 )
+        assert plug.testTimeout( tcase ) == 30
 
-        tspec.setTimeout( 40 )
-        assert plug.testTimeout( tspec ) == None
+        tcase.getSpec().setTimeout( 40 )
+        assert plug.testTimeout( tcase ) == None
 
     def test_a_timeout_function_that_fails_with_an_exception(self):
         ""
@@ -48,15 +48,15 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
                 raise Exception( 'fake exception' )
             """ )
 
-        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
-        rtn, out, err = util.call_capture_output( plug.testTimeout, tspec )
+        tcase = vtu.make_fake_TestCase( TestStatusHandler() )
+        rtn, out, err = util.call_capture_output( plug.testTimeout, tcase )
         assert rtn == None
         assert 'Exception' in out and 'fake exception' in out
         assert 'Traceback' in out
 
         # multiple exceptions are not printed (uniquified by exception string)
-        tspec = vtu.make_fake_TestSpec( TestStatusHandler(), name='btest' )
-        rtn, out, err = util.call_capture_output( plug.testTimeout, tspec )
+        tcase = vtu.make_fake_TestCase( TestStatusHandler(), name='btest' )
+        rtn, out, err = util.call_capture_output( plug.testTimeout, tcase )
         assert rtn == None
         assert 'Exception' not in out and 'fake exception' not in out
         assert 'Traceback' not in out
@@ -68,8 +68,8 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
                 return 'abc'
             """ )
 
-        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
-        rtn, out, err = util.call_capture_output( plug.testTimeout, tspec )
+        tcase = vtu.make_fake_TestCase( TestStatusHandler() )
+        rtn, out, err = util.call_capture_output( plug.testTimeout, tcase )
         assert rtn == None
         assert 'Traceback' in out
 
@@ -80,8 +80,8 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
                 return -1
             """ )
 
-        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
-        rtn, out, err = util.call_capture_output( plug.testTimeout, tspec )
+        tcase = vtu.make_fake_TestCase( TestStatusHandler() )
+        rtn, out, err = util.call_capture_output( plug.testTimeout, tcase )
         assert rtn == 0
         assert 'Traceback' not in out
 

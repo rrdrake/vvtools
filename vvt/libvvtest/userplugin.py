@@ -27,13 +27,13 @@ class UserPluginBridge:
         # each exception string
         self.exc_uniq = set()
 
-    def validateTest(self, tspec):
+    def validateTest(self, tcase):
         """
         Returns non-empty string (an explanation) if user validation fails.
         """
         rtn = None
         if self.validate != None:
-            specs = self._make_test_to_user_interface_dict( tspec )
+            specs = self._make_test_to_user_interface_dict( tcase )
             try:
                 rtn = self.validate( specs )
             except Exception:
@@ -43,13 +43,13 @@ class UserPluginBridge:
 
         return rtn
 
-    def testTimeout(self, tspec):
+    def testTimeout(self, tcase):
         """
         Returns None for no change or an integer value.
         """
         rtn = None
         if self.timeout != None:
-            specs = self._make_test_to_user_interface_dict( tspec )
+            specs = self._make_test_to_user_interface_dict( tcase )
             try:
                 rtn = self.timeout( specs )
                 if rtn != None:
@@ -61,7 +61,7 @@ class UserPluginBridge:
 
         return rtn
 
-    def testPreload(self, tspec):
+    def testPreload(self, tcase):
         """
         May modify os.environ and return value is either None/empty or
         a string containing the python to use.
@@ -69,9 +69,9 @@ class UserPluginBridge:
         pyexe = None
 
         if self.preload != None:
-            specs = self._make_test_to_user_interface_dict( tspec )
+            specs = self._make_test_to_user_interface_dict( tcase )
             try:
-                label = tspec.getPreloadLabel()
+                label = tcase.getSpec().getPreloadLabel()
                 if label:
                     specs['preload'] = label
                 pyexe = self.preload( specs )
@@ -102,8 +102,10 @@ class UserPluginBridge:
             sys.stdout.write( '\n' + tb + '\n' )
             self.exc_uniq.add( xs )
 
-    def _make_test_to_user_interface_dict(self, tspec):
+    def _make_test_to_user_interface_dict(self, tcase):
         ""
+        tspec = tcase.getSpec()
+
         specs = { 'name'       : tspec.getName(),
                   'keywords'   : tspec.getKeywords( include_implicit=False ),
                   'parameters' : tspec.getParameters(),

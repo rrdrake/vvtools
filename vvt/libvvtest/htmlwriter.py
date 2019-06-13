@@ -29,8 +29,10 @@ class HTMLWriter:
         datestr = outpututils.make_date_stamp( datestamp, None,
                                                "%Y-%m-%d %H:%M:%S" )
 
+        tcaseL = tlist.getActiveTests()
+
         parts = outpututils.partition_tests_by_result( self.statushandler,
-                                                       tlist.getActiveTests() )
+                                                       tcaseL )
 
         sumstr = outpututils.results_summary_string( parts )
 
@@ -78,33 +80,33 @@ class HTMLWriter:
 
         fp.write( '  <ul>\n' )
 
-        for atest in tlist:
+        for tcase in tlist:
 
             xs = outpututils.XstatusString( self.statushandler,
-                                            atest, self.testdir, cwd )
+                                            tcase, self.testdir, cwd )
             fp.write( '  <li><code>' + xs + '</code>\n' )
 
-            ref = outpututils.ensure_TestSpec( atest )
+            tspec = tcase.getSpec()
 
-            tdir = pjoin( self.testdir, ref.getExecuteDirectory() )
+            tdir = pjoin( self.testdir, tspec.getExecuteDirectory() )
             assert cwd == tdir[:len(cwd)]
             reltdir = tdir[len(cwd)+1:]
 
             fp.write( "<ul>\n" )
-            thome = atest.getRootpath()
-            xfile = pjoin( thome, atest.getFilepath() )
+            thome = tspec.getRootpath()
+            xfile = pjoin( thome, tspec.getFilepath() )
             fp.write( '  <li>XML: <a href="file://' + xfile + '" ' + \
                              'type="text/plain">' + xfile + "</a></li>\n" )
             fp.write( '  <li>Parameters:<code>' )
-            for (k,v) in atest.getParameters().items():
+            for (k,v) in tspec.getParameters().items():
                 fp.write( ' ' + k + '=' + v )
             fp.write( '</code></li>\n' )
-            kwlist = atest.getKeywords() + \
-                     self.statushandler.getResultsKeywords( atest )
+            kwlist = tspec.getKeywords() + \
+                     self.statushandler.getResultsKeywords( tspec )
             fp.write( '  <li>Keywords: <code>' + ' '.join( kwlist ) + \
                        '</code></li>\n' )
             xs = outpututils.XstatusString( self.statushandler,
-                                            atest, self.testdir, cwd )
+                                            tcase, self.testdir, cwd )
             fp.write( '  <li>Status: <code>' + xs + '</code></li>\n' )
             fp.write( '  <li> Files:' )
             if os.path.exists(reltdir):

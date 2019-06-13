@@ -34,15 +34,15 @@ class GitLabWriter:
             os.mkdir( self.outdir )
 
         try:
-            testL = atestlist.getActiveTests( self.sortspec )
+            tcaseL = atestlist.getActiveTests( self.sortspec )
 
-            print3( "Writing", len(testL),
+            print3( "Writing", len(tcaseL),
                     "tests in GitLab format to", self.outdir )
 
             conv = GitLabMarkDownConverter( self.testdir, self.outdir,
                                             self.statushandler )
             conv.setRunAttr( **runattrs )
-            conv.saveResults( testL )
+            conv.saveResults( tcaseL )
 
         finally:
             self.permsetter.recurse( self.outdir )
@@ -77,10 +77,10 @@ class GitLabMarkDownConverter:
         ""
         self.runattrs.update( kwargs )
 
-    def saveResults(self, testL):
+    def saveResults(self, tcaseL):
         ""
         parts = outpututils.partition_tests_by_result( self.statushandler,
-                                                       testL )
+                                                       tcaseL )
 
         basepath = pjoin( self.destdir, 'TestResults' )
         fname = basepath + '.md'
@@ -97,21 +97,21 @@ class GitLabMarkDownConverter:
                                       self.big_table, self.max_links )
 
         for result in [ 'fail', 'diff', 'timeout' ]:
-            for i,tst in enumerate( parts[result] ):
+            for i,tcase in enumerate( parts[result] ):
                 if i < self.max_links:
-                    self.createTestFile( outpututils.ensure_TestSpec( tst ) )
+                    self.createTestFile( tcase )
 
-    def createTestFile(self, tspec):
+    def createTestFile(self, tcase):
         ""
-        xdir = tspec.getExecuteDirectory()
+        xdir = tcase.getSpec().getExecuteDirectory()
         base = xdir.replace( os.sep, '_' )
         fname = pjoin( self.destdir, base+'.md' )
 
         srcdir = pjoin( self.test_dir, xdir )
 
         result = outpututils.XstatusString( self.statushandler,
-                                            tspec, self.test_dir, os.getcwd() )
-        preamble = 'Name: '+tspec.getName()+'  \n' + \
+                                            tcase, self.test_dir, os.getcwd() )
+        preamble = 'Name: '+tcase.getSpec().getName()+'  \n' + \
                    'Result: <code>'+result+'</code>  \n' + \
                    'Run directory: ' + os.path.abspath(srcdir) + '  \n'
 
@@ -167,16 +167,16 @@ def write_gitlab_results_table( fp, statushandler, result, testL, max_path_links
     fp.write( '| Result | Date   | Time   | Path   |\n' + \
               '| ------ | ------ | -----: | :----- |\n' )
 
-    for i,tst in enumerate(testL):
+    for i,tcase in enumerate(testL):
         add_link = ( i < max_path_links )
-        fp.write( format_gitlab_table_line( statushandler, tst, add_link ) + '\n' )
+        fp.write( format_gitlab_table_line( statushandler, tcase, add_link ) + '\n' )
 
     fp.write( '\n' )
 
 
-def format_gitlab_table_line( statushandler, tst, add_link ):
+def format_gitlab_table_line( statushandler, tcase, add_link ):
     ""
-    tspec = outpututils.ensure_TestSpec( tst )
+    tspec = tcase.getSpec()
 
     result = statushandler.getResultStatus( tspec )
     dt = outpututils.format_test_run_date( statushandler, tspec )

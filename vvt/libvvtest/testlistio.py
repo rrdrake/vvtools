@@ -12,6 +12,7 @@ import shutil
 
 from . import TestSpec
 from .ParameterSet import ParameterSet
+from .testcase import TestCase
 
 version = 33
 
@@ -44,11 +45,11 @@ class TestListWriter:
         finally:
             fp.close()
 
-    def append(self, tspec):
+    def append(self, tcase):
         ""
         fp = open( self.filename, 'a' )
         try:
-            fp.write( test_to_string( tspec ) + '\n' )
+            fp.write( test_to_string( tcase ) + '\n' )
         finally:
             fp.close()
 
@@ -89,8 +90,9 @@ class TestListReader:
                 elif key == 'Finish':
                     self.finish = eval( val )[1]
                 else:
-                    tspec = string_to_test( val )
-                    self.tests[ tspec.getExecuteDirectory() ] = tspec
+                    tcase = string_to_test( val )
+                    xdir = tcase.getSpec().getExecuteDirectory()
+                    self.tests[ xdir ] = tcase
 
             except Exception:
                 pass
@@ -278,11 +280,13 @@ def remove_attrs_with_None_for_a_value( attrdict ):
             attrdict.pop( k )
 
 
-def test_to_string( tspec ):
+def test_to_string( tcase ):
     """
     Returns a string with no newlines containing the file path, parameter
     names/values, and attribute names/values.
     """
+    tspec = tcase.getSpec()
+
     assert tspec.getName() and tspec.getRootpath() and tspec.getFilepath()
 
     testdict = {}
@@ -330,7 +334,7 @@ def string_to_test( strid ):
     for k,v in testdict['attrs'].items():
         tspec.setAttr( k, v )
 
-    return tspec
+    return TestCase( tspec )
 
 
 def print3( *args ):

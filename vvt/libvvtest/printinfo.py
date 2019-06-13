@@ -46,10 +46,11 @@ class TestInformationPrinter:
         txL = self.xlist.getRunning()
         self.println( "  *", len(txL), "running test(s):" )
 
-        for tx in txL:
-            sdt = self.statushandler.getStartDate( tx.atest )
+        for tcase in txL:
+            tspec = tcase.getSpec()
+            sdt = self.statushandler.getStartDate( tspec )
             duration = datetime.timedelta( seconds=int(now-sdt) )
-            xdir = tx.atest.getExecuteDirectory()
+            xdir = tspec.getExecuteDirectory()
             self.println( "    *", xdir,
                           '({0} elapsed)'.format(duration) )
 
@@ -63,8 +64,8 @@ class TestInformationPrinter:
             duration = datetime.timedelta( seconds=int(duration) )
             self.println( '    * qbat.{0}'.format(qid),
                           '({0} since submitting)'.format(duration) )
-            for tx in batch_job.testL:
-                xdir = tx.atest.getExecuteDirectory()
+            for tcase in batch_job.testL:
+                xdir = tcase.getSpec().getExecuteDirectory()
                 self.println( '      *', xdir )
 
     def println(self, *args):

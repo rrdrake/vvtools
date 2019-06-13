@@ -228,11 +228,11 @@ class TestStatusHandler:
         self.markDone( tspec, 1 )
         tspec.setAttr( 'result', 'timeout' )
 
-    def copyResults(self, to_tspec, from_tspec):
+    def copyResults(self, to_tcase, from_tcase):
         ""
-        for k,v in from_tspec.getAttrs().items():
+        for k,v in from_tcase.getSpec().getAttrs().items():
             if k in ['state','xtime','xdate','result']:
-                to_tspec.setAttr( k, v )
+                to_tcase.getSpec().setAttr( k, v )
 
 
 PARAM_SKIP = 'param'

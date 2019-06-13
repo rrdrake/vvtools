@@ -12,6 +12,7 @@ import glob
 from . import TestList
 from . import testlistio
 from . import pathutil
+from .testcase import TestCase
 
 
 class BatchScriptWriter:
@@ -58,22 +59,23 @@ class BatchScriptWriter:
         qL = []
         for np in self.xlist.getTestExecProcList():
           xL = []
-          for tx in self.xlist.getTestExecList(np):
-            xL.append( (tx.atest.getAttr('timeout'),tx) )
+          for tcase in self.xlist.getTestExecList(np):
+            xL.append( (tcase.getSpec().getAttr('timeout'),tcase) )
           xL.sort()
           grpL = []
           tsum = 0
-          for rt,tx in xL:
+          for rt,tcase in xL:
+            tx = tcase.getExec()
             depset = tx.getDependencySet()
             if depset.numDependencies() > 0 or tx.atest.getAttr('timeout') < 1:
               # analyze tests and those with no timeout get their own group
-              qL.append( [ self.Tzero, len(qL), [tx] ] )
+              qL.append( [ self.Tzero, len(qL), [tcase] ] )
             else:
               if len(grpL) > 0 and tsum + rt > qlen:
                 qL.append( [ tsum, len(qL), grpL ] )
                 grpL = []
                 tsum = 0
-              grpL.append( tx )
+              grpL.append( tcase )
               tsum += rt
           if len(grpL) > 0:
             qL.append( [ tsum, len(qL), grpL ] )
@@ -133,12 +135,13 @@ class BatchScriptWriter:
         tL = []
         maxnp = 0
         qtime = 0
-        for tx in qlist:
+        for tcase in qlist:
+          tx = tcase.getExec()
           np = int( tx.atest.getParameters().get('np', 0) )
           if np <= 0: np = 1
           maxnp = max( maxnp, np )
-          tl.addTest(tx.atest)
-          tL.append( tx )
+          tl.addTest( tcase )
+          tL.append( tcase )
           qtime += int( tx.atest.getAttr('timeout') )
         
         if qtime == 0:
@@ -387,8 +390,12 @@ class BatchScheduler:
         for qid,bjob in list( self.accountant.getNotStarted() ):
             tx1 = self.getBlockingDependency( bjob )
             assert tx1 != None  # otherwise checkstart() should have ran it
-            for tx0 in bjob.testL:
-                notrunL.append( (tx0,tx1) )
+            for tcase0 in bjob.testL:
+                if hasattr( tx1, 'atest' ):
+                    tcase1 = TestCase( tx1.atest, tx1 )  # magic
+                else:
+                    tcase1 = TestCase( tx1, tx1 )  # magic
+                notrunL.append( (tcase0,tcase1) )
             self.accountant.markJobDone( qid, 'notrun' )
 
         # TODO: rather than only reporting the jobs left on qtodo as not run,
@@ -420,13 +427,14 @@ class BatchScheduler:
             jobtests = tlr.getTests()
 
             # only add tests to the stopped list that are done
-            for tx in bjob.testL:
-                xdir = tx.atest.getExecuteDirectory()
+            for tcase in bjob.testL:
 
-                tspec = jobtests.get( xdir, None )
-                if tspec and self.statushandler.isDone( tspec ):
-                    tL.append( tx.atest )
-                    self.xlist.testDone( tx )
+                xdir = tcase.getSpec().getExecuteDirectory()
+
+                job_tcase = jobtests.get( xdir, None )
+                if job_tcase and self.statushandler.isDone( job_tcase.getSpec() ):
+                    tL.append( tcase )
+                    self.xlist.testDone( tcase )
 
         else:
             mark = 'fail'
@@ -441,7 +449,8 @@ class BatchScheduler:
         ran but did not pass or diff, then that dependency test is returned.
         Otherwise None is returned.
         """
-        for tx in bjob.testL:
+        for tcase in bjob.testL:
+            tx = tcase.getExec()  # magic
             deptx = tx.getDependencySet().getBlocking()
             if deptx != None:
                 return deptx
@@ -455,7 +464,7 @@ class BatchJob:
         self.maxnp = maxnp
         self.outfile = fout
         self.resultsfile = resultsfile
-        self.testL = testL  # list of TestExec objects
+        self.testL = testL  # list of TestCase objects
         self.jobid = None
         self.tstart = None
         self.tstop = None

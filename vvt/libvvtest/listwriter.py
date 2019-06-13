@@ -66,11 +66,11 @@ class ListWriter:
             os.mkdir( self.outdir )
 
         try:
-            testL = atestlist.getActiveTests()
+            tcaseL = atestlist.getActiveTests()
 
-            print3( "Writing results of", len(testL), "tests to", absfname )
+            print3( "Writing results of", len(tcaseL), "tests to", absfname )
 
-            self.writeTestResults( testL, absfname, runattrs, inprogress )
+            self.writeTestResults( tcaseL, absfname, runattrs, inprogress )
 
         finally:
             self.permsetter.set( absfname )
@@ -93,12 +93,12 @@ class ListWriter:
 
         return basename
 
-    def writeTestResults(self, testlist, filename, runattrs, inprogress):
+    def writeTestResults(self, tcaseL, filename, runattrs, inprogress):
         ""
         tr = results.TestResults()
 
-        for tspec in testlist:
-            tr.addTest( tspec )
+        for tcase in tcaseL:
+            tr.addTest( tcase.getSpec() )
 
         pname = runattrs['platform']
         cplr = runattrs['compiler']

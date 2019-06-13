@@ -32,6 +32,7 @@ vvtest_file = pjoin( vvtdir, 'vvtest' )
 resultspy = pjoin( vvtdir, 'results.py' )
 
 import libvvtest.TestSpec as TestSpec
+import libvvtest.testcase as testcase
 import libvvtest.teststatus as teststatus
 from libvvtest.RuntimeConfig import RuntimeConfig
 from libvvtest.userplugin import UserPluginBridge, import_module_by_name
@@ -611,6 +612,14 @@ def make_fake_TestSpec( statushandler, result=None,
         statushandler.setRuntime( ts, runtime )
 
     return ts
+
+
+def make_fake_TestCase( statushandler, result=None,
+                        runtime=None, name='atest',
+                        keywords=['key1','key2'] ):
+    ""
+    return testcase.TestCase( make_fake_TestSpec( statushandler, result,
+                                                  runtime, name, keywords ) )
 
 
 # python imports can get confused when importing the same module name more

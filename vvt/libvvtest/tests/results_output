@@ -28,10 +28,10 @@ import libvvtest.resultswriter as resultswriter
 import libvvtest.outpututils as outpututils
 from libvvtest.consolewriter import ConsoleWriter
 import libvvtest.gitlabwriter as gitlabwriter
-import libvvtest.TestSpec as TestSpec
 from libvvtest.TestSpecCreator import TestCreator
 from libvvtest.RuntimeConfig import RuntimeConfig
 from libvvtest.teststatus import TestStatusHandler, DIFF_EXIT_STATUS
+from libvvtest.testcase import TestCase
 
 
 class misc_tests( vtu.vvtestTestCase ):
@@ -82,7 +82,7 @@ class misc_tests( vtu.vvtestTestCase ):
 
     def test_partition_then_summary_string(self):
         ""
-        tL = self.getFakeTestList()
+        tL = [ TestCase( tspec ) for tspec in self.getFakeTestList() ]
 
         parts = outpututils.partition_tests_by_result( self.statushandler, tL )
         sumry = outpututils.results_summary_string( parts )
@@ -514,24 +514,24 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         ""
         handler = self.statushandler
 
-        tst = self.makeTest( 'pass', 5 )
-        line = gitlabwriter.format_gitlab_table_line( handler, tst, True )
+        tcase = TestCase( self.makeTest( 'pass', 5 ) )
+        line = gitlabwriter.format_gitlab_table_line( handler, tcase, True )
         print3( line )
         sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
         assert len(sL) == 4
         assert sL[0] == 'pass' and sL[2] == '5s'
         assert sL[3] == 'sdir/atest.np=4'
 
-        tst = self.makeTest( 'fail', 7 )
-        line = gitlabwriter.format_gitlab_table_line( handler, tst, True )
+        tcase = TestCase( self.makeTest( 'fail', 7 ) )
+        line = gitlabwriter.format_gitlab_table_line( handler, tcase, True )
         print3( line )
         sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
         assert len(sL) == 4
         assert sL[0] == 'fail' and sL[2] == '7s'
         assert sL[3] == '[sdir/atest.np=4](sdir_atest.np=4.md)'
 
-        tst = self.makeTest( 'fail', 7 )
-        line = gitlabwriter.format_gitlab_table_line( handler, tst, False )
+        tcase = TestCase( self.makeTest( 'fail', 7 ) )
+        line = gitlabwriter.format_gitlab_table_line( handler, tcase, False )
         print3( line )
         sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
         assert len(sL) == 4
@@ -542,8 +542,8 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         ""
         handler = self.statushandler
 
-        tL = [ self.makeTest( 'pass', 5, 'good' ),
-               self.makeTest( 'diff', 5, 'bad' ) ]
+        tL = [ TestCase( self.makeTest( 'pass', 5, 'good' ) ),
+               TestCase( self.makeTest( 'diff', 5, 'bad' ) )]
 
         sio = StringIO()
         gitlabwriter.write_gitlab_results_table( sio, handler, 'mixed', tL, 100 )
@@ -559,10 +559,10 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         ""
         handler = self.statushandler
 
-        tL = [ self.makeTest( 'diff', 5, 'testA' ),
-               self.makeTest( 'diff', 5, 'testB' ),
-               self.makeTest( 'diff', 5, 'testC' ),
-               self.makeTest( 'diff', 5, 'testD' ) ]
+        tL = [ TestCase( self.makeTest( 'diff', 5, 'testA' ) ),
+               TestCase( self.makeTest( 'diff', 5, 'testB' ) ),
+               TestCase( self.makeTest( 'diff', 5, 'testC' ) ),
+               TestCase( self.makeTest( 'diff', 5, 'testD' ) ) ]
 
         sio = StringIO()
         gitlabwriter.write_gitlab_results_table( sio, handler, 'diff', tL, 2 )
@@ -586,10 +586,10 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         ""
         handler = self.statushandler
 
-        tL = [ self.makeTest( 'fail', 5, 'testA' ),
-               self.makeTest( 'fail', 5, 'testB' ),
-               self.makeTest( 'fail', 5, 'testC' ),
-               self.makeTest( 'fail', 5, 'testD' ) ]
+        tL = [ TestCase( self.makeTest( 'fail', 5, 'testA' ) ),
+               TestCase( self.makeTest( 'fail', 5, 'testB' ) ),
+               TestCase( self.makeTest( 'fail', 5, 'testC' ) ),
+               TestCase( self.makeTest( 'fail', 5, 'testD' ) ) ]
 
         sio = StringIO()
         gitlabwriter.write_gitlab_results( sio, handler, 'fail', tL, 'large.md', 2, 3 )
@@ -828,7 +828,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         conv = gitlabwriter.GitLabMarkDownConverter(
                                         vrun.resultsDir(), '.',
                                         self.statushandler )
-        conv.createTestFile( tst )
+        conv.createTestFile( TestCase( tst ) )
         time.sleep(1)
 
         mdfile = util.globfile( 'DiffTest.*.md' )
@@ -967,7 +967,7 @@ class MockTestList:
     def __init__(self, statushandler, list_of_TestSpec):
         ""
         self.statushandler = statushandler
-        self.tspecs = list_of_TestSpec
+        self.tspecs = [ TestCase( tspec ) for tspec in list_of_TestSpec ]
 
     def getTests(self):
         ""
@@ -976,12 +976,13 @@ class MockTestList:
     def getActiveTests(self, sorting=''):
         ""
         tL = []
-        for tspec in self.tspecs:
+        for tcase in self.tspecs:
+            tspec = tcase.getSpec()
             if not self.statushandler.skipTest( tspec ):
-                tL.append( tspec )
+                tL.append( (tspec.getName(), tcase) )
         tL.sort()
 
-        return tL
+        return [ T[1] for T in tL ]
 
 
 ############################################################################

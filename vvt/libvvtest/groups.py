@@ -12,22 +12,24 @@ class ParameterizeAnalyzeGroups:
     def __init__(self, statushandler):
         ""
         self.statushandler = statushandler
-        self.groupmap = {}  # (test filepath, test name) -> list of TestSpec
+        self.groupmap = {}  # (test filepath, test name) -> list of TestCase
 
-    def getGroup(self, tspec):
+    def getGroup(self, tcase):
         ""
-        key = ( tspec.getFilepath(), tspec.getName() )
+        key = ( tcase.getSpec().getFilepath(), tcase.getSpec().getName() )
         tL = []
-        for tspec in self.groupmap[key]:
-            if not self.statushandler.skipTestByParameter( tspec ):
-                tL.append( tspec )
+        for grp_tcase in self.groupmap[key]:
+            if not self.statushandler.skipTestByParameter( grp_tcase.getSpec() ):
+                tL.append( grp_tcase )
         return tL
 
-    def rebuild(self, tspecs):
+    def rebuild(self, tcase_map):
         ""
         self.groupmap.clear()
 
-        for xdir,t in tspecs.items():
+        for xdir,tcase in tcase_map.items():
+
+            t = tcase.getSpec()
 
             # this key is common to each test in a parameterize/analyze
             # test group (including the analyze test)
@@ -38,21 +40,23 @@ class ParameterizeAnalyzeGroups:
                 L = []
                 self.groupmap[ key ] = L
 
-            L.append( t )
+            L.append( tcase )
 
     def iterateGroups(self):
         ""
-        for key,tspecL in self.groupmap.items():
+        for key,tcaseL in self.groupmap.items():
 
             analyze = None
             tL = []
 
-            for tspec in tspecL:
+            for tcase in tcaseL:
+
+                tspec = tcase.getSpec()
 
                 if tspec.isAnalyze():
-                    analyze = tspec
+                    analyze = tcase
                 elif not self.statushandler.skipTestByParameter( tspec ):
-                    tL.append( tspec )
+                    tL.append( tcase )
 
             if analyze != None:
                 yield ( analyze, tL )

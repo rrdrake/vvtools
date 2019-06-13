@@ -483,8 +483,8 @@ class InformationMode:
         ""
         print3( "\nresults keywords: " + ' '.join( RESULTS_KEYWORDS ) )
         kd = {}
-        for t in tlist.getActiveTests():
-            for k in t.getKeywords( include_implicit=False ):
+        for tcase in tlist.getActiveTests():
+            for k in tcase.getSpec().getKeywords( include_implicit=False ):
                 kd[k] = None
         L = list( kd.keys() )
         L.sort()
@@ -500,8 +500,8 @@ class InformationMode:
     def printTestFiles(self, tlist):
         ""
         D = {}
-        for t in tlist.getActiveTests():
-            d = os.path.normpath( t.getFilename() )
+        for tcase in tlist.getActiveTests():
+            d = os.path.normpath( tcase.getSpec().getFilename() )
             D[d] = None
         L = list( D.keys() )
         L.sort()
@@ -618,26 +618,28 @@ def extractTestFiles( opts, optD, dirs, target_dir, rtdata ):
             tf = os.path.join(td,f1)
             shutil.copy2( f2, tf )
     
-    for t in tlist.getActiveTests():
+    for tcase in tlist.getActiveTests():
 
-        tname = t.getName()
-        T = (tname, t.getFilename())
+        tspec = tcase.getSpec()
 
-        from_dir = os.path.dirname( t.getFilename() )
-        p = os.path.dirname( t.getFilepath() )
+        tname = tspec.getName()
+        T = (tname, tspec.getFilename())
+
+        from_dir = os.path.dirname( tspec.getFilename() )
+        p = os.path.dirname( tspec.getFilepath() )
         if p: to_dir = os.path.normpath( os.path.join( target_dir, p ) )
         else: to_dir = target_dir
 
         if not os.path.exists( to_dir ):
             os.makedirs( to_dir )
-        tof = os.path.join( target_dir, t.getFilepath() )
+        tof = os.path.join( target_dir, tspec.getFilepath() )
 
         if tof not in uniqD:
             uniqD[tof] = None
-            try: shutil.copy2( t.getFilename(), tof )
+            try: shutil.copy2( tspec.getFilename(), tof )
             except IOError: pass
 
-        for srcf in t.getSourceFiles():
+        for srcf in tspec.getSourceFiles():
 
             if os.path.exists( os.path.join( from_dir, srcf ) ):
                 fL = [ srcf ]
@@ -1119,10 +1121,12 @@ def executeTestList( opts, optD, rtdata,
             tnext = xlist.popNext( plat )
 
             if tnext != None:
-                print3( 'Starting:', exec_path( tnext.atest, test_dir ) )
-                tnext.start()
-                tlist.appendTestResult( tnext.atest )
-            
+                tspec = tnext.getSpec()
+                texec = tnext.getExec()
+                print3( 'Starting:', exec_path( tspec, test_dir ) )
+                texec.start()
+                tlist.appendTestResult( tnext )
+
             elif xlist.numRunning() == 0:
                 break
 
@@ -1131,13 +1135,14 @@ def executeTestList( opts, optD, rtdata,
                 time.sleep(1)
 
             showprogress = False
-            for tx in list( xlist.getRunning() ):
+            for tcase in list( xlist.getRunning() ):
+                tx = tcase.getExec()
                 if tx.poll():
-                    xs = XstatusString( statushandler, tx, test_dir, cwd )
+                    xs = XstatusString( statushandler, tcase, test_dir, cwd )
                     print3( "Finished:", xs )
-                    xlist.testDone( tx )
+                    xlist.testDone( tcase )
                     showprogress = True
-          
+
             uthook.check( xlist.numRunning(), xlist.numDone() )
 
             if showprogress:
@@ -1152,10 +1157,11 @@ def executeTestList( opts, optD, rtdata,
         tlist.writeFinished()
 
     # any remaining tests cannot run, so print warnings
-    tL = xlist.popRemaining()
-    if len(tL) > 0:
+    tcaseL = xlist.popRemaining()
+    if len(tcaseL) > 0:
         print3()
-    for tx in tL:
+    for tcase in tcaseL:
+        tx = tcase.getExec()  # magic: clean this up
         depset = tx.getDependencySet()
         deptx = depset.getBlocking()
         assert depset.numDependencies() > 0 and deptx != None
@@ -1236,8 +1242,8 @@ def batchTestList( opts, optD, rtdata,
             if len(qidL) > 0:
                 ids = ' '.join( [ str(qid) for qid in qidL ] )
                 print3( 'Finished batch IDS:', ids )
-            for t in doneL:
-                ts = XstatusString( statushandler, t, test_dir, cwd )
+            for tcase in doneL:
+                ts = XstatusString( statushandler, tcase, test_dir, cwd )
                 print3( "Finished:", ts )
 
             uthook.check( schedule.numInFlight(), schedule.numPastQueue() )
@@ -1274,7 +1280,9 @@ def batchTestList( opts, optD, rtdata,
     if len(NF) > 0:
       print3( "*** Warning: these batch numbers did not seem to finish:",
               ' '.join(NF) )
-    for tx,deptx in nrL:
+    for tcase0,tcase1 in nrL:
+        tx = tcase0.getExec()  # magic
+        deptx = tcase1.getExec()  # magic
         depset = tx.getDependencySet()
         assert depset.numDependencies() > 0 and deptx != None
         if isinstance( deptx, TestExec.TestExec ):
@@ -1322,21 +1330,23 @@ class TimeHandler:
 
         cache = results.LookupCache( pname, cplr, self.platobj.testingDirectory() )
 
-        for t in tlist.getTests():
+        for tcase in tlist.getTests():
 
-            tout = self.plugin.testTimeout( t )
+            tspec = tcase.getSpec()
+
+            tout = self.plugin.testTimeout( tcase )
             if tout == None:
                 # grab explicit timeout value, if the test specifies it
-                tout = t.getTimeout()
+                tout = tspec.getTimeout()
 
             # look for a previous runtime value
-            tlen,tresult = cache.getRunTime( t )
+            tlen,tresult = cache.getRunTime( tspec )
 
             if tlen != None:
 
-                rt = self.statushandler.getRuntime( t, None )
+                rt = self.statushandler.getRuntime( tspec, None )
                 if rt == None:
-                    self.statushandler.setRuntime( t, int(tlen) )
+                    self.statushandler.setRuntime( tspec, int(tlen) )
 
                 if tout == None:
                     if tresult == "timeout":
@@ -1345,11 +1355,11 @@ class TimeHandler:
                         tout = self._timeout_from_previous_runtime( tlen )
 
             elif tout == None:
-                tout = self._default_timeout( t )
+                tout = self._default_timeout( tspec )
 
             tout = self._apply_timeout_options( tout )
 
-            t.setAttr( 'timeout', tout )
+            tcase.getSpec().setAttr( 'timeout', tout )
 
         cache = None
 
@@ -1583,32 +1593,32 @@ def baselineTests( opts, optD, rtdata ):
         xlist.createTestExecs( test_dir, plat, config, perms )
 
         failures = False
-        for tx in xlist.getTestExecList():
+        for tcase in xlist.getTestExecList():
 
-            if isinstance(tx, TestExec.TestExec):
-                ref = tx.atest
-            else:
-                ref = tx
+            tspec = tcase.getSpec()
+            texec = tcase.getExec()
 
-            sys.stdout.write( "baselining "+ref.getExecuteDirectory()+"..." )
+            xdir = tspec.getExecuteDirectory()
 
-            tx.start( baseline=1 )
+            sys.stdout.write( "baselining "+xdir+"..." )
+
+            texec.start( baseline=1 )
 
             tm = int( os.environ.get( 'VVTEST_BASELINE_TIMEOUT', 30 ) )
             for i in range(tm):
 
                 time.sleep(1)
 
-                if tx.poll():
-                    if statushandler.passed( tx.atest ):
+                if texec.poll():
+                    if statushandler.passed( tspec ):
                         print3( "done" )
                     else:
                         failures = True
                         print3("FAILED")
                     break
 
-            if not tx.isDone():
-                tx.killJob()
+            if not texec.isDone():
+                texec.killJob()
                 failures = True
                 print3( "TIMED OUT" )
 

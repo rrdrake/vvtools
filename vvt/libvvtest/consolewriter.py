@@ -51,8 +51,8 @@ class ConsoleWriter:
 
     def _write_summary(self, atestlist):
         ""
-        testL = atestlist.getTests()
-        parts = outpututils.partition_tests_by_result( self.statushandler, testL )
+        tcaseL = atestlist.getTests()
+        parts = outpututils.partition_tests_by_result( self.statushandler, tcaseL )
 
         n = len( parts['pass'] ) + \
             len( parts['diff'] ) + \
@@ -71,7 +71,7 @@ class ConsoleWriter:
         self._write_part_count( parts, 'skip', indent=False, label='skipped' )
         self._write_skips( parts['skip'] )
 
-        self.iwrite( 'total:', len(testL) )
+        self.iwrite( 'total:', len(tcaseL) )
 
     def _write_skips(self, skiplist):
         ""
@@ -86,8 +86,8 @@ class ConsoleWriter:
         ""
         skipmap = {}
 
-        for tst in skiplist:
-            reason = self.statushandler.getReasonForSkipTest( tst )
+        for tcase in skiplist:
+            reason = self.statushandler.getReasonForSkipTest( tcase.getSpec() )
             if reason not in skipmap:
                 skipmap[reason] = 0
             skipmap[reason] += 1
@@ -115,21 +115,21 @@ class ConsoleWriter:
 
         self.write( "==================================================" )
 
-        testL = atestlist.getActiveTests( self.sortspec )
+        tcaseL = atestlist.getActiveTests( self.sortspec )
 
         if level == 1:
-            numwritten = self._write_nonpass_notdone( testL, cwd )
+            numwritten = self._write_nonpass_notdone( tcaseL, cwd )
 
         elif level == 2:
-            for atest in testL:
-                self.writeTest( atest, cwd )
-            numwritten = len( testL )
+            for tcase in tcaseL:
+                self.writeTest( tcase, cwd )
+            numwritten = len( tcaseL )
 
         elif level > 2:
-            testL = atestlist.getTests()
-            for atest in testL:
-                self.writeTest( atest, cwd )
-            numwritten = len( testL )
+            tcaseL = atestlist.getTests()
+            for tcase in tcaseL:
+                self.writeTest( tcase, cwd )
+            numwritten = len( tcaseL )
 
         if numwritten > 0:
             self.write( "==================================================" )
@@ -143,15 +143,15 @@ class ConsoleWriter:
 
         return level
 
-    def _write_nonpass_notdone(self, testL, cwd):
+    def _write_nonpass_notdone(self, tcaseL, cwd):
         ""
         numwritten = 0
         numnonpass = 0
-        for atest in testL:
+        for tcase in tcaseL:
 
-            if self._nonpass_or_notdone( atest ):
+            if self._nonpass_or_notdone( tcase.getSpec() ):
                 if numwritten < self.maxnonpass:
-                    self.writeTest( atest, cwd )
+                    self.writeTest( tcase, cwd )
                     numwritten += 1
                 numnonpass += 1
 
@@ -181,8 +181,8 @@ class ConsoleWriter:
         ""
         self.write( '   ', *args )
 
-    def writeTest(self, atest, cwd):
+    def writeTest(self, tcase, cwd):
         ""
-        astr = outpututils.XstatusString( self.statushandler, atest,
+        astr = outpututils.XstatusString( self.statushandler, tcase,
                                           self.testdir, cwd )
         self.write( astr )

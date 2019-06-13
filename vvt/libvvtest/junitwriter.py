@@ -51,21 +51,21 @@ class JUnitWriter:
         datestr = outpututils.make_date_stamp( datestamp, self.datestamp,
                                                "%Y-%m-%dT%H:%M:%S" )
 
-        testL = atestlist.getActiveTests()
+        tcaseL = atestlist.getActiveTests()
 
-        print3( "Writing", len(testL), "tests to JUnit file", self.filename )
-
+        print3( "Writing", len(tcaseL), "tests to JUnit file", self.filename )
 
         parts = outpututils.partition_tests_by_result( self.statushandler,
-                                                       testL )
+                                                       tcaseL )
 
         npass = len( parts['pass'] )
         nwarn = len( parts['diff'] ) + len( parts['notdone'] ) + len( parts['notrun'] )
         nfail = len( parts['fail'] ) + len( parts['timeout'] )
 
         tsum = 0.0
-        for tst in testL:
-            tsum += max( 0.0, self.statushandler.getRuntime( tst, 0.0 ) )
+        for tcase in tcaseL:
+            tspec = tcase.getSpec()
+            tsum += max( 0.0, self.statushandler.getRuntime( tspec, 0.0 ) )
 
         tdir = os.path.basename( self.testdir )
         tdir = tdir.replace( '.', '_' )  # a dot is a Java class separator
@@ -86,8 +86,8 @@ class JUnitWriter:
             pkgclass = 'vvtest.'+tdir
 
             for result in [ 'pass', 'fail', 'diff', 'timeout', 'notdone', 'notrun' ]:
-                for tst in parts[result]:
-                    self.write_testcase( fp, tst, result, pkgclass, 10 )
+                for tcase in parts[result]:
+                    self.write_testcase( fp, tcase, result, pkgclass, 10 )
 
             fp.write( '</testsuite>\n' + \
                       '</testsuites>\n' )
@@ -96,29 +96,31 @@ class JUnitWriter:
             fp.close()
             self.permsetter.set( self.filename )
 
-    def write_testcase(self, fp, tst, result, pkgclass, max_KB):
+    def write_testcase(self, fp, tcase, result, pkgclass, max_KB):
         ""
-        xt = max( 0.0, self.statushandler.getRuntime( tst, 0.0 ) )
+        tspec = tcase.getSpec()
 
-        fp.write( '<testcase name="'+tst.xdir+'"' + \
+        xt = max( 0.0, self.statushandler.getRuntime( tspec, 0.0 ) )
+
+        fp.write( '<testcase name="'+tspec.getExecuteDirectory()+'"' + \
                            ' classname="'+pkgclass+'" time="'+str(xt)+'">\n' )
 
         if result == 'fail' or result == 'timeout':
             fp.write( '<failure message="'+result.upper()+'"/>\n' )
-            buf = self.make_execute_log_section( tst, max_KB )
+            buf = self.make_execute_log_section( tcase, max_KB )
             fp.write( buf + '\n' )
         elif result == 'diff':
             fp.write( '<skipped message="DIFF"/>\n' )
-            buf = self.make_execute_log_section( tst, max_KB )
+            buf = self.make_execute_log_section( tcase, max_KB )
             fp.write( buf + '\n' )
         elif result == 'notdone' or result == 'notrun':
             fp.write( '<skipped message="'+result.upper()+'"/>\n' )
 
         fp.write( '</testcase>\n' )
 
-    def make_execute_log_section(self, tspec, max_KB):
+    def make_execute_log_section(self, tcase, max_KB):
         ""
-        logdir = pjoin( self.testdir, tspec.getExecuteDirectory() )
+        logdir = pjoin( self.testdir, tcase.getSpec().getExecuteDirectory() )
         logfile = pjoin( logdir, 'execute.log' )
 
         try:
