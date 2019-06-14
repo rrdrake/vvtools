@@ -18,8 +18,9 @@ from testutils import print3
 
 from libvvtest.TestSpecCreator import TestCreator
 from libvvtest.RuntimeConfig import RuntimeConfig
-from libvvtest.TestSpec import TestSpec
-from libvvtest.TestExec import TestExec
+from libvvtest.testcase import TestCase
+from libvvtest.TestSpec import TestSpec  # magic: get rid of this?
+from libvvtest.TestExec import TestExec  # magic: get rid of this?
 from libvvtest.teststatus import TestStatusHandler
 
 from libvvtest import depend
@@ -294,12 +295,9 @@ class Function_find_tests_by_execute_directory_match( vtu.vvtestTestCase ):
 
 #######################################
 
-def make_test_dep( testobj ):
+def make_test_dep( tcase ):
     ""
-    if isinstance( testobj, TestSpec ):
-        return depend.TestDependency( testobj, None, None )
-    else:
-        return depend.TestDependency( testobj.atest, None, None )
+    return depend.TestDependency( tcase, None, None )
 
 
 def add_dependency( from_test, to_test ):
@@ -308,9 +306,18 @@ def add_dependency( from_test, to_test ):
     depset.addDependency( make_test_dep( to_test ) )
 
 
-def make_TestExec( tspec ):
+def make_TestSpec( name ):
     ""
-    return TestExec( TestStatusHandler(), None, tspec, None )
+    ts = TestSpec( name, os.getcwd(), name+'.vvt' )
+    return TestCase( ts, None )
+
+
+def make_TestExec( name ):
+    ""
+    st = TestStatusHandler()
+    ts = TestSpec( name, os.getcwd(), name+'.vvt' )
+    tx = TestExec( st, None, ts, None )
+    return TestCase( ts, tx )
 
 
 class dependency_related_functions( vtu.vvtestTestCase ):
@@ -321,59 +328,55 @@ class dependency_related_functions( vtu.vvtestTestCase ):
 
     def test_addDependency_uniquifies_multiple_TestSpec(self):
         ""
-        ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = make_TestExec( ts )
+        tcase = make_TestSpec( 'testA' )
 
-        ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        add_dependency( tx, ts1 )
+        dep1 = make_TestSpec( 'atest' )
+        add_dependency( tcase, dep1 )
 
-        ts2 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        add_dependency( tx, ts2 )
+        dep2 = make_TestSpec( 'atest' )
+        add_dependency( tcase, dep2 )
 
-        assert tx.getDependencySet().numDependencies() == 1
+        assert tcase.getDependencySet().numDependencies() == 1
 
     def test_addDependency_uniquifies_multiple_TestExec(self):
         ""
-        ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = make_TestExec( ts )
+        tcase = make_TestExec( 'testA' )
 
-        ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx1 = make_TestExec( ts1 )
-        add_dependency( tx, tx1 )
+        dep1 = make_TestExec( 'atest' )
+        add_dependency( tcase, dep1 )
 
-        ts2 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx2 = make_TestExec( ts2 )
-        add_dependency( tx, tx2 )
+        dep2 = make_TestExec( 'atest' )
+        add_dependency( tcase, dep2 )
 
-        assert tx.getDependencySet().numDependencies() == 1
+        assert tcase.getDependencySet().numDependencies() == 1
 
     def test_addDependency_uniquifies_TestSpec_then_TestExec(self):
         ""
-        ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = make_TestExec( ts )
+        tcase = make_TestExec( 'testA' )
 
-        ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        add_dependency( tx, ts1 )
+        dep1 = make_TestSpec( 'atest' )
+        add_dependency( tcase, dep1 )
 
-        ts2 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx2 = make_TestExec( ts2 )
-        add_dependency( tx, tx2 )
+        dep2 = make_TestExec( 'atest' )
+        add_dependency( tcase, dep2 )
 
-        assert tx.getDependencySet().numDependencies() == 1
+        depset = tcase.getDependencySet()
+        assert depset.numDependencies() == 1
+        assert depset.getBlocking().getExec() != None
 
     def test_addDependency_uniquifies_TestExec_then_TestSpec(self):
         ""
-        ts = TestSpec( 'testA', os.getcwd(), 'testA.vvt' )
-        tx = make_TestExec( ts )
+        tcase = make_TestExec( 'testA' )
 
-        ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        tx1 = make_TestExec( ts1 )
-        add_dependency( tx, tx1 )
+        dep1 = make_TestExec( 'atest' )
+        add_dependency( tcase, dep1 )
 
-        ts1 = TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
-        add_dependency( tx, ts1 )
+        dep2 = make_TestSpec( 'atest' )
+        add_dependency( tcase, dep2 )
 
-        assert tx.getDependencySet().numDependencies() == 1
+        depset = tcase.getDependencySet()
+        assert depset.numDependencies() == 1
+        assert depset.getBlocking().getExec() != None
 
 
 #######################################

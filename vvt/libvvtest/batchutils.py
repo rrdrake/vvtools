@@ -12,7 +12,6 @@ import glob
 from . import TestList
 from . import testlistio
 from . import pathutil
-from .testcase import TestCase
 
 
 class BatchScriptWriter:
@@ -65,9 +64,9 @@ class BatchScriptWriter:
           grpL = []
           tsum = 0
           for rt,tcase in xL:
-            tx = tcase.getExec()
-            depset = tx.getDependencySet()
-            if depset.numDependencies() > 0 or tx.atest.getAttr('timeout') < 1:
+            tspec = tcase.getSpec()
+            depset = tcase.getDependencySet()
+            if depset.numDependencies() > 0 or tspec.getAttr('timeout') < 1:
               # analyze tests and those with no timeout get their own group
               qL.append( [ self.Tzero, len(qL), [tcase] ] )
             else:
@@ -388,13 +387,9 @@ class BatchScheduler:
         # the list of tests that were not run
         notrunL = []
         for qid,bjob in list( self.accountant.getNotStarted() ):
-            tx1 = self.getBlockingDependency( bjob )
-            assert tx1 != None  # otherwise checkstart() should have ran it
+            tcase1 = self.getBlockingDependency( bjob )
+            assert tcase1 != None  # otherwise checkstart() should have ran it
             for tcase0 in bjob.testL:
-                if hasattr( tx1, 'atest' ):
-                    tcase1 = TestCase( tx1.atest, tx1 )  # magic
-                else:
-                    tcase1 = TestCase( tx1, tx1 )  # magic
                 notrunL.append( (tcase0,tcase1) )
             self.accountant.markJobDone( qid, 'notrun' )
 
@@ -450,8 +445,7 @@ class BatchScheduler:
         Otherwise None is returned.
         """
         for tcase in bjob.testL:
-            tx = tcase.getExec()  # magic
-            deptx = tx.getDependencySet().getBlocking()
+            deptx = tcase.getDependencySet().getBlocking()
             if deptx != None:
                 return deptx
         return None

@@ -45,10 +45,6 @@ class TestExec:
         self.pid = 0
         self.xdir = None
 
-        # do this import here to avoid possible cyclic dependency
-        from . import depend
-        self.depset = depend.DependencySet( self.statushandler )
-
     def init(self, test_dir, platform, commondb, config ):
         """
         The platform is a Platform object.  The test_dir is the top level
@@ -177,10 +173,6 @@ class TestExec:
         ""
         return self.has_dependent
 
-    def getDependencySet(self):
-        ""
-        return self.depset
-
     def _prepare_and_execute_test(self, baseline):
         ""
         try:
@@ -226,7 +218,7 @@ class TestExec:
 
     def _apply_plugin_preload(self):
         ""
-        pyexe = self.plugin.testPreload( TestCase( self.atest ) )  # magic
+        pyexe = self.plugin.testPreload( self.magic_hack )  # magic
         if pyexe:
             return pyexe
         else:
@@ -525,7 +517,7 @@ class TestExec:
                 ScriptWriter.writeScript( self.atest, script_file,
                                           lang, self.config, self.platform,
                                           test_dir,
-                                          self.getDependencySet() )
+                                          self.magic_hack.getDependencySet() )
 
                 self.perms.set( os.path.abspath( script_file ) )
 

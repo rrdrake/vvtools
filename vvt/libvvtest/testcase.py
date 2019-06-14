@@ -2,14 +2,19 @@
 
 import os, sys
 
+from . import depend
+from .teststatus import TestStatusHandler
+
 
 class TestCase:
 
-    def __init__(self, testspec=None, testexec=None, statushandler=None):
+    def __init__(self, testspec=None, testexec=None):
         ""
         self.tspec = testspec
         self.texec = testexec
-        self.tstat = statushandler
+        self.tstat = TestStatusHandler()
+
+        self.depset = None
 
     def getSpec(self):
         ""
@@ -26,3 +31,14 @@ class TestCase:
     def setExec(self, texec):
         ""
         self.texec = texec
+
+    def setStatusHandler(self, tstat):
+        ""
+        self.tstat = tstat
+
+    def getDependencySet(self):
+        ""
+        if self.depset == None:
+            self.depset = depend.DependencySet( self.tstat )
+        return self.depset
+

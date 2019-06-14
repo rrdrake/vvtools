@@ -7,25 +7,27 @@
 import os, sys
 import fnmatch
 
-from . import TestSpec
-
 
 class TestDependency:
 
-    def __init__(self, testobj, matchpat, wordexpr):
+    def __init__(self, tcase, matchpat, wordexpr):
         ""
-        self.testobj = testobj
+        self.tcase = tcase
         self.matchpat = matchpat
         self.wordexpr = wordexpr
 
-    def getTestSpec(self):
+    def getTestCase(self):
         ""
-        return self.testobj
+        return self.tcase
+
+    def hasTestExec(self):
+        ""
+        return self.tcase.getExec() != None
 
     def hasSameExecuteDirectory(self, testdep):
         ""
-        xdir1 = self.testobj.getExecuteDirectory()
-        xdir2 = testdep.testobj.getExecuteDirectory()
+        xdir1 = self.tcase.getSpec().getExecuteDirectory()
+        xdir2 = testdep.tcase.getSpec().getExecuteDirectory()
 
         return xdir1 == xdir2
 
@@ -42,7 +44,7 @@ class TestDependency:
 
     def getMatchDirectory(self):
         ""
-        return self.matchpat, self.testobj.getExecuteDirectory()
+        return self.matchpat, self.tcase.getSpec().getExecuteDirectory()
 
 
 class DependencySet:
@@ -54,10 +56,12 @@ class DependencySet:
 
     def addDependency(self, testdep):
         ""
+        assert testdep.getTestCase().getSpec()  # magic
         append = True
         for i,tdep in enumerate( self.deps ):
             if tdep.hasSameExecuteDirectory( testdep ):
-                self.deps[i] = testdep
+                if not self.deps[i].hasTestExec():
+                    self.deps[i] = testdep
                 append = False
                 break
 
@@ -84,15 +88,15 @@ class DependencySet:
 
         for tdep in self.deps:
 
-            tspec = tdep.getTestSpec()
+            tcase = tdep.getTestCase()
 
-            if not self.statushandler.isDone( tspec ):
-                return tspec
+            if not self.statushandler.isDone( tcase.getSpec() ):
+                return tcase
 
-            result = self.statushandler.getResultStatus( tspec )
+            result = self.statushandler.getResultStatus( tcase.getSpec() )
 
             if not tdep.satisfiesResult( result ):
-                return tspec
+                return tcase
 
         return None
 
@@ -100,7 +104,7 @@ class DependencySet:
         ""
         for tdep in self.deps:
 
-            tspec = tdep.getTestSpec()
+            tspec = tdep.getTestCase().getSpec()
 
             if self.statushandler.isDone( tspec ):
                 result = self.statushandler.getResultStatus( tspec )
@@ -158,12 +162,9 @@ class DependencySet:
 def connect_dependency( from_tcase, to_tcase, pattrn=None, expr=None ):
     ""
     assert from_tcase.getExec() != None
-    # assert not isinstance( from_test, TestSpec.TestSpec )
 
-    ref = to_tcase.getSpec()  # magic: want to leave this as a TestCase
-
-    tdep = TestDependency( ref, pattrn, expr )
-    from_tcase.getExec().getDependencySet().addDependency( tdep )
+    tdep = TestDependency( to_tcase, pattrn, expr )
+    from_tcase.getDependencySet().addDependency( tdep )
 
     texec = to_tcase.getExec()
     if texec != None:

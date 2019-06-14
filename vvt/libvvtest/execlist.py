@@ -58,6 +58,7 @@ class TestExecList:
 
                 xt = TestExec( self.statushandler, self.plugin, tspec, perms )
                 tcase.setExec( xt )
+                xt.magic_hack = tcase  # magic: remove this hack
 
                 if tspec.getAttr( 'hasdependent', False ):
                     xt.setHasDependent()
@@ -201,8 +202,7 @@ class TestExecList:
                 i = 0
                 while i < N:
                     tcase = tcaseL[i]
-                    tx = tcase.getExec()
-                    if tx.getDependencySet().getBlocking() == None:
+                    if tcase.getDependencySet().getBlocking() == None:
                         self._pop_test_exec( np, i )
                         return tcase
                     i += 1

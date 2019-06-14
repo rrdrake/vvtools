@@ -16,27 +16,31 @@ RESULTS_KEYWORDS = [ 'notrun', 'notdone',
 # this is the exit status that tests use to indicate a diff
 DIFF_EXIT_STATUS = 64
 
+PARAM_SKIP = 'param'
+RESTART_PARAM_SKIP = 'restartparam'
+KEYWORD_SKIP = 'keyword'
+RESULTS_KEYWORD_SKIP = 'resultskeyword'
+SUBDIR_SKIP = 'subdir'
+
+SKIP_REASON = {
+        PARAM_SKIP           : 'excluded by parameter expression',
+        RESTART_PARAM_SKIP   : 'excluded by parameter expression',
+        KEYWORD_SKIP         : 'excluded by keyword expression',
+        RESULTS_KEYWORD_SKIP : 'previous result keyword expression',
+        SUBDIR_SKIP          : 'current working directory',
+        'platform'           : 'excluded by platform expression',
+        'option'             : 'excluded by option expression',
+        'tdd'                : 'TDD test',
+        'search'             : 'excluded by file search expression',
+        'maxprocs'           : 'exceeds max processors',
+        'runtime'            : 'runtime too low or too high',
+        'nobaseline'         : 'no rebaseline specification',
+        'depskip'            : 'analyze dependency skipped',
+        'tsum'               : 'cummulative runtime exceeded',
+    }
+
 
 class TestStatusHandler:
-
-    def __init__(self):
-        ""
-        self.skipreason = {
-                PARAM_SKIP           : 'excluded by parameter expression',
-                RESTART_PARAM_SKIP   : 'excluded by parameter expression',
-                KEYWORD_SKIP         : 'excluded by keyword expression',
-                RESULTS_KEYWORD_SKIP : 'previous result keyword expression',
-                SUBDIR_SKIP          : 'current working directory',
-                'platform'           : 'excluded by platform expression',
-                'option'             : 'excluded by option expression',
-                'tdd'                : 'TDD test',
-                'search'             : 'excluded by file search expression',
-                'maxprocs'           : 'exceeds max processors',
-                'runtime'            : 'runtime too low or too high',
-                'nobaseline'         : 'no rebaseline specification',
-                'depskip'            : 'analyze dependency skipped',
-                'tsum'               : 'cummulative runtime exceeded',
-            }
 
     def resetResults(self, tspec):
         ""
@@ -155,7 +159,7 @@ class TestStatusHandler:
         assert skip
         # a shortened skip reason is mapped to a longer description, but
         # if not found, then just return the skip value itself
-        return self.skipreason.get( skip, skip )
+        return SKIP_REASON.get( skip, skip )
 
     def isNotrun(self, tspec):
         ""
@@ -233,13 +237,6 @@ class TestStatusHandler:
         for k,v in from_tcase.getSpec().getAttrs().items():
             if k in ['state','xtime','xdate','result']:
                 to_tcase.getSpec().setAttr( k, v )
-
-
-PARAM_SKIP = 'param'
-RESTART_PARAM_SKIP = 'restartparam'
-KEYWORD_SKIP = 'keyword'
-RESULTS_KEYWORD_SKIP = 'resultskeyword'
-SUBDIR_SKIP = 'subdir'
 
 
 def translate_exit_status_to_result_string( exit_status ):
