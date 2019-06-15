@@ -56,7 +56,6 @@ class DependencySet:
 
     def addDependency(self, testdep):
         ""
-        assert testdep.getTestCase().getSpec()  # magic
         append = True
         for i,tdep in enumerate( self.deps ):
             if tdep.hasSameExecuteDirectory( testdep ):

@@ -9,6 +9,7 @@ import os, sys
 from . import CommonSpec
 from .TestExec import TestExec
 from . import depend
+from . import testrunner
 
 
 class TestExecList:
@@ -34,8 +35,8 @@ class TestExecList:
         self._createTestExecList( perms )
         
         for tcase in self.getTestExecList():
-            xt = tcase.getExec()
-            xt.init( test_dir, platform, xdb, config )
+            testrunner.initialize_for_execution( tcase, test_dir, platform,
+                                                 xdb, config, self.plugin )
 
     def markTestsWithDependents(self):
         ""
@@ -56,9 +57,8 @@ class TestExecList:
 
                 assert tspec.constructionCompleted()
 
-                xt = TestExec( self.statushandler, self.plugin, tspec, perms )
+                xt = TestExec( self.statushandler, tspec, perms )
                 tcase.setExec( xt )
-                xt.magic_hack = tcase  # magic: remove this hack
 
                 if tspec.getAttr( 'hasdependent', False ):
                     xt.setHasDependent()
@@ -156,6 +156,15 @@ class TestExecList:
             self.started[ tcase.getSpec().getExecuteDirectory() ] = tcase
 
         return tcase
+
+    def startTest(self, tcase, platform, baseline=0):
+        ""
+        np = int( tcase.getSpec().getParameters().get('np', 0) )
+
+        obj = platform.obtainProcs( np )
+        tcase.getExec().setResourceObject( obj )
+
+        tcase.getExec().start( baseline )
 
     def popRemaining(self):
         """

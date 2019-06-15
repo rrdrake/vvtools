@@ -1124,7 +1124,7 @@ def executeTestList( opts, optD, rtdata,
                 tspec = tnext.getSpec()
                 texec = tnext.getExec()
                 print3( 'Starting:', exec_path( tspec, test_dir ) )
-                texec.start()
+                xlist.startTest( tnext, plat )
                 tlist.appendTestResult( tnext )
 
             elif xlist.numRunning() == 0:
@@ -1596,7 +1596,7 @@ def baselineTests( opts, optD, rtdata ):
 
             sys.stdout.write( "baselining "+xdir+"..." )
 
-            texec.start( baseline=1 )
+            xlist.startTest( tcase, plat, baseline=1 )
 
             tm = int( os.environ.get( 'VVTEST_BASELINE_TIMEOUT', 30 ) )
             for i in range(tm):

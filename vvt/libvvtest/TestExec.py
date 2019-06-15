@@ -5,17 +5,10 @@
 # Government retains certain rights in this software.
 
 import os, sys
+import subprocess
 import signal
 import time
-import shutil
-import glob
 import traceback
-
-from . import cshScriptWriter
-from . import ScriptWriter
-from . import pgexec
-from .makecmd import MakeScriptCommand
-from .testcase import TestCase  # magic
 
 
 # if a test times out, it receives a SIGINT.  if it doesn't finish up
@@ -29,55 +22,55 @@ class TestExec:
     The status and test results are saved in the TestSpec object.
     """
     
-    def __init__(self, statushandler, usrplugin, atest, perms):
+    def __init__(self, statushandler, atest, perms):
         """
         Constructs a test execution object which references a TestSpec obj.
         The 'perms' argument is a PermissionsSetter object.
         """
         self.statushandler = statushandler
-        self.plugin = usrplugin
         self.atest = atest
         self.perms = perms
         self.has_dependent = False
         
-        self.platform = None
         self.timeout = 0
         self.pid = 0
-        self.xdir = None
+        self.rundir = None
 
-    def init(self, test_dir, platform, commondb, config ):
-        """
-        The platform is a Platform object.  The test_dir is the top level
-        testing directory, which is either an absolute path or relative to
-        the current working directory.
-        """
-        self.platform = platform
-        self.config = config
-        self.timeout = self.atest.getAttr( 'timeout', 0 )
+        self.resource_obj = None
 
-        self.statushandler.resetResults( self.atest )
+    def setRunDirectory(self, rundir):
+        ""
+        self.rundir = rundir
 
-        self.xdir = os.path.join( test_dir, self.atest.getExecuteDirectory() )
+    def getRunDirectory(self):
+        ""
+        return self.rundir
 
-        if not os.path.exists( self.xdir ):
-            os.makedirs( self.xdir )
+    def setTimeout(self, value):
+        ""
+        self.timeout = value
 
-        self.perms.set( self.atest.getExecuteDirectory() )
+    def getTimeout(self):
+        ""
+        return self.timeout
 
-        if self.atest.getSpecificationForm() == 'xml':
-            self._write_xml_run_script( commondb )
-        else:
-            self._write_script_utils( test_dir )
+    def setExecutionHandler(self, handler):
+        ""
+        self.handler = handler
+
+    def setResourceObject(self, obj):
+        ""
+        self.resource_obj = obj
+
+    def getResourceObject(self):
+        ""
+        return self.resource_obj
 
     def start(self, baseline=0):
         """
         Launches the child process.
         """
         assert self.pid == 0
-
-        np = int( self.atest.getParameters().get('np', 0) )
-
-        self.plugin_obj = self.platform.obtainProcs( np )
 
         self.timedout = 0  # holds time.time() if the test times out
 
@@ -107,20 +100,17 @@ class TestExec:
 
             # test finished
 
-            self.platform.giveProcs( self.plugin_obj )
-
             if self.timedout > 0:
                 self.statushandler.markTimedOut( self.atest )
             else:
                 exit_status = decode_subprocess_exit_code( code )
                 self.statushandler.markDone( self.atest, exit_status )
 
-            self.perms.recurse( self.xdir )
+            self.perms.recurse( self.rundir )
 
-            if self.config.get('postclean') and \
-               self.statushandler.passed( self.atest ) and \
-               not self.has_dependent:
-                self.postclean()
+            self.handler.check_postclean( self.has_dependent )
+
+            self.handler.finishExecution()
 
         # not done .. check for timeout
         elif self.timeout > 0:
@@ -176,30 +166,9 @@ class TestExec:
     def _prepare_and_execute_test(self, baseline):
         ""
         try:
-            os.chdir(self.xdir)
+            os.chdir( self.rundir )
 
-            self._check_redirect_output_to_log_file( baseline )
-
-            set_timeout_environ_variable( self.timeout )
-
-            self._check_run_preclean( baseline )
-            self._check_write_mpi_machine_file()
-            self._check_set_working_files( baseline )
-
-            self._set_environ_for_python_execution( baseline )
-
-            pyexe = self._apply_plugin_preload()
-
-            cmd_list = self._make_execute_command( baseline, pyexe )
-
-            echo_test_execution_info( self.atest.getName(),
-                                      cmd_list, self.timeout )
-
-            sys.stdout.write( '\n' )
-            sys.stdout.flush()
-
-            if baseline:
-                self.copyBaselineFiles()
+            cmd_list = self.handler.prepare_for_launch( baseline )
 
             sys.stdout.flush() ; sys.stderr.flush()
 
@@ -207,7 +176,7 @@ class TestExec:
                 # this can only happen in baseline mode
                 os._exit(0)
             else:
-                x = pgexec.group_exec_subprocess( cmd_list )
+                x = group_exec_subprocess( cmd_list )
                 os._exit(x)
 
         except:
@@ -215,360 +184,6 @@ class TestExec:
             traceback.print_exc()
             sys.stdout.flush() ; sys.stderr.flush()
             os._exit(1)
-
-    def _apply_plugin_preload(self):
-        ""
-        pyexe = self.plugin.testPreload( self.magic_hack )  # magic
-        if pyexe:
-            return pyexe
-        else:
-            return sys.executable
-
-    def _make_execute_command(self, baseline, pyexe):
-        ""
-        maker = MakeScriptCommand( self.atest, pyexe )
-        cmdL = maker.make_base_execute_command( baseline )
-
-        if cmdL != None:
-            if hasattr(self.plugin_obj, "mpi_opts") and self.plugin_obj.mpi_opts:
-                cmdL.extend(['--mpirun_opts', self.plugin_obj.mpi_opts])
-
-            if self.config.get('analyze'):
-                cmdL.append('--execute_analysis_sections')
-
-            cmdL.extend( self.config.get( 'testargs' ) )
-
-        return cmdL
-
-    def _check_redirect_output_to_log_file(self, baseline):
-        ""
-        if baseline:
-            logfname = 'baseline.log'
-        elif not self.config.get('logfile'):
-            logfname = None
-        else:
-            logfname = 'execute.log'
-
-        if logfname != None:
-            redirect_stdout_stderr_to_filename( logfname )
-            self.perms.set( os.path.abspath( logfname ) )
-
-    def _check_run_preclean(self, baseline):
-        ""
-        if self.config.get('preclean') and \
-           not self.config.get('analyze') and \
-           not baseline:
-            self.preclean()
-
-    def preclean(self):
-        """
-        Should only be run just prior to launching the test script.  It
-        removes all files in the execute directory except for a few vvtest
-        files.
-        """
-        sys.stdout.write( "Cleaning execute directory...\n" )
-        sys.stdout.flush()
-
-        xL = [ 'execute.log', 'baseline.log' ]
-
-        if self.atest.getSpecificationForm() == 'xml':
-            xL.append( 'runscript' )
-
-        for f in os.listdir('.'):
-          if f not in xL and not f.startswith( 'vvtest_util' ):
-            if os.path.islink( f ):
-              os.remove( f )
-            elif os.path.isdir(f):
-              sys.stdout.write( "rm -r "+f+"\n" ) ; sys.stdout.flush()
-              shutil.rmtree( f )
-            else:
-              sys.stdout.write( "rm "+f+"\n" ) ; sys.stdout.flush()
-              os.remove( f )
-
-    def _check_write_mpi_machine_file(self):
-        ""
-        if hasattr( self.plugin_obj, 'machinefile' ):
-
-            fp = open( "machinefile", "w" )
-            try:
-                fp.write( self.plugin_obj.machinefile )
-            finally:
-                fp.close()
-
-            self.perms.set( os.path.abspath( "machinefile" ) )
-
-    def _check_set_working_files(self, baseline):
-        """
-        establish soft links and make copies of working files
-        """
-        if not baseline:
-            if not self.setWorkingFiles():
-                sys.stdout.flush()
-                sys.stderr.flush()
-                os._exit(1)
-
-    def setWorkingFiles(self):
-        """
-        Called before the test script is executed, this sets the link and
-        copy files in the test execution directory.  Returns False if certain
-        errors are encountered and written to stderr, otherwise True.
-        """
-        sys.stdout.write( "Linking and copying working files...\n" )
-        sys.stdout.flush()
-
-        srcdir = os.path.normpath(
-                      os.path.join(
-                          self.atest.getRootpath(),
-                          os.path.dirname( self.atest.getFilepath() ) ) )
-        
-        ok = True
-
-        # first establish the soft linked files
-        for srcname,tstname in self.atest.getLinkFiles():
-            
-            f = os.path.normpath( os.path.join( srcdir, srcname ) )
-
-            srcL = []
-            if os.path.exists(f):
-                srcL.append( f )
-            else:
-                fL = glob.glob( f )
-                if len(fL) > 1 and tstname != None:
-                    sys.stderr.write( "*** error: the test requested to " + \
-                          "soft link a file that matched multiple sources " + \
-                          "AND a single linkname was given: " + f + "\n" )
-                    ok = False
-                    continue
-                else:
-                    srcL.extend( fL )
-
-            if len(srcL) > 0:
-                
-                for srcf in srcL:
-
-                    if tstname == None:
-                        tstf = os.path.basename( srcf )
-                    else:
-                        tstf = tstname
-                    
-                    if os.path.islink( tstf ):
-                        lf = os.readlink( tstf )
-                        if lf != srcf:
-                            os.remove( tstf )
-                            sys.stdout.write( 'ln -s '+srcf+' '+tstf+'\n' )
-                            os.symlink( srcf, tstf )
-                    
-                    elif os.path.exists( tstf ):
-                        if os.path.isdir( tstf ):
-                            shutil.rmtree( tstf )
-                        else:
-                            os.remove( tstf )
-                        sys.stdout.write( 'ln -s '+srcf+' '+tstf+'\n' )
-                        os.symlink( srcf, tstf )
-                    
-                    else:
-                        sys.stdout.write( 'ln -s '+srcf+' '+tstf+'\n' )
-                        os.symlink( srcf, tstf )
-            
-            else:
-                sys.stderr.write( "*** error: the test requested to " + \
-                      "soft link a non-existent file: " + f + "\n" )
-                ok = False
-        
-        # files to be copied
-        for srcname,tstname in self.atest.getCopyFiles():
-
-            f = os.path.normpath( os.path.join( srcdir, srcname ) )
-
-            srcL = []
-            if os.path.exists(f):
-                srcL.append( f )
-            else:
-                fL = glob.glob( f )
-                if len(fL) > 1 and tstname != None:
-                    sys.stderr.write( "*** error: the test requested to " + \
-                          "copy a file that matched multiple sources " + \
-                          "AND a single copyname was given: " + f + "\n" )
-                    ok = False
-                    continue
-                else:
-                    srcL.extend( fL )
-
-            if len(srcL) > 0:
-                
-                for srcf in srcL:
-                    
-                    if tstname == None:
-                        tstf = os.path.basename( srcf )
-                    else:
-                        tstf = tstname
-                    
-                    if os.path.islink( tstf ):
-                        os.remove( tstf )
-                    elif os.path.exists( tstf ):
-                        if os.path.isdir( tstf ):
-                            shutil.rmtree( tstf )
-                        else:
-                            os.remove( tstf )
-
-                    if os.path.isdir( srcf ):
-                        sys.stdout.write( 'cp -rp '+srcf+' '+tstf+'\n' )
-                        shutil.copytree( srcf, tstf, symlinks=True )
-                    else:
-                        sys.stdout.write( 'cp -p '+srcf+' '+tstf+'\n' )
-                        shutil.copy2( srcf, tstf )
-            
-            else:
-                sys.stderr.write( "*** error: the test requested to " + \
-                      "copy a non-existent file: " + f + "\n" )
-                ok = False
-
-        return ok
-
-    def copyBaselineFiles(self):
-        """
-        """
-        troot = self.atest.getRootpath()
-        tdir = os.path.dirname( self.atest.getFilepath() )
-        srcdir = os.path.normpath( os.path.join( troot, tdir ) )
-        
-        # TODO: add file globbing for baseline files
-        for fromfile,tofile in self.atest.getBaselineFiles():
-            dst = os.path.join( srcdir, tofile )
-            sys.stdout.write( "baseline: cp -p "+fromfile+" "+dst+'\n' )
-            sys.stdout.flush()
-            shutil.copy2( fromfile, dst )
-
-    def _set_environ_for_python_execution(self, baseline):
-        """
-        set up python pathing to make import of script utils easy
-        """
-        pth = os.getcwd()
-        if self.config.get('configdir'):
-            # make sure the config dir comes before vvtest/config
-            pth += ':'+self.config.get('configdir')
-
-        d = self.config.get('toolsdir')
-        pth += ':'+os.path.join( d, 'config' )
-        pth += ':'+d
-
-        val = os.environ.get( 'PYTHONPATH', '' )
-        if val: os.environ['PYTHONPATH'] = pth + ':' + val
-        else:   os.environ['PYTHONPATH'] = pth
-
-    def postclean(self):
-        """
-        Should only be run right after the test script finishes.  It removes
-        all files in the execute directory except for a few vvtest files.
-        """
-        xL = [ 'execute.log', 'baseline.log', 'machinefile' ]
-
-        if self.atest.getSpecificationForm() == 'xml':
-            xL.append( 'runscript' )
-
-        # might as well keep the linked files
-        for sf,tf in self.atest.getLinkFiles():
-            if tf == None:
-                tf = os.path.basename( sf )
-            xL.append( tf )
-        
-        for f in os.listdir( self.xdir ):
-          if f not in xL and not f.startswith( 'vvtest_util' ):
-            fp = os.path.join( self.xdir, f )
-            if os.path.islink( fp ):
-              os.remove( fp )
-            elif os.path.isdir( fp ):
-              shutil.rmtree( fp )
-            else:
-              os.remove( fp )
-
-    def _write_xml_run_script(self, commondb):
-        ""
-        # no 'form' defaults to the XML test specification format
-
-        script_file = os.path.join( self.xdir, 'runscript' )
-
-        if self.config.get('refresh') or not os.path.exists( script_file ):
-
-            troot = self.atest.getRootpath()
-            assert os.path.isabs( troot )
-            tdir = os.path.dirname( self.atest.getFilepath() )
-            srcdir = os.path.normpath( os.path.join( troot, tdir ) )
-
-            # note that this writes a different sequence if the test is an
-            # analyze test
-            cshScriptWriter.writeScript( self.atest, commondb, self.platform,
-                                         self.config.get('toolsdir'),
-                                         self.config.get('exepath'),
-                                         srcdir,
-                                         self.config.get('onopts'),
-                                         self.config.get('offopts'),
-                                         script_file )
-
-            self.perms.set( os.path.abspath( script_file ) )
-
-    def _write_script_utils(self, test_dir):
-        ""
-        for lang in ['py','sh']:
-
-            script_file = os.path.join( self.xdir, 'vvtest_util.'+lang )
-
-            if self.config.get('refresh') or not os.path.exists( script_file ):
-                ScriptWriter.writeScript( self.atest, script_file,
-                                          lang, self.config, self.platform,
-                                          test_dir,
-                                          self.magic_hack.getDependencySet() )
-
-                self.perms.set( os.path.abspath( script_file ) )
-
-    def __cmp__(self, rhs):
-        if rhs == None: return 1  # None objects are always less
-        return cmp( self.atest, rhs.atest )
-    
-    def __lt__(self, rhs):
-        if rhs == None: return False  # None objects are always less
-        return self.atest < rhs.atest
-
-
-def redirect_stdout_stderr_to_filename( filename ):
-    ""
-    ofile = open( filename, "w+" )
-
-    # reassign stdout & stderr file descriptors to the file
-    os.dup2( ofile.fileno(), sys.stdout.fileno() )
-    os.dup2( ofile.fileno(), sys.stderr.fileno() )
-
-
-def echo_test_execution_info( testname, cmd_list, timeout ):
-    ""
-    sys.stdout.write( "Starting test: "+testname+'\n' )
-    sys.stdout.write( "Directory    : "+os.getcwd()+'\n' )
-
-    if cmd_list != None:
-        sys.stdout.write( "Command      : "+' '.join( cmd_list )+'\n' )
-
-    sys.stdout.write( "Timeout      : "+str(timeout)+'\n' )
-
-    sys.stdout.write( '\n' )
-    sys.stdout.flush()
-
-
-def set_timeout_environ_variable( timeout ):
-    """
-    add a timeout environ variable so the test can take steps to
-    shutdown a running application that is taking too long;  add
-    a bump factor so it won't shutdown before the test harness
-    recognizes it as a timeout
-    """
-    if timeout > 0:
-
-        if timeout < 30: t = 60
-        if timeout < 120: t = timeout * 1.4
-        else: t = timeout * 1.2
-
-        # [Apr 2019] using TIMEOUT is deprecated
-        os.environ['TIMEOUT'] = str( int( t ) )
-        os.environ['VVTEST_TIMEOUT'] = str( int( t ) )
 
 
 def decode_subprocess_exit_code( exit_code ):
@@ -583,3 +198,80 @@ def decode_subprocess_exit_code( exit_code ):
         return 0
 
     return 1
+
+
+def group_exec_subprocess( cmd, **kwargs ):
+    """
+    Run the given command in a subprocess in its own process group, then wait
+    for it.  Catch all signals and dispatch them to the child process group.
+
+    The SIGTERM and SIGHUP signals are sent to the child group, but they also
+    cause a SIGKILL to be sent after a short delay.
+
+    This function modifies the current environment by registering signal
+    handlers, so the intended use is something like this
+
+        pid = os.fork()
+        if pid == 0:
+            x = group_exec_subprocess( 'some command', shell=True )
+            os._exit(x)
+    """
+    register_signal_handlers()
+
+    terminate_delay = kwargs.pop( 'terminate_delay', 5 )
+
+    kwargs[ 'preexec_fn' ] = lambda: os.setpgid( os.getpid(), os.getpid() )
+    proc = subprocess.Popen( cmd, **kwargs )
+
+    while True:
+        try:
+            x = proc.wait()
+            break
+        except KeyboardInterrupt:
+            os.kill( -proc.pid, signal.SIGINT )
+        except SignalException:
+            e = sys.exc_info()[1]
+            os.kill( -proc.pid, e.sig )
+            if e.sig in [ signal.SIGTERM, signal.SIGHUP ]:
+                x = check_terminate_subprocess( proc, terminate_delay )
+                break
+        except:
+            os.kill( -proc.pid, signal.SIGTERM )
+
+    return x
+
+
+class SignalException( Exception ):
+    def __init__(self, signum):
+        self.sig = signum
+        Exception.__init__( self, 'Received signal '+str(signum) )
+
+def signal_handler( signum, frame ):
+    raise SignalException( signum )
+
+
+def register_signal_handlers( reset=False ):
+    ""
+    if reset:
+        handler = signal.SIG_DFL
+    else:
+        handler = signal_handler
+
+    signal.signal( signal.SIGTERM, handler )
+    signal.signal( signal.SIGABRT, handler )
+    signal.signal( signal.SIGHUP, handler )
+    signal.signal( signal.SIGALRM, handler )
+    signal.signal( signal.SIGUSR1, handler )
+    signal.signal( signal.SIGUSR2, handler )
+
+
+def check_terminate_subprocess( proc, terminate_delay ):
+    ""
+    if terminate_delay:
+        time.sleep( terminate_delay )
+
+    x = proc.poll()
+
+    os.kill( -proc.pid, signal.SIGKILL )
+
+    return x
