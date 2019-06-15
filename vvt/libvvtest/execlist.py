@@ -36,12 +36,13 @@ class TestExecList:
         
         for tcase in self.getTestExecList():
             testrunner.initialize_for_execution( tcase, test_dir, platform,
-                                                 xdb, config, self.plugin )
+                                                 xdb, config, self.plugin,
+                                                 perms )
 
     def markTestsWithDependents(self):
         ""
         for tcase in self.getTestExecList():
-            if tcase.getExec().hasDependent():
+            if tcase.hasDependent():
                 tcase.getSpec().setAttr( 'hasdependent', True )
 
     def _createTestExecList(self, perms):
@@ -57,11 +58,11 @@ class TestExecList:
 
                 assert tspec.constructionCompleted()
 
-                xt = TestExec( self.statushandler, tspec, perms )
+                xt = TestExec( self.statushandler, tspec )
                 tcase.setExec( xt )
 
                 if tspec.getAttr( 'hasdependent', False ):
-                    xt.setHasDependent()
+                    tcase.setHasDependent()
 
                 np = int( tspec.getParameters().get('np', 0) )
                 if np in self.xtlist:

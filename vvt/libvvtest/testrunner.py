@@ -17,7 +17,7 @@ from .makecmd import MakeScriptCommand
 # TestExec mainly a container
 
 def initialize_for_execution( tcase, test_dir, platform,
-                              commondb, config, usrplugin ):
+                              commondb, config, usrplugin, perms ):
     """
     The platform is a Platform object.  The test_dir is the top level
     testing directory, which is either an absolute path or relative to
@@ -27,7 +27,7 @@ def initialize_for_execution( tcase, test_dir, platform,
     texec = tcase.getExec()
     tstat = tcase.getStat()
 
-    handler = ExecutionHandler( tcase, texec.perms, config, platform, usrplugin )
+    handler = ExecutionHandler( tcase, perms, config, platform, usrplugin )
     texec.setExecutionHandler( handler )
 
     texec.setTimeout( tspec.getAttr( 'timeout', 0 ) )
@@ -40,16 +40,15 @@ def initialize_for_execution( tcase, test_dir, platform,
     if not os.path.exists( wdir ):
         os.makedirs( wdir )
 
-    # magic: move perms out of TestExec
-    texec.perms.set( tspec.getExecuteDirectory() )
+    perms.set( tspec.getExecuteDirectory() )
 
     if tspec.getSpecificationForm() == 'xml':
-        write_xml_run_script( tcase, commondb, config, platform )
+        write_xml_run_script( tcase, commondb, config, platform, perms )
     else:
-        write_script_utils( tcase, test_dir, config, platform )
+        write_script_utils( tcase, test_dir, config, platform, perms )
 
 
-def write_xml_run_script( tcase, commondb, config, platform ):
+def write_xml_run_script( tcase, commondb, config, platform, perms ):
     ""
     # no 'form' defaults to the XML test specification format
 
@@ -76,10 +75,10 @@ def write_xml_run_script( tcase, commondb, config, platform ):
                                      config.get('offopts'),
                                      script_file )
 
-        texec.perms.set( os.path.abspath( script_file ) )
+        perms.set( os.path.abspath( script_file ) )
 
 
-def write_script_utils( tcase, test_dir, config, platform ):
+def write_script_utils( tcase, test_dir, config, platform, perms ):
     ""
     texec = tcase.getExec()
     rundir = texec.getRunDirectory()
@@ -94,7 +93,7 @@ def write_script_utils( tcase, test_dir, config, platform ):
                                       test_dir,
                                       tcase.getDependencySet() )
 
-            texec.perms.set( os.path.abspath( script_file ) )
+            perms.set( os.path.abspath( script_file ) )
 
 
 class ExecutionHandler:
@@ -324,13 +323,11 @@ class ExecutionHandler:
         if val: os.environ['PYTHONPATH'] = pth + ':' + val
         else:   os.environ['PYTHONPATH'] = pth
 
-    def check_postclean(self, has_dependent):
+    def check_postclean(self):
         ""
-        # magic: handle has_dependent differently
-
         if self.config.get('postclean') and \
            self.tcase.getStat().passed( self.tcase.getSpec() ) and \
-           not has_dependent:
+           not self.tcase.hasDependent():
             self.postclean()
 
     def postclean(self):
@@ -395,8 +392,12 @@ class ExecutionHandler:
 
     def finishExecution(self):
         ""
+        rundir = self.tcase.getExec().getRunDirectory()
+        self.perms.recurse( rundir )
+
+        self.check_postclean()
+
         self.platform.giveProcs( self.tcase.getExec().getResourceObject() )
-        pass
 
     def make_execute_command(self, baseline, pyexe):
         ""

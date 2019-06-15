@@ -22,15 +22,13 @@ class TestExec:
     The status and test results are saved in the TestSpec object.
     """
     
-    def __init__(self, statushandler, atest, perms):
+    def __init__(self, statushandler, atest):
         """
         Constructs a test execution object which references a TestSpec obj.
         The 'perms' argument is a PermissionsSetter object.
         """
         self.statushandler = statushandler
         self.atest = atest
-        self.perms = perms
-        self.has_dependent = False
         
         self.timeout = 0
         self.pid = 0
@@ -106,10 +104,6 @@ class TestExec:
                 exit_status = decode_subprocess_exit_code( code )
                 self.statushandler.markDone( self.atest, exit_status )
 
-            self.perms.recurse( self.rundir )
-
-            self.handler.check_postclean( self.has_dependent )
-
             self.handler.finishExecution()
 
         # not done .. check for timeout
@@ -154,14 +148,6 @@ class TestExec:
             self.signalJob( signal.SIGTERM )
             time.sleep(5)
             self.poll()
-
-    def setHasDependent(self):
-        ""
-        self.has_dependent = True
-
-    def hasDependent(self):
-        ""
-        return self.has_dependent
 
     def _prepare_and_execute_test(self, baseline):
         ""

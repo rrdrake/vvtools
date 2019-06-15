@@ -165,9 +165,8 @@ def connect_dependency( from_tcase, to_tcase, pattrn=None, expr=None ):
     tdep = TestDependency( to_tcase, pattrn, expr )
     from_tcase.getDependencySet().addDependency( tdep )
 
-    texec = to_tcase.getExec()
-    if texec != None:
-        texec.setHasDependent()
+    if to_tcase.getExec() != None:
+        to_tcase.setHasDependent()
 
 
 def find_tests_by_execute_directory_match( xdir, pattern, xdir2tcase ):
@@ -222,7 +221,7 @@ def connect_analyze_dependencies( analyze, tcaseL, xdir2testexec ):
             connect_dependency( analyze, tcase )
             gxt = xdir2testexec.get( tspec.getExecuteDirectory(), None )
             if gxt != None:
-                gxt.getExec().setHasDependent()
+                gxt.setHasDependent()
 
 
 def check_connect_dependencies( tcase, xdir2tcase, xdir2testexec ):
