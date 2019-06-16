@@ -8,11 +8,11 @@ from .teststatus import TestStatusHandler
 
 class TestCase:
 
-    def __init__(self, testspec=None, testexec=None):
+    def __init__(self, testspec, testexec=None):
         ""
         self.tspec = testspec
         self.texec = testexec
-        self.tstat = TestStatusHandler()
+        self.tstat = TestStatusHandler( testspec )
 
         self.depset = None
         self.has_dependent = False

@@ -144,19 +144,19 @@ class BatchScriptWriter:
             qtime += int( tspec.getAttr('timeout') )
         
         if qtime == 0:
-          qtime = self.Tzero  # give it the "no timeout" length of time
+            qtime = self.Tzero  # give it the "no timeout" length of time
         else:
-          # allow more time in the queue than calculated. This overhead time
-          # monotonically increases with increasing qtime and plateaus at
-          # about 16 minutes of overhead.
-          if qtime < 60:
-            qtime += 60
-          elif qtime < 10*60:
-            qtime += qtime
-          elif qtime < 30*60:
-            qtime += 10*60 + int( float(qtime-10*60) * 0.3 )
-          else:
-            qtime += 10*60 + int( float(30*60-10*60) * 0.3 )
+            # allow more time in the queue than calculated. This overhead time
+            # monotonically increases with increasing qtime and plateaus at
+            # about 16 minutes of overhead.
+            if qtime < 60:
+                qtime += 60
+            elif qtime < 10*60:
+                qtime += qtime
+            elif qtime < 30*60:
+                qtime += 10*60 + int( float(qtime-10*60) * 0.3 )
+            else:
+                qtime += 10*60 + int( float(30*60-10*60) * 0.3 )
 
         if self.max_timeout:
             qtime = min( qtime, float(self.max_timeout) )

@@ -32,7 +32,7 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
                 else: return None
             """ )
 
-        tcase = vtu.make_fake_TestCase( TestStatusHandler() )
+        tcase = vtu.make_fake_TestCase()
         assert plug.testTimeout( tcase ) == 10
 
         tcase.getSpec().setTimeout( 20 )
@@ -48,14 +48,14 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
                 raise Exception( 'fake exception' )
             """ )
 
-        tcase = vtu.make_fake_TestCase( TestStatusHandler() )
+        tcase = vtu.make_fake_TestCase()
         rtn, out, err = util.call_capture_output( plug.testTimeout, tcase )
         assert rtn == None
         assert 'Exception' in out and 'fake exception' in out
         assert 'Traceback' in out
 
         # multiple exceptions are not printed (uniquified by exception string)
-        tcase = vtu.make_fake_TestCase( TestStatusHandler(), name='btest' )
+        tcase = vtu.make_fake_TestCase( name='btest' )
         rtn, out, err = util.call_capture_output( plug.testTimeout, tcase )
         assert rtn == None
         assert 'Exception' not in out and 'fake exception' not in out
@@ -68,7 +68,7 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
                 return 'abc'
             """ )
 
-        tcase = vtu.make_fake_TestCase( TestStatusHandler() )
+        tcase = vtu.make_fake_TestCase()
         rtn, out, err = util.call_capture_output( plug.testTimeout, tcase )
         assert rtn == None
         assert 'Traceback' in out
@@ -80,7 +80,7 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
                 return -1
             """ )
 
-        tcase = vtu.make_fake_TestCase( TestStatusHandler() )
+        tcase = vtu.make_fake_TestCase()
         rtn, out, err = util.call_capture_output( plug.testTimeout, tcase )
         assert rtn == 0
         assert 'Traceback' not in out

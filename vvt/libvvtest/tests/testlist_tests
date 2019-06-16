@@ -33,7 +33,7 @@ class TestSpec_to_and_from_string( vtu.vvtestTestCase ):
 
     def test_converting_a_test_to_a_string_and_back(self):
         ""
-        tcase = make_fake_TestCase()
+        tcase = get_fake_TestCase()
 
         sid = tio.test_to_string( tcase )
         assert '\n' not in sid
@@ -90,7 +90,7 @@ class test_list_file_read_write( vtu.vvtestTestCase ):
         ""
         tlw = tio.TestListWriter( 'tests.out' )
         tlw.start()
-        tcase = make_fake_TestCase()
+        tcase = get_fake_TestCase()
         tlw.append( tcase )
 
         time.sleep(1)
@@ -167,7 +167,7 @@ class test_list_file_read_write( vtu.vvtestTestCase ):
         ""
         tlw = tio.TestListWriter( 'tests.out' )
         tlw.start()
-        tcase = make_fake_TestCase_with_results()
+        tcase = get_fake_TestCase_with_results()
         tlw.append( tcase )
 
         time.sleep(1)
@@ -372,7 +372,7 @@ class TestList_results_file( vtu.vvtestTestCase ):
         ""
         tl = TestList.TestList( TestStatusHandler(), 'testlist' )
         rfile = tl.initializeResultsFile()
-        tcase = make_fake_TestCase()
+        tcase = get_fake_TestCase()
         tl.appendTestResult( tcase )
 
         time.sleep(1)
@@ -390,7 +390,7 @@ class TestList_results_file( vtu.vvtestTestCase ):
         ""
         tl = TestList.TestList( TestStatusHandler(), 'testlist' )
         rfile = tl.initializeResultsFile()
-        tcase = make_fake_TestCase()
+        tcase = get_fake_TestCase()
         tl.appendTestResult( tcase )
 
         time.sleep(1)
@@ -462,7 +462,7 @@ example_testlist_version_32 = \
 
 ############################################################################
 
-def make_fake_TestSpec():
+def get_fake_TestCase():
     ""
     ts = TestSpec.TestSpec( 'atest', os.getcwd(), 'atest.xml' )
 
@@ -478,12 +478,6 @@ def make_fake_TestSpec():
     ts.setAttr('aname6', 23.23)
     ts.setAttr('aname7', None)
 
-    return ts
-
-
-def make_fake_TestCase():
-    ""
-    ts = make_fake_TestSpec()
     return TestCase( testspec=ts )
 
 
@@ -520,14 +514,15 @@ def assert_TestCase_same_as_fake( tcase, rootdir=None ):
     assert tspec.getAttr('aname7') == None
 
 
-def make_fake_TestCase_with_results():
+def get_fake_TestCase_with_results():
     ""
-    tcase = make_fake_TestCase()
+    tcase = get_fake_TestCase()
     ts = tcase.getSpec()
 
-    ts.setAttr( 'state', "notdone" )
-    ts.setAttr( 'xtime', -1 )
-    ts.setAttr( 'xdate', int(time.time()) )
+    tcase.getStat().markStarted( ts, time.time() )
+    # ts.setAttr( 'state', "notdone" )
+    # ts.setAttr( 'xtime', -1 )
+    # ts.setAttr( 'xdate', int(time.time()) )
 
     return tcase
 
@@ -561,7 +556,7 @@ def write_test_list_with_fake_test( filename, **kwargs ):
     ""
     tlw = tio.TestListWriter( filename )
     tlw.start()
-    tcase = make_fake_TestCase()
+    tcase = get_fake_TestCase()
     for k,v in kwargs.items():
         tcase.getSpec().setAttr( k, v )
     tlw.append( tcase )
@@ -577,7 +572,7 @@ def write_TestList_with_fake_test( filename, **kwargs ):
     if dosuffix:
         tl.setResultsSuffix()
 
-    tcase = make_fake_TestCase()
+    tcase = get_fake_TestCase()
     for k,v in kwargs.items():
         tcase.getSpec().setAttr( k, v )
     tl.addTest( tcase )
@@ -590,7 +585,7 @@ def write_TestList_with_fake_test( filename, **kwargs ):
 def write_TestList_fake_results( testlistobj ):
     ""
     rfile = testlistobj.initializeResultsFile()
-    tcase = make_fake_TestCase_with_results()
+    tcase = get_fake_TestCase_with_results()
     testlistobj.appendTestResult( tcase )
     testlistobj.writeFinished()
 

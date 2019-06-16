@@ -42,11 +42,15 @@ SKIP_REASON = {
 
 class TestStatusHandler:
 
-    def resetResults(self, tspec):
+    def __init__(self, testspec=None):
         ""
-        tspec.setAttr( 'state', 'notrun' )
-        tspec.removeAttr( 'xtime' )
-        tspec.removeAttr( 'xdate' )
+        self.tspec = testspec
+
+    def resetResults(self):
+        ""
+        self.tspec.setAttr( 'state', 'notrun' )
+        self.tspec.removeAttr( 'xtime' )
+        self.tspec.removeAttr( 'xdate' )
 
     def getResultsKeywords(self, tspec):
         ""

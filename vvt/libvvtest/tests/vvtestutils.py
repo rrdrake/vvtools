@@ -573,54 +573,52 @@ def assert_summary_string( summary_string,
     if skip    != None: assert valD['skip']    == skip
 
 
-def make_fake_TestSpec( statushandler, result=None,
-                        runtime=None, name='atest',
-                        keywords=['key1','key2'] ):
+def make_fake_TestSpec( name='atest', keywords=['key1','key2'] ):
     ""
     ts = TestSpec.TestSpec( name, os.getcwd(), 'sdir/'+name+'.vvt' )
-
-    statushandler.resetResults( ts )
-
     ts.setKeywords( keywords )
-
     ts.setParameters( { 'np':'4' } )
+    return ts
+
+
+def make_fake_TestCase( result=None, runtime=None, name='atest',
+                        keywords=['key1','key2'] ):
+    ""
+    tcase = testcase.TestCase( make_fake_TestSpec( name, keywords ) )
+
+    tspec = tcase.getSpec()
+    tstat = tcase.getStat()
+
+    tstat.resetResults()
 
     if result:
         tm = time.time()
         if result == 'skip':
-            statushandler.markSkipByPlatform( ts )
+            tstat.markSkipByPlatform( tspec )
         elif result == 'timeout':
-            statushandler.markStarted( ts, tm )
-            statushandler.markTimedOut( ts )
+            tstat.markStarted( tspec, tm )
+            tstat.markTimedOut( tspec )
         elif result == 'pass':
-            statushandler.markStarted( ts, tm )
-            statushandler.markDone( ts, 0 )
+            tstat.markStarted( tspec, tm )
+            tstat.markDone( tspec, 0 )
         elif result == 'diff':
-            statushandler.markStarted( ts, tm )
-            statushandler.markDone( ts, teststatus.DIFF_EXIT_STATUS )
+            tstat.markStarted( tspec, tm )
+            tstat.markDone( tspec, teststatus.DIFF_EXIT_STATUS )
         elif result == 'notdone':
-            statushandler.markStarted( ts, tm )
+            tstat.markStarted( tspec, tm )
         elif result == 'notrun':
             pass
         elif result == 'running':
-            statushandler.markStarted( ts, tm )
+            tstat.markStarted( tspec, tm )
         else:
             assert result == 'fail', '*** error (value='+str(result)+')'
-            statushandler.markStarted( ts, tm )
-            statushandler.markDone( ts, 1 )
+            tstat.markStarted( tspec, tm )
+            tstat.markDone( tspec, 1 )
 
     if runtime != None:
-        statushandler.setRuntime( ts, runtime )
+        tstat.setRuntime( tspec, runtime )
 
-    return ts
-
-
-def make_fake_TestCase( statushandler, result=None,
-                        runtime=None, name='atest',
-                        keywords=['key1','key2'] ):
-    ""
-    return testcase.TestCase( make_fake_TestSpec( statushandler, result,
-                                                  runtime, name, keywords ) )
+    return tcase
 
 
 # python imports can get confused when importing the same module name more

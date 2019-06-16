@@ -12,9 +12,6 @@ from . import cshScriptWriter
 from . import ScriptWriter
 from .makecmd import MakeScriptCommand
 
-# setup and launch
-# prerun & postrun
-# TestExec mainly a container
 
 def initialize_for_execution( tcase, test_dir, platform,
                               commondb, config, usrplugin, perms ):
@@ -32,7 +29,7 @@ def initialize_for_execution( tcase, test_dir, platform,
 
     texec.setTimeout( tspec.getAttr( 'timeout', 0 ) )
 
-    tstat.resetResults( tspec )
+    tstat.resetResults()
 
     wdir = os.path.join( test_dir, tspec.getExecuteDirectory() )
     texec.setRunDirectory( wdir )

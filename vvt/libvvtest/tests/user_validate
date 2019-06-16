@@ -36,8 +36,8 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
 
         plug = UserPluginBridge( RuntimeConfig(), mod )
 
-        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
-        assert not plug.validateTest( tspec )
+        tcase = vtu.make_fake_TestCase()
+        assert not plug.validateTest( tcase )
 
     def test_empty_plugin_found(self):
         ""
@@ -45,8 +45,8 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
             pass
             """ )
 
-        tspec = vtu.make_fake_TestSpec( TestStatusHandler() )
-        assert not plug.validateTest( tspec )
+        tcase = vtu.make_fake_TestCase()
+        assert not plug.validateTest( tcase )
 
     def test_a_plugin_with_an_error_during_import(self):
         ""
@@ -81,8 +81,7 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
                     return "keywords must contain fast, medium, or long"
             """ )
 
-        tcase = vtu.make_fake_TestCase( TestStatusHandler(),
-                                        keywords=['lightning','fast'] )
+        tcase = vtu.make_fake_TestCase( keywords=['lightning','fast'] )
         assert not plug.validateTest( tcase )
 
         tcase.getSpec().setKeywords( ['lightning','fist'] )
@@ -96,14 +95,14 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
                 raise Exception( 'fake exception' )
             """ )
 
-        tcase = vtu.make_fake_TestCase( TestStatusHandler() )
+        tcase = vtu.make_fake_TestCase()
         rtn, out, err = util.call_capture_output( plug.validateTest, tcase )
         assert 'Exception' in rtn and 'fake exception' in rtn
         assert 'Exception' in out and 'fake exception' in out
         assert 'Traceback' in out
 
         # multiple exceptions are not printed (uniquified by exception string)
-        tcase = vtu.make_fake_TestCase( TestStatusHandler(), name='btest' )
+        tcase = vtu.make_fake_TestCase( name='btest' )
         rtn, out, err = util.call_capture_output( plug.validateTest, tcase )
         assert 'Exception' in rtn and 'fake exception' in rtn
         assert 'Exception' not in out and 'fake exception' not in out
@@ -120,19 +119,19 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
         statushandler = TestStatusHandler()
         tf = TestFilter( RuntimeConfig(), statushandler, plug )
 
-        tcase = vtu.make_fake_TestCase( statushandler, keywords=['good'] )
+        tcase = vtu.make_fake_TestCase( keywords=['good'] )
         assert tf.userValidation( tcase )
         assert not statushandler.skipTest( tcase.getSpec() )
 
-        tcase = vtu.make_fake_TestCase( statushandler, keywords=['good','bad'] )
+        tcase = vtu.make_fake_TestCase( keywords=['good','bad'] )
         assert not tf.userValidation( tcase )
         assert statushandler.skipTest( tcase.getSpec() )
 
-        tcase = vtu.make_fake_TestCase( statushandler, keywords=['good'] )
+        tcase = vtu.make_fake_TestCase( keywords=['good'] )
         tf.applyPermanent( { tcase.getSpec().getExecuteDirectory() : tcase } )
         assert not statushandler.skipTest( tcase.getSpec() )
 
-        tcase = vtu.make_fake_TestCase( statushandler, keywords=['bad','good'] )
+        tcase = vtu.make_fake_TestCase( keywords=['bad','good'] )
         tf.applyPermanent( { tcase.getSpec().getExecuteDirectory() : tcase } )
         assert statushandler.skipTest( tcase.getSpec() )
 
@@ -147,7 +146,7 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
                     return 'param np must be 4'
             """ )
 
-        tcase = vtu.make_fake_TestCase( TestStatusHandler() )
+        tcase = vtu.make_fake_TestCase()
         assert not plug.validateTest( tcase )
 
     def test_validate_function_keywords_do_not_include_parameters(self):
@@ -159,7 +158,7 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
                 assert 'np' not in kwds
             """ )
 
-        tcase = vtu.make_fake_TestCase( TestStatusHandler() )
+        tcase = vtu.make_fake_TestCase()
         assert not plug.validateTest( tcase )
 
     def test_validate_function_receives_test_name_and_its_not_in_keywords(self):
@@ -173,7 +172,7 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
                 assert tname not in kwds
             """ )
 
-        tcase = vtu.make_fake_TestCase( TestStatusHandler() )
+        tcase = vtu.make_fake_TestCase()
         assert not plug.validateTest( tcase )
 
     def test_validate_function_receives_options_and_platform_name(self):
@@ -189,7 +188,7 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
             platname='Atari',
             options=['dbg','gcc'] )
 
-        tcase = vtu.make_fake_TestCase( TestStatusHandler() )
+        tcase = vtu.make_fake_TestCase()
         rtn = plug.validateTest( tcase )
         assert rtn == 'Houston, we have a problem up here'
 
