@@ -135,13 +135,13 @@ class BatchScriptWriter:
         maxnp = 0
         qtime = 0
         for tcase in qlist:
-          tx = tcase.getExec()
-          np = int( tx.atest.getParameters().get('np', 0) )
-          if np <= 0: np = 1
-          maxnp = max( maxnp, np )
-          tl.addTest( tcase )
-          tL.append( tcase )
-          qtime += int( tx.atest.getAttr('timeout') )
+            tspec = tcase.getSpec()
+            np = int( tspec.getParameters().get('np', 0) )
+            if np <= 0: np = 1
+            maxnp = max( maxnp, np )
+            tl.addTest( tcase )
+            tL.append( tcase )
+            qtime += int( tspec.getAttr('timeout') )
         
         if qtime == 0:
           qtime = self.Tzero  # give it the "no timeout" length of time

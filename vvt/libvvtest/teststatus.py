@@ -192,11 +192,11 @@ class TestStatusHandler:
         else:
             return 'notdone'
 
-    def startRunning(self, tspec):
+    def markStarted(self, tspec, start_time):
         ""
         tspec.setAttr( 'state', 'notdone' )
         tspec.setAttr( 'xtime', -1 )
-        tspec.setAttr( 'xdate', int( 100 * time.time() ) * 0.01 )
+        tspec.setAttr( 'xdate', int( 100 * start_time ) * 0.01 )
 
     def getStartDate(self, tspec, *default):
         ""

@@ -390,8 +390,16 @@ class ExecutionHandler:
 
             self.perms.set( os.path.abspath( "machinefile" ) )
 
-    def finishExecution(self):
+    def finishExecution(self, exit_status, timedout):
         ""
+        tspec = self.tcase.getSpec()
+        tstat = self.tcase.getStat()
+
+        if timedout > 0:
+            tstat.markTimedOut( tspec )
+        else:
+            tstat.markDone( tspec, exit_status )
+
         rundir = self.tcase.getExec().getRunDirectory()
         self.perms.recurse( rundir )
 

@@ -19,22 +19,17 @@ interrupt_to_kill_timeout = 30
 class TestExec:
     """
     Runs a test in the background and provides methods to poll and kill it.
-    The status and test results are saved in the TestSpec object.
     """
     
-    def __init__(self, statushandler, atest):
-        """
-        Constructs a test execution object which references a TestSpec obj.
-        The 'perms' argument is a PermissionsSetter object.
-        """
-        self.statushandler = statushandler
-        self.atest = atest
-        
+    def __init__(self):
+        ""
         self.timeout = 0
-        self.pid = 0
         self.rundir = None
-
         self.resource_obj = None
+
+        self.pid = None
+        self.tstart = None
+        self.tstop = None
 
     def setRunDirectory(self, rundir):
         ""
@@ -68,11 +63,10 @@ class TestExec:
         """
         Launches the child process.
         """
-        assert self.pid == 0
+        assert self.pid == None
 
         self.timedout = 0  # holds time.time() if the test times out
-
-        self.statushandler.startRunning( self.atest )
+        self.tstart = time.time()
 
         sys.stdout.flush() ; sys.stderr.flush()
 
@@ -81,36 +75,40 @@ class TestExec:
             # child process is the test itself
             self._prepare_and_execute_test( baseline )
 
+    def getStartTime(self):
+        ""
+        return self.tstart
+
     def poll(self):
         """
         """
-        if self.isNotrun():
+        if self.tstart == None:
             return False
 
-        if self.isDone():
+        if self.tstop != None:
             return True
 
         assert self.pid > 0
 
-        cpid,code = os.waitpid(self.pid, os.WNOHANG)
+        cpid,code = os.waitpid( self.pid, os.WNOHANG )
 
         if cpid > 0:
 
             # test finished
 
+            self.tstop = time.time()
+
             if self.timedout > 0:
-                self.statushandler.markTimedOut( self.atest )
+                exit_status = None
             else:
                 exit_status = decode_subprocess_exit_code( code )
-                self.statushandler.markDone( self.atest, exit_status )
 
-            self.handler.finishExecution()
+            self.handler.finishExecution( exit_status, self.timedout )
 
-        # not done .. check for timeout
         elif self.timeout > 0:
+            # not done .. check for timeout
             tm = time.time()
-            tzero = self.statushandler.getStartDate( self.atest )
-            if tm-tzero > self.timeout:
+            if tm-self.tstart > self.timeout:
                 if self.timedout == 0:
                     # interrupt all processes in the process group
                     self.signalJob( signal.SIGINT )
@@ -119,13 +117,7 @@ class TestExec:
                     # SIGINT isn't killing fast enough, use stronger method
                     self.signalJob( signal.SIGTERM )
 
-        return self.isDone()
-
-    def isNotrun(self):
-        return self.statushandler.isNotrun( self.atest )
-
-    def isDone(self):
-        return self.statushandler.isDone( self.atest )
+        return self.tstop != None
     
     def signalJob(self, sig):
         """

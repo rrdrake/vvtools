@@ -226,10 +226,10 @@ def connect_analyze_dependencies( analyze, tcaseL, xdir2testexec ):
 
 def check_connect_dependencies( tcase, xdir2tcase, xdir2testexec ):
     ""
-    testexec = tcase.getExec()
+    tspec = tcase.getSpec()
 
-    for dep_pat,expr in testexec.atest.getDependencies():
-        xdir = testexec.atest.getExecuteDirectory()
+    for dep_pat,expr in tspec.getDependencies():
+        xdir = tspec.getExecuteDirectory()
         depL = find_tests_by_execute_directory_match(
                                         xdir, dep_pat, xdir2tcase )
         for dep_xdir in depL:

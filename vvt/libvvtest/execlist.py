@@ -58,8 +58,7 @@ class TestExecList:
 
                 assert tspec.constructionCompleted()
 
-                xt = TestExec( self.statushandler, tspec )
-                tcase.setExec( xt )
+                tcase.setExec( TestExec() )
 
                 if tspec.getAttr( 'hasdependent', False ):
                     tcase.setHasDependent()
@@ -160,12 +159,17 @@ class TestExecList:
 
     def startTest(self, tcase, platform, baseline=0):
         ""
-        np = int( tcase.getSpec().getParameters().get('np', 0) )
+        tspec = tcase.getSpec()
+        texec = tcase.getExec()
+
+        np = int( tspec.getParameters().get('np', 0) )
 
         obj = platform.obtainProcs( np )
-        tcase.getExec().setResourceObject( obj )
+        texec.setResourceObject( obj )
 
-        tcase.getExec().start( baseline )
+        texec.start( baseline )
+
+        self.statushandler.markStarted( tspec, texec.getStartTime() )
 
     def popRemaining(self):
         """

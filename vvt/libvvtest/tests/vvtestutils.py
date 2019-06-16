@@ -586,26 +586,27 @@ def make_fake_TestSpec( statushandler, result=None,
     ts.setParameters( { 'np':'4' } )
 
     if result:
+        tm = time.time()
         if result == 'skip':
             statushandler.markSkipByPlatform( ts )
         elif result == 'timeout':
-            statushandler.startRunning( ts )
+            statushandler.markStarted( ts, tm )
             statushandler.markTimedOut( ts )
         elif result == 'pass':
-            statushandler.startRunning( ts )
+            statushandler.markStarted( ts, tm )
             statushandler.markDone( ts, 0 )
         elif result == 'diff':
-            statushandler.startRunning( ts )
+            statushandler.markStarted( ts, tm )
             statushandler.markDone( ts, teststatus.DIFF_EXIT_STATUS )
         elif result == 'notdone':
-            statushandler.startRunning( ts )
+            statushandler.markStarted( ts, tm )
         elif result == 'notrun':
             pass
         elif result == 'running':
-            statushandler.startRunning( ts )
+            statushandler.markStarted( ts, tm )
         else:
             assert result == 'fail', '*** error (value='+str(result)+')'
-            statushandler.startRunning( ts )
+            statushandler.markStarted( ts, tm )
             statushandler.markDone( ts, 1 )
 
     if runtime != None:
