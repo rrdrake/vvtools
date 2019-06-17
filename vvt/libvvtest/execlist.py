@@ -14,9 +14,8 @@ from . import testrunner
 
 class TestExecList:
 
-    def __init__(self, statushandler, usrplugin, tlist):
+    def __init__(self, usrplugin, tlist):
         ""
-        self.statushandler = statushandler
         self.plugin = usrplugin
         self.tlist = tlist
 
@@ -54,7 +53,7 @@ class TestExecList:
 
             tspec = tcase.getSpec()
 
-            if not self.statushandler.skipTest( tspec ):
+            if not tcase.getStat().skipTest():
 
                 assert tspec.constructionCompleted()
 
@@ -101,7 +100,7 @@ class TestExecList:
         for np,tcaseL in self.xtlist.items():
             sortL = []
             for tcase in tcaseL:
-                tm = self.statushandler.getRuntime( tcase.getSpec(), None )
+                tm = tcase.getStat().getRuntime( None )
                 if tm == None: tm = 0
                 sortL.append( (tm,tcase) )
             sortL.sort()
@@ -169,7 +168,7 @@ class TestExecList:
 
         texec.start( baseline )
 
-        self.statushandler.markStarted( tspec, texec.getStartTime() )
+        tcase.getStat().markStarted( texec.getStartTime() )
 
     def popRemaining(self):
         """

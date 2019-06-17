@@ -49,9 +49,8 @@ class TestDependency:
 
 class DependencySet:
 
-    def __init__(self, statushandler):
+    def __init__(self):
         ""
-        self.statushandler = statushandler
         self.deps = []
 
     def addDependency(self, testdep):
@@ -81,7 +80,7 @@ class DependencySet:
         #     tspec = tdep.getTestSpec()
         #     print ( 'magic: getblock dep', tspec.getExecuteDirectory(),
         #         self.statushandler.isDone( tspec ),
-        #         self.statushandler.getResultStatus( tspec ),
+        #         tdep.getStat().getResultStatus(),
         #         self.statushandler.skipTest( tspec ) )
 
 
@@ -89,10 +88,10 @@ class DependencySet:
 
             tcase = tdep.getTestCase()
 
-            if not self.statushandler.isDone( tcase.getSpec() ):
+            if not tcase.getStat().isDone():
                 return tcase
 
-            result = self.statushandler.getResultStatus( tcase.getSpec() )
+            result = tcase.getStat().getResultStatus()
 
             if not tdep.satisfiesResult( result ):
                 return tcase
@@ -103,23 +102,25 @@ class DependencySet:
         ""
         for tdep in self.deps:
 
-            tspec = tdep.getTestCase().getSpec()
+            tcase = tdep.getTestCase()
+            tspec = tcase.getSpec()
+            tstat = tcase.getStat()
 
-            if self.statushandler.isDone( tspec ):
-                result = self.statushandler.getResultStatus( tspec )
+            if tstat.isDone():
+                result = tstat.getResultStatus()
                 if not tdep.satisfiesResult( result ):
                     return tspec
 
-            elif self.statushandler.skipTest( tspec ):
-                result = self.statushandler.getResultStatus( tspec )
+            elif tstat.skipTest():
+                result = tstat.getResultStatus()
                 if not tdep.satisfiesResult( result ):
                     return tspec
 
-            elif self.statushandler.isNotDone( tspec ):
+            elif tstat.isNotDone():
                 return tspec
 
             else:
-                assert self.statushandler.isNotrun( tspec )
+                assert tstat.isNotrun()
 
                 pass
 
@@ -141,7 +142,7 @@ class DependencySet:
     #         elif not self.statushandler.isDone( tspec ):
     #             return tspec
 
-    #         result = self.statushandler.getResultStatus( tspec )
+    #         result = tdep.getStat().getResultStatus()
 
     #         if not tdep.satisfiesResult( result ):
     #             return tspec

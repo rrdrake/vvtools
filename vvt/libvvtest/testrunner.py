@@ -323,7 +323,7 @@ class ExecutionHandler:
     def check_postclean(self):
         ""
         if self.config.get('postclean') and \
-           self.tcase.getStat().passed( self.tcase.getSpec() ) and \
+           self.tcase.getStat().passed() and \
            not self.tcase.hasDependent():
             self.postclean()
 
@@ -393,9 +393,9 @@ class ExecutionHandler:
         tstat = self.tcase.getStat()
 
         if timedout > 0:
-            tstat.markTimedOut( tspec )
+            tstat.markTimedOut()
         else:
-            tstat.markDone( tspec, exit_status )
+            tstat.markDone( exit_status )
 
         rundir = self.tcase.getExec().getRunDirectory()
         self.perms.recurse( rundir )

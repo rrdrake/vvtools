@@ -14,7 +14,7 @@ class TestCase:
         self.texec = testexec
         self.tstat = TestStatusHandler( testspec )
 
-        self.depset = None
+        self.depset = depend.DependencySet()
         self.has_dependent = False
 
     def getSpec(self):
@@ -33,14 +33,8 @@ class TestCase:
         ""
         self.texec = texec
 
-    def setStatusHandler(self, tstat):
-        ""
-        self.tstat = tstat
-
     def getDependencySet(self):
         ""
-        if self.depset == None:
-            self.depset = depend.DependencySet( self.tstat )
         return self.depset
 
     def setHasDependent(self):

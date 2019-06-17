@@ -9,10 +9,10 @@ import time
 import glob
 
 from .TestSpecError import TestSpecError
-from . import TestSpec
 from .testcase import TestCase
 from . import testlistio
 from .groups import ParameterizeAnalyzeGroups
+from .teststatus import copy_test_results
 
 
 class TestList:
@@ -21,13 +21,11 @@ class TestList:
     file and to read from a test XML file.
     """
 
-    def __init__(self, statushandler, filename,
+    def __init__(self, filename,
                        runtime_config=None,
                        testcreator=None,
                        testfilter=None):
         ""
-        self.statushandler = statushandler
-
         if filename:
             self.filename = os.path.normpath( filename )
         else:
@@ -161,7 +159,7 @@ class TestList:
 
                 t = self.tcasemap.get( xdir, None )
                 if t != None:
-                    self.statushandler.copyResults( t, tcase )
+                    copy_test_results( t, tcase )
 
     def ensureInlinedTestResultIncludes(self):
         ""
@@ -218,9 +216,9 @@ class TestList:
 
         self.testfilter.applyPermanent( self.tcasemap )
 
-        finalize_analyze_tests( self.statushandler, self.groups )
+        finalize_analyze_tests( self.groups )
 
-        self.numactive = count_active( self.statushandler, self.tcasemap )
+        self.numactive = count_active( self.tcasemap )
 
     def determineActiveTests(self, filter_dir=None,
                                    analyze_only=False,
@@ -231,15 +229,15 @@ class TestList:
         self.testfilter.applyRuntime( self.tcasemap, filter_dir )
 
         if not baseline:
-            finalize_analyze_tests( self.statushandler, self.groups )
+            finalize_analyze_tests( self.groups )
 
-        refresh_active_tests( self.statushandler, self.tcasemap, self.creator )
+        refresh_active_tests( self.tcasemap, self.creator )
 
         if baseline:
             # baseline marking must come after TestSpecs are refreshed
-            mark_skips_for_baselining( self.statushandler, self.tcasemap )
+            mark_skips_for_baselining( self.tcasemap )
 
-        self.numactive = count_active( self.statushandler, self.tcasemap )
+        self.numactive = count_active( self.tcasemap )
 
     def numActive(self):
         """
@@ -266,7 +264,7 @@ class TestList:
 
         for tcase in self.tcasemap.values():
             t = tcase.getSpec()
-            if not self.statushandler.skipTest(t):
+            if not tcase.getStat().skipTest():
                 subL = []
                 for c in sorting:
                     if c == 'n':
@@ -274,13 +272,13 @@ class TestList:
                     elif c == 'x':
                         subL.append( t.getExecuteDirectory() )
                     elif c == 't':
-                        tm = self.statushandler.getRuntime( t, None )
+                        tm = tcase.getStat().getRuntime( None )
                         if tm == None: tm = 0
                         subL.append( tm )
                     elif c == 'd':
-                        subL.append( self.statushandler.getStartDate( t, 0 ) )
+                        subL.append( tcase.getStat().getStartDate( 0 ) )
                     elif c == 's':
-                        subL.append( self.statushandler.getResultStatus( t ) )
+                        subL.append( tcase.getStat().getResultStatus() )
 
                 subL.append( tcase )
                 tL.append( subL )
@@ -295,9 +293,8 @@ class TestList:
         ""
         ival = 0
         for tcase in self.tcasemap.values():
-            tspec = tcase.getSpec()
-            if not self.statushandler.skipTest( tspec ):
-                result = self.statushandler.getResultStatus( tspec )
+            if not tcase.getStat().skipTest():
+                result = tcase.getStat().getResultStatus()
                 if   result == 'diff'   : ival |= ( 2**1 )
                 elif result == 'fail'   : ival |= ( 2**2 )
                 elif result == 'timeout': ival |= ( 2**3 )
@@ -409,7 +406,7 @@ class TestList:
     def _check_create_parameterize_analyze_group_map(self):
         ""
         if self.groups == None:
-            self.groups = ParameterizeAnalyzeGroups( self.statushandler )
+            self.groups = ParameterizeAnalyzeGroups()
             self.groups.rebuild( self.tcasemap )
 
 
@@ -421,16 +418,16 @@ def check_make_directory_containing_file( filename ):
             os.mkdir( d )
 
 
-def mark_skips_for_baselining( statushandler, tcase_map ):
+def mark_skips_for_baselining( tcase_map ):
     ""
     for xdir,tcase in tcase_map.items():
         tspec = tcase.getSpec()
-        if not statushandler.skipTest( tspec ):
+        if not tcase.getStat().skipTest():
             if not tspec.hasBaseline():
-                statushandler.markSkipByBaselineHandling( tspec )
+                tcase.getStat().markSkipByBaselineHandling()
 
 
-def finalize_analyze_tests( statushandler, groups ):
+def finalize_analyze_tests( groups ):
     ""
     for analyze, tcaseL in groups.iterateGroups():
 
@@ -438,14 +435,14 @@ def finalize_analyze_tests( statushandler, groups ):
         paramsets = []
 
         for tcase in tcaseL:
-            if statushandler.skipTestCausingAnalyzeSkip( tcase.getSpec() ):
+            if tcase.getStat().skipTestCausingAnalyzeSkip():
                 skip_analyze = True
             else:
                 paramsets.append( tcase.getSpec().getParameters() )
 
         if skip_analyze:
-            if not statushandler.skipTest( analyze.getSpec() ):
-                statushandler.markSkipByAnalyzeDependency( analyze.getSpec() )
+            if not analyze.getStat().skipTest():
+                analyze.getStat().markSkipByAnalyzeDependency()
         else:
             def evalfunc( paramD ):
                 for D in paramsets:
@@ -456,20 +453,20 @@ def finalize_analyze_tests( statushandler, groups ):
             pset.applyParamFilter( evalfunc )
 
 
-def count_active( statushandler, tcase_map ):
+def count_active( tcase_map ):
     ""
     cnt = 0
     for tcase in tcase_map.values():
-        if not statushandler.skipTest( tcase.getSpec() ):
+        if not tcase.getStat().skipTest():
             cnt += 1
     return cnt
 
 
-def refresh_active_tests( statushandler, tcase_map, creator ):
+def refresh_active_tests( tcase_map, creator ):
     ""
     for xdir,tcase in tcase_map.items():
         tspec = tcase.getSpec()
-        if not statushandler.skipTest( tspec ):
+        if not tcase.getStat().skipTest():
             if not tspec.constructionCompleted():
                 creator.reparse( tspec )
 

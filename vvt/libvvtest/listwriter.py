@@ -33,10 +33,8 @@ class ListWriter:
     is given on the vvtest command line, then that date is used instead.
     """
 
-    def __init__(self, statushandler, permsetter,
-                       output_dir, results_test_dir):
+    def __init__(self, permsetter, output_dir, results_test_dir):
         ""
-        self.statushandler = statushandler
         self.permsetter = permsetter
         self.outdir = os.path.normpath( os.path.abspath( output_dir ) )
         self.testdir = results_test_dir

@@ -9,9 +9,8 @@ import os, sys
 
 class ParameterizeAnalyzeGroups:
 
-    def __init__(self, statushandler):
+    def __init__(self):
         ""
-        self.statushandler = statushandler
         self.groupmap = {}  # (test filepath, test name) -> list of TestCase
 
     def getGroup(self, tcase):
@@ -19,7 +18,7 @@ class ParameterizeAnalyzeGroups:
         key = ( tcase.getSpec().getFilepath(), tcase.getSpec().getName() )
         tL = []
         for grp_tcase in self.groupmap[key]:
-            if not self.statushandler.skipTestByParameter( grp_tcase.getSpec() ):
+            if not grp_tcase.getStat().skipTestByParameter():
                 tL.append( grp_tcase )
         return tL
 
@@ -55,7 +54,7 @@ class ParameterizeAnalyzeGroups:
 
                 if tspec.isAnalyze():
                     analyze = tcase
-                elif not self.statushandler.skipTestByParameter( tspec ):
+                elif not tcase.getStat().skipTestByParameter():
                     tL.append( tcase )
 
             if analyze != None:

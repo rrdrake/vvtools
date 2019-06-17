@@ -19,9 +19,8 @@ from testutils import print3
 from libvvtest.TestSpecCreator import TestCreator
 from libvvtest.RuntimeConfig import RuntimeConfig
 from libvvtest.testcase import TestCase
-from libvvtest.TestSpec import TestSpec  # magic: get rid of this?
-from libvvtest.TestExec import TestExec  # magic: get rid of this?
-from libvvtest.teststatus import TestStatusHandler
+from libvvtest.TestSpec import TestSpec
+from libvvtest.TestExec import TestExec
 
 from libvvtest import depend
 find_tests_by_execute_directory_match = depend.find_tests_by_execute_directory_match
@@ -306,15 +305,14 @@ def add_dependency( from_test, to_test ):
     depset.addDependency( make_test_dep( to_test ) )
 
 
-def make_TestSpec( name ):
+def make_TestSpec_test_case( name ):
     ""
     ts = TestSpec( name, os.getcwd(), name+'.vvt' )
     return TestCase( ts, None )
 
 
-def make_TestExec( name ):
+def make_TestExec_test_case( name ):
     ""
-    st = TestStatusHandler()
     ts = TestSpec( name, os.getcwd(), name+'.vvt' )
     tx = TestExec()
     return TestCase( ts, tx )
@@ -328,36 +326,36 @@ class dependency_related_functions( vtu.vvtestTestCase ):
 
     def test_addDependency_uniquifies_multiple_TestSpec(self):
         ""
-        tcase = make_TestSpec( 'testA' )
+        tcase = make_TestSpec_test_case( 'testA' )
 
-        dep1 = make_TestSpec( 'atest' )
+        dep1 = make_TestSpec_test_case( 'atest' )
         add_dependency( tcase, dep1 )
 
-        dep2 = make_TestSpec( 'atest' )
+        dep2 = make_TestSpec_test_case( 'atest' )
         add_dependency( tcase, dep2 )
 
         assert tcase.getDependencySet().numDependencies() == 1
 
     def test_addDependency_uniquifies_multiple_TestExec(self):
         ""
-        tcase = make_TestExec( 'testA' )
+        tcase = make_TestExec_test_case( 'testA' )
 
-        dep1 = make_TestExec( 'atest' )
+        dep1 = make_TestExec_test_case( 'atest' )
         add_dependency( tcase, dep1 )
 
-        dep2 = make_TestExec( 'atest' )
+        dep2 = make_TestExec_test_case( 'atest' )
         add_dependency( tcase, dep2 )
 
         assert tcase.getDependencySet().numDependencies() == 1
 
     def test_addDependency_uniquifies_TestSpec_then_TestExec(self):
         ""
-        tcase = make_TestExec( 'testA' )
+        tcase = make_TestExec_test_case( 'testA' )
 
-        dep1 = make_TestSpec( 'atest' )
+        dep1 = make_TestSpec_test_case( 'atest' )
         add_dependency( tcase, dep1 )
 
-        dep2 = make_TestExec( 'atest' )
+        dep2 = make_TestExec_test_case( 'atest' )
         add_dependency( tcase, dep2 )
 
         depset = tcase.getDependencySet()
@@ -366,12 +364,12 @@ class dependency_related_functions( vtu.vvtestTestCase ):
 
     def test_addDependency_uniquifies_TestExec_then_TestSpec(self):
         ""
-        tcase = make_TestExec( 'testA' )
+        tcase = make_TestExec_test_case( 'testA' )
 
-        dep1 = make_TestExec( 'atest' )
+        dep1 = make_TestExec_test_case( 'atest' )
         add_dependency( tcase, dep1 )
 
-        dep2 = make_TestSpec( 'atest' )
+        dep2 = make_TestSpec_test_case( 'atest' )
         add_dependency( tcase, dep2 )
 
         depset = tcase.getDependencySet()

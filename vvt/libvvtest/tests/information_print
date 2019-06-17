@@ -22,7 +22,6 @@ import vvtestutils as vtu
 import testutils as util
 
 import libvvtest.printinfo as printinfo
-from libvvtest.teststatus import TestStatusHandler
 from libvvtest.TestExec import TestExec
 import libvvtest.batchutils as batchutils
 from libvvtest.execlist import TestExecList
@@ -35,14 +34,12 @@ class InformationPrinter( vtu.vvtestTestCase ):
         ""
         vtu.vvtestTestCase.setUp( self, cleanout=False )
 
-        self.statushandler = TestStatusHandler()
-        self.xlist, self.xtests = make_fake_TestExecList( self.statushandler )
+        self.xlist, self.xtests = make_fake_TestExecList()
 
     def test_print_list_information(self):
         ""
         sio = StringIO()
-        obj = printinfo.TestInformationPrinter( self.statushandler,
-                                                sio, self.xlist )
+        obj = printinfo.TestInformationPrinter( sio, self.xlist )
 
         time.sleep(2)
 
@@ -73,8 +70,7 @@ class InformationPrinter( vtu.vvtestTestCase ):
             return True
 
         sio = StringIO()
-        obj = printinfo.TestInformationPrinter( self.statushandler,
-                                                sio, self.xlist )
+        obj = printinfo.TestInformationPrinter( sio, self.xlist )
         obj.setInputChecker( fake_input_check )
 
         obj.checkPrint()
@@ -85,8 +81,7 @@ class InformationPrinter( vtu.vvtestTestCase ):
         ""
         sio = StringIO()
         batch = make_mock_Batcher( self.xtests )
-        obj = printinfo.TestInformationPrinter( self.statushandler,
-                                                sio, self.xlist, batch )
+        obj = printinfo.TestInformationPrinter( sio, self.xlist, batch )
 
         time.sleep(2)
 
@@ -112,9 +107,9 @@ class InformationPrinter( vtu.vvtestTestCase ):
         assert lines[4].strip().startswith( '* sdir/atest' )
 
 
-def make_fake_TestExecList( statushandler ):
+def make_fake_TestExecList():
     ""
-    tlist = TestList( statushandler, None )
+    tlist = TestList( None )
 
     txL = []
 
@@ -123,7 +118,7 @@ def make_fake_TestExecList( statushandler ):
         tlist.addTest( ts )
         ts.getSpec().setConstructionCompleted()
 
-    xlist = TestExecList( statushandler, None, tlist )
+    xlist = TestExecList( None, tlist )
 
     xlist._createTestExecList( None )
 

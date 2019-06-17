@@ -14,10 +14,8 @@ print3 = outpututils.print3
 
 class GitLabWriter:
 
-    def __init__(self, statushandler, permsetter,
-                       output_dir, results_test_dir):
+    def __init__(self, permsetter, output_dir, results_test_dir):
         ""
-        self.statushandler = statushandler
         self.permsetter = permsetter
         self.outdir = os.path.normpath( os.path.abspath( output_dir ) )
         self.testdir = results_test_dir
@@ -39,8 +37,7 @@ class GitLabWriter:
             print3( "Writing", len(tcaseL),
                     "tests in GitLab format to", self.outdir )
 
-            conv = GitLabMarkDownConverter( self.testdir, self.outdir,
-                                            self.statushandler )
+            conv = GitLabMarkDownConverter( self.testdir, self.outdir )
             conv.setRunAttr( **runattrs )
             conv.saveResults( tcaseL )
 
@@ -57,14 +54,13 @@ class GitLabFileSelector:
 
 class GitLabMarkDownConverter:
 
-    def __init__(self, test_dir, destdir, statushandler,
+    def __init__(self, test_dir, destdir,
                        max_KB=10,
                        big_table_size=100,
                        max_links_per_table=200 ):
         ""
         self.test_dir = test_dir
         self.destdir = destdir
-        self.statushandler = statushandler
         self.max_KB = max_KB
         self.big_table = big_table_size
         self.max_links = max_links_per_table
@@ -79,8 +75,7 @@ class GitLabMarkDownConverter:
 
     def saveResults(self, tcaseL):
         ""
-        parts = outpututils.partition_tests_by_result( self.statushandler,
-                                                       tcaseL )
+        parts = outpututils.partition_tests_by_result( tcaseL )
 
         basepath = pjoin( self.destdir, 'TestResults' )
         fname = basepath + '.md'
@@ -92,8 +87,7 @@ class GitLabMarkDownConverter:
             for result in [ 'fail', 'diff', 'timeout',
                             'pass', 'notrun', 'notdone' ]:
                 altname = basepath + '_' + result + '.md'
-                write_gitlab_results( fp, self.statushandler,
-                                      result, parts[result], altname,
+                write_gitlab_results( fp, result, parts[result], altname,
                                       self.big_table, self.max_links )
 
         for result in [ 'fail', 'diff', 'timeout' ]:
@@ -109,8 +103,7 @@ class GitLabMarkDownConverter:
 
         srcdir = pjoin( self.test_dir, xdir )
 
-        result = outpututils.XstatusString( self.statushandler,
-                                            tcase, self.test_dir, os.getcwd() )
+        result = outpututils.XstatusString( tcase, self.test_dir, os.getcwd() )
         preamble = 'Name: '+tcase.getSpec().getName()+'  \n' + \
                    'Result: <code>'+result+'</code>  \n' + \
                    'Run directory: ' + os.path.abspath(srcdir) + '  \n'
@@ -142,7 +135,7 @@ def write_run_attributes( fp, attrs ):
     fp.write( '\n' )
 
 
-def write_gitlab_results( fp, statushandler, result, testL, altname,
+def write_gitlab_results( fp, result, testL, altname,
                               maxtablesize, max_path_links ):
     ""
     hdr = '## Tests that '+result+' = '+str( len(testL) ) + '\n\n'
@@ -152,35 +145,35 @@ def write_gitlab_results( fp, statushandler, result, testL, altname,
         pass
 
     elif len(testL) <= maxtablesize:
-        write_gitlab_results_table( fp, statushandler, result, testL, max_path_links )
+        write_gitlab_results_table( fp, result, testL, max_path_links )
 
     else:
         bn = os.path.basename( altname )
         fp.write( 'Large table contained in ['+bn+']('+bn+').\n\n' )
         with open( altname, 'w' ) as altfp:
             altfp.write( hdr )
-            write_gitlab_results_table( altfp, statushandler, result, testL, max_path_links )
+            write_gitlab_results_table( altfp, result, testL, max_path_links )
 
 
-def write_gitlab_results_table( fp, statushandler, result, testL, max_path_links ):
+def write_gitlab_results_table( fp, result, testL, max_path_links ):
     ""
     fp.write( '| Result | Date   | Time   | Path   |\n' + \
               '| ------ | ------ | -----: | :----- |\n' )
 
     for i,tcase in enumerate(testL):
         add_link = ( i < max_path_links )
-        fp.write( format_gitlab_table_line( statushandler, tcase, add_link ) + '\n' )
+        fp.write( format_gitlab_table_line( tcase, add_link ) + '\n' )
 
     fp.write( '\n' )
 
 
-def format_gitlab_table_line( statushandler, tcase, add_link ):
+def format_gitlab_table_line( tcase, add_link ):
     ""
     tspec = tcase.getSpec()
 
-    result = statushandler.getResultStatus( tspec )
-    dt = outpututils.format_test_run_date( statushandler, tspec )
-    tm = outpututils.format_test_run_time( statushandler, tspec )
+    result = tcase.getStat().getResultStatus()
+    dt = outpututils.format_test_run_date( tcase )
+    tm = outpututils.format_test_run_time( tcase )
     path = tspec.getExecuteDirectory()
 
     makelink = ( add_link and result in ['diff','fail','timeout'] )

@@ -36,12 +36,6 @@ from libvvtest.testcase import TestCase
 
 class misc_tests( vtu.vvtestTestCase ):
 
-    def setUp(self):
-        ""
-        vtu.vvtestTestCase.setUp( self )
-
-        self.statushandler = TestStatusHandler()
-
     def test_make_date_stamp(self):
         ""
         tm0 = time.mktime( time.strptime( 'Sun Oct 11 13:20:58 2018' ) )
@@ -84,7 +78,7 @@ class misc_tests( vtu.vvtestTestCase ):
         ""
         tL = self.getFakeTestList()
 
-        parts = outpututils.partition_tests_by_result( self.statushandler, tL )
+        parts = outpututils.partition_tests_by_result( tL )
         sumry = outpututils.results_summary_string( parts )
         vtu.assert_summary_string( sumry, npass=1, fail=2, diff=3,
                                           timeout=1, notdone=1, notrun=3,
@@ -138,10 +132,10 @@ class misc_tests( vtu.vvtestTestCase ):
 
     def test_abbreviated_console_output(self):
         ""
-        tlist = MockTestList( self.statushandler, self.getFakeTestList() )
+        tlist = MockTestList( self.getFakeTestList() )
 
         sio = StringIO()
-        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
+        conwr = ConsoleWriter( sio, os.getcwd() )
         conwr.writeListSummary( tlist, 'Test list:' )
 
         val = sio.getvalue()
@@ -151,7 +145,7 @@ class misc_tests( vtu.vvtestTestCase ):
         assert 'Summary:' not in val
 
         sio = StringIO()
-        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
+        conwr = ConsoleWriter( sio, os.getcwd() )
         conwr.writeListSummary( tlist, 'Summary:' )
 
         val = sio.getvalue()
@@ -161,17 +155,17 @@ class misc_tests( vtu.vvtestTestCase ):
 
     def test_prerun_console_output(self):
         ""
-        tlist = MockTestList( self.statushandler, self.getFakeTestList() )
+        tlist = MockTestList( self.getFakeTestList() )
 
         sio = StringIO()
-        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
+        conwr = ConsoleWriter( sio, os.getcwd() )
         conwr.writeActiveList( tlist, True )
 
         val = sio.getvalue()
         assert not val.strip()
 
         sio = StringIO()
-        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
+        conwr = ConsoleWriter( sio, os.getcwd() )
         conwr.writeActiveList( tlist, False )
 
         val = sio.getvalue()
@@ -179,7 +173,7 @@ class misc_tests( vtu.vvtestTestCase ):
         self.assert_test_list_counts_for_active( val )
 
         sio = StringIO()
-        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd(), verbose=2 )
+        conwr = ConsoleWriter( sio, os.getcwd(), verbose=2 )
         conwr.writeActiveList( tlist, True )
 
         val = sio.getvalue()
@@ -187,7 +181,7 @@ class misc_tests( vtu.vvtestTestCase ):
         self.assert_test_list_counts_for_active( val )
 
         sio = StringIO()
-        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd(), verbose=3 )
+        conwr = ConsoleWriter( sio, os.getcwd(), verbose=3 )
         conwr.writeActiveList( tlist, True )
 
         val = sio.getvalue()
@@ -196,10 +190,10 @@ class misc_tests( vtu.vvtestTestCase ):
 
     def test_postrun_console_output(self):
         ""
-        tlist = MockTestList( self.statushandler, self.getFakeTestList() )
+        tlist = MockTestList( self.getFakeTestList() )
 
         sio = StringIO()
-        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
+        conwr = ConsoleWriter( sio, os.getcwd() )
         conwr.writeResultsList( tlist )
         conwr.writeListSummary( tlist, 'Summary:' )
 
@@ -209,7 +203,7 @@ class misc_tests( vtu.vvtestTestCase ):
         self.assert_test_list_counts_for_notrun_notdone( val )
 
         sio = StringIO()
-        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
+        conwr = ConsoleWriter( sio, os.getcwd() )
         conwr.setMaxNonPass( 3 )
         conwr.writeResultsList( tlist )
         conwr.writeListSummary( tlist, 'Summary:' )
@@ -222,14 +216,13 @@ class misc_tests( vtu.vvtestTestCase ):
 
     def test_postrun_console_output_with_all_tests_passing_except_last(self):
         ""
-        tlist = MockTestList( self.statushandler,
-                              [ self.makeTest( 'pass' ),
+        tlist = MockTestList( [ self.makeTest( 'pass' ),
                                 self.makeTest( 'pass' ),
                                 self.makeTest( 'pass' ),
                                 self.makeTest( 'fail' ) ] )
 
         sio = StringIO()
-        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd() )
+        conwr = ConsoleWriter( sio, os.getcwd() )
         conwr.setMaxNonPass( 2 )
         conwr.writeResultsList( tlist )
         conwr.writeListSummary( tlist, 'Summary:' )
@@ -241,10 +234,10 @@ class misc_tests( vtu.vvtestTestCase ):
 
     def test_max_detail_console_list_output(self):
         ""
-        tlist = MockTestList( self.statushandler, self.getFakeTestList() )
+        tlist = MockTestList( self.getFakeTestList() )
 
         sio = StringIO()
-        conwr = ConsoleWriter( self.statushandler, sio, os.getcwd(), verbose=3 )
+        conwr = ConsoleWriter( sio, os.getcwd(), verbose=3 )
         conwr.writeResultsList( tlist )
         conwr.writeListSummary( tlist, 'Summary:' )
 
@@ -492,12 +485,6 @@ class html_output_format_tests( vtu.vvtestTestCase ):
 
 class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
-    def setUp(self):
-        ""
-        vtu.vvtestTestCase.setUp( self )
-
-        self.statushandler = TestStatusHandler()
-
     def makeTest(self, result=None, runtime=None, name='atest'):
         ""
         return vtu.make_fake_TestCase( result, runtime, name )
@@ -512,10 +499,8 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
     def test_write_table_line_for_a_test(self):
         ""
-        handler = self.statushandler
-
         tcase = self.makeTest( 'pass', 5 )
-        line = gitlabwriter.format_gitlab_table_line( handler, tcase, True )
+        line = gitlabwriter.format_gitlab_table_line( tcase, True )
         print3( line )
         sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
         assert len(sL) == 4
@@ -523,7 +508,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         assert sL[3] == 'sdir/atest.np=4'
 
         tcase = self.makeTest( 'fail', 7 )
-        line = gitlabwriter.format_gitlab_table_line( handler, tcase, True )
+        line = gitlabwriter.format_gitlab_table_line( tcase, True )
         print3( line )
         sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
         assert len(sL) == 4
@@ -531,7 +516,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         assert sL[3] == '[sdir/atest.np=4](sdir_atest.np=4.md)'
 
         tcase = self.makeTest( 'fail', 7 )
-        line = gitlabwriter.format_gitlab_table_line( handler, tcase, False )
+        line = gitlabwriter.format_gitlab_table_line( tcase, False )
         print3( line )
         sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
         assert len(sL) == 4
@@ -540,13 +525,11 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
     def test_write_gitlab_results_table(self):
         ""
-        handler = self.statushandler
-
         tL = [ self.makeTest( 'pass', 5, 'good' ),
                self.makeTest( 'diff', 5, 'bad' ) ]
 
         sio = StringIO()
-        gitlabwriter.write_gitlab_results_table( sio, handler, 'mixed', tL, 100 )
+        gitlabwriter.write_gitlab_results_table( sio, 'mixed', tL, 100 )
 
         val = sio.getvalue()
         print3( val )
@@ -557,15 +540,13 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
     def test_write_results_table_with_max_path_links(self):
         ""
-        handler = self.statushandler
-
         tL = [ self.makeTest( 'diff', 5, 'testA' ),
                self.makeTest( 'diff', 5, 'testB' ),
                self.makeTest( 'diff', 5, 'testC' ),
                self.makeTest( 'diff', 5, 'testD' ) ]
 
         sio = StringIO()
-        gitlabwriter.write_gitlab_results_table( sio, handler, 'diff', tL, 2 )
+        gitlabwriter.write_gitlab_results_table( sio, 'diff', tL, 2 )
 
         val = sio.getvalue()
         print3( val )
@@ -584,15 +565,13 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
     def test_that_large_results_tables_go_to_separate_file(self):
         ""
-        handler = self.statushandler
-
         tL = [ self.makeTest( 'fail', 5, 'testA' ),
                self.makeTest( 'fail', 5, 'testB' ),
                self.makeTest( 'fail', 5, 'testC' ),
                self.makeTest( 'fail', 5, 'testD' ) ]
 
         sio = StringIO()
-        gitlabwriter.write_gitlab_results( sio, handler, 'fail', tL, 'large.md', 2, 3 )
+        gitlabwriter.write_gitlab_results( sio, 'fail', tL, 'large.md', 2, 3 )
         time.sleep(1)
 
         val = sio.getvalue()
@@ -615,7 +594,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         tL = []
 
         sio = StringIO()
-        gitlabwriter.write_gitlab_results( sio, None, 'fail', tL, 'nope.md', 2, 3 )
+        gitlabwriter.write_gitlab_results( sio, 'fail', tL, 'nope.md', 2, 3 )
         time.sleep(1)
 
         val = sio.getvalue()
@@ -764,7 +743,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         time.sleep(1)
 
         preamble = 'Houston, we have a problem.'
-        converter = gitlabwriter.GitLabMarkDownConverter( None, None, None )
+        converter = gitlabwriter.GitLabMarkDownConverter( None, None )
         converter.createGitlabDirectoryContents(
                                     'results.md', preamble, 'subdir' )
         time.sleep(1)
@@ -777,7 +756,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
     def test_create_file_directory_contents_but_directory_does_not_exist(self):
         ""
         preamble = 'Houston, we have a problem.'
-        converter = gitlabwriter.GitLabMarkDownConverter( None, None, None )
+        converter = gitlabwriter.GitLabMarkDownConverter( None, None )
         converter.createGitlabDirectoryContents(
                                     'results.md', preamble, 'subdir' )
         time.sleep(1)
@@ -788,7 +767,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
 
     def test_test_run_attributes(self):
         ""
-        conv = gitlabwriter.GitLabMarkDownConverter( '.', '.', None )
+        conv = gitlabwriter.GitLabMarkDownConverter( '.', '.' )
         conv.saveResults( [] )
         time.sleep(1)
 
@@ -796,7 +775,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         val = fval.split( '## Tests that', 1 )[0]
         assert val.strip() == ''
 
-        conv = gitlabwriter.GitLabMarkDownConverter( '.', '.', None )
+        conv = gitlabwriter.GitLabMarkDownConverter( '.', '.' )
         tm = time.time()
         conv.setRunAttr( startdate=str(tm)+' / '+time.ctime(tm),
                          finishdate=str(tm+10)+' / '+time.ctime(tm+10) )
@@ -821,13 +800,12 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         tL = creator.fromFile( '.', 'DiffTest.xml', None )
         tst = tL[0]
 
-        self.statushandler.markStarted( tst, time.time() )
-        self.statushandler.markDone( tst, DIFF_EXIT_STATUS )
-        self.statushandler.setRuntime( tst, 3 )
+        tstat = TestStatusHandler( tst )
+        tstat.markStarted( time.time() )
+        tstat.markDone( DIFF_EXIT_STATUS )
+        tstat.setRuntime( 3 )
 
-        conv = gitlabwriter.GitLabMarkDownConverter(
-                                        vrun.resultsDir(), '.',
-                                        self.statushandler )
+        conv = gitlabwriter.GitLabMarkDownConverter( vrun.resultsDir(), '.' )
         conv.createTestFile( TestCase( tst ) )
         time.sleep(1)
 
@@ -964,9 +942,8 @@ def find_child_node( node, childname ):
 
 class MockTestList:
 
-    def __init__(self, statushandler, list_of_TestCase):
+    def __init__(self, list_of_TestCase):
         ""
-        self.statushandler = statushandler
         self.tspecs = list_of_TestCase
 
     def getTests(self):
@@ -978,7 +955,7 @@ class MockTestList:
         tL = []
         for tcase in self.tspecs:
             tspec = tcase.getSpec()
-            if not self.statushandler.skipTest( tspec ):
+            if not tcase.getStat().skipTest():
                 tL.append( (tspec.getName(), tcase) )
         tL.sort()
 

@@ -126,9 +126,8 @@ class BatchScriptWriter:
         qidstr = str(qnumber)
 
         testlistfname = self.namer.getTestListName( qidstr )
-        statushandler = self.rtdata.getTestStatusHandler()
 
-        tl = TestList.TestList( statushandler, testlistfname )
+        tl = TestList.TestList( testlistfname )
         tl.setResultsSuffix( results_suffix )
 
         tL = []
@@ -204,13 +203,12 @@ class BatchScriptWriter:
 
 class BatchScheduler:
 
-    def __init__(self, tlist, xlist, statushandler,
+    def __init__(self, tlist, xlist,
                        accountant, namer, perms,
                        plat, maxjobs, clean_exit_marker):
         ""
         self.tlist = tlist
         self.xlist = xlist
-        self.statushandler = statushandler
         self.accountant = accountant
         self.namer = namer
         self.perms = perms
@@ -427,7 +425,7 @@ class BatchScheduler:
                 xdir = tcase.getSpec().getExecuteDirectory()
 
                 job_tcase = jobtests.get( xdir, None )
-                if job_tcase and self.statushandler.isDone( job_tcase.getSpec() ):
+                if job_tcase and job_tcase.getStat().isDone():
                     tL.append( tcase )
                     self.xlist.testDone( tcase )
 

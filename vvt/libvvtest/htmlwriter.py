@@ -13,10 +13,8 @@ from . import outpututils
 
 class HTMLWriter:
 
-    def __init__(self, statushandler, permsetter,
-                       output_filename, results_test_dir):
+    def __init__(self, permsetter, output_filename, results_test_dir):
         ""
-        self.statushandler = statushandler
         self.permsetter = permsetter
         self.filename = os.path.normpath( os.path.abspath( output_filename ) )
         self.testdir = results_test_dir
@@ -31,8 +29,7 @@ class HTMLWriter:
 
         tcaseL = tlist.getActiveTests()
 
-        parts = outpututils.partition_tests_by_result( self.statushandler,
-                                                       tcaseL )
+        parts = outpututils.partition_tests_by_result( tcaseL )
 
         sumstr = outpututils.results_summary_string( parts )
 
@@ -82,8 +79,7 @@ class HTMLWriter:
 
         for tcase in tlist:
 
-            xs = outpututils.XstatusString( self.statushandler,
-                                            tcase, self.testdir, cwd )
+            xs = outpututils.XstatusString( tcase, self.testdir, cwd )
             fp.write( '  <li><code>' + xs + '</code>\n' )
 
             tspec = tcase.getSpec()
@@ -101,12 +97,10 @@ class HTMLWriter:
             for (k,v) in tspec.getParameters().items():
                 fp.write( ' ' + k + '=' + v )
             fp.write( '</code></li>\n' )
-            kwlist = tspec.getKeywords() + \
-                     self.statushandler.getResultsKeywords( tspec )
+            kwlist = tspec.getKeywords() + tcase.getStat().getResultsKeywords()
             fp.write( '  <li>Keywords: <code>' + ' '.join( kwlist ) + \
                        '</code></li>\n' )
-            xs = outpututils.XstatusString( self.statushandler,
-                                            tcase, self.testdir, cwd )
+            xs = outpututils.XstatusString( tcase, self.testdir, cwd )
             fp.write( '  <li>Status: <code>' + xs + '</code></li>\n' )
             fp.write( '  <li> Files:' )
             if os.path.exists(reltdir):

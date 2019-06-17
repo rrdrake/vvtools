@@ -12,10 +12,8 @@ from . import outpututils
 
 class ConsoleWriter:
 
-    def __init__(self, statushandler, output_file_obj, results_test_dir,
-                       verbose=1):
+    def __init__(self, output_file_obj, results_test_dir, verbose=1):
         ""
-        self.statushandler = statushandler
         self.fileobj = output_file_obj
         self.testdir = results_test_dir
 
@@ -52,7 +50,7 @@ class ConsoleWriter:
     def _write_summary(self, atestlist):
         ""
         tcaseL = atestlist.getTests()
-        parts = outpututils.partition_tests_by_result( self.statushandler, tcaseL )
+        parts = outpututils.partition_tests_by_result( tcaseL )
 
         n = len( parts['pass'] ) + \
             len( parts['diff'] ) + \
@@ -87,7 +85,7 @@ class ConsoleWriter:
         skipmap = {}
 
         for tcase in skiplist:
-            reason = self.statushandler.getReasonForSkipTest( tcase.getSpec() )
+            reason = tcase.getStat().getReasonForSkipTest()
             if reason not in skipmap:
                 skipmap[reason] = 0
             skipmap[reason] += 1
@@ -149,7 +147,7 @@ class ConsoleWriter:
         numnonpass = 0
         for tcase in tcaseL:
 
-            if self._nonpass_or_notdone( tcase.getSpec() ):
+            if self._nonpass_or_notdone( tcase ):
                 if numwritten < self.maxnonpass:
                     self.writeTest( tcase, cwd )
                     numwritten += 1
@@ -161,13 +159,13 @@ class ConsoleWriter:
 
         return numwritten
 
-    def _nonpass_or_notdone(self, tspec):
+    def _nonpass_or_notdone(self, tcase):
         ""
-        if self.statushandler.isDone( tspec ) and \
-                not self.statushandler.passed( tspec ):
+        if tcase.getStat().isDone() and \
+                not tcase.getStat().passed():
             return True
 
-        if self.statushandler.isNotDone( tspec ):
+        if tcase.getStat().isNotDone():
             return True
 
         return False
@@ -183,6 +181,5 @@ class ConsoleWriter:
 
     def writeTest(self, tcase, cwd):
         ""
-        astr = outpututils.XstatusString( self.statushandler, tcase,
-                                          self.testdir, cwd )
+        astr = outpututils.XstatusString( tcase, self.testdir, cwd )
         self.write( astr )

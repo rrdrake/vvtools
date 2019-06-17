@@ -14,10 +14,8 @@ print3 = outpututils.print3
 
 class JUnitWriter:
 
-    def __init__(self, statushandler, permsetter,
-                       output_filename, results_test_dir):
+    def __init__(self, permsetter, output_filename, results_test_dir):
         ""
-        self.statushandler = statushandler
         self.permsetter = permsetter
         self.filename = os.path.normpath( os.path.abspath( output_filename ) )
         self.testdir = results_test_dir
@@ -55,8 +53,7 @@ class JUnitWriter:
 
         print3( "Writing", len(tcaseL), "tests to JUnit file", self.filename )
 
-        parts = outpututils.partition_tests_by_result( self.statushandler,
-                                                       tcaseL )
+        parts = outpututils.partition_tests_by_result( tcaseL )
 
         npass = len( parts['pass'] )
         nwarn = len( parts['diff'] ) + len( parts['notdone'] ) + len( parts['notrun'] )
@@ -64,8 +61,7 @@ class JUnitWriter:
 
         tsum = 0.0
         for tcase in tcaseL:
-            tspec = tcase.getSpec()
-            tsum += max( 0.0, self.statushandler.getRuntime( tspec, 0.0 ) )
+            tsum += max( 0.0, tcase.getStat().getRuntime( 0.0 ) )
 
         tdir = os.path.basename( self.testdir )
         tdir = tdir.replace( '.', '_' )  # a dot is a Java class separator
@@ -100,7 +96,7 @@ class JUnitWriter:
         ""
         tspec = tcase.getSpec()
 
-        xt = max( 0.0, self.statushandler.getRuntime( tspec, 0.0 ) )
+        xt = max( 0.0, tcase.getStat().getRuntime( 0.0 ) )
 
         fp.write( '<testcase name="'+tspec.getExecuteDirectory()+'"' + \
                            ' classname="'+pkgclass+'" time="'+str(xt)+'">\n' )

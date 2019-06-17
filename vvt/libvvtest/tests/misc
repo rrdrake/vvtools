@@ -17,7 +17,6 @@ import testutils as util
 from testutils import print3
 
 from libvvtest.misc import find_vvtest_test_root_file
-from libvvtest.teststatus import TestStatusHandler
 import libvvtest.TestList as TestList
 
 
@@ -71,29 +70,27 @@ class exit_status_controls( vtu.vvtestTestCase ):
 
     def test_encoding_an_integer_by_tests_notrun_or_notpass(self):
         ""
-        sh = TestStatusHandler()
-
-        tl = TestList.TestList( sh, None )
+        tl = TestList.TestList( None )
         tl.addTest( vtu.make_fake_TestCase( 'pass' ) )
         assert tl.encodeIntegerWarning() == 0
 
-        tl = TestList.TestList( sh, None )
+        tl = TestList.TestList( None )
         tl.addTest( vtu.make_fake_TestCase( 'diff' ) )
         assert tl.encodeIntegerWarning() == 2**1
 
-        tl = TestList.TestList( sh, None )
+        tl = TestList.TestList( None )
         tl.addTest( vtu.make_fake_TestCase( 'fail' ) )
         assert tl.encodeIntegerWarning() == 2**2
 
-        tl = TestList.TestList( sh, None )
+        tl = TestList.TestList( None )
         tl.addTest( vtu.make_fake_TestCase( 'timeout' ) )
         assert tl.encodeIntegerWarning() == 2**3
 
-        tl = TestList.TestList( sh, None )
+        tl = TestList.TestList( None )
         tl.addTest( vtu.make_fake_TestCase( 'notdone' ) )
         assert tl.encodeIntegerWarning() == 2**4
 
-        tl = TestList.TestList( sh, None )
+        tl = TestList.TestList( None )
         tl.addTest( vtu.make_fake_TestCase( 'notrun' ) )
         assert tl.encodeIntegerWarning() == 2**5
 

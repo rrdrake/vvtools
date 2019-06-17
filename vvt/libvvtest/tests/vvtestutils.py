@@ -586,7 +586,6 @@ def make_fake_TestCase( result=None, runtime=None, name='atest',
     ""
     tcase = testcase.TestCase( make_fake_TestSpec( name, keywords ) )
 
-    tspec = tcase.getSpec()
     tstat = tcase.getStat()
 
     tstat.resetResults()
@@ -594,29 +593,29 @@ def make_fake_TestCase( result=None, runtime=None, name='atest',
     if result:
         tm = time.time()
         if result == 'skip':
-            tstat.markSkipByPlatform( tspec )
+            tstat.markSkipByPlatform()
         elif result == 'timeout':
-            tstat.markStarted( tspec, tm )
-            tstat.markTimedOut( tspec )
+            tstat.markStarted( tm )
+            tstat.markTimedOut()
         elif result == 'pass':
-            tstat.markStarted( tspec, tm )
-            tstat.markDone( tspec, 0 )
+            tstat.markStarted( tm )
+            tstat.markDone(  0 )
         elif result == 'diff':
-            tstat.markStarted( tspec, tm )
-            tstat.markDone( tspec, teststatus.DIFF_EXIT_STATUS )
+            tstat.markStarted( tm )
+            tstat.markDone( teststatus.DIFF_EXIT_STATUS )
         elif result == 'notdone':
-            tstat.markStarted( tspec, tm )
+            tstat.markStarted( tm )
         elif result == 'notrun':
             pass
         elif result == 'running':
-            tstat.markStarted( tspec, tm )
+            tstat.markStarted( tm )
         else:
             assert result == 'fail', '*** error (value='+str(result)+')'
-            tstat.markStarted( tspec, tm )
-            tstat.markDone( tspec, 1 )
+            tstat.markStarted( tm )
+            tstat.markDone( 1 )
 
     if runtime != None:
-        tstat.setRuntime( tspec, runtime )
+        tstat.setRuntime( runtime )
 
     return tcase
 

@@ -28,9 +28,9 @@ import libvvtest.testlistio as testlistio
 import libvvtest.utesthooks as utesthooks
 import libvvtest.resultswriter as resultswriter
 import libvvtest.consolewriter as consolewriter
-from libvvtest.outpututils import XstatusString, pretty_time, make_date_stamp
+from libvvtest.outpututils import XstatusString, pretty_time
 import libvvtest.pathutil as pathutil
-from libvvtest.teststatus import TestStatusHandler, RESULTS_KEYWORDS
+from libvvtest.teststatus import RESULTS_KEYWORDS
 from libvvtest.printinfo import TestInformationPrinter
 from libvvtest.TestSpecCreator import TestCreator
 import libvvtest.userplugin as userplugin
@@ -77,8 +77,6 @@ class MainEntry:
         self.rtdata.setTestResultsDir( test_cache_dir )
 
         self.rtdata.setPermissionsObject( self.opts, self.optD )
-
-        self.rtdata.setTestStatusHandler( TestStatusHandler() )
 
         self.constructResultsWriter( start_time )
 
@@ -171,8 +169,7 @@ class MainEntry:
                                     self.rtdata.getTestResultsDir(),
                                     self.rtdata.getPermissionsObject(),
                                     self.rtdata.getPlatformObject(),
-                                    self.rtdata.cmdL,
-                                    self.rtdata.getTestStatusHandler() )
+                                    self.rtdata.cmdL )
         self.rtdata.setResultsWriter( resw )
 
     def constructFilteringObjects(self):
@@ -189,11 +186,10 @@ class MainEntry:
         plug = userplugin.UserPluginBridge( rtconfig, plugmod )
         self.rtdata.setUserPlugin( plug )
 
-        statushandler = self.rtdata.getTestStatusHandler()
-        testfilter = TestFilter( rtconfig, statushandler, plug )
+        testfilter = TestFilter( rtconfig, plug )
         self.rtdata.setTestFilter( testfilter )
 
-        timehandler = TimeHandler( statushandler, plug, platobj,
+        timehandler = TimeHandler( plug, platobj,
                                    self.opts.dash_T,
                                    self.opts.timeout_multiplier,
                                    self.opts.max_timeout )
@@ -347,10 +343,6 @@ class RuntimeData:
     def setPermissionsObject(self, opts, optD):
         self.perms = make_PermissionSetter( self.test_dir, opts.perms )
     def getPermissionsObject(self): return self.perms
-
-    def setTestStatusHandler(self, statushandler):
-        self.statushandler = statushandler
-    def getTestStatusHandler(self): return self.statushandler
 
     def setResultsWriter(self, writer): self.results_writer = writer
     def getResultsWriter(self): return self.results_writer
@@ -512,12 +504,10 @@ class InformationMode:
 def make_TestList( rtdata, filename ):
     ""
     rtconfig = rtdata.getRuntimeConfig()
-    statushandler = rtdata.getTestStatusHandler()
     creator = rtdata.getTestCreator()
     testfilter = rtdata.getTestFilter()
 
-    return TestList.TestList( statushandler, filename,
-                              rtconfig, creator, testfilter )
+    return TestList.TestList( filename, rtconfig, creator, testfilter )
 
 
 ##############################################################################
@@ -546,7 +536,6 @@ def generateTestList( opts, optD, dirs, rtdata ):
     plat = rtdata.getPlatformObject()
     testsubdir = rtdata.getTestSubdir()
     perms = rtdata.getPermissionsObject()
-    statushandler = rtdata.getTestStatusHandler()
     timehandler = rtdata.getTestTimeHandler()
     plugin = rtdata.getUserPlugin()
 
@@ -571,7 +560,7 @@ def generateTestList( opts, optD, dirs, rtdata ):
     tlist.stringFileWrite()
     perms.set( os.path.abspath( tfile ) )
 
-    xlist = TestExecList( statushandler, plugin, tlist )
+    xlist = TestExecList( plugin, tlist )
     xlist.createTestExecs( test_dir, plat, config, perms )
 
     print3( "Test directory:", testsubdir )
@@ -584,7 +573,6 @@ def extractTestFiles( opts, optD, dirs, target_dir, rtdata ):
     directory.
     """
     plat = rtdata.getPlatformObject()
-    statushandler = rtdata.getTestStatusHandler()
     timehandler = rtdata.getTestTimeHandler()
 
     tlist = make_TestList( rtdata, None )
@@ -926,7 +914,6 @@ def runTests( opts, optD, rtdata, dirs ):
     config = rtdata.getConfiguration()
     plat = rtdata.getPlatformObject()
     testsubdir = rtdata.getTestSubdir()
-    statushandler = rtdata.getTestStatusHandler()
     timehandler = rtdata.getTestTimeHandler()
     plugin = rtdata.getUserPlugin()
 
@@ -974,7 +961,7 @@ def runTests( opts, optD, rtdata, dirs ):
 
     if tlist.numActive() > 0:
 
-        xlist = TestExecList( statushandler, plugin, tlist )
+        xlist = TestExecList( plugin, tlist )
         xlist.createTestExecs( test_dir, plat, config, perms )
 
         if not opts.batch:
@@ -1025,12 +1012,11 @@ def determine_verbose_integer( dash_v ):
 def make_results_writer( opts, optD,
                          start_time, toolsdir,
                          test_dir, perms,
-                         platobj, cmdL, statushandler ):
+                         platobj, cmdL ):
     ""
     verb = determine_verbose_integer( opts.dash_v )
 
-    conobj = consolewriter.ConsoleWriter( statushandler, sys.stdout, test_dir,
-                                          verbose=verb )
+    conobj = consolewriter.ConsoleWriter( sys.stdout, test_dir, verbose=verb )
     conobj.setSortingSpecification( optD['sort_letters'] )
 
     htmlobj = None
@@ -1042,31 +1028,27 @@ def make_results_writer( opts, optD,
 
         if opts.html:
             import libvvtest.htmlwriter as htmlwriter
-            htmlobj = htmlwriter.HTMLWriter( statushandler,
-                                             perms,
+            htmlobj = htmlwriter.HTMLWriter( perms,
                                              opts.html,
                                              test_dir )
 
         if opts.junit:
             import libvvtest.junitwriter as junitwriter
-            junitobj = junitwriter.JUnitWriter( statushandler,
-                                                perms,
+            junitobj = junitwriter.JUnitWriter( perms,
                                                 opts.junit,
                                                 test_dir )
             junitobj.setOutputDate( opts.results_date )
 
         if opts.gitlab:
             import libvvtest.gitlabwriter as gitlabwriter
-            gitlabobj = gitlabwriter.GitLabWriter( statushandler,
-                                                   perms,
+            gitlabobj = gitlabwriter.GitLabWriter( perms,
                                                    opts.gitlab,
                                                    test_dir )
             gitlabobj.setSortingSpecification( optD['sort_letters'] )
 
         if opts.save_results:
             import libvvtest.listwriter as listwriter
-            wlistobj = listwriter.ListWriter( statushandler,
-                                              perms,
+            wlistobj = listwriter.ListWriter( perms,
                                               platobj.testingDirectory(),
                                               test_dir )
             wlistobj.setOutputDate( opts.results_date )
@@ -1096,8 +1078,6 @@ def executeTestList( opts, optD, rtdata,
                      results_writer ):
     """
     """
-    statushandler = rtdata.getTestStatusHandler()
-
     plat.display()
     starttime = time.time()
     print3( "Start time:", time.ctime() )
@@ -1108,7 +1088,7 @@ def executeTestList( opts, optD, rtdata,
 
     try:
 
-        info = TestInformationPrinter( statushandler, sys.stdout, xlist )
+        info = TestInformationPrinter( sys.stdout, xlist )
 
         # execute tests
 
@@ -1138,7 +1118,7 @@ def executeTestList( opts, optD, rtdata,
             for tcase in list( xlist.getRunning() ):
                 tx = tcase.getExec()
                 if tx.poll():
-                    xs = XstatusString( statushandler, tcase, test_dir, cwd )
+                    xs = XstatusString( tcase, test_dir, cwd )
                     print3( "Finished:", xs )
                     xlist.testDone( tcase )
                     showprogress = True
@@ -1186,8 +1166,6 @@ def batchTestList( opts, optD, rtdata,
     """
     assert opts.qsub_id == None
 
-    statushandler = rtdata.getTestStatusHandler()
-
     qsublimit = opts.batch_limit
     if qsublimit == None:
         qsublimit = plat.getDefaultQsubLimit()
@@ -1222,7 +1200,7 @@ def batchTestList( opts, optD, rtdata,
     for inclf in batch.getIncludeFiles():
         tlist.addIncludeFile( inclf )
 
-    info = TestInformationPrinter( statushandler, sys.stdout, tlist, batch )
+    info = TestInformationPrinter( sys.stdout, tlist, batch )
 
     try:
         while True:
@@ -1242,7 +1220,7 @@ def batchTestList( opts, optD, rtdata,
                 ids = ' '.join( [ str(qid) for qid in qidL ] )
                 print3( 'Finished batch IDS:', ids )
             for tcase in doneL:
-                ts = XstatusString( statushandler, tcase, test_dir, cwd )
+                ts = XstatusString( tcase, test_dir, cwd )
                 print3( "Finished:", ts )
 
             uthook.check( schedule.numInFlight(), schedule.numPastQueue() )
@@ -1302,10 +1280,9 @@ def sleep_with_info_check( info, qsleep ):
 
 class TimeHandler:
 
-    def __init__(self, statushandler, userplugin, platobj, cmdline_timeout,
+    def __init__(self, userplugin, platobj, cmdline_timeout,
                        timeout_multiplier, max_timeout):
         ""
-        self.statushandler = statushandler
         self.plugin = userplugin
         self.platobj = platobj
         self.cmdline_timeout = cmdline_timeout
@@ -1338,9 +1315,9 @@ class TimeHandler:
 
             if tlen != None:
 
-                rt = self.statushandler.getRuntime( tspec, None )
+                rt = tcase.getStat().getRuntime( None )
                 if rt == None:
-                    self.statushandler.setRuntime( tspec, int(tlen) )
+                    tcase.getStat().setRuntime( int(tlen) )
 
                 if tout == None:
                     if tresult == "timeout":
@@ -1428,7 +1405,6 @@ class Batcher:
         self.perms = perms
 
         clean_exit_marker = "queue job finished cleanly"
-        statushandler = rtdata.getTestStatusHandler()
 
         self.accountant = batchutils.BatchAccountant()
 
@@ -1436,7 +1412,6 @@ class Batcher:
 
         self.scheduler = batchutils.BatchScheduler(
                             tlist, xlist,
-                            statushandler,
                             self.accountant, self.namer,
                             perms, plat, qsublimit,
                             clean_exit_marker )
@@ -1491,7 +1466,6 @@ def restartTests( opts, optD, rtdata ):
     config = rtdata.getConfiguration()
     plat = rtdata.getPlatformObject()
     test_dir = rtdata.getTestResultsDir()
-    statushandler = rtdata.getTestStatusHandler()
     plugin = rtdata.getUserPlugin()
 
     # this variable allows vvtest tests to run vvtest (ie, allows recursion)
@@ -1534,7 +1508,7 @@ def restartTests( opts, optD, rtdata ):
 
     if tlist.numActive() > 0:
 
-        xlist = TestExecList( statushandler, plugin, tlist )
+        xlist = TestExecList( plugin, tlist )
         xlist.createTestExecs( test_dir, plat, config, perms )
 
         if not opts.batch:
@@ -1558,7 +1532,6 @@ def baselineTests( opts, optD, rtdata ):
     config = rtdata.getConfiguration()
     plat = rtdata.getPlatformObject()
     test_dir = rtdata.getTestResultsDir()
-    statushandler = rtdata.getTestStatusHandler()
     plugin = rtdata.getUserPlugin()
 
     tfile = os.path.join( test_dir, testlist_name )
@@ -1583,7 +1556,7 @@ def baselineTests( opts, optD, rtdata ):
 
         perms = rtdata.getPermissionsObject()
 
-        xlist = TestExecList( statushandler, plugin, tlist )
+        xlist = TestExecList( plugin, tlist )
         xlist.createTestExecs( test_dir, plat, config, perms )
 
         failures = False
@@ -1604,14 +1577,14 @@ def baselineTests( opts, optD, rtdata ):
                 time.sleep(1)
 
                 if texec.poll():
-                    if statushandler.passed( tspec ):
+                    if tcase.getStat().passed():
                         print3( "done" )
                     else:
                         failures = True
                         print3("FAILED")
                     break
 
-            if not statushandler.isDone( tspec ):
+            if not tcase.getStat().isDone():
                 texec.killJob()
                 failures = True
                 print3( "TIMED OUT" )

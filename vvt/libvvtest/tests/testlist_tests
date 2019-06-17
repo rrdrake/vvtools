@@ -23,7 +23,6 @@ import libvvtest.testlistio as tio
 import libvvtest.TestList as TestList
 import libvvtest.TestSpec as TestSpec
 from libvvtest.testcase import TestCase
-from libvvtest.teststatus import TestStatusHandler
 
 
 class TestSpec_to_and_from_string( vtu.vvtestTestCase ):
@@ -325,7 +324,7 @@ class TestList_results_file( vtu.vvtestTestCase ):
         sfx = tl.getResultsSuffix()
         time.sleep(2)
 
-        tl = TestList.TestList( TestStatusHandler(), 'testlist' )
+        tl = TestList.TestList( 'testlist' )
         tl.readTestList()
         assert tl.getResultsSuffix() == sfx
         rfile = write_TestList_fake_results( tl )
@@ -345,7 +344,7 @@ class TestList_results_file( vtu.vvtestTestCase ):
 
         # write include test list file containing suffix attribute
         tcase = list( tl.getTests() )[0]
-        tlincl = TestList.TestList( TestStatusHandler(), 'subtests' )
+        tlincl = TestList.TestList( 'subtests' )
         tlincl.setResultsSuffix( sfx )
         tl.addTest( tcase )
         tlincl.stringFileWrite( include_results_suffix=True )
@@ -357,7 +356,7 @@ class TestList_results_file( vtu.vvtestTestCase ):
         time.sleep(1)
 
         # create the sublist test results
-        tlsub = TestList.TestList( TestStatusHandler(), 'subtests' )
+        tlsub = TestList.TestList( 'subtests' )
         tlsub.readTestList()
         rfile = write_TestList_fake_results( tlsub )
         time.sleep(1)
@@ -370,14 +369,14 @@ class TestList_results_file( vtu.vvtestTestCase ):
 
     def test_read_an_unfinished_test_list_file(self):
         ""
-        tl = TestList.TestList( TestStatusHandler(), 'testlist' )
+        tl = TestList.TestList( 'testlist' )
         rfile = tl.initializeResultsFile()
         tcase = get_fake_TestCase()
         tl.appendTestResult( tcase )
 
         time.sleep(1)
 
-        tl = TestList.TestList( TestStatusHandler(), None )
+        tl = TestList.TestList( None )
         tl.readTestResults( rfile )
 
         tm = tl.getDateStamp()
@@ -388,7 +387,7 @@ class TestList_results_file( vtu.vvtestTestCase ):
 
     def test_scan_an_unfinished_test_list_file(self):
         ""
-        tl = TestList.TestList( TestStatusHandler(), 'testlist' )
+        tl = TestList.TestList( 'testlist' )
         rfile = tl.initializeResultsFile()
         tcase = get_fake_TestCase()
         tl.appendTestResult( tcase )
@@ -517,12 +516,8 @@ def assert_TestCase_same_as_fake( tcase, rootdir=None ):
 def get_fake_TestCase_with_results():
     ""
     tcase = get_fake_TestCase()
-    ts = tcase.getSpec()
 
-    tcase.getStat().markStarted( ts, time.time() )
-    # ts.setAttr( 'state', "notdone" )
-    # ts.setAttr( 'xtime', -1 )
-    # ts.setAttr( 'xdate', int(time.time()) )
+    tcase.getStat().markStarted( time.time() )
 
     return tcase
 
@@ -567,7 +562,7 @@ def write_TestList_with_fake_test( filename, **kwargs ):
     ""
     dosuffix = kwargs.pop( 'results_suffix', False )
 
-    tl = TestList.TestList( TestStatusHandler(), filename )
+    tl = TestList.TestList( filename )
 
     if dosuffix:
         tl.setResultsSuffix()
@@ -594,7 +589,7 @@ def write_TestList_fake_results( testlistobj ):
 
 def read_TestList_and_check_fake_test( filename ):
     ""
-    tl = TestList.TestList( TestStatusHandler(), filename )
+    tl = TestList.TestList( filename )
     tl.readTestList()
     tL = list( tl.getTests() )
     assert len(tL) == 1

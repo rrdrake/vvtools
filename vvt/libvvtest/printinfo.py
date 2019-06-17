@@ -12,9 +12,8 @@ import select
 
 class TestInformationPrinter:
 
-    def __init__(self, statushandler, outfile, xlist, batcher=None):
+    def __init__(self, outfile, xlist, batcher=None):
         ""
-        self.statushandler = statushandler
         self.outfile = outfile
         self.xlist = xlist
         self.batcher = batcher
@@ -48,7 +47,7 @@ class TestInformationPrinter:
 
         for tcase in txL:
             tspec = tcase.getSpec()
-            sdt = self.statushandler.getStartDate( tspec )
+            sdt = tcase.getStat().getStartDate()
             duration = datetime.timedelta( seconds=int(now-sdt) )
             xdir = tspec.getExecuteDirectory()
             self.println( "    *", xdir,

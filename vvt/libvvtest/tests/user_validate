@@ -17,7 +17,6 @@ import testutils as util
 
 from libvvtest.RuntimeConfig import RuntimeConfig
 from libvvtest.filtering import TestFilter
-from libvvtest.teststatus import TestStatusHandler
 from libvvtest.userplugin import UserPluginBridge, import_module_by_name
 
 
@@ -116,24 +115,23 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
                     return 'bad boys not allowed'
 
         plug = UserPluginBridge( RuntimeConfig(), FakePluginModule() )
-        statushandler = TestStatusHandler()
-        tf = TestFilter( RuntimeConfig(), statushandler, plug )
+        tf = TestFilter( RuntimeConfig(), plug )
 
         tcase = vtu.make_fake_TestCase( keywords=['good'] )
         assert tf.userValidation( tcase )
-        assert not statushandler.skipTest( tcase.getSpec() )
+        assert not tcase.getStat().skipTest()
 
         tcase = vtu.make_fake_TestCase( keywords=['good','bad'] )
         assert not tf.userValidation( tcase )
-        assert statushandler.skipTest( tcase.getSpec() )
+        assert tcase.getStat().skipTest()
 
         tcase = vtu.make_fake_TestCase( keywords=['good'] )
         tf.applyPermanent( { tcase.getSpec().getExecuteDirectory() : tcase } )
-        assert not statushandler.skipTest( tcase.getSpec() )
+        assert not tcase.getStat().skipTest()
 
         tcase = vtu.make_fake_TestCase( keywords=['bad','good'] )
         tf.applyPermanent( { tcase.getSpec().getExecuteDirectory() : tcase } )
-        assert statushandler.skipTest( tcase.getSpec() )
+        assert tcase.getStat().skipTest()
 
     def test_validate_function_receives_test_parameters(self):
         ""

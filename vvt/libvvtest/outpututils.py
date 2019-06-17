@@ -12,7 +12,7 @@ from . import TestExec
 from . import pathutil
 
 
-def XstatusString( statushandler, tcase, test_dir, cwd ):
+def XstatusString( tcase, test_dir, cwd ):
     """
     Returns a formatted string containing the job and its status.
     """
@@ -21,16 +21,16 @@ def XstatusString( statushandler, tcase, test_dir, cwd ):
     s =  '%-20s' % ref.getName()
 
     skipreason = None
-    if statushandler.skipTest( ref ):
-        skipreason = statushandler.getReasonForSkipTest( ref )
+    if tcase.getStat().skipTest():
+        skipreason = tcase.getStat().getReasonForSkipTest()
 
     if skipreason:
         s += ' %-8s' % 'skip'
     else:
-        s += ' %-8s' % statushandler.getResultStatus( ref )
+        s += ' %-8s' % tcase.getStat().getResultStatus()
 
-    s += ' %-4s' % format_test_run_time( statushandler, ref )
-    s += ' %14s' % format_test_run_date( statushandler, ref )
+    s += ' %-4s' % format_test_run_time( tcase )
+    s += ' %14s' % format_test_run_date( tcase )
 
     xdir = ref.getExecuteDirectory()
     s += ' ' + pathutil.relative_execute_directory( xdir, test_dir, cwd )
@@ -77,18 +77,17 @@ def make_date_stamp( testdate, optrdate, timefmt="%Y_%m_%d" ):
     return datestr
 
 
-def partition_tests_by_result( statushandler, tcaseL ):
+def partition_tests_by_result( tcaseL ):
     ""
     parts = { 'fail':[], 'timeout':[], 'diff':[],
               'pass':[], 'notrun':[], 'notdone':[],
               'skip':[] }
 
     for tcase in tcaseL:
-        tspec = tcase.getSpec()
-        if statushandler.skipTest( tspec ):
+        if tcase.getStat().skipTest():
             parts[ 'skip' ].append( tcase )
         else:
-            result = statushandler.getResultStatus( tspec )
+            result = tcase.getStat().getResultStatus()
             parts[ result ].append( tcase )
 
     return parts
@@ -105,18 +104,18 @@ def results_summary_string( testparts ):
     return ', '.join( sumL )
 
 
-def format_test_run_date( statushandler, tspec ):
+def format_test_run_date( tcase ):
     ""
-    xdate = statushandler.getStartDate( tspec, 0 )
+    xdate = tcase.getStat().getStartDate( 0 )
     if xdate > 0:
         return time.strftime( "%m/%d %H:%M:%S", time.localtime(xdate) )
     else:
         return ''
 
 
-def format_test_run_time( statushandler, tspec ):
+def format_test_run_time( tcase ):
     ""
-    xtime = statushandler.getRuntime( tspec, -1 )
+    xtime = tcase.getStat().getRuntime( -1 )
     if xtime < 0:
         return ''
     else:

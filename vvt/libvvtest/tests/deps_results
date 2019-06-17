@@ -17,7 +17,6 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
-from libvvtest.teststatus import TestStatusHandler
 import libvvtest.depend as depend
 
 import libvvtest.FilterExpressions as FilterExpressions
@@ -101,56 +100,47 @@ class dependency_result_expressions( vtu.vvtestTestCase ):
 
     def test_get_blocking_dependencies_that_are_done(self):
         ""
-        st = TestStatusHandler()
-
-        depset,tcase = make_DependencySet_with_a_dependency( st, 'pass' )
+        depset,tcase = make_DependencySet_with_a_dependency( 'pass' )
         assert depset.getBlockingDependency() == None
 
-        depset,tcase = make_DependencySet_with_a_dependency( st, 'fail' )
+        depset,tcase = make_DependencySet_with_a_dependency( 'fail' )
         assert depset.getBlockingDependency() != None
 
-        depset,tcase = make_DependencySet_with_a_dependency( st, 'fail', '*' )
+        depset,tcase = make_DependencySet_with_a_dependency( 'fail', '*' )
         assert depset.getBlockingDependency() == None
 
-        depset,tcase = make_DependencySet_with_a_dependency( st, 'fail',
+        depset,tcase = make_DependencySet_with_a_dependency( 'fail',
                                                              'pass or fail' )
         assert depset.getBlockingDependency() == None
 
     def test_get_blocking_dependencies_that_are_running(self):
         ""
-        st = TestStatusHandler()
-
-        depset,tcase = make_DependencySet_with_a_dependency( st, 'running' )
+        depset,tcase = make_DependencySet_with_a_dependency( 'running' )
         assert depset.getBlockingDependency() != None
 
-        depset,tcase = make_DependencySet_with_a_dependency( st, 'pass' )
+        depset,tcase = make_DependencySet_with_a_dependency( 'pass' )
         assert depset.getBlockingDependency() == None
-        append_to_DependencySet( st, depset, 'running' )
+        append_to_DependencySet( depset, 'running' )
         assert depset.getBlockingDependency() != None
 
     def test_get_blocking_dependencies_that_are_skipped(self):
         ""
-        st = TestStatusHandler()
-
-        depset,tcase = make_DependencySet_with_a_dependency( st, 'skip' )
+        depset,tcase = make_DependencySet_with_a_dependency( 'skip' )
         assert depset.getBlockingDependency() != None
 
-        depset,tcase = make_DependencySet_with_a_dependency( st, 'skip', '*' )
+        depset,tcase = make_DependencySet_with_a_dependency( 'skip', '*' )
         assert depset.getBlockingDependency() == None
 
     def test_get_blocking_dependencies_that_have_not_run_yet(self):
         ""
         return # magic: still working on getBlockingDependency() method
 
-        st = TestStatusHandler()
-
-        depset,tcase = make_DependencySet_with_a_dependency( st, 'notrun' )
+        depset,tcase = make_DependencySet_with_a_dependency( 'notrun' )
         assert depset.getBlockingDependency() != None
 
     # def test_a_notrun_may_or_may_not_be_a_blocking_dependency(self):
     #     ""
-    #     st = TestStatusHandler()
-    #     depset,tcase = make_DependencySet_with_a_dependency( st, 'notrun' )
+    #     depset,tcase = make_DependencySet_with_a_dependency( 'notrun' )
 
     #     assert depset.getBlocking() != None
 
@@ -162,8 +152,7 @@ class dependency_result_expressions( vtu.vvtestTestCase ):
 
     # def test_a_notdone_is_a_blocking_dependency(self):
     #     ""
-    #     st = TestStatusHandler()
-    #     depset,tcase = make_DependencySet_with_a_dependency( st, 'notdone' )
+    #     depset,tcase = make_DependencySet_with_a_dependency( 'notdone' )
 
     #     assert depset.getBlocking() != None
     #     assert depset.getBlocking( allow_notrun=True ) != None
@@ -201,10 +190,9 @@ class dependency_result_expressions( vtu.vvtestTestCase ):
             assert len( lineL ) == 1
 
 
-def make_DependencySet_with_a_dependency( statushandler, test_result,
-                                          result_expr=None ):
+def make_DependencySet_with_a_dependency( test_result, result_expr=None ):
     ""
-    depset = depend.DependencySet( statushandler )
+    depset = depend.DependencySet()
     tcase = vtu.make_fake_TestCase( test_result )
 
     wordexpr = make_word_expression( result_expr )
@@ -215,7 +203,7 @@ def make_DependencySet_with_a_dependency( statushandler, test_result,
     return depset, tcase
 
 
-def append_to_DependencySet( statushandler, depset, test_result ):
+def append_to_DependencySet( depset, test_result ):
     ""
     tcase = vtu.make_fake_TestCase( test_result )
 
