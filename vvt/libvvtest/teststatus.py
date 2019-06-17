@@ -40,7 +40,7 @@ SKIP_REASON = {
     }
 
 
-class TestStatusHandler:
+class TestStatus:
 
     def __init__(self, testspec):
         ""

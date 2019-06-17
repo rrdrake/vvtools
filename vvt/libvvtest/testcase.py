@@ -3,7 +3,7 @@
 import os, sys
 
 from . import depend
-from .teststatus import TestStatusHandler
+from .teststatus import TestStatus
 
 
 class TestCase:
@@ -12,8 +12,8 @@ class TestCase:
         ""
         self.tspec = testspec
         self.texec = testexec
-        self.tstat = TestStatusHandler( testspec )
 
+        self.tstat = TestStatus( testspec )
         self.depset = depend.DependencySet()
         self.has_dependent = False
 
