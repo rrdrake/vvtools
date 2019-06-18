@@ -325,24 +325,8 @@ class TestSpec:
 
         # always add the test specification file to the linked file list
         self.lnfiles.append( (os.path.basename(self.filepath),None) )
-
-    def __cmp__(self, rhs):
-        if rhs == None: return 1  # None objects are always less
-        if   self.name < rhs.name: return -1
-        elif self.name > rhs.name: return  1
-        if   self.xdir < rhs.xdir: return -1
-        elif self.xdir > rhs.xdir: return  1
-        return 0
     
-    def __lt__(self, rhs):
-        if rhs == None: return False  # None objects are always less
-        if   self.name < rhs.name: return True
-        elif self.name > rhs.name: return False
-        if   self.xdir < rhs.xdir: return True
-        elif self.xdir > rhs.xdir: return False
-        return False
-    
-    def __repr__(self):
+    def __str__(self):
         return 'TestSpec(name=' + str(self.name) + ', xdir=' + self.xdir + ')'
 
     def setConstructionCompleted(self):

@@ -1244,8 +1244,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
 
         tL = create_tests( '.', 'ok39.xml', nofltr )
         assert len(tL) == 3
-        tL.sort()
-        print3( "print3( with parameterize/analyze 4:", tL )
+        print3( "with parameterize/analyze 4:", tL )
         assert tL[0].isAnalyze()
         assert tL[0].getAnalyzeScript()
         assert not tL[1].isAnalyze()
@@ -1445,6 +1444,9 @@ def create_tests( rootpath, relpath, rtconfig ):
     ""
     creator = TestCreator( rtconfig )
     tL = creator.fromFile( rootpath, relpath, None )
+    sortL = [ (ts.getExecuteDirectory(),ts) for ts in tL ]
+    sortL.sort()
+    tL = [ T[1] for T in sortL ]
     return tL
 
 
