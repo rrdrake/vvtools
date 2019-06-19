@@ -294,17 +294,6 @@ class Function_find_tests_by_execute_directory_match( vtu.vvtestTestCase ):
 
 #######################################
 
-def make_test_dep( tcase ):
-    ""
-    return depend.TestDependency( tcase, None, None )
-
-
-def add_dependency( from_test, to_test ):
-    ""
-    depset = from_test.getDependencySet()
-    depset.addDependency( make_test_dep( to_test ) )
-
-
 def make_TestSpec_test_case( name ):
     ""
     ts = TestSpec( name, os.getcwd(), name+'.vvt' )
@@ -329,52 +318,50 @@ class dependency_related_functions( vtu.vvtestTestCase ):
         tcase = make_TestSpec_test_case( 'testA' )
 
         dep1 = make_TestSpec_test_case( 'atest' )
-        add_dependency( tcase, dep1 )
+        tcase.addDependency( dep1 )
 
         dep2 = make_TestSpec_test_case( 'atest' )
-        add_dependency( tcase, dep2 )
+        tcase.addDependency( dep2 )
 
-        assert tcase.getDependencySet().numDependencies() == 1
+        assert tcase.numDependencies() == 1
 
     def test_addDependency_uniquifies_multiple_TestExec(self):
         ""
         tcase = make_TestExec_test_case( 'testA' )
 
         dep1 = make_TestExec_test_case( 'atest' )
-        add_dependency( tcase, dep1 )
+        tcase.addDependency( dep1 )
 
         dep2 = make_TestExec_test_case( 'atest' )
-        add_dependency( tcase, dep2 )
+        tcase.addDependency( dep2 )
 
-        assert tcase.getDependencySet().numDependencies() == 1
+        assert tcase.numDependencies() == 1
 
     def test_addDependency_uniquifies_TestSpec_then_TestExec(self):
         ""
         tcase = make_TestExec_test_case( 'testA' )
 
         dep1 = make_TestSpec_test_case( 'atest' )
-        add_dependency( tcase, dep1 )
+        tcase.addDependency( dep1 )
 
         dep2 = make_TestExec_test_case( 'atest' )
-        add_dependency( tcase, dep2 )
+        tcase.addDependency( dep2 )
 
-        depset = tcase.getDependencySet()
-        assert depset.numDependencies() == 1
-        assert depset.getBlockingTestCase().getExec() != None
+        assert tcase.numDependencies() == 1
+        assert tcase.getBlockingDependency().getExec() != None
 
     def test_addDependency_uniquifies_TestExec_then_TestSpec(self):
         ""
         tcase = make_TestExec_test_case( 'testA' )
 
         dep1 = make_TestExec_test_case( 'atest' )
-        add_dependency( tcase, dep1 )
+        tcase.addDependency( dep1 )
 
         dep2 = make_TestSpec_test_case( 'atest' )
-        add_dependency( tcase, dep2 )
+        tcase.addDependency( dep2 )
 
-        depset = tcase.getDependencySet()
-        assert depset.numDependencies() == 1
-        assert depset.getBlockingTestCase().getExec() != None
+        assert tcase.numDependencies() == 1
+        assert tcase.getBlockingDependency().getExec() != None
 
 
 #######################################

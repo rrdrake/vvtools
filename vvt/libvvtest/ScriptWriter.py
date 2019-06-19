@@ -7,12 +7,12 @@
 import os, sys
 
 
-def writeScript( testobj, filename, lang, config, plat,
-                          test_dir, depset ):
+def writeScript( testcase, filename, lang, config, plat, test_dir ):
     """
     Writes a helper script for the test.  The script language is based on
     the 'lang' argument.
     """
+    testobj = testcase.getSpec()
     tname = testobj.getName()
 
     troot = testobj.getRootpath()
@@ -35,7 +35,7 @@ def writeScript( testobj, filename, lang, config, plat,
     platname = plat.getName()
     cplrname = plat.getCompiler()
 
-    dep_list = depset.getMatchDirectories()
+    dep_list = testcase.getMatchDirectories()
 
     w = LineWriter()
 

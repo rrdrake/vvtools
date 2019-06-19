@@ -1141,11 +1141,10 @@ def executeTestList( opts, optD, rtdata,
     if len(tcaseL) > 0:
         print3()
     for tcase in tcaseL:
-        depset = tcase.getDependencySet()
-        deptx = depset.getBlockingTestCase()
-        assert depset.numDependencies() > 0 and deptx != None
+        deptx = tcase.getBlockingDependency()
+        assert tcase.numDependencies() > 0 and deptx != None
         if isinstance( deptx, TestExec.TestExec ):
-            xdir = deptx.atest.getExecuteDirectory()
+            xdir = deptx.atest.getExecuteDirectory()  # magic: remove this
         else:
             xdir = deptx.getSpec().getExecuteDirectory()
         print3( '*** Warning: test "'+tcase.getSpec().getExecuteDirectory()+'"',
@@ -1258,8 +1257,7 @@ def batchTestList( opts, optD, rtdata,
       print3( "*** Warning: these batch numbers did not seem to finish:",
               ' '.join(NF) )
     for tcase0,tcase1 in nrL:
-        depset = tcase0.getDependencySet()
-        assert depset.numDependencies() > 0 and tcase1 != None
+        assert tcase0.numDependencies() > 0 and tcase1 != None
         xdir = tcase1.getSpec().getExecuteDirectory()
         print3( '*** Warning: test "'+tcase0.getSpec().getExecuteDirectory()+'"',
                 'notrun due to dependency "' + xdir + '"' )

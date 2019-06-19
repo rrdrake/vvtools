@@ -46,7 +46,7 @@ class TestDependency:
         ""
         return self.matchpat, self.tcase.getSpec().getExecuteDirectory()
 
-    def IsBlocking(self):
+    def isBlocking(self):
         ""
         tcase = self.getTestCase()
         tstat = tcase.getStat()
@@ -62,7 +62,7 @@ class TestDependency:
         else:
             assert tstat.isNotrun()
 
-            if tcase.getDependencySet().willNeverRun():
+            if tcase.willNeverRun():
                 result = tstat.getResultStatus()
                 if not self.satisfiesResult( result ):
                     return True
@@ -82,7 +82,7 @@ class TestDependency:
                 return True
 
         elif tstat.isNotrun():
-            if tcase.getDependencySet().willNeverRun():
+            if tcase.willNeverRun():
                 result = tstat.getResultStatus()
                 if not self.satisfiesResult( result ):
                     return True
@@ -90,108 +90,11 @@ class TestDependency:
         return False
 
 
-class DependencySet:
-
-    def __init__(self):
-        ""
-        self.deps = []
-
-    def addDependency(self, testdep):
-        ""
-        append = True
-        for i,tdep in enumerate( self.deps ):
-            if tdep.hasSameExecuteDirectory( testdep ):
-                if not self.deps[i].hasTestExec():
-                    self.deps[i] = testdep
-                append = False
-                break
-
-        if append:
-            self.deps.append( testdep )
-
-    def numDependencies(self):
-        ""
-        return len( self.deps )
-
-    def getBlockingTestCase(self):
-        ""
-        for tdep in self.deps:
-            if tdep.IsBlocking():
-                return tdep.getTestCase()
-
-        return None
-
-    # def getBlockingTestCase(self):
-    #     ""
-    #     for tdep in self.deps:
-
-    #         tcase = tdep.getTestCase()
-    #         tstat = tcase.getStat()
-
-    #         if tstat.isDone() or tstat.skipTest():
-    #             result = tstat.getResultStatus()
-    #             if not tdep.satisfiesResult( result ):
-    #                 return tcase
-
-    #         elif tstat.isNotDone():
-    #             return tcase
-
-    #         else:
-    #             assert tstat.isNotrun()
-
-    #             if tcase.getDependencySet().willNeverRun():
-    #                 result = tstat.getResultStatus()
-    #                 if not tdep.satisfiesResult( result ):
-    #                     return tcase
-    #             else:
-    #                 return tcase
-
-    #     return None
-
-    # def willNeverRun(self):
-    #     ""
-    #     for tdep in self.deps:
-
-    #         tcase = tdep.getTestCase()
-    #         tstat = tcase.getStat()
-
-    #         if tstat.isDone() or tstat.skipTest():
-    #             result = tstat.getResultStatus()
-    #             if not tdep.satisfiesResult( result ):
-    #                 return True
-
-    #         elif tstat.isNotrun():
-    #             if tcase.getDependencySet().willNeverRun():
-    #                 result = tstat.getResultStatus()
-    #                 if not tdep.satisfiesResult( result ):
-    #                     return True
-
-    #     return False
-
-    def willNeverRun(self):
-        ""
-        for tdep in self.deps:
-            if tdep.willNeverRun():
-                return True
-
-        return False
-
-    def getMatchDirectories(self):
-        ""
-        L = []
-
-        for tdep in self.deps:
-            L.append( tdep.getMatchDirectory() )
-
-        return L
-
-
 def connect_dependency( from_tcase, to_tcase, pattrn=None, expr=None ):
     ""
     assert from_tcase.getExec() != None
 
-    tdep = TestDependency( to_tcase, pattrn, expr )
-    from_tcase.getDependencySet().addDependency( tdep )
+    from_tcase.addDependency( to_tcase, pattrn, expr )
 
     if to_tcase.getExec() != None:
         to_tcase.setHasDependent()

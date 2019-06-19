@@ -14,7 +14,7 @@ class TestCase:
         self.texec = testexec
 
         self.tstat = TestStatus( testspec )
-        self.depset = depend.DependencySet()
+        self.deps = []
         self.has_dependent = False
 
     def getSpec(self):
@@ -33,10 +33,6 @@ class TestCase:
         ""
         self.texec = texec
 
-    def getDependencySet(self):
-        ""
-        return self.depset
-
     def setHasDependent(self):
         ""
         self.has_dependent = True
@@ -44,4 +40,48 @@ class TestCase:
     def hasDependent(self):
         ""
         return self.has_dependent
+
+    def addDependency(self, testcase, match_pattern=None, result_expr=None):
+        ""
+        testdep = depend.TestDependency( testcase, match_pattern, result_expr )
+
+        append = True
+        for i,tdep in enumerate( self.deps ):
+            if tdep.hasSameExecuteDirectory( testdep ):
+                if not self.deps[i].hasTestExec():
+                    self.deps[i] = testdep
+                append = False
+                break
+
+        if append:
+            self.deps.append( testdep )
+
+    def numDependencies(self):
+        ""
+        return len( self.deps )
+
+    def getBlockingDependency(self):
+        ""
+        for tdep in self.deps:
+            if tdep.isBlocking():
+                return tdep.getTestCase()
+
+        return None
+
+    def willNeverRun(self):
+        ""
+        for tdep in self.deps:
+            if tdep.willNeverRun():
+                return True
+
+        return False
+
+    def getMatchDirectories(self):
+        ""
+        L = []
+
+        for tdep in self.deps:
+            L.append( tdep.getMatchDirectory() )
+
+        return L
 

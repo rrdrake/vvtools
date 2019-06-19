@@ -65,8 +65,7 @@ class BatchScriptWriter:
           tsum = 0
           for rt,tcase in xL:
             tspec = tcase.getSpec()
-            depset = tcase.getDependencySet()
-            if depset.numDependencies() > 0 or tspec.getAttr('timeout') < 1:
+            if tcase.numDependencies() > 0 or tspec.getAttr('timeout') < 1:
               # analyze tests and those with no timeout get their own group
               qL.append( [ self.Tzero, len(qL), [tcase] ] )
             else:
@@ -443,7 +442,7 @@ class BatchScheduler:
         Otherwise None is returned.
         """
         for tcase in bjob.testL:
-            deptx = tcase.getDependencySet().getBlockingTestCase()
+            deptx = tcase.getBlockingDependency()
             if deptx != None:
                 return deptx
         return None

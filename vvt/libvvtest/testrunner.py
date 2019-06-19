@@ -85,10 +85,9 @@ def write_script_utils( tcase, test_dir, config, platform, perms ):
         script_file = os.path.join( rundir, 'vvtest_util.'+lang )
 
         if config.get('refresh') or not os.path.exists( script_file ):
-            ScriptWriter.writeScript( tcase.getSpec(), script_file,
+            ScriptWriter.writeScript( tcase, script_file,
                                       lang, config, platform,
-                                      test_dir,
-                                      tcase.getDependencySet() )
+                                      test_dir )
 
             perms.set( os.path.abspath( script_file ) )
 
