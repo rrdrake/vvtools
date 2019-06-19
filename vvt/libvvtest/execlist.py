@@ -102,10 +102,11 @@ class TestExecList:
             for tcase in tcaseL:
                 tm = tcase.getStat().getRuntime( None )
                 if tm == None: tm = 0
-                sortL.append( (tm,tcase) )
+                xdir = tcase.getSpec().getExecuteDirectory()
+                sortL.append( (tm,xdir,tcase) )
             sortL.sort()
             sortL.reverse()
-            tcaseL[:] = [ tcase for tm,tcase in sortL ]
+            tcaseL[:] = [ tcase for tm,xdir,tcase in sortL ]
 
     def getTestExecProcList(self):
         """

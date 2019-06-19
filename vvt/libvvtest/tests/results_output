@@ -956,10 +956,11 @@ class MockTestList:
         for tcase in self.tspecs:
             tspec = tcase.getSpec()
             if not tcase.getStat().skipTest():
-                tL.append( (tspec.getName(), tcase) )
+                xdir = tspec.getExecuteDirectory()
+                tL.append( (tspec.getName(), xdir, id(tcase), tcase) )
         tL.sort()
 
-        return [ T[1] for T in tL ]
+        return [ T[-1] for T in tL ]
 
 
 ############################################################################

@@ -59,11 +59,12 @@ class BatchScriptWriter:
         for np in self.xlist.getTestExecProcList():
           xL = []
           for tcase in self.xlist.getTestExecList(np):
-            xL.append( (tcase.getSpec().getAttr('timeout'),tcase) )
+            xdir = tcase.getSpec().getExecuteDirectory()
+            xL.append( (tcase.getSpec().getAttr('timeout'),xdir,tcase) )
           xL.sort()
           grpL = []
           tsum = 0
-          for rt,tcase in xL:
+          for rt,xdir,tcase in xL:
             tspec = tcase.getSpec()
             if tcase.numDependencies() > 0 or tspec.getAttr('timeout') < 1:
               # analyze tests and those with no timeout get their own group
