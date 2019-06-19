@@ -101,72 +101,141 @@ class dependency_result_expressions( vtu.vvtestTestCase ):
     def test_get_blocking_dependencies_that_are_done(self):
         ""
         depset,tcase = make_DependencySet_with_a_dependency( 'pass' )
-        assert depset.getBlockingDependency() == None
+        assert depset.getBlockingTestCase() == None
 
         depset,tcase = make_DependencySet_with_a_dependency( 'fail' )
-        assert depset.getBlockingDependency() != None
+        assert depset.getBlockingTestCase() != None
 
         depset,tcase = make_DependencySet_with_a_dependency( 'fail', '*' )
-        assert depset.getBlockingDependency() == None
+        assert depset.getBlockingTestCase() == None
 
         depset,tcase = make_DependencySet_with_a_dependency( 'fail',
                                                              'pass or fail' )
-        assert depset.getBlockingDependency() == None
+        assert depset.getBlockingTestCase() == None
 
     def test_get_blocking_dependencies_that_are_running(self):
         ""
         depset,tcase = make_DependencySet_with_a_dependency( 'running' )
-        assert depset.getBlockingDependency() != None
+        assert depset.getBlockingTestCase() != None
 
         depset,tcase = make_DependencySet_with_a_dependency( 'pass' )
-        assert depset.getBlockingDependency() == None
+        assert depset.getBlockingTestCase() == None
         append_to_DependencySet( depset, 'running' )
-        assert depset.getBlockingDependency() != None
+        assert depset.getBlockingTestCase() != None
 
     def test_get_blocking_dependencies_that_are_skipped(self):
         ""
         depset,tcase = make_DependencySet_with_a_dependency( 'skip' )
-        assert depset.getBlockingDependency() != None
+        assert depset.getBlockingTestCase() != None
 
         depset,tcase = make_DependencySet_with_a_dependency( 'skip', '*' )
-        assert depset.getBlockingDependency() == None
+        assert depset.getBlockingTestCase() == None
 
     def test_get_blocking_dependencies_that_have_not_run_yet(self):
         ""
-        return # magic: still working on getBlockingDependency() method
+        depset,tcase = make_DependencySet_with_a_dependency( 'pass' )
+        assert depset.getBlockingTestCase() == None
+        append_to_DependencySet( depset, 'notrun' )
+        assert depset.getBlockingTestCase() != None
+
+    def test_will_never_run_logic(self):
+        ""
+        depset,tcase = make_DependencySet_with_a_dependency( 'pass' )
+        assert not depset.willNeverRun()
+
+        depset,tcase = make_DependencySet_with_a_dependency( 'fail' )
+        assert depset.willNeverRun()
+
+        depset,tcase = make_DependencySet_with_a_dependency( 'fail', '*' )
+        assert not depset.willNeverRun()
+
+        depset,tcase = make_DependencySet_with_a_dependency( 'skip' )
+        assert depset.willNeverRun()
+
+        depset,tcase = make_DependencySet_with_a_dependency( 'skip', '*' )
+        assert not depset.willNeverRun()
+
+        depset,tcase = make_DependencySet_with_a_dependency( 'skippass' )
+        assert not depset.willNeverRun()
+
+        depset,tcase = make_DependencySet_with_a_dependency( 'skipfail' )
+        assert depset.willNeverRun()
+
+        depset,tcase = make_DependencySet_with_a_dependency( 'notdone' )
+        assert not depset.willNeverRun()
+
+        depset,tcase = make_DependencySet_with_a_dependency( 'notdone', '*' )
+        assert not depset.willNeverRun()
 
         depset,tcase = make_DependencySet_with_a_dependency( 'notrun' )
-        assert depset.getBlockingDependency() != None
+        assert not depset.willNeverRun()
 
-    # def test_a_notrun_may_or_may_not_be_a_blocking_dependency(self):
-    #     ""
-    #     depset,tcase = make_DependencySet_with_a_dependency( 'notrun' )
+        depset,tcase = make_DependencySet_with_a_dependency( 'notrun', '*' )
+        assert not depset.willNeverRun()
 
-    #     assert depset.getBlocking() != None
+        depset,tcase = make_DependencySet_with_a_dependency(
+                            'notrun',
+                            second_level_result='fail' )
+        assert depset.willNeverRun()
 
-    #     assert depset.getBlocking( allow_notrun=True ) == None
+        depset,tcase = make_DependencySet_with_a_dependency(
+                            'notrun', '*',
+                            second_level_result='fail' )
+        assert not depset.willNeverRun()
 
-    #     st.markStarted( tspec, time.time() )
-    #     st.markDone( tspec, 0 )
-    #     assert depset.getBlocking() == None
+        depset,tcase = make_DependencySet_with_a_dependency(
+                            'notrun',
+                            second_level_result='pass' )
+        assert not depset.willNeverRun()
 
-    # def test_a_notdone_is_a_blocking_dependency(self):
-    #     ""
-    #     depset,tcase = make_DependencySet_with_a_dependency( 'notdone' )
+    def test_get_blocking_dependencies_that_will_never_run(self):
+        ""
+        # a dep which has to be run, but will never run
+        depset,tcase = make_DependencySet_with_a_dependency(
+                            'notrun',
+                            second_level_result='fail' )
+        assert depset.getBlockingTestCase() != None
 
-    #     assert depset.getBlocking() != None
-    #     assert depset.getBlocking( allow_notrun=True ) != None
+        # a dep which does NOT have to be run, and will never run
+        depset,tcase = make_DependencySet_with_a_dependency(
+                            'notrun', result_expr='*',
+                            second_level_result='fail' )
+        assert depset.getBlockingTestCase() == None
+
+        # a dep which does not have to be run, but not known yet if it will run
+        depset,tcase = make_DependencySet_with_a_dependency(
+                            'notrun', result_expr='*',
+                            second_level_result='notrun' )
+        assert depset.getBlockingTestCase() != None
+
+        # a dep which does not have to be run, and will never run due to skip
+        depset,tcase = make_DependencySet_with_a_dependency(
+                            'notrun', result_expr='*',
+                            second_level_result='skip' )
+        assert depset.getBlockingTestCase() == None
+
+        # a dep which does not have to be run, but must wait to run
+        depset,tcase = make_DependencySet_with_a_dependency(
+                            'notrun', result_expr='*',
+                            second_level_result='skippass' )
+        assert depset.getBlockingTestCase() != None
 
     def test_a_result_wildcard_will_ignore_a_skipped_dependency(self):
         ""
-        return # magic: still working to fix result="*" on skipped tests
-
         util.writefile( 'testA.vvt', """
             #VVT: depends on (result="*") : testB testC
             import os
             import vvtest_util as vvt
             print ( vvt.DEPDIRS )
-            assert len( vvt.DEPDIRS ) == 1
+            assert len( vvt.DEPDIRS ) == 2
+            if os.path.exists( vvt.DEPDIRS[0] ):
+                assert os.path.basename( vvt.DEPDIRS[0] ) == 'testB'
+                assert os.path.basename( vvt.DEPDIRS[1] ) == 'testC'
+                assert not os.path.exists( vvt.DEPDIRS[1] )
+            else:
+                assert os.path.basename( vvt.DEPDIRS[0] ) == 'testC'
+                assert os.path.basename( vvt.DEPDIRS[1] ) == 'testB'
+                assert os.path.exists( vvt.DEPDIRS[1] )
             """ )
         util.writefile( 'testB.vvt', """
             import os, time
@@ -186,11 +255,9 @@ class dependency_result_expressions( vtu.vvtestTestCase ):
             vrun = vtu.runvvtest( '-vv -k testA/testB', batch=batch )
             vrun.assertCounts( total=3, npass=2, skip=1 )
 
-            lineL = util.grepfiles( 'time=', 'TestResults*/testX/execute.log' )
-            assert len( lineL ) == 1
 
-
-def make_DependencySet_with_a_dependency( test_result, result_expr=None ):
+def make_DependencySet_with_a_dependency( test_result, result_expr=None,
+                                          second_level_result=None ):
     ""
     depset = depend.DependencySet()
     tcase = vtu.make_fake_TestCase( test_result )
@@ -199,6 +266,12 @@ def make_DependencySet_with_a_dependency( test_result, result_expr=None ):
 
     tdep = depend.TestDependency( tcase, None, wordexpr )
     depset.addDependency( tdep )
+
+    if second_level_result:
+        tcase2 = vtu.make_fake_TestCase( second_level_result, name='btest' )
+        wordexpr2 = make_word_expression( None )
+        tdep2 = depend.TestDependency( tcase2, None, wordexpr2 )
+        tcase.getDependencySet().addDependency( tdep2 )
 
     return depset, tcase
 

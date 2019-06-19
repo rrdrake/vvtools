@@ -215,7 +215,7 @@ class TestExecList:
                 i = 0
                 while i < N:
                     tcase = tcaseL[i]
-                    if tcase.getDependencySet().getBlocking() == None:
+                    if tcase.getDependencySet().getBlockingTestCase() == None:
                         self._pop_test_exec( np, i )
                         return tcase
                     i += 1

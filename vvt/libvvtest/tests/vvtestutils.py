@@ -594,12 +594,20 @@ def make_fake_TestCase( result=None, runtime=None, name='atest',
         tm = time.time()
         if result == 'skip':
             tstat.markSkipByPlatform()
+        elif result == 'skippass':
+            tstat.markStarted( tm )
+            tstat.markDone( 0 )
+            tstat.markSkipByPlatform()
+        elif result == 'skipfail':
+            tstat.markStarted( tm )
+            tstat.markDone( 1 )
+            tstat.markSkipByPlatform()
         elif result == 'timeout':
             tstat.markStarted( tm )
             tstat.markTimedOut()
         elif result == 'pass':
             tstat.markStarted( tm )
-            tstat.markDone(  0 )
+            tstat.markDone( 0 )
         elif result == 'diff':
             tstat.markStarted( tm )
             tstat.markDone( teststatus.DIFF_EXIT_STATUS )

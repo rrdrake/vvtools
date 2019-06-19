@@ -46,6 +46,49 @@ class TestDependency:
         ""
         return self.matchpat, self.tcase.getSpec().getExecuteDirectory()
 
+    def IsBlocking(self):
+        ""
+        tcase = self.getTestCase()
+        tstat = tcase.getStat()
+
+        if tstat.isDone() or tstat.skipTest():
+            result = tstat.getResultStatus()
+            if not self.satisfiesResult( result ):
+                return True
+
+        elif tstat.isNotDone():
+            return True
+
+        else:
+            assert tstat.isNotrun()
+
+            if tcase.getDependencySet().willNeverRun():
+                result = tstat.getResultStatus()
+                if not self.satisfiesResult( result ):
+                    return True
+            else:
+                return True
+
+        return False
+
+    def willNeverRun(self):
+        ""
+        tcase = self.getTestCase()
+        tstat = tcase.getStat()
+
+        if tstat.isDone() or tstat.skipTest():
+            result = tstat.getResultStatus()
+            if not self.satisfiesResult( result ):
+                return True
+
+        elif tstat.isNotrun():
+            if tcase.getDependencySet().willNeverRun():
+                result = tstat.getResultStatus()
+                if not self.satisfiesResult( result ):
+                    return True
+
+        return False
+
 
 class DependencySet:
 
@@ -70,84 +113,68 @@ class DependencySet:
         ""
         return len( self.deps )
 
-    def getBlocking(self):
-        """
-        If one or more dependencies did not run, did not finish, or failed,
-        then that offending TestSpec is returned.  Otherwise, None is returned.
-        """
-        # print ( 'magic: getblock enter' )
-        # for tdep in self.deps:
-        #     tspec = tdep.getTestSpec()
-        #     print ( 'magic: getblock dep', tspec.getExecuteDirectory(),
-        #         self.statushandler.isDone( tspec ),
-        #         tdep.getStat().getResultStatus(),
-        #         self.statushandler.skipTest( tspec ) )
-
-
-        for tdep in self.deps:
-
-            tcase = tdep.getTestCase()
-
-            if not tcase.getStat().isDone():
-                return tcase
-
-            result = tcase.getStat().getResultStatus()
-
-            if not tdep.satisfiesResult( result ):
-                return tcase
-
-        return None
-
-    def getBlockingDependency(self):
+    def getBlockingTestCase(self):
         ""
         for tdep in self.deps:
-
-            tcase = tdep.getTestCase()
-            tspec = tcase.getSpec()
-            tstat = tcase.getStat()
-
-            if tstat.isDone():
-                result = tstat.getResultStatus()
-                if not tdep.satisfiesResult( result ):
-                    return tspec
-
-            elif tstat.skipTest():
-                result = tstat.getResultStatus()
-                if not tdep.satisfiesResult( result ):
-                    return tspec
-
-            elif tstat.isNotDone():
-                return tspec
-
-            else:
-                assert tstat.isNotrun()
-
-                pass
+            if tdep.IsBlocking():
+                return tdep.getTestCase()
 
         return None
 
-    # def getBlocking(self, allow_notrun=False):
-    #     """
-    #     If one or more dependencies did not run, did not finish, or failed,
-    #     then that offending TestSpec is returned.  Otherwise, None is returned.
-    #     """
+    # def getBlockingTestCase(self):
+    #     ""
     #     for tdep in self.deps:
 
-    #         tspec = tdep.getTestSpec()
+    #         tcase = tdep.getTestCase()
+    #         tstat = tcase.getStat()
 
-    #         if self.statushandler.isNotrun( tspec ):
-    #             if not allow_notrun:
-    #                 return tspec
+    #         if tstat.isDone() or tstat.skipTest():
+    #             result = tstat.getResultStatus()
+    #             if not tdep.satisfiesResult( result ):
+    #                 return tcase
 
-    #         elif not self.statushandler.isDone( tspec ):
-    #             return tspec
+    #         elif tstat.isNotDone():
+    #             return tcase
 
-    #         result = tdep.getStat().getResultStatus()
+    #         else:
+    #             assert tstat.isNotrun()
 
-    #         if not tdep.satisfiesResult( result ):
-    #             return tspec
+    #             if tcase.getDependencySet().willNeverRun():
+    #                 result = tstat.getResultStatus()
+    #                 if not tdep.satisfiesResult( result ):
+    #                     return tcase
+    #             else:
+    #                 return tcase
 
     #     return None
+
+    # def willNeverRun(self):
+    #     ""
+    #     for tdep in self.deps:
+
+    #         tcase = tdep.getTestCase()
+    #         tstat = tcase.getStat()
+
+    #         if tstat.isDone() or tstat.skipTest():
+    #             result = tstat.getResultStatus()
+    #             if not tdep.satisfiesResult( result ):
+    #                 return True
+
+    #         elif tstat.isNotrun():
+    #             if tcase.getDependencySet().willNeverRun():
+    #                 result = tstat.getResultStatus()
+    #                 if not tdep.satisfiesResult( result ):
+    #                     return True
+
+    #     return False
+
+    def willNeverRun(self):
+        ""
+        for tdep in self.deps:
+            if tdep.willNeverRun():
+                return True
+
+        return False
 
     def getMatchDirectories(self):
         ""

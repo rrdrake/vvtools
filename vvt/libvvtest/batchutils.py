@@ -443,7 +443,7 @@ class BatchScheduler:
         Otherwise None is returned.
         """
         for tcase in bjob.testL:
-            deptx = tcase.getDependencySet().getBlocking()
+            deptx = tcase.getDependencySet().getBlockingTestCase()
             if deptx != None:
                 return deptx
         return None
