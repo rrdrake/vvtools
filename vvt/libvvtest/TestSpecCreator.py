@@ -518,6 +518,11 @@ def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
                     raise TestSpecError( 'invalid parameter value: "' + \
                                          v+'", line ' + str(lnum) )
 
+            dup = find_duplicate_value( vL )
+            if dup:
+                raise TestSpecError( 'duplicate parameter value: "'+dup + \
+                                     '", line ' + str(lnum) )
+
             paramset.addParameter( nL[0], vL )
 
         else:
@@ -541,9 +546,23 @@ def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
                                              v+'", line ' + str(lnum) )
                 vL.append( gL )
 
+            dup = find_duplicate_value( vL )
+            if dup:
+                raise TestSpecError( 'duplicate parameter value: "' + \
+                                     ','.join(dup) + '", line ' + str(lnum) )
+
             paramset.addParameterGroup( nL, vL )
 
     return paramset
+
+
+def find_duplicate_value( lst ):
+    ""
+    for val in lst:
+        if lst.count( val ) > 1:
+            return val
+
+    return None
 
 
 def parseAnalyze_scr( t, vspecs, evaluator ):

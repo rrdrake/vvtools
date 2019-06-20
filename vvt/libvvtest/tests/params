@@ -324,6 +324,32 @@ class parameter_tests( vtu.vvtestTestCase ):
             vtu.runvvtest( '-i -k dog' ).assertCounts( total=0 )
             vtu.runvvtest( '-i -k Z' ).assertCounts( total=4, npass=4 )
 
+    def test_duplicate_parameterize_values_is_an_error(self):
+        ""
+        util.writescript( 'params1.vvt', """
+            #!"""+sys.executable+"""
+            #VVT: parameterize : animal = dog cat dog
+            pass
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=0 )
+        assert len( util.greplines( 'skip*duplicate*dog', vrun.out ) ) == 1
+
+    def test_duplicate_parameterize_value_set_is_an_error(self):
+        ""
+        util.writescript( 'params1.vvt', """
+            #!"""+sys.executable+"""
+            #VVT: parameterize : thing1,thing2 = dog,cat pig,cat dog,cat
+            pass
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=0 )
+        assert len( util.greplines( 'skip*duplicate*dog,cat', vrun.out ) ) == 1
+
 
 #####################################################################
 

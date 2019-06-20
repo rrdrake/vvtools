@@ -392,8 +392,9 @@ class TestList:
                 tspec1 = tcase.getSpec()
                 print3( '*** warning:',
                     'ignoring test with duplicate execution directory\n',
-                    '      first file :', tspec1.getFilename() + '\n',
-                    '      second file:', tspec.getFilename() )
+                    '      first  :', tspec1.getFilename() + '\n',
+                    '      second :', tspec.getFilename() + '\n',
+                    '      execute:', xdir )
             else:
                 self.tcasemap[xdir] = TestCase( tspec )
 
