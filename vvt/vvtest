@@ -10,7 +10,6 @@ sys.excepthook = sys.__excepthook__
 import os
 import time
 import shutil
-import glob
 import shlex
 
 import libvvtest.cmdline as cmdline
@@ -37,6 +36,7 @@ import libvvtest.userplugin as userplugin
 from libvvtest.filtering import TestFilter
 from libvvtest.scanner import TestFileScanner
 from libvvtest.errors import FatalError
+import libvvtest.extract as extract
 
 
 version = '1.2'
@@ -106,7 +106,7 @@ class MainEntry:
             baselineTests( self.opts, self.optD, self.rtdata )
 
         elif self.opts.extract:
-            extractTestFiles( self.opts, self.optD,
+            extractTestFiles( self.optD['param_dict'],
                               self.dirs, self.opts.extract, self.rtdata )
 
         else:
@@ -562,98 +562,21 @@ def generateTestList( opts, optD, dirs, rtdata ):
     print3( "Test directory:", testsubdir )
 
 
-def extractTestFiles( opts, optD, dirs, target_dir, rtdata ):
+def extractTestFiles( param_dict, dirs, target_dir, rtdata ):
     """
     Uses all the regular filtering mechanisms to gather tests from a test
     source area and copies the files used for each test into a separate
     directory.
     """
-    timehandler = rtdata.getTestTimeHandler()
-
     tlist = make_TestList( rtdata, None )
 
-    scan_test_source_directories( tlist, dirs, optD['param_dict'] )
+    scan_test_source_directories( tlist, dirs, param_dict )
 
-    timehandler.load( tlist )
+    rtdata.getTestTimeHandler().load( tlist )
 
     tlist.applyPermanentFilters()
 
-    if not os.path.isabs(target_dir):
-        target_dir = os.path.abspath(target_dir)
-    if not os.path.exists(target_dir):
-        os.makedirs( target_dir )
-    
-    uniqD = {}
-    
-    def wvisit( arg, dname, dirs, files ):
-        """
-        copy a directory tree, but leave out version control files
-        """
-        for n in ['CVS','.cvsignore','.svn','.git','.gitignore']:
-            while (n in dirs): dirs.remove(n)
-            while (n in files): files.remove(n)
-        fd = os.path.normpath( os.path.join( arg[0], dname ) )
-        td = os.path.normpath( os.path.join( arg[1], dname ) )
-        if not os.path.exists(td):
-            os.makedirs(td)
-        for f1 in files:
-            f2 = os.path.join(fd,f1)
-            tf = os.path.join(td,f1)
-            shutil.copy2( f2, tf )
-    
-    for tcase in tlist.getActiveTests():
-
-        tspec = tcase.getSpec()
-
-        tname = tspec.getName()
-        T = (tname, tspec.getFilename())
-
-        from_dir = os.path.dirname( tspec.getFilename() )
-        p = os.path.dirname( tspec.getFilepath() )
-        if p: to_dir = os.path.normpath( os.path.join( target_dir, p ) )
-        else: to_dir = target_dir
-
-        if not os.path.exists( to_dir ):
-            os.makedirs( to_dir )
-        tof = os.path.join( target_dir, tspec.getFilepath() )
-
-        if tof not in uniqD:
-            uniqD[tof] = None
-            try: shutil.copy2( tspec.getFilename(), tof )
-            except IOError: pass
-
-        for srcf in tspec.getSourceFiles():
-
-            if os.path.exists( os.path.join( from_dir, srcf ) ):
-                fL = [ srcf ]
-            else:
-                cwd = os.getcwd()
-                try:
-                    os.chdir( from_dir )
-                    fL = glob.glob( srcf )
-                except Exception:
-                    fL = []
-                os.chdir( cwd )
-
-            for f in fL:
-                fromf = os.path.join( from_dir, f )
-                tof = os.path.join( to_dir, f )
-                tod = os.path.dirname(tof)
-                if tof not in uniqD:
-                    uniqD[tof] = None
-                    if not os.path.exists(tod):
-                        os.makedirs(tod)
-                    
-                    if os.path.isdir(fromf):
-                        cwd = os.getcwd()
-                        os.chdir(fromf)
-                        for root,dirs,files in os.walk( '.' ):
-                            wvisit( (fromf, tof), root, dirs, files )
-                        os.chdir(cwd)
-                      
-                    else:
-                        try: shutil.copy2( fromf, tof )
-                        except IOError: pass
+    extract.copy_out_test_files( target_dir, tlist.getActiveTests() )
 
 
 ##############################################################################
