@@ -762,8 +762,8 @@ def runTests( opts, optD, rtdata, dirs ):
         xlist.createTestExecs( test_dir, plat, config, perms )
 
         if not opts.batch:
-            executeTestList( opts, optD, rtdata,
-                             tlist, xlist, test_dir, plat, perms, tfile,
+            executeTestList( opts.qsub_id,
+                             tlist, xlist, test_dir, plat, perms,
                              results_writer )
 
         else:
@@ -870,8 +870,8 @@ def make_results_writer( opts, optD,
     return writer
 
 
-def executeTestList( opts, optD, rtdata,
-                     tlist, xlist, test_dir, plat, perms, tfile,
+def executeTestList( qsub_id,
+                     tlist, xlist, test_dir, plat, perms,
                      results_writer ):
     """
     """
@@ -879,7 +879,7 @@ def executeTestList( opts, optD, rtdata,
     starttime = time.time()
     print3( "Start time:", time.ctime() )
 
-    uthook = utesthooks.construct_unit_testing_hook( 'run', opts.qsub_id )
+    uthook = utesthooks.construct_unit_testing_hook( 'run', qsub_id )
 
     rfile = tlist.initializeResultsFile()
 
@@ -1197,8 +1197,8 @@ def restartTests( opts, optD, rtdata ):
         xlist.createTestExecs( test_dir, plat, config, perms )
 
         if not opts.batch:
-            executeTestList( opts, optD, rtdata,
-                             tlist, xlist, test_dir, plat, perms, tfile,
+            executeTestList( opts.qsub_id,
+                             tlist, xlist, test_dir, plat, perms,
                              results_writer )
 
         else:
