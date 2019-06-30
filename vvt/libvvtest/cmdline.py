@@ -442,7 +442,8 @@ def create_parser( argvlist, vvtest_version ):
 
     names = ', '.join( get_help_section_list() )
     intro = help_intro.replace( 'HELP_SECTION_LIST', names )
-    psr = argutil.ArgumentParser( prog='vvtest',
+    psr = argutil.ArgumentParser(
+                        prog='vvtest',
                         description=intro,
                         formatter_class=argutil.ParagraphHelpFormatter )
 

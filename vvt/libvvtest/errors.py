@@ -5,5 +5,10 @@
 # Government retains certain rights in this software.
 
 
+class FatalError(Exception):
+    pass
+
+
 class TestSpecError(Exception):
     pass
+

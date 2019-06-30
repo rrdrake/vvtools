@@ -14,7 +14,7 @@ from . import FilterExpressions
 
 from .ParameterSet import ParameterSet
 from .ScriptReader import ScriptReader, check_parse_attributes_section
-from .TestSpecError import TestSpecError
+from .errors import TestSpecError
 
 
 class TestCreator:

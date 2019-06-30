@@ -10,7 +10,7 @@ sys.excepthook = sys.__excepthook__
 import os
 import re
 
-from .TestSpecError import TestSpecError
+from .errors import TestSpecError
 
 
 class ScriptSpec:

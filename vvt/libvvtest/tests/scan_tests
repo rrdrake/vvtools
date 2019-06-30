@@ -1,0 +1,90 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+
+import vvtestutils as vtu
+import testutils as util
+from testutils import print3
+
+import libvvtest.TestList as TestList
+from libvvtest.TestSpecCreator import TestCreator
+from libvvtest.RuntimeConfig import RuntimeConfig
+from libvvtest.scanner import TestFileScanner
+
+
+class TestList_scan_behavior( vtu.vvtestTestCase ):
+
+    def test_scan_a_directory_for_tests(self):
+        ""
+        util.writefile( 'subdir/scr.vvt', """
+            pass
+            """ )
+        util.writefile( 'subdir/old.xml', """
+            <rtest name="old">
+                <execute>
+                    echo "hello"
+                </execute>
+            </rtest>
+            """ )
+        time.sleep(1)
+
+        tlist,scan = construct_TestList_and_TestFileScanner()
+        scan.scanPath( 'subdir' )
+
+        tL = list( tlist.getTests() )
+        assert len( tL ) == 2
+        if tL[0].getSpec().getName() == 'scr':
+            assert tL[0].getSpec().getFilepath() == 'scr.vvt'
+            assert tL[1].getSpec().getFilepath() == 'old.xml'
+        else:
+            assert tL[1].getSpec().getFilepath() == 'scr.vvt'
+            assert tL[0].getSpec().getFilepath() == 'old.xml'
+
+    def test_scan_a_single_test_file(self):
+        ""
+        util.writefile( 'scr.vvt', """
+            pass
+            """ )
+        time.sleep(1)
+
+        tlist,scan = construct_TestList_and_TestFileScanner()
+        scan.scanPath( 'scr.vvt' )
+
+        tL = list( tlist.getTests() )
+        assert len( tL ) == 1
+        assert tL[0].getSpec().getName() == 'scr'
+        assert tL[0].getSpec().getFilepath() == 'scr.vvt'
+
+    def test_scan_a_path_that_does_not_exist(self):
+        ""
+        cmd = vtu.vvtest_command_line( 'mypath' )
+        x,out = util.runcmd( cmd, raise_on_error=False )
+
+        assert x != 0
+        assert 'does not exist' in out and 'mypath' in out
+
+
+def construct_TestList_and_TestFileScanner():
+    ""
+    rtconfig = RuntimeConfig()
+    creator = TestCreator( rtconfig )
+    tlist = TestList.TestList( None, rtconfig, creator )
+
+    scan = TestFileScanner( tlist )
+
+    return tlist,scan
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

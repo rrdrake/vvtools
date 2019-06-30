@@ -35,6 +35,8 @@ from libvvtest.printinfo import TestInformationPrinter
 from libvvtest.TestSpecCreator import TestCreator
 import libvvtest.userplugin as userplugin
 from libvvtest.filtering import TestFilter
+from libvvtest.scanner import TestFileScanner
+from libvvtest.errors import FatalError
 
 
 version = '1.2'
@@ -511,22 +513,16 @@ def make_TestList( rtdata, filename ):
 
 
 ##############################################################################
-#
-# generation of tests
-
 
 def scan_test_source_directories( tlist, scan_dirs, setparams ):
     ""
+    scan = TestFileScanner( tlist, setparams )
+
     # default scan directory is the current working directory
     if len(scan_dirs) == 0:
         scan_dirs = ['.']
 
-    for d in scan_dirs:
-        if not os.path.exists(d):
-            sys.stderr.write(
-                '*** error: directory does not exist: ' + str(d) + '\n')
-            sys.exit(1);
-        tlist.scanDirectory( d, setparams )
+    scan.scanPaths( scan_dirs )
 
 
 def generateTestList( opts, optD, dirs, rtdata ):
@@ -572,7 +568,6 @@ def extractTestFiles( opts, optD, dirs, target_dir, rtdata ):
     source area and copies the files used for each test into a separate
     directory.
     """
-    plat = rtdata.getPlatformObject()
     timehandler = rtdata.getTestTimeHandler()
 
     tlist = make_TestList( rtdata, None )
@@ -917,7 +912,7 @@ def runTests( opts, optD, rtdata, dirs ):
     timehandler = rtdata.getTestTimeHandler()
     plugin = rtdata.getUserPlugin()
 
-    # determine the directory that stores the test results then create it
+    # determine the directory that stores the test results
     test_dir = os.path.abspath( testsubdir )
     tfile = os.path.join( test_dir, testlist_name )
 
@@ -1707,9 +1702,14 @@ def make_PermissionSetter( test_dir, optperms ):
 
 if __name__ == '__main__':
     ""
-    main = MainEntry( sys.argv )
-    main.constructObjects()
+    try:
+        main = MainEntry( sys.argv )
+        main.constructObjects()
 
-    exitstat = main.execute()
-    if exitstat:
-        sys.exit( exitstat )
+        exitstat = main.execute()
+        if exitstat:
+            sys.exit( exitstat )
+
+    except FatalError as e:
+        sys.stderr.write( '*** vvtest error: '+str(e)+'\n' )
+        sys.exit(1)
