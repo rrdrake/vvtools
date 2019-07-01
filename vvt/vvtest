@@ -22,13 +22,10 @@ import libvvtest.batchutils as batchutils
 import libvvtest.FilterExpressions as FilterExpressions
 from libvvtest.RuntimeConfig import RuntimeConfig
 import libvvtest.testlistio as testlistio
-import libvvtest.utesthooks as utesthooks
 import libvvtest.resultswriter as resultswriter
 import libvvtest.consolewriter as consolewriter
-from libvvtest.outpututils import XstatusString, pretty_time
 import libvvtest.pathutil as pathutil
 from libvvtest.teststatus import RESULTS_KEYWORDS
-from libvvtest.printinfo import TestInformationPrinter
 from libvvtest.TestSpecCreator import TestCreator
 import libvvtest.userplugin as userplugin
 from libvvtest.filtering import TestFilter
@@ -699,12 +696,6 @@ def readCommandInfo( opts, optD, rtdata ):
     return None
 
 
-def exec_path( testspec, test_dir ):
-    ""
-    xdir = testspec.getExecuteDirectory()
-    return pathutil.relative_execute_directory( xdir, test_dir, os.getcwd() )
-
-
 def runTests( opts, optD, rtdata, dirs ):
     """
     Executes a list of tests.
@@ -763,9 +754,8 @@ def runTests( opts, optD, rtdata, dirs ):
         xlist.createTestExecs( test_dir, plat, config, perms )
 
         if not opts.batch:
-            executeTestList( opts.qsub_id,
-                             tlist, xlist, test_dir, plat, perms,
-                             results_writer )
+            execute.run_test_list( opts.qsub_id, tlist, xlist, test_dir, plat,
+                                   perms, results_writer )
 
         else:
             batchTestList( opts, optD, rtdata,
@@ -869,90 +859,6 @@ def make_results_writer( opts, optD,
     writer.setRunAttr( LOADEDMODULES=os.environ.get( 'LOADEDMODULES', '' ) )
 
     return writer
-
-
-def executeTestList( qsub_id,
-                     tlist, xlist, test_dir, plat, perms,
-                     results_writer ):
-    """
-    """
-    plat.display()
-    starttime = time.time()
-    print3( "Start time:", time.ctime() )
-
-    uthook = utesthooks.construct_unit_testing_hook( 'run', qsub_id )
-
-    rfile = tlist.initializeResultsFile()
-
-    try:
-
-        info = TestInformationPrinter( sys.stdout, xlist )
-
-        # execute tests
-
-        perms.set( os.path.abspath( rfile ) )
-
-        cwd = os.getcwd()
-
-        while True:
-
-            tnext = xlist.popNext( plat )
-
-            if tnext != None:
-                tspec = tnext.getSpec()
-                texec = tnext.getExec()
-                print3( 'Starting:', exec_path( tspec, test_dir ) )
-                xlist.startTest( tnext, plat )
-                tlist.appendTestResult( tnext )
-
-            elif xlist.numRunning() == 0:
-                break
-
-            else:
-                info.checkPrint()
-                time.sleep(1)
-
-            showprogress = False
-            for tcase in list( xlist.getRunning() ):
-                tx = tcase.getExec()
-                if tx.poll():
-                    xs = XstatusString( tcase, test_dir, cwd )
-                    print3( "Finished:", xs )
-                    xlist.testDone( tcase )
-                    showprogress = True
-
-            uthook.check( xlist.numRunning(), xlist.numDone() )
-
-            if showprogress:
-                ndone = xlist.numDone()
-                ntot = tlist.numActive()
-                pct = 100 * float(ndone) / float(ntot)
-                div = str(ndone)+'/'+str(ntot)
-                dt = pretty_time( time.time() - starttime )
-                print3( "Progress: " + div+" = %%%.1f"%pct + ', time = '+dt )
-
-    finally:
-        tlist.writeFinished()
-
-    # any remaining tests cannot run, so print warnings
-    tcaseL = xlist.popRemaining()
-    if len(tcaseL) > 0:
-        print3()
-    for tcase in tcaseL:
-        deptx = tcase.getBlockingDependency()
-        assert tcase.numDependencies() > 0 and deptx != None
-        if isinstance( deptx, TestExec.TestExec ):
-            xdir = deptx.atest.getExecuteDirectory()  # magic: remove this
-        else:
-            xdir = deptx.getSpec().getExecuteDirectory()
-        print3( '*** Warning: test "'+tcase.getSpec().getExecuteDirectory()+'"',
-                'notrun due to dependency "' + xdir + '"' )
-
-    print3()
-    results_writer.postrun( tlist )
-
-    elapsed = pretty_time( time.time() - starttime )
-    print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
 
 
 def batchTestList( opts, optD, rtdata,
@@ -1116,9 +1022,8 @@ def restartTests( opts, optD, rtdata ):
         xlist.createTestExecs( test_dir, plat, config, perms )
 
         if not opts.batch:
-            executeTestList( opts.qsub_id,
-                             tlist, xlist, test_dir, plat, perms,
-                             results_writer )
+            execute.run_test_list( opts.qsub_id, tlist, xlist, test_dir, plat,
+                                   perms, results_writer )
 
         else:
             batchTestList( opts, optD, rtdata,

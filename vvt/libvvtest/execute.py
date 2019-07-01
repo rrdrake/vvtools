@@ -8,6 +8,7 @@ import os, sys
 import time
 
 from . import utesthooks
+from . import pathutil
 from .printinfo import TestInformationPrinter
 from .outpututils import XstatusString, pretty_time
 
@@ -108,6 +109,91 @@ def sleep_with_info_check( info, qsleep ):
     for i in range( int( qsleep + 0.5 ) ):
         info.checkPrint()
         time.sleep( 1 )
+
+
+def run_test_list( qsub_id, tlist, xlist, test_dir, plat,
+                   perms, results_writer ):
+    ""
+    plat.display()
+    starttime = time.time()
+    print3( "Start time:", time.ctime() )
+
+    uthook = utesthooks.construct_unit_testing_hook( 'run', qsub_id )
+
+    rfile = tlist.initializeResultsFile()
+
+    try:
+
+        info = TestInformationPrinter( sys.stdout, xlist )
+
+        # execute tests
+
+        perms.set( os.path.abspath( rfile ) )
+
+        cwd = os.getcwd()
+
+        while True:
+
+            tnext = xlist.popNext( plat )
+
+            if tnext != None:
+                tspec = tnext.getSpec()
+                texec = tnext.getExec()
+                print3( 'Starting:', exec_path( tspec, test_dir ) )
+                xlist.startTest( tnext, plat )
+                tlist.appendTestResult( tnext )
+
+            elif xlist.numRunning() == 0:
+                break
+
+            else:
+                info.checkPrint()
+                time.sleep(1)
+
+            showprogress = False
+            for tcase in list( xlist.getRunning() ):
+                tx = tcase.getExec()
+                if tx.poll():
+                    xs = XstatusString( tcase, test_dir, cwd )
+                    print3( "Finished:", xs )
+                    xlist.testDone( tcase )
+                    showprogress = True
+
+            uthook.check( xlist.numRunning(), xlist.numDone() )
+
+            if showprogress:
+                ndone = xlist.numDone()
+                ntot = tlist.numActive()
+                pct = 100 * float(ndone) / float(ntot)
+                div = str(ndone)+'/'+str(ntot)
+                dt = pretty_time( time.time() - starttime )
+                print3( "Progress: " + div+" = %%%.1f"%pct + ', time = '+dt )
+
+    finally:
+        tlist.writeFinished()
+
+    # any remaining tests cannot run, so print warnings
+    tcaseL = xlist.popRemaining()
+    if len(tcaseL) > 0:
+        print3()
+    for tcase in tcaseL:
+        deptx = tcase.getBlockingDependency()
+        assert tcase.numDependencies() > 0 and deptx != None
+        xdir = deptx.getSpec().getExecuteDirectory()
+        print3( '*** Warning: test "'+tcase.getSpec().getExecuteDirectory()+'"',
+                'notrun due to dependency "' + xdir + '"' )
+
+    print3()
+    results_writer.postrun( tlist )
+
+    elapsed = pretty_time( time.time() - starttime )
+    print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
+
+
+def exec_path( testspec, test_dir ):
+    ""
+    xdir = testspec.getExecuteDirectory()
+    return pathutil.relative_execute_directory( xdir, test_dir, os.getcwd() )
 
 
 def print3( *args ):
