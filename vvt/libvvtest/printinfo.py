@@ -55,10 +55,9 @@ class TestInformationPrinter:
 
     def writeBatchListInfo(self, now):
         ""
-        accnt = self.batcher.getAccountant()
-
-        self.println( '  *', accnt.numStarted(), 'batch job(s) in flight:' )
-        for qid, batch_job in accnt.getStarted():
+        self.println( '  *', self.batcher.getNumStarted(),
+                      'batch job(s) in flight:' )
+        for qid, batch_job in self.batcher.getStarted():
             duration = now - batch_job.tstart
             duration = datetime.timedelta( seconds=int(duration) )
             self.println( '    * qbat.{0}'.format(qid),

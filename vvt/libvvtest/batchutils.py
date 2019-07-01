@@ -118,8 +118,6 @@ class BatchScriptWriter:
             d = self.namer.getSubdir( i )
             self.perms.recurse( d )
 
-        return len( qsubids )
-
     def make_queue_batch(self, qnumber, qlist, npD, comopts, results_suffix):
         """
         """
@@ -574,6 +572,10 @@ class BatchAccountant:
     def addJob(self, qid, batchjob ):
         ""
         self.qtodo[ qid ] = batchjob
+
+    def numToDo(self):
+        ""
+        return len( self.qtodo )
 
     def numStarted(self):
         return len( self.qstart )

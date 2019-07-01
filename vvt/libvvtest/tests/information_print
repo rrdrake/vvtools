@@ -135,8 +135,13 @@ class MockBatcher:
         ""
         self.accountant = batchutils.BatchAccountant()
 
-    def getAccountant(self):
-        return self.accountant
+    def getNumStarted(self):
+        ""
+        return self.accountant.numStarted()
+
+    def getStarted(self):
+        ""
+        return self.accountant.getStarted()
 
 
 def make_mock_Batcher( xtests ):
@@ -147,8 +152,9 @@ def make_mock_Batcher( xtests ):
     qid = 0
     jid = 42
     bjob.start( jid )
-    batch.getAccountant().addJob( qid, bjob )
-    batch.getAccountant().markJobStarted( qid, jid )
+    batch.accountant.addJob( qid, bjob )
+    batch.accountant.markJobStarted( qid, jid )
+
     return batch
 
 
