@@ -196,6 +196,42 @@ def exec_path( testspec, test_dir ):
     return pathutil.relative_execute_directory( xdir, test_dir, os.getcwd() )
 
 
+def run_baseline( xlist, plat ):
+    ""
+    failures = False
+    for tcase in xlist.getTestExecList():
+
+        tspec = tcase.getSpec()
+        texec = tcase.getExec()
+
+        xdir = tspec.getExecuteDirectory()
+
+        sys.stdout.write( "baselining "+xdir+"..." )
+
+        xlist.startTest( tcase, plat, baseline=1 )
+
+        tm = int( os.environ.get( 'VVTEST_BASELINE_TIMEOUT', 30 ) )
+        for i in range(tm):
+
+            time.sleep(1)
+
+            if texec.poll():
+                if tcase.getStat().passed():
+                    print3( "done" )
+                else:
+                    failures = True
+                    print3("FAILED")
+                break
+
+        if not tcase.getStat().isDone():
+            texec.killJob()
+            failures = True
+            print3( "TIMED OUT" )
+
+    if failures:
+      print3( "\n\n !!!!!!!!!!!  THERE WERE FAILURES  !!!!!!!!!! \n\n" )
+
+
 def print3( *args ):
     ""
     s = ' '.join( [ str(arg) for arg in args ] )
