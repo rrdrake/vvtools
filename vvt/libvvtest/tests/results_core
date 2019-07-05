@@ -1,0 +1,257 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import re
+import time
+import glob
+
+import vvtestutils as vtu
+import testutils as util
+from testutils import print3
+
+import results
+
+import results_util as ru
+
+timesfname = results.runtimes_filename
+multifname = results.multiruntimes_filename
+
+
+class test_results_tests( vtu.vvtestTestCase ):
+
+    def test_make_and_parse_test_attributes(self):
+        ""
+        aD = { 'xdate':int(time.time()),
+               'xtime':23, 'state':'done', 'result':'pass' }
+        s = results.make_attr_string( aD )
+        D2 = results.read_attrs( s.split() )
+        assert aD == D2, str(aD) + ' != ' + str(D2)
+
+        aD = { 'xdate':int(time.time()), 'state':'notdone' }
+        s = results.make_attr_string( aD )
+        D2 = results.read_attrs( s.split() )
+        assert aD == D2, str(aD) + ' != ' + str(D2)
+
+        aD = { 'state':'notrun' }
+        s = results.make_attr_string( aD )
+        D2 = results.read_attrs( s.split() )
+        assert aD == D2, str(aD) + ' != ' + str(D2)
+
+    def test_saving_results_when_the_root_cannot_be_determined(self):
+        ""
+        ru.write_tests_cat_dog_circle()
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=3, npass=3 )
+        tdir = vrun.resultsDir()
+
+        vtu.runvvtest( '-i --save-results' )
+        resultsfname = util.globfile('results.*')
+
+        ru.assert_empty_testresults_file( resultsfname )
+
+        tr = results.TestResults( resultsfname )
+        assert ru.results_write_creates_the_same_file( resultsfname, tr )
+
+    def test_nominal_uses_of_TestResults_class(self):
+        ""
+        ru.write_tests_cat_dog_circle()
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=3, npass=3 )
+        tdir = vrun.resultsDir()
+
+        resultsfname = ru.create_runtimes_and_results_file( tdir )
+
+        tr = results.TestResults( resultsfname )
+        assert tr.testdir() == tdir
+
+        topdir = os.path.basename( os.getcwd() )
+        ru.assert_cat_dog_circle_testresults_contents( tr, topdir )
+
+        assert ru.results_write_creates_the_same_file( resultsfname, tr )
+
+        # write empty runtimes files in the subdirectories
+        os.remove( timesfname )
+        util.runcmd( vtu.resultspy + ' save', chdir='one' )
+        util.runcmd( vtu.resultspy + ' save', chdir='two' )
+
+        ru.assert_empty_testresults_file( 'one/runtimes' )
+        ru.assert_empty_testresults_file( 'two/runtimes' )
+
+        # saving results this time will produce different root-relative paths
+        vtu.runvvtest( '-i --save-results' )
+        tr = results.TestResults( resultsfname )
+        ru.assert_cat_dog_circle_testresults_contents( tr )
+
+        # saving runtimes again to the subdirectories should populate the
+        # runtimes but only include tests at or below the root
+        fn = os.path.abspath( resultsfname )
+        util.runcmd( vtu.resultspy + ' save ' + fn, chdir='one' )
+        util.runcmd( vtu.resultspy + ' save ' + fn, chdir='two' )
+
+        ru.assert_cat_dog_runtimes( 'one' )
+        ru.assert_circle_runtimes( 'two' )
+
+    def test_save_results_with_multiple_parameterize(self):
+        ""
+        util.writefile( "cat.xml", """
+            <rtest name="cat">
+            <parameterize direction="front rear"/>
+            <parameterize side="left right"/>
+                <execute/>
+            </rtest>""" )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=4, npass=4 )
+        tdir = vrun.resultsDir()
+
+        resultsfname = ru.create_runtimes_and_results_file( tdir )
+
+        ru.assert_results_file_has_tests(
+                resultsfname,
+                'cat.direction=front.side=left',
+                'cat.direction=front.side=right',
+                'cat.direction=rear.side=left',
+                'cat.direction=rear.side=right' )
+
+    def test_save_results_with_multiple_parameterize_and_an_analyze(self):
+        ""
+        util.writefile( "cat.vvt", """
+            #VVT: parameterize: direction = front rear
+            #VVT: parameterize: side = left right
+            #VVT: analyze: -a
+            pass
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=5, npass=5 )
+        tdir = vrun.resultsDir()
+
+        resultsfname = ru.create_runtimes_and_results_file( tdir )
+
+        ru.assert_results_file_has_tests(
+                resultsfname,
+                'cat',
+                'cat.direction=front.side=left',
+                'cat.direction=front.side=right',
+                'cat.direction=rear.side=left',
+                'cat.direction=rear.side=right' )
+
+    def test_save_results_with_zipped_parameterize_and_an_analyze(self):
+        ""
+        util.writefile( "cat.xml", """
+            <rtest name="cat">
+            <parameterize direction="front rear"
+                          side="left right"/>
+                <execute/>
+                <analyze>
+                    echo "hello"
+                </analyze>
+            </rtest>""" )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=3, npass=3 )
+        tdir = vrun.resultsDir()
+
+        resultsfname = ru.create_runtimes_and_results_file( tdir )
+
+        assert len( util.grepfiles( "cat", resultsfname ) ) == 3
+        assert len( util.grepfiles( "cat.direction=front.side=left", resultsfname ) ) == 1
+        assert len( util.grepfiles( "cat.direction=rear.side=right", resultsfname ) ) == 1
+
+        ru.assert_results_file_has_tests(
+                resultsfname,
+                'cat',
+                'cat.direction=front.side=left',
+                'cat.direction=rear.side=right' )
+
+    def test_nominal_use_of_MultiResults_class(self):
+        ""
+        ru.write_tests_cat_dog_circle()
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=3, npass=3 )
+        tdir = vrun.resultsDir()
+
+        # bootstrap with runtimes files then save the test results
+        util.runcmd( vtu.resultspy + ' save', chdir='one' )
+        util.runcmd( vtu.resultspy + ' save', chdir='two' )
+        vtu.runvvtest( '-i --save-results' )
+
+        resultsfname = util.globfile('results.*')
+        tr = results.TestResults( resultsfname )
+        platname,cplrname = tr.platform(), tr.compiler()
+        platid = platname+'/'+cplrname
+
+        util.runcmd( vtu.resultspy + ' merge ' + resultsfname )
+
+        ru.assert_multi_results_file_has_tests(
+                multifname,
+                1,
+                'one/cat',
+                'one/dog',
+                'two/circle' )
+
+        t1 = ru.get_multi_results_test_time( multifname, 'one/dog' )
+        assert t1 > 0 and t1 < 4
+
+        # create a second results file with a different platform/compiler name
+        tr = results.TestResults( resultsfname )
+        resultsfname2 = 'results2'
+        tr.writeResults( resultsfname2, 'Plat2', 'Cplr2', 'sparky', tdir )
+
+        # merge a second platform/compiler file into first
+        util.runcmd( vtu.resultspy + ' merge -x '+resultsfname2 )
+
+        ru.assert_multi_results_file_has_tests(
+                multifname,
+                2,
+                'one/cat',
+                'one/dog',
+                'two/circle' )
+
+        # increase the run time of one test and run vvtest again
+        util.writefile( "one/dog.xml", """
+            <rtest name="dog">
+                <execute>
+                    sleep 4
+                </execute>
+            </rtest>
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest( '-w' )
+        vrun.assertCounts( total=3, npass=3 )
+
+        # merge over the top of the multi platform file
+        vtu.runvvtest( '-i --save-results' )
+        util.runcmd( vtu.resultspy + ' merge -x '+resultsfname )
+
+        # check the 'dog' test time increased
+        t2 = ru.get_multi_results_test_time( multifname, 'one/dog', platid )
+        assert t2 > t1
+
+        # check that the other 'dog' time did not get overwritten
+        t3 = ru.get_multi_results_test_time( multifname, 'one/dog', 'Plat2/Cplr2' )
+        assert t2 > t3
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

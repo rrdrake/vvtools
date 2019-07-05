@@ -367,7 +367,7 @@ class MultiResults:
         #           attrD maps attribute name to attribute value
         self.dataD = {}
         
-        # 'rtimeD' comes from runtimes.txt files contained at the top of the
+        # 'rtimeD' comes from runtimes files contained at the top of the
         # test directory, and 'rtime_roots' is a list of the top directory
         # names
         #     rtimeD maps root-relative directory to testD
