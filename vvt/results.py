@@ -8,12 +8,11 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
-import string
 import time
 import glob
-import re
 
 import libvvtest.fmtresults as fmtresults
+import libvvtest.reports as reports
 
 
 usage_string = """
@@ -347,7 +346,6 @@ def report_main( argv ):
 
 ########################################################################
 
-
 def multiplatform_merge( optD, fileL ):
     """
     Read results file(s) and merge test entries into the multi-platform
@@ -398,56 +396,6 @@ def multiplatform_merge( optD, fileL ):
     return warnL
 
 
-def parse_results_filename( filename ):
-    """
-    Assuming a file name of the form
-
-        results.<date>.<platform>.<options>.<tag>
-    
-    this function returns a tuple
-
-        ( date, platform, options, tag )
-
-    where an entry will be None if the filename form did not have that data or
-    if parsing for that entry failed.  The 'date' is seconds since epoch.
-    The rest are strings.
-    """
-    f = os.path.basename( filename )
-    L = [ s.strip() for s in f.split('.',4) ]
-
-    ftime = None
-    if len(L) >= 2:
-        try:
-            T = time.strptime( L[1], '%Y_%m_%d' )
-            ftime = time.mktime( T )
-        except:
-            ftime = None
-    
-    platname = None
-    if len(L) >= 3:
-        platname = L[2]
-    
-    opts = None
-    if len(L) >= 4:
-        opts = L[3]
-    
-    tag = None
-    if len(L) >= 5:
-        tag = L[4]
-
-    return ftime, platname, opts, tag
-
-
-def date_round_down( tm ):
-    """
-    Given a date in seconds, this function rounds down to midnight of the
-    date.  Returns a date in seconds.
-    """
-    s = time.strftime( "%Y %m %d", time.localtime( tm ) )
-    T = time.strptime( s, "%Y %m %d" )
-    return time.mktime( T )
-
-
 def process_files( optD, fileL, fileG, **kwargs ):
     """
     Apply -g and -d options to the 'fileL' list, in place.  The order
@@ -488,10 +436,10 @@ def process_files( optD, fileL, fileG, **kwargs ):
         if dval != None:
             dval = int(dval)
             # filter out results files that are too old
-            cutoff = date_round_down( int( time.time() - dval*24*60*60 ) )
+            cutoff = fmtresults.date_round_down( int( time.time() - dval*24*60*60 ) )
             newL = []
             for f in fL:
-                ft,plat,opts,tag = parse_results_filename( f )
+                ft,plat,opts,tag = fmtresults.parse_results_filename( f )
                 if ft == None or ft >= cutoff:
                     newL.append( f )
             del fL[:]
@@ -505,7 +453,7 @@ def process_files( optD, fileL, fileG, **kwargs ):
             # include/exclude results files based on platform name
             newL = []
             for f in fL:
-                ft,plat,opts,tag = parse_results_filename( f )
+                ft,plat,opts,tag = fmtresults.parse_results_filename( f )
                 if plat == None or \
                    ( platL == None or plat in platL ) and \
                    ( xplatL == None or plat not in xplatL ):
@@ -518,7 +466,7 @@ def process_files( optD, fileL, fileG, **kwargs ):
             optnL = '+'.join( optD['-o'] ).split('+')
             newL = []
             for f in fL:
-                ft,plat,opts,tag = parse_results_filename( f )
+                ft,plat,opts,tag = fmtresults.parse_results_filename( f )
                 if opts != None:
                     # if at least one of the -o values from the command line
                     # is contained in the file name options, then keep the file
@@ -537,7 +485,7 @@ def process_files( optD, fileL, fileG, **kwargs ):
             optnL = '+'.join( optD['-O'] ).split('+')
             newL = []
             for f in fL:
-                ft,plat,opts,tag = parse_results_filename( f )
+                ft,plat,opts,tag = fmtresults.parse_results_filename( f )
                 if opts != None:
                     # if at least one of the -O values from the command line is
                     # contained in the file name options, then exclude the file
@@ -560,7 +508,7 @@ def process_files( optD, fileL, fileG, **kwargs ):
             # include/exclude based on tag
             newL = []
             for f in fL:
-                ft,plat,opts,tag = parse_results_filename( f )
+                ft,plat,opts,tag = fmtresults.parse_results_filename( f )
                 if tag == None or \
                    ( tagL == None or tag in tagL ) and \
                    ( xtagL == None or tag not in xtagL ):
@@ -882,14 +830,14 @@ def report_generation( optD, fileL ):
     process_files( optD, fileL, fileG, default_d=15 )
 
     # read all the results files
-    rmat = ResultsMatrix()
+    rmat = reports.ResultsMatrix()
     for f in fileL:
-        ftime,tr,rkey = read_results_file( f, warnL )
+        ftime,tr,rkey = fmtresults.read_results_file( f, warnL )
         if ftime != None:
             tr.detail_ok = True  # inject a boolean flag to do detailing
             rmat.add( ftime, tr, rkey )
     for f in fileG:
-        ftime,tr,rkey = read_results_file( f, warnL )
+        ftime,tr,rkey = fmtresults.read_results_file( f, warnL )
         if ftime != None:
             tr.detail_ok = False  # inject a boolean flag to NOT do detailing
             rmat.add( ftime, tr, rkey )
@@ -900,12 +848,12 @@ def report_generation( optD, fileL ):
     
     # the DateMap object helps format the test results output
     if '-d' in optD:
-        df = date_round_down( curtm-optD['-d']*24*60*60 )
+        df = fmtresults.date_round_down( curtm-optD['-d']*24*60*60 )
         dmin = min( df, rmat.minFileDate() )
     else:
         dmin = rmat.minFileDate()
     dmax = max(  0, rmat.maxFileDate() )
-    dmap = DateMap( dmin, dmax )
+    dmap = reports.DateMap( dmin, dmax )
 
     # write out the summary for each platform/options/tag combination
 
@@ -1005,46 +953,46 @@ def report_generation( optD, fileL ):
 
     if dohtml:
 
-        print3( dashboard_preamble )
+        print3( reports.dashboard_preamble )
         if '--webloc' in optD:
             loc = optD['--webloc']
             print3( 'Go to the <a href="'+loc+ '">full report</a>.\n<br>\n' )
             loc = os.path.join( os.path.dirname( loc ), 'testrun.html' )
             print3( 'Also the <a href="'+loc+'">machine summaries</a>.\n<br>\n' )
 
-        html_start_rollup( sys.stdout, dmap, "Production Rollup", 7 )
+        reports.html_start_rollup( sys.stdout, dmap, "Production Rollup", 7 )
         for rkey,cnts,rL in primary:
-            html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
-        html_end_rollup( sys.stdout )
+            reports.html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
+        reports.html_end_rollup( sys.stdout )
         
         if len(secondary) > 0:
-            html_start_rollup( sys.stdout, dmap, "Secondary Rollup", 7 )
+            reports.html_start_rollup( sys.stdout, dmap, "Secondary Rollup", 7 )
             for rkey,cnts,rL in secondary:
-                html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
-            html_end_rollup( sys.stdout )
+                reports.html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
+            reports.html_end_rollup( sys.stdout )
         
         print3( '\n<br>\n<hr>\n' )
 
         fn = os.path.join( optD['--html'], 'dash.html' )
         dashfp = open( fn, 'w' )
-        dashfp.write( dashboard_preamble )
-        html_start_rollup( dashfp, dmap, "Production Rollup" )
+        dashfp.write( reports.dashboard_preamble )
+        reports.html_start_rollup( dashfp, dmap, "Production Rollup" )
         for rkey,cnts,rL in primary:
-            html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
-        html_end_rollup( dashfp )
+            reports.html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
+        reports.html_end_rollup( dashfp )
         
         if len(secondary) > 0:
-            html_start_rollup( dashfp, dmap, "Secondary Rollup" )
+            reports.html_start_rollup( dashfp, dmap, "Secondary Rollup" )
             for rkey,cnts,rL in secondary:
-                html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
-            html_end_rollup( dashfp )
+                reports.html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
+            reports.html_end_rollup( dashfp )
         
         if len(tdd) > 0:
-            html_start_rollup( dashfp, dmap, "TDD Rollup" )
+            reports.html_start_rollup( dashfp, dmap, "TDD Rollup" )
             for rkey,cnts,rL in tdd:
                 if sum(cnts) > 0:
-                    html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
-            html_end_rollup( dashfp )
+                    reports.html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
+            reports.html_end_rollup( dashfp )
         
         dashfp.write( '\n<br>\n<hr>\n' )
 
@@ -1076,7 +1024,7 @@ def report_generation( optD, fileL ):
             continue
         
         if dohtml:
-            html_start_detail( dashfp, dmap, d+'/'+tn, tnum )
+            reports.html_start_detail( dashfp, dmap, d+'/'+tn, tnum )
             detailed[ d+'/'+tn ] = tnum
             tnum += 1
         else:
@@ -1098,7 +1046,7 @@ def report_generation( optD, fileL ):
                     else: rL.append( (fd,st) )
 
             if dohtml:
-                html_detail_line( dashfp, dmap, rkey, rL )
+                reports.html_detail_line( dashfp, dmap, rkey, rL )
             else:
                 print3( keyfmt%rkey, dmap.history( rL ), location )
 
@@ -1109,15 +1057,15 @@ def report_generation( optD, fileL ):
             print3()
     
     if dohtml:
-        dashfp.write( dashboard_close )
+        dashfp.write( reports.dashboard_close )
         dashfp.close()
 
         fn = os.path.join( optD['--html'], 'testrun.html' )
         trunfp = open( fn, 'w' )
-        trunfp.write( dashboard_preamble )
+        trunfp.write( reports.dashboard_preamble )
         for rkey,fdate,tr in runlist:
-            write_testrun_entry( trunfp, plug, rkey, fdate, tr, detailed )
-        trunfp.write( dashboard_close )
+            reports.write_testrun_entry( trunfp, plug, rkey, fdate, tr, detailed )
+        trunfp.write( reports.dashboard_close )
         trunfp.close()
     
     return warnL
@@ -1142,820 +1090,17 @@ def get_results_plugin( optD ):
     return None
 
 
-def read_results_file( filename, warnL ):
-    """
-    Constructs a TestResults class and loads it with the contents of
-    'filename', which is expected to be a results.<date>.* file.  Returns
-    the file date, the TestResults object, and the results key.  If the read
-    fails, then None,None,None is returned and the 'warnL' list is appended
-    with the error message.
-    """
-    # parse the file name to get things like the date stamp
-    ftime,plat,opts,tag = parse_results_filename( filename )
-    
-    try:
-        assert ftime != None
-
-        # try to read the file
-        fmt,vers,hdr,nskip = fmtresults.read_file_header( filename )
-        assert fmt == 'results', \
-                'expected a "results" file format, not "'+str(fmt)+'"'
-        tr = fmtresults.TestResults( filename )
-        
-        # the file header contains the platform & compiler names
-        assert tr.platform() != None and tr.compiler() != None
-    
-    except:
-        warnL.append( "skipping results file: " + filename + \
-                                ", Exception = " + str(sys.exc_info()[1]) )
-        return None,None,None
-    
-    results_key = plat
-    if opts != None:
-        results_key += '.'+opts
-    if tag != None:
-        results_key += '.'+tag
-
-    return ftime,tr,results_key
-
-
-class ResultsMatrix:
-    """
-    Helper class for collecting test results.  A matrix is stored whose rows
-    are platform/compiler strings and columns are machine:directory strings.
-    Each entry in the matrix is a list of (file date, TestResults object) and
-    which is always kept sorted by file date.
-    """
-
-    def __init__(self):
-        self.matrixD = {}
-        self.daterange = None  # will be [ min date, max date ]
-
-    def add(self, filedate, results, results_key):
-        """
-        Based on the 'results_key', this function determines the location in
-        the matrix to append the results, and does the append.
-        """
-        if results_key not in self.matrixD:
-            self.matrixD[results_key] = []
-        
-        row = self.matrixD[results_key]
-
-        row.append( (filedate,results) )
-
-        row.sort()  # kept sorted by increasing file date
-        
-        # for convenience, the track the date range of all test results files
-        if self.daterange == None:
-            self.daterange = [ filedate, filedate ]
-        else:
-            self.daterange[0] = min( self.daterange[0], filedate )
-            self.daterange[1] = max( self.daterange[1], filedate )
-
-    def minFileDate(self):
-        if self.daterange != None: return self.daterange[0]
-    def maxFileDate(self):
-        if self.daterange != None: return self.daterange[1]
-
-    def testruns(self, testdir=None, testname=None):
-        """
-        Return a sorted list of the test results keys.  That is, the rows in
-        the matrix.  If 'testdir' and 'testname' are both non-None, then
-        only results keys are included that have at least one test results
-        object containing the specified test.
-        """
-        if testdir == None or testname == None:
-            L = list( self.matrixD.keys() )
-            L.sort()
-        else:
-            L = []
-            for rkey,trL in self.matrixD.items():
-                n = 0
-                for fdate,tr in trL:
-                    attrD = tr.testAttrs( testdir, testname )
-                    n += len(attrD)
-                if n > 0:
-                    L.append( rkey )
-            L.sort()
-
-        return L
-
-    def _get_platcplr(self, trL):
-        """
-        Given a row of the matrix, returns the platform and compiler names
-        of the most recent test results object.  Ignores test results objects
-        if either the platform name or compiler name is None or empty.
-        """
-        dupL = [] + trL
-        dupL.reverse()
-
-        for fdate,tr in dupL:
-            p,c = tr.platform(), tr.compiler()
-            if p and c:
-                return p,c
-
-        return None, None
-
-    def location(self, platcplr):
-        """
-        For the given 'platcplr', return a sorted list of the
-        machine:testdirectory name for most recent test results date.
-        """
-        row = self.matrixD[platcplr]
-
-        tr = row[-1][1]
-        mach,rdir = tr.machine(), tr.testdir()
-        if mach == None: mach = '?'
-        if rdir == None: rdir = '?'
-        
-        return mach+':'+rdir
-
-    def resultsList(self, results_key):
-        """
-        Returns a list of (file date, results) pairs for the test results
-        corresponding to 'results_key'.  The list is sorted by increasing date.
-        """
-        return [] + self.matrixD[results_key]
-
-    def latestResults(self, results_key):
-        """
-        For the given test run key, finds the test results with the most
-        recent date stamp, but that is not in progress.  Returns a tuple
-
-            ( file date, TestResults, TestResults, started )
-
-        where the first TestResults is the latest and the second TestResults
-        is the second latest, and 'started' is True if the most recent test
-        results are in progress.
-        """
-        L = [] + self.matrixD[results_key]
-        L.reverse()
-        started = L[0][1].inProgress()
-        # pick the most recent and second most recent which is not in-progress
-        frst = None
-        scnd = None
-        for fd,tr in L:
-            if not tr.inProgress():
-                if frst == None:
-                    frst = ( fd, tr )
-                elif scnd == None:
-                    scnd = tr
-                else:
-                    break
-        
-        if frst != None:
-            return frst[0], frst[1], scnd, started
-        
-        fd,tr = L[0]  # all are in progress? just choose most recent
-        return fd,tr,None,started
-
-    def resultsForTest(self, platcplr, testdir, testname, result=None):
-        """
-        For each entry in the 'platcplr' row, collect the attributes of the
-        test containing the test ID 'testdir' plus 'testname'.  That is, all
-        tests with the given ID are collected across each of the locations
-        for the given platcplr.
-
-        If 'result' is given, it must be a string "state=<state>" or
-        "result=<result>" (as produced by TestResults.collectResults()).
-
-        The collection is gathered as a list of (file date, test attributes)
-        pairs (and sorted).  The 'test attributes' dictionary will be None
-        if and only if a test results run was in progress on that date.
-
-        Also computed is the location of the most recent execution of the test.
-
-        The list and the location are returned.
-        """
-        D = {}
-        maxloc = None
-        for filedate,results in self.matrixD[platcplr]:
-            
-            mach,rdir = results.machine(), results.testdir()
-            if mach == None: mach = '?'
-            if rdir == None: rdir = '?'
-            loc = mach+':'+rdir
-
-            attrD = results.testAttrs( testdir, testname )
-            if len(attrD) > 0:
-                
-                if 'xdate' not in attrD and results.inProgress():
-                    if filedate not in D:
-                        # mark the test on this date as in progress
-                        D[filedate] = None
-                
-                else:
-                    if filedate in D:
-                        i = self._tie_break( D[filedate], attrD, result )
-                        if i > 0:
-                            D[filedate] = attrD  # prefer new test results
-                    else:
-                        D[filedate] = attrD
-
-                    if maxloc == None:
-                        maxloc = [ filedate, loc, attrD ]
-                    elif filedate > maxloc[0]:
-                        maxloc = [ filedate, loc, attrD ]
-                    elif abs( filedate - maxloc[0] ) < 2:
-                        # the test appears in more than one results file
-                        # on the same file date, so try to break the tie
-                        i = self._tie_break( maxloc[2], attrD, result )
-                        if i > 0:
-                            maxloc = [ filedate, loc, attrD ]
-        
-        L = list( D.items() )
-        L.sort()
-
-        if maxloc == None: loc = ''
-        else:              loc = maxloc[1]
-        
-        return L,loc
-
-    def _tie_break(self, attrs1, attrs2, result):
-        """
-        Given the result attributes from two different executions of the same
-        test, this returns -1 if the first execution wins, 1 if the second
-        execution wins, or zero if the tie could not be broken.  The 'result'
-        argument is None or a result string produced from the
-        TestResults.collectResults() method.
-        """
-        # None is used as an "in progress" mark; in this case, always
-        # choose the other one
-        if attrs1 == None:
-            return 1
-        elif attrs2 == None:
-            return -1
-
-        if result != None:
-            # break tie using the preferred result
-            if result.startswith( 'state=' ):
-                rs = result.split( 'state=' )[1]
-                r1 = attrs1.get( 'state', '' )
-                r2 = attrs2.get( 'state', '' )
-            else:
-                assert result.startswith( 'result=' )
-                rs = result.split( 'result=' )[1]
-                r1 = attrs1.get( 'result', '' )
-                r2 = attrs2.get( 'result', '' )
-            if r1 == rs and r2 != rs:
-                # only previous entry has preferred result
-                return -1
-            elif r2 == rs and r1 != rs:
-                # only new entry has preferred result
-                return 1
-
-        d1 = attrs1.get( 'xdate', None )
-        d2 = attrs2.get( 'xdate', None )
-        if d2 == None:
-            # new entry does not have an execution date
-            return -1
-        elif d1 == None or d2 > d1:
-            # old entry does not have an execution date or new entry
-            # executed more recently
-            return 1
-
-        # unable to break the tie
-        return 0
-
-
-class DateMap:
-    """
-    This is a helper class to format the test result status values, and a
-    legend for the dates.
-    """
-    
-    def __init__(self, mindate, maxdate ):
-        """
-        Construct with a date range.  All days in between are populated with
-        a character to preserve spacing.
-        """
-        # initialize the list of days
-        if mindate > maxdate:
-            # date range not available; default to today
-            self.dateL = [ DateInfoString( time.time() ) ]
-        else:
-            self.dateL = []
-            d = mindate
-            while not d > maxdate:
-                day = DateInfoString( d )
-                if day not in self.dateL:
-                    self.dateL.append( day )
-                d += 24*60*60
-            day = DateInfoString( maxdate )
-            if day not in self.dateL:
-                self.dateL.append( day )
-
-        # determine number of characters in first group (week)
-        num1 = 0
-        for day in self.dateL:
-            doy,yr,dow,m,d = day.split()
-            if num1 and dow == '1':
-                break
-            num1 += 1
-
-        # compute the dates that start each week (or partial week)
-        self.wkdateL = []
-        n = 0
-        for day in self.dateL:
-            doy,yr,dow,m,d = day.split()
-            if not n:
-                self.wkdateL.append( '%-7s' % (m+'/'+d) )
-            n += 1
-            if dow == '0':
-                n = 0
-        
-        # the first group is a little special; first undo the padding
-        self.wkdateL[0] = self.wkdateL[0].strip()
-        if len( self.wkdateL[0] ) < num1:
-            # pad the first legend group on the right with spaces
-            self.wkdateL[0] = ( '%-'+str(num1)+'s') % self.wkdateL[0]
-
-    def getDateList(self, numdays=None):
-        """
-        Returns a list of strings of the dates in the range for the current
-        report.  The strings are the output of the DateInfoString() function.
-
-        If 'numdays' is not None, it limits the dates to this number of (most
-        recent) days.
-        """
-        if numdays:
-            return self.dateL[-numdays:]
-        return [] + self.dateL
-
-    def legend(self):
-        return ' '.join( self.wkdateL )
-
-    def history(self, resultL):
-        """
-        Given a list of (date,result) pairs, this function formats the
-        history into a string and returns it.
-        """
-        # create a map of the date to the result character
-        hist = {}
-        for xd,rs in resultL:
-            day = DateInfoString( xd )
-            hist[ day ] = self._char( rs )
-
-        # walk the full history range and accumulate the result characters
-        # in order (if a test is absent on a given day, a period is used)
-        cL = []
-        s = ''
-        for day in self.dateL:
-            doy,yr,dow,m,d = day.split()
-            if s and dow == '1':
-                cL.append( s )
-                s = ''
-            s += hist.get( day, '.' )
-        if s:
-            cL.append( s )
-        
-        # may need to pad the first date group
-        if len(cL[0]) < len(self.wkdateL[0]):
-            fmt = '%'+str(len(self.wkdateL[0]))+'s'
-            cL[0] = fmt % cL[0]
-        
-        return ' '.join( cL )
-
-
-    def _char(self, result):
-        """
-        Translate the result string into a single character.
-        """
-        if result == 'pass': return 'p'
-        if result == 'diff': return 'D'
-        if result == 'fail': return 'F'
-        if result == 'timeout': return 'T'
-        if result == 'notrun': return 'n'
-        if result == 'start': return 's'
-        if result == 'ran': return 'r'
-        return '?'
-
-def DateInfoString( tm ):
-    """
-    Given a date in seconds, return a string that contains the day of the
-    year, the year, the day of the week, the month, and the day of the month.
-    These are white space separated.
-    """
-    return time.strftime( "%j %Y %w %m %d", time.localtime(tm) )
-
-
-####################################################################
-
-# this defines the beginning of an html file that "style" specifications
-# that are used later in the tables
-dashboard_preamble = '''
-<!DOCTYPE html>
-<html lang = "en-US">
-
-  <head>
-    <meta charset = "UTF-8">
-    <title>Dashboard</title>
-    <style>
-      .thintable {
-        border: 1px solid black;
-        border-collapse: collapse;
-      }
-
-      .grptr {
-        border-bottom: 4px solid black
-      }
-      .midtr {
-        border-bottom: 1px solid black
-      }
-
-      .grpth {
-        border-left: 4px solid black;
-      }
-      .midth {
-        border-style: none;
-        border-left: 1px solid black;
-        text-align: center;
-      }
-
-      .grptdw {
-        border-left: 4px solid black;
-        text-align: center;
-      }
-      .midtdw {
-        border-style: none;
-        border-left: 1px solid black;
-        text-align: center;
-      }
-      .grptdg {
-        border-left: 4px solid black;
-        text-align: center;
-        background-color: lightgreen;
-        color: black;
-      }
-      .midtdg {
-        border-style: none;
-        border-left: 1px solid black;
-        text-align: center;
-        background-color: lightgreen;
-        color: black;
-      }
-      .grptdr {
-        border-left: 4px solid black;
-        text-align: center;
-        background-color: tomato;
-        color: black;
-      }
-      .midtdr {
-        border-style: none;
-        border-left: 1px solid black;
-        text-align: center;
-        background-color: tomato;
-        color: black;
-      }
-      .grptdy {
-        border-left: 4px solid black;
-        text-align: center;
-        background-color: yellow;
-        color: black;
-      }
-      .midtdy {
-        border-style: none;
-        border-left: 1px solid black;
-        text-align: center;
-        background-color: yellow;
-        color: black;
-      }
-      .grptdc {
-        border-left: 4px solid black;
-        text-align: center;
-        background-color: cyan;
-        color: black;
-      }
-      .midtdc {
-        border-style: none;
-        border-left: 1px solid black;
-        text-align: center;
-        background-color: cyan;
-        color: black;
-      }
-      .grptdh {
-        border-left: 4px solid black;
-        text-align: center;
-        background-color: wheat;
-        color: black;
-      }
-      .midtdh {
-        border-style: none;
-        border-left: 1px solid black;
-        text-align: center;
-        background-color: wheat;
-        color: black;
-      }
-      .grptdm {
-        border-left: 4px solid black;
-        text-align: center;
-        background-color: magenta;
-        color: black;
-      }
-      .midtdm {
-        border-style: none;
-        border-left: 1px solid black;
-        text-align: center;
-        background-color: magenta;
-        color: black;
-      }
-    </style>
-  </head>
-  <body>
-'''.lstrip()
-
-dashboard_close = '''
-  </body>
-</html>
-'''
-
-
-def html_start_rollup( fp, dmap, title, numdays=None ):
-    """
-    Begin a table that contains the latest results for each test run and
-    a "status" word for historical dates.
-    """
-    dL = dmap.getDateList( numdays )
-
-    fp.write( '\n' + \
-        '<h3>'+title+'</h3>\n' + \
-        '<table class="thintable">\n' + \
-        '<tr style="border-style: none;">\n' + \
-        '<th></th>\n' + \
-        '<th class="grpth" colspan="4" style="text-align: center;">Test Results</th>\n' + \
-        '<th class="grpth" colspan="'+str(len(dL))+'">Execution Status</th>\n' + \
-        '</tr>\n' )
-    fp.write(
-        '<tr class="grptr">\n' + \
-        '<th>Platform.Options.Variation</th>\n' + \
-        '<th class="grpth">pass</th>\n' + \
-        '<th class="midth">diff</th>\n' + \
-        '<th class="midth">fail</th>\n' + \
-        '<th class="midth">othr</th>\n' )
-    cl = 'grpth'
-    for day in dL:
-        doy,yr,dow,m,d = day.split()
-        if dow == '1':
-            fp.write( '<th class="grpth">'+m+'/'+d+'</th>\n' )
-        else:
-            fp.write( '<th class="'+cl+'">'+m+'/'+d+'</th>\n' )
-        cl = 'midth'
-    fp.write(
-        '</tr>\n' )
-
-html_dowmap = {
-    'sunday'    : 0, 'sun': 0,
-    'monday'    : 1, 'mon': 1,
-    'tuesday'   : 2, 'tue': 2,
-    'wednesday' : 3, 'wed': 3,
-    'thursday'  : 4, 'thu': 4,
-    'friday'    : 5, 'fri': 5,
-    'saturday'  : 6, 'sat': 6,
-}
-
-def html_rollup_line( fp, plug, dmap, label, cnts, stats, shorten=None ):
-    """
-    Each entry in the rollup table is written by calling this function.  It
-    is called for each test run id, which is the 'label'.
-
-    If 'shorten' is not None, it should be the number of days to display.  It
-    also prevents any html links to be written.
-    """
-    dL = dmap.getDateList( shorten )
-
-    schedL = None
-    if plug:
-        sched = plug.get_test_run_info( label, 'schedule' )
-        if sched:
-            schedL = []
-            for s in sched.split():
-                dow = html_dowmap.get( s.lower(), None )
-                if dow != None:
-                    schedL.append( dow )
-
-    # create a map of the date to the result color
-    hist = {}
-    for xd,rs in stats:
-        day = DateInfoString( xd )
-        hist[ day ] = ( rs, result_color( rs ) )
-    
-    np,nd,nf,nt,nr,unk = cnts
-    fp.write( '\n<tr class="midtr">\n' )
-    if shorten == None:
-        fp.write( '<td><a href="testrun.html#'+label+'">'+label+'</a></td>\n' )
-    else:
-        fp.write( '<td>'+label+'</td>\n' )
-    fp.write( '<td class="grptdg"><b>'+str(np)+'</b></td>\n' )
-    cl = ( "midtdy" if nd > 0 else "midtdg" )
-    fp.write( '<td class="'+cl+'"><b>'+str(nd)+'</b></td>\n' )
-    cl = ( "midtdr" if nf > 0 else "midtdg" )
-    fp.write( '<td class="'+cl+'"><b>'+str(nf)+'</b></td>\n' )
-    cl = ( "midtdy" if nt+nr+unk > 0 else "midtdg" )
-    fp.write( '<td class="'+cl+'"><b>'+str(nt+nr+unk)+'</b></td>\n' )
-
-    ent = 'grptd'
-    for day in dL:
-        doy,yr,dow,m,d = day.split()
-        if day in hist:
-            rs,c = hist[day]
-            #rs,c = hist.get( day, ( '', 'w' ) )
-        elif schedL != None:
-            if int(dow) in schedL:
-                rs,c = 'MIA', result_color('MIA')
-            else:
-                rs,c = '','w'
-        else:
-            rs,c = '','w'
-        if dow == '1':
-            fp.write( '<td class="grptd'+c+'">'+rs+'</td>\n' )
-        else:
-            fp.write( '<td class="'+ent+c+'">'+rs+'</td>\n' )
-        ent = 'midtd'
-    fp.write( '</tr>\n' )
-
-
-def html_end_rollup( fp ):
-    """
-    """
-    fp.write( '\n</table>\n' )
-
-
-def html_start_detail( fp, dmap, testid, marknum ):
-    """
-    Call this function for individual test to be detailed, which will show
-    the result status for each of the dates.
-    """
-    dL = dmap.getDateList()
-
-    fp.write( '\n' + \
-        '<h3 id="test'+str(marknum)+'">' + html_escape(testid) + '</h3>\n' + \
-        '<table class="thintable">\n' + \
-        '<tr class="grptr">\n' + \
-        '<th></th>\n' )
-    cl = 'grpth'
-    for day in dL:
-        doy,yr,dow,m,d = day.split()
-        if dow == '1':
-            fp.write( '<th class="grpth">'+m+'/'+d+'</th>\n' )
-        else:
-            fp.write( '<th class="'+cl+'">'+m+'/'+d+'</th>\n' )
-        cl = 'midth'
-    fp.write(
-        '</tr>\n' )
-
-
-def html_detail_line( fp, dmap, label, resL ):
-    """
-    Called once per line for detailing a test.  The 'label' is the test run id.
-    """
-    dL = dmap.getDateList()
-
-    # create a map of the date to the result color
-    hist = {}
-    for fd,rs in resL:
-        day = DateInfoString( fd )
-        hist[ day ] = ( rs, result_color( rs ) )
-    
-    fp.write( '\n' + \
-        '<tr class="midtr">\n' + \
-        '<td><a href="testrun.html#'+label+'">'+label+'</a></td>\n' )
-    
-    ent = 'grptd'
-    for day in dL:
-        doy,yr,dow,m,d = day.split()
-        rs,c = hist.get( day, ( '', 'w' ) )
-        if dow == '1':
-            fp.write( '<td class="grptd'+c+'">'+rs+'</td>\n' )
-        else:
-            fp.write( '<td class="'+ent+c+'">'+rs+'</td>\n' )
-        ent = 'midtd'
-
-    fp.write( '</tr>\n' )
-
-def html_escape( s ):
-    """
-    """
-    s = s.replace( '&', '&amp' )
-    s = s.replace( '<', '&lt' )
-    s = s.replace( '>', '&gt' )
-    return s
-
-def write_testrun_entry( fp, plug, results_key, fdate, tr, detailed ):
-    """
-    The test run page shows information about the test run, such as which
-    machine and directory, the compiler, and the schedule.  It draws on data
-    from the config directory, if present.
-    """
-    desc = None
-    log = None
-    sched = None
-    if plug and hasattr( plug, 'get_test_run_info' ):
-        desc = plug.get_test_run_info( results_key, 'description' )
-        log = plug.get_test_run_info( results_key, 'log' )
-        sched = plug.get_test_run_info( results_key, 'schedule' )
-    datestr = time.strftime( "%Y %m %d", time.localtime(fdate) )
-
-    fp.write( '\n' + \
-        '<h2 id="'+results_key+'">'+results_key+'</h2>\n' + \
-        '<ul>\n' )
-    if desc:
-        fp.write( 
-        '<li><b>Description:</b> '+html_escape(desc)+'</li>\n' )
-    fp.write(
-        '<li><b>Machine:</b> '+tr.machine()+'</li>\n' + \
-        '<li><b>Compiler:</b> '+tr.compiler()+'</li>\n' + \
-        '<li><b>Test Directory:</b> '+tr.testdir()+'</li>\n' )
-    if log:
-        fp.write(
-        '<li><b>Log File:</b> '+html_escape(log)+'</li>\n' )
-    if sched:
-        fp.write(
-        '<li><b>Schedule:</b> '+html_escape(sched)+'</li>\n' )
-    
-    for tdd in [False,True]:
-        resD,num = tr.collectResults( 'fail', 'diff', 'timeout',
-                                      'notrun', 'notdone',
-                                      matchlist=True, tdd=tdd )
-        if tdd:
-            if len(resD) == 0:
-                continue  # skip the TDD item altogether if no tests
-            fp.write(
-                '<li><b>Latest TDD Results:</b> '+datestr )
-        else:
-            fp.write(
-                '<li><b>Latest Results:</b> '+datestr )
-        if len(resD) > 0:
-            resL = []
-            for kT,vT in resD.items():
-                d,tn = kT
-                xd,res = vT
-                resL.append( ( d+'/'+tn, res.split('=',1)[1] ) )
-            resL.sort()
-
-            fp.write( \
-                '<br>\n' + \
-                '<table style="border: 1px solid black; border-collapse: collapse;">\n' )
-            maxlist = 40  # TODO: make this number configurable
-            i = 0
-            for tn,res in resL:
-                if i >= maxlist:
-                    i = len(resL)+1
-                    break
-                cl = 'midtd'+result_color(res)
-                fp.write( \
-                    '<tr style="border: 1px solid black;">\n' + \
-                    '<td class="'+cl+'" style="border: 1px solid black;">'+res+'</td>\n' )
-                tid = detailed.get( tn, None )
-                if tid:
-                    fp.write( \
-                        '<td><a href="dash.html#test'+str(tid)+'">' + \
-                        html_escape(tn) + '</a></td></tr>\n' )
-                else:
-                    fp.write( '<td>' + html_escape(tn) + '</td></tr>\n' )
-                i += 1
-            fp.write( \
-                '</table>\n' )
-            if i > len(resL):
-                fp.write( \
-                    '<br>\n' + \
-                    '*** this list truncated; num entries = '+str(len(resL))+'\n' )
-        fp.write( '</li>\n' )
-    fp.write( '</ul>\n' )
-    fp.write( '<br>\n' )
-
-
-def result_color( result ):
-    """
-    Translate the result string into a color character.  These colors must
-    be known to the preample "style" list.
-    """
-    if result == 'pass': return 'g'
-    if result == 'ran': return 'g'
-    if result == 'start': return 'c'
-    if result == 'notdone': return 'c'
-    if result == 'diff': return 'y'
-    if result == 'fail': return 'r'
-    if result == 'notrun': return 'h'
-    if result == 'timeout': return 'm'
-    if result == 'MIA': return 'y'
-    return 'w'
-
 ########################################################################
 
-
-########################################################################
-
-def print3( *args, **kwargs ):
+def print3( *args ):
+    ""
     s = ' '.join( [ str(x) for x in args ] )
-    if len(kwargs) > 0:
-        s += ' ' + ' '.join( [ str(k)+'='+str(v) for k,v in kwargs.items() ] )
     sys.stdout.write( s + os.linesep )
     sys.stdout.flush()
 
 
 def process_option( optD, option_name, value_type, *restrictions ):
-    """
-    """
+    ""
     if option_name in optD:
         try:
             v = value_type( optD[option_name] )

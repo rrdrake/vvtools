@@ -917,7 +917,8 @@ def _svn_rootrel(tdir):
       if relurl:
         relurl = os.path.normpath( relurl )
         assert not os.path.isabs(relurl)
-    
+
+    # magic: remove this backup
     if repo == None:
       # this shouldn't happen, but if it does, then assume alegra repo
       repo = "https://teamforge.sandia.gov/svn/repos/alegranevada"
@@ -1214,3 +1215,89 @@ def merge_check( existD, newD, dcut, xopt, wopt ):
     
     return False
 
+
+def date_round_down( tm ):
+    """
+    Given a date in seconds, this function rounds down to midnight of the
+    date.  Returns a date in seconds.
+    """
+    s = time.strftime( "%Y %m %d", time.localtime( tm ) )
+    T = time.strptime( s, "%Y %m %d" )
+    return time.mktime( T )
+
+
+def parse_results_filename( filename ):
+    """
+    Assuming a file name of the form
+
+        results.<date>.<platform>.<options>.<tag>
+    
+    this function returns a tuple
+
+        ( date, platform, options, tag )
+
+    where an entry will be None if the filename form did not have that data or
+    if parsing for that entry failed.  The 'date' is seconds since epoch.
+    The rest are strings.
+    """
+    f = os.path.basename( filename )
+    L = [ s.strip() for s in f.split('.',4) ]
+
+    ftime = None
+    if len(L) >= 2:
+        try:
+            T = time.strptime( L[1], '%Y_%m_%d' )
+            ftime = time.mktime( T )
+        except:
+            ftime = None
+    
+    platname = None
+    if len(L) >= 3:
+        platname = L[2]
+    
+    opts = None
+    if len(L) >= 4:
+        opts = L[3]
+    
+    tag = None
+    if len(L) >= 5:
+        tag = L[4]
+
+    return ftime, platname, opts, tag
+
+
+def read_results_file( filename, warnL ):
+    """
+    Constructs a TestResults class and loads it with the contents of
+    'filename', which is expected to be a results.<date>.* file.  Returns
+    the file date, the TestResults object, and the results key.  If the read
+    fails, then None,None,None is returned and the 'warnL' list is appended
+    with the error message.
+    """
+    # parse the file name to get things like the date stamp
+    ftime,plat,opts,tag = parse_results_filename( filename )
+    
+    try:
+        assert ftime != None
+
+        # try to read the file
+        fmt,vers,hdr,nskip = read_file_header( filename )
+        assert fmt == 'results', \
+                'expected a "results" file format, not "'+str(fmt)+'"'
+        tr = TestResults( filename )
+        
+        # the file header contains the platform & compiler names
+        assert tr.platform() != None and tr.compiler() != None
+    
+    except:
+        warnL.append( "skipping results file: " + filename + \
+                                ", Exception = " + str(sys.exc_info()[1]) )
+        return None,None,None
+    
+    results_key = plat
+    if opts != None:
+        results_key += '.'+opts
+    if tag != None:
+        results_key += '.'+tag
+
+    return ftime,tr,results_key
