@@ -345,21 +345,6 @@ def report_main( argv ):
         print3( "*** Warning:", s )
 
 
-#######################################################################
-
-
-
-########################################################################
-
-
-
-
-def read_runtimes( rtimeD, filename ):
-    """
-    """
-    pass
-
-
 ########################################################################
 
 
@@ -396,11 +381,11 @@ def multiplatform_merge( optD, fileL ):
         else:
             
             if fmt and fmt == 'results':
-                if merge_results_file( mr, f, warnL, dcut, xopt, wopt ):
+                if fmtresults.merge_results_file( mr, f, warnL, dcut, xopt, wopt ):
                     newtest = True
             
             elif fmt and fmt == 'multi':
-                if merge_multi_file( mr, f, warnL, dcut, xopt, wopt ):
+                if fmtresults.merge_multi_file( mr, f, warnL, dcut, xopt, wopt ):
                     newtest = True
             
             else:
@@ -411,112 +396,6 @@ def multiplatform_merge( optD, fileL ):
         mr.writeFile( fmtresults.multiruntimes_filename )
     
     return warnL
-
-
-def merge_multi_file( multi, filename, warnL, dcut, xopt, wopt ):
-    """
-    """
-    tr = fmtresults.MultiResults()
-    try:
-        tr.readFile( filename )
-    except:
-        warnL.append( "skipping multi-platform results file " + \
-                      filename + ": Exception = " + str(sys.exc_info()[1]) )
-        tr = None
-    
-    newtest = False
-    if tr != None:
-        for d in tr.dirList():
-            for tn in tr.testList(d):
-                for pc in tr.platformList( d, tn ):
-                    xD = multi.testAttrs( d, tn, pc )
-                    aD = tr.testAttrs( d, tn, pc )
-                    if merge_check( xD, aD, dcut, xopt, wopt ):
-                        newtest = True
-                        multi.addTestName( d, tn, pc, aD )
-
-    return newtest
-
-
-def merge_results_file( multi, filename, warnL, dcut, xopt, wopt ):
-    """
-    """
-    tr = fmtresults.TestResults()
-    try:
-        tr.readResults( filename )
-    except:
-        warnL.append( "skipping results file " + filename + \
-                      ": Exception = " + str(sys.exc_info()[1]) )
-        tr = None
-    
-    newtest = False
-    if tr != None:
-        plat = tr.platform()
-        cplr = tr.compiler()
-        if plat == None or cplr == None:
-            warnL.append( "skipping results file "+filename + \
-                          ": platform and/or compiler not defined" )
-        else:
-            pc = plat+'/'+cplr
-            for d in tr.dirList():
-                tL = tr.testList(d)
-                for tn in tL:
-                    xD = multi.testAttrs( d, tn, pc )
-                    aD = tr.testAttrs( d, tn )
-                    if merge_check( xD, aD, dcut, xopt, wopt ):
-                        newtest = True
-                        multi.addTestName( d, tn, pc, aD )
-
-    return newtest
-
-
-def merge_check( existD, newD, dcut, xopt, wopt ):
-    """
-    Return True if the new test should be merged in (based on the
-    attribute dict of the existing and new test).
-    """
-    # new test must have a date, a runtime, and an acceptable result
-    nd = newD.get('xdate',-1)
-    nt = newD.get('xtime',-1)
-    nr = newD.get('result',None)
-    if nd > 0 and nt > 0 and nr in ['pass','diff','timeout']:
-        
-        xd = existD.get('xdate',-1)
-        xt = existD.get('xtime',-1)
-        xr = existD.get('result',None)
-
-        if xd < 0 or xt < 0 or xr not in ['pass','diff','timeout']:
-            return True
-        
-        if wopt:
-            return True
-        elif xopt:
-            if nd >= xd:
-                # new date is more recent, so take new test
-                return True
-        else:
-            if xt < 0:
-                return True
-            if dcut != None:
-                # with -d option, lower the precedence of old tests
-                if xd < dcut and nd < dcut:
-                    if nt > xt:
-                        # both are old tests, so take max runtime
-                        return True
-                elif xd < dcut:
-                    # existing test below cutoff, so take new test
-                    return True
-                elif nd < dcut:
-                    pass  # new test below cutoff, so take old test
-                else:
-                    # both tests above cutoff, so take max runtime
-                    if nt > xt:
-                        return True
-            elif nt > xt:
-                # take test with maximum runtime
-                return True
-    
-    return False
 
 
 def parse_results_filename( filename ):
