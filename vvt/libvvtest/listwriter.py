@@ -8,8 +8,8 @@ import os, sys
 import time
 from os.path import join as pjoin
 
-import results
 from . import outpututils
+from . import fmtresults
 print3 = outpututils.print3
 
 
@@ -93,10 +93,13 @@ class ListWriter:
 
     def writeTestResults(self, tcaseL, filename, runattrs, inprogress):
         ""
-        tr = results.TestResults()
+        dcache = {}
+        tr = fmtresults.TestResults()
 
         for tcase in tcaseL:
-            tr.addTest( tcase.getSpec() )
+            rootrel = fmtresults.determine_rootrel( tcase.getSpec(), dcache )
+            if rootrel:
+                tr.addTest( tcase.getSpec(), rootrel )
 
         pname = runattrs['platform']
         cplr = runattrs['compiler']

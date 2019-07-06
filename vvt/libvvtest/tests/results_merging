@@ -24,8 +24,10 @@ import results
 
 import results_util as ru
 
-timesfname = results.runtimes_filename
-multifname = results.multiruntimes_filename
+import libvvtest.fmtresults as fmtresults
+
+timesfname = fmtresults.runtimes_filename
+multifname = fmtresults.multiruntimes_filename
 
 
 class test_results_tests( vtu.vvtestTestCase ):
@@ -155,7 +157,7 @@ class test_results_tests( vtu.vvtestTestCase ):
                      chdir='testing' )
 
         # check the combined multiplat file
-        mr = results.MultiResults()
+        mr = fmtresults.MultiResults()
         mr.readFile( 'testing/'+multifname )
         assert mr.dirList() == ['tsrc/one','tsrc/two']
         assert mr.testList('tsrc/one') == ['cat','dog']
@@ -239,7 +241,7 @@ class test_results_tests( vtu.vvtestTestCase ):
         rfn3 = os.path.abspath( util.globfile( 'testing/results.*.3rd' ) )
 
         # force the results to be a different platform/compiler
-        tr = results.TestResults( rfn3 )
+        tr = fmtresults.TestResults( rfn3 )
         tr.writeResults( rfn3, 'Plat2', 'Cplr2', 'sparky', tdir )
         util.runcmd( vtu.resultspy + ' merge '+rfn3, chdir='testing' )
 

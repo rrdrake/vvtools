@@ -22,8 +22,10 @@ import results
 
 import results_util as ru
 
-timesfname = results.runtimes_filename
-multifname = results.multiruntimes_filename
+import libvvtest.fmtresults as fmtresults
+
+timesfname = fmtresults.runtimes_filename
+multifname = fmtresults.multiruntimes_filename
 
 
 class test_results_tests( vtu.vvtestTestCase ):
@@ -32,18 +34,18 @@ class test_results_tests( vtu.vvtestTestCase ):
         ""
         aD = { 'xdate':int(time.time()),
                'xtime':23, 'state':'done', 'result':'pass' }
-        s = results.make_attr_string( aD )
-        D2 = results.read_attrs( s.split() )
+        s = fmtresults.make_attr_string( aD )
+        D2 = fmtresults.read_attrs( s.split() )
         assert aD == D2, str(aD) + ' != ' + str(D2)
 
         aD = { 'xdate':int(time.time()), 'state':'notdone' }
-        s = results.make_attr_string( aD )
-        D2 = results.read_attrs( s.split() )
+        s = fmtresults.make_attr_string( aD )
+        D2 = fmtresults.read_attrs( s.split() )
         assert aD == D2, str(aD) + ' != ' + str(D2)
 
         aD = { 'state':'notrun' }
-        s = results.make_attr_string( aD )
-        D2 = results.read_attrs( s.split() )
+        s = fmtresults.make_attr_string( aD )
+        D2 = fmtresults.read_attrs( s.split() )
         assert aD == D2, str(aD) + ' != ' + str(D2)
 
     def test_saving_results_when_the_root_cannot_be_determined(self):
@@ -60,7 +62,7 @@ class test_results_tests( vtu.vvtestTestCase ):
 
         ru.assert_empty_testresults_file( resultsfname )
 
-        tr = results.TestResults( resultsfname )
+        tr = fmtresults.TestResults( resultsfname )
         assert ru.results_write_creates_the_same_file( resultsfname, tr )
 
     def test_nominal_uses_of_TestResults_class(self):
@@ -74,7 +76,7 @@ class test_results_tests( vtu.vvtestTestCase ):
 
         resultsfname = ru.create_runtimes_and_results_file( tdir )
 
-        tr = results.TestResults( resultsfname )
+        tr = fmtresults.TestResults( resultsfname )
         assert tr.testdir() == tdir
 
         topdir = os.path.basename( os.getcwd() )
@@ -92,7 +94,7 @@ class test_results_tests( vtu.vvtestTestCase ):
 
         # saving results this time will produce different root-relative paths
         vtu.runvvtest( '-i --save-results' )
-        tr = results.TestResults( resultsfname )
+        tr = fmtresults.TestResults( resultsfname )
         ru.assert_cat_dog_circle_testresults_contents( tr )
 
         # saving runtimes again to the subdirectories should populate the
@@ -195,7 +197,7 @@ class test_results_tests( vtu.vvtestTestCase ):
         vtu.runvvtest( '-i --save-results' )
 
         resultsfname = util.globfile('results.*')
-        tr = results.TestResults( resultsfname )
+        tr = fmtresults.TestResults( resultsfname )
         platname,cplrname = tr.platform(), tr.compiler()
         platid = platname+'/'+cplrname
 
@@ -212,7 +214,7 @@ class test_results_tests( vtu.vvtestTestCase ):
         assert t1 > 0 and t1 < 4
 
         # create a second results file with a different platform/compiler name
-        tr = results.TestResults( resultsfname )
+        tr = fmtresults.TestResults( resultsfname )
         resultsfname2 = 'results2'
         tr.writeResults( resultsfname2, 'Plat2', 'Cplr2', 'sparky', tdir )
 

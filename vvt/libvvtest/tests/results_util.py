@@ -14,10 +14,7 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
-import results
-
-timesfname = results.runtimes_filename
-multifname = results.multiruntimes_filename
+import libvvtest.fmtresults as fmtresults
 
 
 def write_tests_cat_dog_circle( in_subdir=None ):
@@ -86,7 +83,7 @@ def assert_cat_dog_circle_testresults_contents( testresults_obj, topdir=None ):
 
 def assert_cat_dog_runtimes( runtimes_dir ):
     ""
-    tr = results.TestResults( runtimes_dir+'/'+timesfname )
+    tr = fmtresults.TestResults( runtimes_dir+'/'+fmtresults.runtimes_filename )
 
     topdir = ''
     assert len( tr.dirList() ) == 1
@@ -98,7 +95,7 @@ def assert_cat_dog_runtimes( runtimes_dir ):
 
 def assert_circle_runtimes( runtimes_dir ):
     ""
-    tr = results.TestResults( runtimes_dir+'/'+timesfname )
+    tr = fmtresults.TestResults( runtimes_dir+'/'+fmtresults.runtimes_filename )
 
     topdir = ''
     assert len( tr.dirList() ) == 1
@@ -136,13 +133,13 @@ def results_write_creates_the_same_file( results_fname, testresults_obj ):
 
 def assert_empty_testresults_file( filename ):
     ""
-    tr = results.TestResults( filename )
+    tr = fmtresults.TestResults( filename )
     assert len( tr.dirList() ) == 0
 
 
 def assert_results_file_has_tests( filename, *tests, **kwargs ):
     ""
-    tr = results.TestResults( filename )
+    tr = fmtresults.TestResults( filename )
 
     topdir = kwargs.pop( 'topdir', None )
     if topdir == None:
@@ -155,7 +152,7 @@ def assert_results_file_has_tests( filename, *tests, **kwargs ):
 
 def assert_results_file_does_not_have_tests( filename, *tests, **kwargs ):
     ""
-    tr = results.TestResults( filename )
+    tr = fmtresults.TestResults( filename )
 
     topdir = kwargs.pop( 'topdir', None )
     if topdir == None:
@@ -168,7 +165,7 @@ def assert_results_file_does_not_have_tests( filename, *tests, **kwargs ):
 
 def get_results_test_time( filename, testname ):
     ""
-    tr = results.TestResults( filename )
+    tr = fmtresults.TestResults( filename )
 
     rootrel,testkey = os.path.split( testname )
     aD = tr.testAttrs( rootrel, testkey )
@@ -180,7 +177,7 @@ def get_results_test_time( filename, testname ):
 
 def assert_multi_results_file_has_tests( filename, num_plats, *tests ):
     ""
-    mr = results.MultiResults()
+    mr = fmtresults.MultiResults()
     mr.readFile( filename )
 
     for tst in tests:
@@ -190,7 +187,7 @@ def assert_multi_results_file_has_tests( filename, num_plats, *tests ):
 
 def get_multi_results_test_attributes( filename, testname, platid=None ):
     ""
-    mr = results.MultiResults()
+    mr = fmtresults.MultiResults()
     mr.readFile( filename )
 
     rootrel,testkey = os.path.split( testname )
@@ -231,7 +228,7 @@ def get_multi_results_test_result( filename, testname, platid=None ):
 
 def get_results_platform_compiler_id( filename ):
     ""
-    tr = results.TestResults( filename )
+    tr = fmtresults.TestResults( filename )
 
     platname,cplrname = tr.platform(), tr.compiler()
 
@@ -278,7 +275,7 @@ def compute_yesterdays_date_string():
 def copy_results_file_with_new_platid( filename, newfilename, newplatid=None,
                                        newtestdir=None ):
     ""
-    tr = results.TestResults( filename )
+    tr = fmtresults.TestResults( filename )
     mach = tr.machine()
 
     if newtestdir:

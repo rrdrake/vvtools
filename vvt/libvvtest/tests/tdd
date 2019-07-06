@@ -21,10 +21,9 @@ from testutils import print3
 
 import libvvtest.xmlwrapper as xmlwrapper
 
-import results
+import results_util as ru
 
-timesfname = results.runtimes_filename
-multifname = results.multiruntimes_filename
+import libvvtest.fmtresults as fmtresults
 
 
 class tdd_tests( vtu.vvtestTestCase ):
@@ -138,13 +137,9 @@ class tdd_tests( vtu.vvtestTestCase ):
 
         vrun = vtu.runvvtest( '--include-tdd' )
         vrun.assertCounts( total=4, npass=4 )
+        tdir = vrun.resultsDir()
 
-        # bootstrap with runtimes files then save the test results
-        util.runcmd( vtu.resultspy + ' save' )
-        vrun = vtu.runvvtest( '-i --save-results' )
-
-        resultsfname = util.globfile('results.*')
-        tr = results.TestResults( resultsfname )
+        resultsfname = ru.create_runtimes_and_results_file( tdir )
 
         assert len( util.grepfiles( "testone*TDD",    resultsfname ) ) == 1
         assert len( util.grepfiles( "testtwo*pass",   resultsfname ) ) == 1
@@ -183,18 +178,12 @@ class tdd_tests( vtu.vvtestTestCase ):
 
         vrun = vtu.runvvtest( '--include-tdd --config config' )
         vrun.assertCounts( total=4, npass=4 )
+        tdir = vrun.resultsDir()
 
-        # bootstrap with runtimes files then save the test results
-        util.runcmd( vtu.resultspy + ' save' )
-        vtu.runvvtest( '--config config -i --save-results' )
+        rf1 = ru.create_runtimes_and_results_file( tdir )
 
-        rf1 = util.globfile('results.*')
-        tr = results.TestResults( rf1 )
-        platname,cplrname = tr.platform(), tr.compiler()
-        L = rf1.split('.')
-        rf2 = L[0]+'.'+L[1]+'.Fake.'+L[3]
-        mach = os.uname()[1]
-        tr.writeResults( rf2, 'Fake', L[3], mach, '/some/fake/path' )
+        rf2 = '.'.join( rf1.split('.')[:2] + [ 'Fake', 'gcc' ] )
+        ru.copy_results_file_with_new_platid( rf1, rf2, 'Fake/gcc', '/fake/path' )
 
         x,out = util.runcmd( vtu.resultspy + ' report ' + rf1 + ' ' + rf2 )
 

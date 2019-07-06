@@ -6,7 +6,7 @@
 
 import os, sys
 
-import results
+from .fmtresults import LookupCache
 
 
 class TimeHandler:
@@ -30,7 +30,7 @@ class TimeHandler:
         pname = self.platobj.getName()
         cplr = self.platobj.getCompiler()
 
-        cache = results.LookupCache( pname, cplr, self.platobj.testingDirectory() )
+        cache = LookupCache( pname, cplr, self.platobj.testingDirectory() )
 
         for tcase in tlist.getTests():
 

@@ -19,7 +19,9 @@ from testutils import print3
 from libvvtest.TestSpecCreator import TestCreator
 from libvvtest.RuntimeConfig import RuntimeConfig
 
-import results
+import results_util as ru
+
+import libvvtest.fmtresults as fmtresults
 
 
 class runtimes_and_timings( vtu.vvtestTestCase ):
@@ -51,16 +53,15 @@ class runtimes_and_timings( vtu.vvtestTestCase ):
 
         vrun = vtu.runvvtest( tests )
         vrun.assertCounts( total=3, npass=3 )
+        tdir = vrun.resultsDir()
 
-        # create a test source tree runtimes file but without any test results
-        tr = results.TestResults()
-        tr.writeRuntimes( 'tests', None )
+        ru.create_runtimes_and_results_file( tdir, 'tests' )
 
         # even though a rootrel directory could be determined, no runtime is available
         creator = TestCreator( RuntimeConfig() )
         tL = creator.fromFile( tests, 'dir1/one.xml', None )
         tst = tL[0]
-        cache = results.LookupCache( platname, 'cplr' )
+        cache = fmtresults.LookupCache( platname, 'cplr' )
         tm,tv = cache.getRunTime( tst )
         assert tm == None
 
@@ -69,24 +70,25 @@ class runtimes_and_timings( vtu.vvtestTestCase ):
         os.mkdir('testing')
         time.sleep(1)
         os.environ['TESTING_DIRECTORY'] = os.path.abspath( 'testing' )
-        vtu.runvvtest( '-i --save-results' )
 
-        resultsfname = os.path.abspath( util.globfile('testing/results.*') )
+        resultsfname = ru.create_runtimes_and_results_file( tdir, 'tests' )
+
         plat,cplr = get_platform_compiler( resultsfname )
         util.runcmd( vtu.resultspy + ' merge '+resultsfname, chdir='testing' )
 
         # leave the source tree runtimes file empty and use the
         # multiplatform results
-        cache = results.LookupCache( plat, cplr, os.path.abspath('testing') )
+        cache = fmtresults.LookupCache( plat, cplr, os.path.abspath('testing') )
         tm,tv = cache.getRunTime( tst )
         assert tm != None and tm > 0 and tm < 10
 
         # populate the test source tree runtimes file
+        tr = fmtresults.TestResults()
         tr.readResults( resultsfname )
         tr.writeRuntimes( 'tests', None )
 
         # a time for the test should be found from the source tree runtimes file
-        cache = results.LookupCache( platname, 'cplr' )
+        cache = fmtresults.LookupCache( platname, 'cplr' )
         tm,tv = cache.getRunTime( tst )
         assert tm != None and tm > 0 and tm < 10
 
@@ -186,7 +188,7 @@ class runtimes_and_timings( vtu.vvtestTestCase ):
 def get_platform_compiler( resultsfname ):
     """
     """
-    fmt,vers,hdr,nskip = results.read_file_header( resultsfname )
+    fmt,vers,hdr,nskip = fmtresults.read_file_header( resultsfname )
     pn = hdr['PLATFORM']
     cp = hdr['COMPILER']
     return pn,cp
