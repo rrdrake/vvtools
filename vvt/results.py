@@ -303,7 +303,7 @@ def clean_main( argv ):
       sys.exit(1)
     try:
       warnings = results_clean( argL[0], optD )
-    except:
+    except Exception:
       sys.stderr.write( "*** Results clean failed: " + \
                         str(sys.exc_info()[1]) + os.linesep )
       sys.exit(1)
@@ -373,7 +373,7 @@ def multiplatform_merge( optD, fileL ):
     for f in fileL:
         try:
             fmt,vers,hdr,nskip = fmtresults.read_file_header( f )
-        except:
+        except Exception:
             warnL.append( "skipping results file: " + f + \
                           ", Exception = " + str(sys.exc_info()[1]) )
         else:
@@ -564,7 +564,7 @@ def write_runtimes( optD, fileL ):
     for srcf in fileL:
       try:
         fmt,vers,hdr,nskip = fmtresults.read_file_header( srcf )
-      except:
+      except Exception:
         warnL.append( "Warning: skipping results file: " + srcf + \
                      ", Exception = " + str(sys.exc_info()[1]) )
       else:
@@ -572,7 +572,7 @@ def write_runtimes( optD, fileL ):
           src = fmtresults.TestResults()
           try:
             src.readResults(srcf)
-          except:
+          except Exception:
             warnL.append( "Warning: skipping results file: " + srcf + \
                          ", Exception = " + str(sys.exc_info()[1]) )
           else:
@@ -588,7 +588,7 @@ def write_runtimes( optD, fileL ):
           src = fmtresults.MultiResults()
           try:
             src.readFile(srcf)
-          except:
+          except Exception:
             warnL.append( "Warning: skipping results file: " + srcf + \
                          ", Exception = " + str(sys.exc_info()[1]) )
           else:
@@ -637,7 +637,7 @@ def write_runtimes( optD, fileL ):
                 fmt,vers,hdr,nskip = fmtresults.read_file_header( rtf )
                 rr = hdr.get( 'ROOT_RELATIVE', None )
                 trs.mergeRuntimes(rtf)
-            except:
+            except Exception:
                 msgs.append( "Warning: skipping existing runtimes file due to " + \
                              "error: " + rtf + ", Exception = " + \
                              str(sys.exc_info()[1]) )
@@ -813,261 +813,36 @@ def report_generation( optD, fileL ):
         showage = optD['-D']
     else:
         showage = 7
+
     if '-r' in optD:
         maxreport = optD['-r']
     else:
         maxreport = 25  # default to 25 tests
-    
-    if '--html' in optD:
-        dohtml = True
-    else:
-        dohtml = False
-    
+
     plug = get_results_plugin( optD )
 
     # this collects the files and applies filters
     fileG = []
     process_files( optD, fileL, fileG, default_d=15 )
 
-    # read all the results files
-    rmat = reports.ResultsMatrix()
-    for f in fileL:
-        ftime,tr,rkey = fmtresults.read_results_file( f, warnL )
-        if ftime != None:
-            tr.detail_ok = True  # inject a boolean flag to do detailing
-            rmat.add( ftime, tr, rkey )
-    for f in fileG:
-        ftime,tr,rkey = fmtresults.read_results_file( f, warnL )
-        if ftime != None:
-            tr.detail_ok = False  # inject a boolean flag to NOT do detailing
-            rmat.add( ftime, tr, rkey )
+    rmat = read_all_results_files( fileL, fileG, warnL )
 
     if len( rmat.testruns() ) == 0:
         print3( 'No results files to process (after filtering)' )
         return warnL
-    
+
     # the DateMap object helps format the test results output
-    if '-d' in optD:
-        df = fmtresults.date_round_down( curtm-optD['-d']*24*60*60 )
-        dmin = min( df, rmat.minFileDate() )
+    dmap = create_date_map( curtm, optD.get( '-d', None ), rmat )
+
+    if '--html' in optD:
+        htmloc = optD['--html']
+        webloc = optD.get( '--webloc', None )
+        reporter = HTMLReporter( rmat, dmap, plug, htmloc, webloc )
     else:
-        dmin = rmat.minFileDate()
-    dmax = max(  0, rmat.maxFileDate() )
-    dmap = reports.DateMap( dmin, dmax )
+        reporter = ConsoleReporter( rmat, dmap )
 
-    # write out the summary for each platform/options/tag combination
+    make_report_from_results( reporter, rmat, maxreport, showage, curtm )
 
-    if not dohtml:
-        print3( "A summary by platform/compiler is next." )
-        print3( "vvtest run codes: s=started, r=ran and finished." )
-
-    # these for html output
-    primary = []
-    secondary = []
-    tdd = []
-    runlist = []
-
-    # If a test gets marked TDD, it will still show up in the test detail
-    # section until all test results (all platform combinations) run the
-    # test again.  To prevent this, we save all the tests that are marked
-    # as TDD for the most recent test results of each platform combination.
-    # Then later when the test detail is being produced, this dict is used
-    # to exclude tests that are marked TDD by any platform combination.
-    # The 'tddmarks' dict is just a union of the dicts coming back from
-    # calling TestResults.collectResults(), which is
-    #      ( test dir, test name ) -> ( run date, result string )
-    tddmarks = {}
-
-    keylen = 0
-    redD = {}
-    for rkey in rmat.testruns():
-        
-        # find max plat/cplr string length for below
-        keylen = max( keylen, len(rkey) )
-
-        loc = rmat.location(rkey)
-
-        if not dohtml:
-            print3()
-            print3( rkey, '@', loc )
-        
-        rL = []
-        for fdate,tr in rmat.resultsList( rkey ):
-            if tr.inProgress(): rL.append( (fdate,'start') )
-            else:               rL.append( (fdate,'ran') )
-        hist = dmap.history(rL)
-
-        fdate,tr,tr2,started = rmat.latestResults( rkey )
-        
-        if dohtml:
-            if tr.detail_ok:
-                primary.append( (rkey, tr.getCounts(), rL) )
-            else:
-                secondary.append( (rkey, tr.getCounts(), rL) )
-            tdd.append( (rkey, tr.getCounts(tdd=True), rL) )
-            D,nm = tr.collectResults( tdd=True )
-            tddmarks.update( D )
-            runlist.append( (rkey,fdate,tr) )
-        else:
-            print3( '  ', dmap.legend() )
-            print3( '  ', hist, '  ', tr.getSummary() )
-            if not tr.detail_ok:
-                s = '(tests for this platform/compiler are not detailed below)'
-                print3( '  '+s )
-
-        testD = {}  # (testdir,testname) -> (xdate,result)
-
-        # don't itemize tests if they are still running, or if they
-        # ran too long ago
-        if not started and tr.detail_ok and \
-           fdate > curtm - showage*24*60*60:
-            
-            resD,nmatch = tr.collectResults( 'fail', 'diff', 'timeout' )
-            
-            rD2 = None
-            if tr2 != None:
-                # get tests that timed out in the 2-nd most recent results
-                rD2,nm2 = tr2.collectResults( 'timeout' )
-            
-            # do not report individual test results for a test
-            # execution that has massive failures
-            if nmatch <= maxreport:
-                for k,T in resD.items():
-                    xd,res = T
-                    if xd > 0 and ( k not in testD or testD[k][0] < xd ):
-                        if rD2 != None:
-                            testD[k] = xd,res,rD2.get( k, None )
-                        else:
-                            testD[k] = xd,res,None
-
-        for k,T in testD.items():
-            xd,res,v2 = T
-            if res:
-                if res == 'result=timeout':
-                    # only report timeouts if the 2-nd most recent test result
-                    # was also a timeout
-                    if v2 != None and v2[1] == 'result=timeout':
-                        redD[k] = res
-                else:
-                    redD[k] = res
-
-    if dohtml:
-
-        print3( reports.dashboard_preamble )
-        if '--webloc' in optD:
-            loc = optD['--webloc']
-            print3( 'Go to the <a href="'+loc+ '">full report</a>.\n<br>\n' )
-            loc = os.path.join( os.path.dirname( loc ), 'testrun.html' )
-            print3( 'Also the <a href="'+loc+'">machine summaries</a>.\n<br>\n' )
-
-        reports.html_start_rollup( sys.stdout, dmap, "Production Rollup", 7 )
-        for rkey,cnts,rL in primary:
-            reports.html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
-        reports.html_end_rollup( sys.stdout )
-        
-        if len(secondary) > 0:
-            reports.html_start_rollup( sys.stdout, dmap, "Secondary Rollup", 7 )
-            for rkey,cnts,rL in secondary:
-                reports.html_rollup_line( sys.stdout, plug, dmap, rkey, cnts, rL, 7 )
-            reports.html_end_rollup( sys.stdout )
-        
-        print3( '\n<br>\n<hr>\n' )
-
-        fn = os.path.join( optD['--html'], 'dash.html' )
-        dashfp = open( fn, 'w' )
-        dashfp.write( reports.dashboard_preamble )
-        reports.html_start_rollup( dashfp, dmap, "Production Rollup" )
-        for rkey,cnts,rL in primary:
-            reports.html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
-        reports.html_end_rollup( dashfp )
-        
-        if len(secondary) > 0:
-            reports.html_start_rollup( dashfp, dmap, "Secondary Rollup" )
-            for rkey,cnts,rL in secondary:
-                reports.html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
-            reports.html_end_rollup( dashfp )
-        
-        if len(tdd) > 0:
-            reports.html_start_rollup( dashfp, dmap, "TDD Rollup" )
-            for rkey,cnts,rL in tdd:
-                if sum(cnts) > 0:
-                    reports.html_rollup_line( dashfp, plug, dmap, rkey, cnts, rL )
-            reports.html_end_rollup( dashfp )
-        
-        dashfp.write( '\n<br>\n<hr>\n' )
-
-        if len(redD) > 0:
-            dashfp.write( \
-                '<h2>Below are the tests that failed or diffed in ' + \
-                'the most recent test sequence of at least one ' + \
-                'Production Rollup platform combination.</h2>' + \
-                '\n<br>\n<hr>\n' )
-    
-    if not dohtml:
-        print3()
-        print3( 'Tests that have diffed, failed, or timed out are next.' )
-        print3( 'Result codes: p=pass, D=diff, F=fail, T=timeout, n=notrun' )
-        print3()
-
-    # for each test that fail/diff/timeout, collect and print the history of
-    # the test on each plat/cplr and for each results date stamp
-
-    detailed = {}
-    tnum = 1
-
-    keyfmt = "   %-"+str(keylen)+"s"
-    redL = list( redD.keys() )
-    redL.sort()
-    for d,tn in redL:
-
-        if (d,tn) in tddmarks:
-            continue
-        
-        if dohtml:
-            reports.html_start_detail( dashfp, dmap, d+'/'+tn, tnum )
-            detailed[ d+'/'+tn ] = tnum
-            tnum += 1
-        else:
-            # print the path to the test and the date legend
-            print3( d+'/'+tn )
-            print3( keyfmt % ' ', dmap.legend() )
-
-        res = redD[ (d,tn) ]
-        for rkey in rmat.testruns( d, tn ):
-            tests,location = rmat.resultsForTest( rkey, d, tn, result=res )
-            rL = []
-            for fd,aD in tests:
-                if aD == None:
-                    rL.append( (fd,'start') )
-                else:
-                    st = aD.get( 'state', '' )
-                    rs = aD.get( 'result', '' )
-                    if rs: rL.append( (fd,rs) )
-                    else: rL.append( (fd,st) )
-
-            if dohtml:
-                reports.html_detail_line( dashfp, dmap, rkey, rL )
-            else:
-                print3( keyfmt%rkey, dmap.history( rL ), location )
-
-
-        if dohtml:
-            dashfp.write( '\n</table>\n' )
-        else:
-            print3()
-    
-    if dohtml:
-        dashfp.write( reports.dashboard_close )
-        dashfp.close()
-
-        fn = os.path.join( optD['--html'], 'testrun.html' )
-        trunfp = open( fn, 'w' )
-        trunfp.write( reports.dashboard_preamble )
-        for rkey,fdate,tr in runlist:
-            reports.write_testrun_entry( trunfp, plug, rkey, fdate, tr, detailed )
-        trunfp.write( reports.dashboard_close )
-        trunfp.close()
-    
     return warnL
 
 
@@ -1090,6 +865,333 @@ def get_results_plugin( optD ):
     return None
 
 
+def read_all_results_files( files, globfiles, warnL ):
+    ""
+    rmat = reports.ResultsMatrix()
+
+    for f in files:
+        ftime,tr,rkey = fmtresults.read_results_file( f, warnL )
+        if ftime != None:
+            tr.detail_ok = True  # inject a boolean flag to do detailing
+            rmat.add( ftime, tr, rkey )
+
+    for f in globfiles:
+        ftime,tr,rkey = fmtresults.read_results_file( f, warnL )
+        if ftime != None:
+            tr.detail_ok = False  # inject a boolean flag to NOT do detailing
+            rmat.add( ftime, tr, rkey )
+
+    return rmat
+
+
+def create_date_map( curtm, daysback, rmat ):
+    ""
+    if daysback == None:
+        dmin = rmat.minFileDate()
+    else:
+        df = fmtresults.date_round_down( curtm-optD['-d']*24*60*60 )
+        dmin = min( df, rmat.minFileDate() )
+
+    dmax = max(  0, rmat.maxFileDate() )
+
+    dmap = reports.DateMap( dmin, dmax )
+
+    return dmap
+
+
+def mark_tests_for_detailing( redD, tr, tr2, started,
+                              fdate, curtm,
+                              maxreport, showage ):
+    ""
+    testD = {}  # (testdir,testname) -> (xdate,result)
+
+    # don't itemize tests if they are still running, or if they
+    # ran too long ago
+    if not started and tr.detail_ok and \
+       fdate > curtm - showage*24*60*60:
+        
+        resD,nmatch = tr.collectResults( 'fail', 'diff', 'timeout' )
+        
+        rD2 = None
+        if tr2 != None:
+            # get tests that timed out in the 2-nd most recent results
+            rD2,nm2 = tr2.collectResults( 'timeout' )
+        
+        # do not report individual test results for a test
+        # execution that has massive failures
+        if nmatch <= maxreport:
+            for k,T in resD.items():
+                xd,res = T
+                if xd > 0 and ( k not in testD or testD[k][0] < xd ):
+                    if rD2 != None:
+                        testD[k] = xd,res,rD2.get( k, None )
+                    else:
+                        testD[k] = xd,res,None
+
+    for k,T in testD.items():
+        xd,res,v2 = T
+        if res:
+            if res == 'result=timeout':
+                # only report timeouts if the 2-nd most recent test result
+                # was also a timeout
+                if v2 != None and v2[1] == 'result=timeout':
+                    redD[k] = res
+            else:
+                redD[k] = res
+
+
+def make_report_from_results( reporter, rmat, maxreport, showage, curtm ):
+    ""
+    # If a test gets marked TDD, it will still show up in the test detail
+    # section until all test results (all platform combinations) run the
+    # test again.  To prevent this, we save all the tests that are marked
+    # as TDD for the most recent test results of each platform combination.
+    # Then later when the test detail is being produced, this dict is used
+    # to exclude tests that are marked TDD by any platform combination.
+    # The 'tddmarks' dict is just a union of the dicts coming back from
+    # calling TestResults.collectResults(), which is
+    #      ( test dir, test name ) -> ( run date, result string )
+    tddmarks = {}
+
+    reporter.writePreamble()
+
+    redD = {}
+    for rkey in rmat.testruns():
+
+        fdate,tr,tr2,started = rmat.latestResults( rkey )
+
+        D,nm = tr.collectResults( tdd=True )
+        tddmarks.update( D )
+
+        reporter.processDetails( rkey )
+
+        mark_tests_for_detailing( redD, tr, tr2, started,
+                                  fdate, curtm,
+                                  maxreport, showage )
+
+    reporter.finalizeRollups( rkey, redD )
+
+    # for each test that fail/diff/timeout, collect and print the history of
+    # the test on each plat/cplr and for each results date stamp
+    reporter.writeDetailedTestGroups( tddmarks, redD )
+
+
+class HTMLReporter:
+
+    def __init__(self, rmat, dmap, plug, htmloc, webloc):
+        ""
+        self.rmat = rmat
+        self.dmap = dmap
+        self.plug = plug
+        self.htmloc = htmloc
+        self.webloc = webloc
+
+        self.primary = []
+        self.secondary = []
+        self.tdd = []
+        self.runlist = []
+
+        self.dashfp = None
+
+    def writePreamble(self):
+        ""
+        pass
+
+    def processDetails(self, rkey):
+        ""
+        loc = self.rmat.location(rkey)
+        rundates = get_run_dates( self.rmat, rkey )
+        fdate,tr,tr2,started = self.rmat.latestResults( rkey )
+        if tr.detail_ok:
+            self.primary.append( (rkey, tr.getCounts(), rundates) )
+        else:
+            self.secondary.append( (rkey, tr.getCounts(), rundates) )
+        self.tdd.append( (rkey, tr.getCounts(tdd=True), rundates) )
+        self.runlist.append( (rkey,fdate,tr) )
+
+    def finalizeRollups(self, rkey, redD):
+        ""
+        print3( reports.dashboard_preamble )
+        if self.webloc != None:
+            print3( 'Go to the <a href="'+self.webloc+ '">full report</a>.\n<br>\n' )
+            loc = os.path.join( os.path.dirname( self.webloc ), 'testrun.html' )
+            print3( 'Also the <a href="'+loc+'">machine summaries</a>.\n<br>\n' )
+
+        reports.html_start_rollup( sys.stdout, self.dmap, "Production Rollup", 7 )
+        for rkey,cnts,rL in self.primary:
+            reports.html_rollup_line( sys.stdout, self.plug, self.dmap, rkey, cnts, rL, 7 )
+        reports.html_end_rollup( sys.stdout )
+        
+        if len(self.secondary) > 0:
+            reports.html_start_rollup( sys.stdout, self.dmap, "Secondary Rollup", 7 )
+            for rkey,cnts,rL in self.secondary:
+                reports.html_rollup_line( sys.stdout, self.plug, self.dmap, rkey, cnts, rL, 7 )
+            reports.html_end_rollup( sys.stdout )
+        
+        print3( '\n<br>\n<hr>\n' )
+
+        fn = os.path.join( self.htmloc, 'dash.html' )
+        self.dashfp = open( fn, 'w' )
+        self.dashfp.write( reports.dashboard_preamble )
+        reports.html_start_rollup( self.dashfp, self.dmap, "Production Rollup" )
+        for rkey,cnts,rL in self.primary:
+            reports.html_rollup_line( self.dashfp, self.plug, self.dmap, rkey, cnts, rL )
+        reports.html_end_rollup( self.dashfp )
+        
+        if len(self.secondary) > 0:
+            reports.html_start_rollup( self.dashfp, self.dmap, "Secondary Rollup" )
+            for rkey,cnts,rL in self.secondary:
+                reports.html_rollup_line( self.dashfp, self.plug, self.dmap, rkey, cnts, rL )
+            reports.html_end_rollup( self.dashfp )
+        
+        if len(self.tdd) > 0:
+            reports.html_start_rollup( self.dashfp, self.dmap, "TDD Rollup" )
+            for rkey,cnts,rL in self.tdd:
+                if sum(cnts) > 0:
+                    reports.html_rollup_line( self.dashfp, self.plug, self.dmap, rkey, cnts, rL )
+            reports.html_end_rollup( self.dashfp )
+        
+        self.dashfp.write( '\n<br>\n<hr>\n' )
+
+        if len(redD) > 0:
+            self.dashfp.write( \
+                '<h2>Below are the tests that failed or diffed in ' + \
+                'the most recent test sequence of at least one ' + \
+                'Production Rollup platform combination.</h2>' + \
+                '\n<br>\n<hr>\n' )
+
+    def writeDetailedTestGroups(self, tddmarks, redD):
+        ""
+        detailed = {}
+        tnum = 1
+
+        redL = list( redD.keys() )
+        redL.sort()
+        for d,tn in redL:
+
+            if (d,tn) in tddmarks:
+                continue
+            
+            reports.html_start_detail( self.dashfp, self.dmap, d+'/'+tn, tnum )
+            detailed[ d+'/'+tn ] = tnum
+            tnum += 1
+
+            res = redD[ (d,tn) ]
+            for rkey in self.rmat.testruns( d, tn ):
+                tests,location = self.rmat.resultsForTest( rkey, d, tn, result=res )
+                rL = test_list_with_results_details( tests )
+
+                reports.html_detail_line( self.dashfp, self.dmap, rkey, rL )
+
+            self.dashfp.write( '\n</table>\n' )
+        
+        self.dashfp.write( reports.dashboard_close )
+        self.dashfp.close()
+
+        fn = os.path.join( self.htmloc, 'testrun.html' )
+        trunfp = open( fn, 'w' )
+        trunfp.write( reports.dashboard_preamble )
+        for rkey,fdate,tr in self.runlist:
+            reports.write_testrun_entry( trunfp, self.plug, rkey, fdate, tr, detailed )
+        trunfp.write( reports.dashboard_close )
+        trunfp.close()
+
+
+class ConsoleReporter:
+
+    def __init__(self, rmat, dmap):
+        ""
+        self.rmat = rmat
+        self.dmap = dmap
+
+        self.keylen = 0
+
+    def writePreamble(self):
+        ""
+        # write out the summary for each platform/options/tag combination
+        print3( "A summary by platform/compiler is next." )
+        print3( "vvtest run codes: s=started, r=ran and finished." )
+
+    def processDetails(self, rkey):
+        ""
+        # find max plat/cplr string length for below
+        self.keylen = max( self.keylen, len(rkey) )
+
+        rundates = get_run_dates( self.rmat, rkey )
+        fdate,tr,tr2,started = self.rmat.latestResults( rkey )
+        loc = self.rmat.location(rkey)
+        hist = self.dmap.history(rundates)
+        print3()
+        print3( rkey, '@', loc )
+        print3( '  ', self.dmap.legend() )
+        print3( '  ', hist, '  ', tr.getSummary() )
+        if not tr.detail_ok:
+            s = '(tests for this platform/compiler are not detailed below)'
+            print3( '  '+s )
+
+    def finalizeRollups(self, rkey, redD):
+        ""
+        pass
+
+    def writeDetailedTestGroups(self, tddmarks, redD):
+        ""
+        print3()
+        print3( 'Tests that have diffed, failed, or timed out are next.' )
+        print3( 'Result codes: p=pass, D=diff, F=fail, T=timeout, n=notrun' )
+        print3()
+
+        detailed = {}
+        tnum = 1
+
+        keyfmt = "   %-"+str(self.keylen)+"s"
+        redL = list( redD.keys() )
+        redL.sort()
+        for d,tn in redL:
+
+            if (d,tn) in tddmarks:
+                continue
+
+            # print the path to the test and the date legend
+            print3( d+'/'+tn )
+            print3( keyfmt % ' ', self.dmap.legend() )
+
+            res = redD[ (d,tn) ]
+            for rkey in self.rmat.testruns( d, tn ):
+                tests,location = self.rmat.resultsForTest( rkey, d, tn, result=res )
+                rL = test_list_with_results_details( tests )
+
+                print3( keyfmt%rkey, self.dmap.history( rL ), location )
+
+            print3()
+
+
+def get_run_dates( rmat, rkey ):
+    ""
+    rundates = []
+
+    for fdate,tr in rmat.resultsList( rkey ):
+        if tr.inProgress(): rundates.append( (fdate,'start') )
+        else:               rundates.append( (fdate,'ran') )
+
+    return rundates
+
+
+def test_list_with_results_details( tests ):
+    ""
+    rL = []
+
+    for fd,aD in tests:
+        if aD == None:
+            rL.append( (fd,'start') )
+        else:
+            st = aD.get( 'state', '' )
+            rs = aD.get( 'result', '' )
+            if rs: rL.append( (fd,rs) )
+            else: rL.append( (fd,st) )
+
+    return rL
+
+
 ########################################################################
 
 def print3( *args ):
@@ -1104,7 +1206,7 @@ def process_option( optD, option_name, value_type, *restrictions ):
     if option_name in optD:
         try:
             v = value_type( optD[option_name] )
-        except:
+        except Exception:
             print3( '*** error: invalid option value "'+option_name+'":',
                     sys.exc_info()[1] )
             sys.exit(1)
