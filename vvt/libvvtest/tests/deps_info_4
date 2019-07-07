@@ -1,0 +1,82 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+
+import vvtestutils as vtu
+import testutils as util
+from testutils import print3
+
+
+class dependency_information( vtu.vvtestTestCase ):
+
+    def test_depdirs_are_available_when_rerunning_an_analyze(self):
+        ""
+        util.writescript( 'testA.vvt', """
+            #!"""+sys.executable+"""
+            #VVT: parameterize : value = 1 2
+            #VVT: analyze : --analyze
+
+            import sys
+            import vvtest_util as vvt
+
+            if "--analyze" in sys.argv[1:]:
+                print ( "Analysis DEPDIRS", vvt.DEPDIRS )
+                assert len(vvt.DEPDIRS) == 2, 'DEPDIRS not length two'
+                raise Exception( "always fail" )
+            else:
+                print ( "value:", vvt.value )
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=3, npass=2, fail=1 )
+        assert vrun.countGrepLogs( 'always fail', 'testA' ) > 0
+
+        vrun = vtu.runvvtest( '-k fail' )
+        vrun.assertCounts( total=1, fail=1 )
+        assert vrun.countGrepLogs( 'always fail', 'testA' ) > 0
+
+    def test_depdirs_are_available_when_rerunning_a_test_with_a_dependency(self):
+        ""
+        util.writescript( 'testX.vvt', """
+            #!"""+sys.executable+"""
+            #VVT: depends on : testY
+            import vvtest_util as vvt
+            print ( 'DEPDIRS', vvt.DEPDIRS )
+            assert len(vvt.DEPDIRS) == 1, 'DEPDIRS not length one'
+            raise Exception( 'always fail' )
+            """ )
+        util.writescript( 'testY.vvt', """
+            #!"""+sys.executable+"""
+            import vvtest_util as vvt
+            assert len(vvt.DEPDIRS) == 0
+            """ )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( batch=batch )
+            vrun.assertCounts( total=2, npass=1, fail=1 )
+            assert vrun.countGrepLogs( 'always fail', 'testX' ) > 0
+
+            vrun = vtu.runvvtest( '-k fail', batch=batch )
+            vrun.assertCounts( total=1, fail=1 )
+            assert vrun.countGrepLogs( 'always fail', 'testX' ) > 0
+
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
