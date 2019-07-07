@@ -23,12 +23,13 @@ import results
 import results_util as ru
 
 import libvvtest.fmtresults as fmtresults
+import libvvtest.testcase as testcase
 
 timesfname = fmtresults.runtimes_filename
 multifname = fmtresults.multiruntimes_filename
 
 
-class test_results_tests( vtu.vvtestTestCase ):
+class unit_tests( vtu.vvtestTestCase ):
 
     def test_make_and_parse_test_attributes(self):
         ""
@@ -47,6 +48,46 @@ class test_results_tests( vtu.vvtestTestCase ):
         s = fmtresults.make_attr_string( aD )
         D2 = fmtresults.read_attrs( s.split() )
         assert aD == D2, str(aD) + ' != ' + str(D2)
+
+    def test_results_date_range(self):
+        ""
+        tr = fmtresults.TestResults()
+
+        mn,mx = tr.dateRange()
+        assert mn == None and mx == None
+
+        now = time.time()
+
+        t1 = make_testcase_started_at_time( 'atest', 10 )
+        tr.addTest( t1.getSpec(), 'myroot' )
+        mn,mx = tr.dateRange()
+        assert abs( now-10*60 - mn ) < 5
+        assert abs( now-10*60 - mx ) < 5
+
+        t2 = make_testcase_started_at_time( 'btest', 20 )
+        tr.addTest( t2.getSpec(), 'myroot' )
+        mn,mx = tr.dateRange()
+        assert abs( now-20*60 - mn ) < 5
+        assert abs( now-10*60 - mx ) < 5
+
+        t3 = make_testcase_started_at_time( 'ctest', 15 )
+        tr.addTest( t3.getSpec(), 'myroot' )
+        mn,mx = tr.dateRange()
+        assert abs( now-20*60 - mn ) < 5
+        assert abs( now-10*60 - mx ) < 5
+
+
+def make_testcase_started_at_time( name='atest', minutes_ago=10 ):
+    ""
+    tc = testcase.TestCase( vtu.make_fake_TestSpec( name ) )
+    tc.getStat().resetResults()
+    tc.getStat().markStarted( time.time() - minutes_ago*60 )
+    tc.getStat().markDone( 0 )
+
+    return tc
+
+
+class integration_tests( vtu.vvtestTestCase ):
 
     def test_saving_results_when_the_root_cannot_be_determined(self):
         ""
