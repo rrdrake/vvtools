@@ -191,7 +191,7 @@ class test_results_tests( vtu.vvtestTestCase ):
                 topdir='tsrc' )
 
         # hold on to the runtime for the cat test
-        cat_t1 = ru.get_results_test_time( resultsfname, 'tsrc/one/cat' )
+        cat_t1 = ru.get_results_test_time_from_file( resultsfname, 'tsrc/one/cat' )
 
         # increase the run time of cat test and run vvtest again
         util.writefile( "tsrc/one/cat.xml", """
@@ -208,7 +208,7 @@ class test_results_tests( vtu.vvtestTestCase ):
 
         rfn2 = os.path.abspath( util.globfile( 'testing/results.*.2nd' ) )
 
-        cat_t2 = ru.get_results_test_time( rfn2, 'tsrc/one/cat' )
+        cat_t2 = ru.get_results_test_time_from_file( rfn2, 'tsrc/one/cat' )
         assert cat_t1 < cat_t2
 
         # merge two results files into the runtimes file
@@ -221,7 +221,7 @@ class test_results_tests( vtu.vvtestTestCase ):
                 'one/dog',
                 'two/circle',
                 topdir='tsrc' )
-        xt = ru.get_results_test_time( 'tsrc/'+timesfname, 'tsrc/one/cat' )
+        xt = ru.get_results_test_time_from_file( 'tsrc/'+timesfname, 'tsrc/one/cat' )
         # two instances of the cat test means the timings should be averaged
         assert abs( xt - (cat_t1+cat_t2)/2. ) < 1
 
@@ -246,13 +246,13 @@ class test_results_tests( vtu.vvtestTestCase ):
         util.runcmd( vtu.resultspy + ' merge '+rfn3, chdir='testing' )
 
         # save off the circle runtime from first execution
-        circ1 = ru.get_results_test_time( 'tsrc/'+timesfname, 'tsrc/two/circle' )
+        circ1 = ru.get_results_test_time_from_file( 'tsrc/'+timesfname, 'tsrc/two/circle' )
 
         # update the test src runtimes file to include the multiplat contents
         mf = os.path.abspath( 'testing/'+multifname )
         util.runcmd( vtu.resultspy + ' save '+mf, chdir='tsrc' )
 
-        circ2 = ru.get_results_test_time( 'tsrc/'+timesfname, 'tsrc/two/circle' )
+        circ2 = ru.get_results_test_time_from_file( 'tsrc/'+timesfname, 'tsrc/two/circle' )
         assert circ1 != circ2
         xt = ru.get_multi_results_test_time(
                     'testing/'+multifname,

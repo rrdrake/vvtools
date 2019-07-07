@@ -163,12 +163,16 @@ def assert_results_file_does_not_have_tests( filename, *tests, **kwargs ):
         assert len( tr.testAttrs( rootrel, testkey ) ) == 0
 
 
-def get_results_test_time( filename, testname ):
+def get_results_test_time_from_file( filename, testname ):
     ""
     tr = fmtresults.TestResults( filename )
+    return get_results_test_time( tr, testname )
 
+
+def get_results_test_time( testresults_obj, testname ):
+    ""
     rootrel,testkey = os.path.split( testname )
-    aD = tr.testAttrs( rootrel, testkey )
+    aD = testresults_obj.testAttrs( rootrel, testkey )
 
     xtime = aD.get( 'xtime', -1 )
 

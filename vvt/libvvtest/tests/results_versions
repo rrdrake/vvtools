@@ -45,7 +45,7 @@ class the_tests( vtu.vvtestTestCase ):
                 'Regression/2D/cable_sgemp/2eps_quad8_ddose',
                 'Regression/2D/cable_sgemp/2eps_quad8_idose',
                 topdir='Benchmarks' )
-        xt = ru.get_results_test_time(
+        xt = ru.get_results_test_time_from_file(
                     fn,
                     'Benchmarks/Regression/2D/adaptivity/bar' )
         assert abs( xt - 15 ) < 2
@@ -61,35 +61,12 @@ class the_tests( vtu.vvtestTestCase ):
 
         ru.assert_results_file_has_tests(
                 fn,
-                'Prototype/1DFlyer/flyer_1d_eul.np=4',
+                'Prototype/1DFlyer/flyer_1d_euler.np=4',
                 'Prototype/1DFlyer/flyer_1d_lag.np=4',
                 'Regression/2D/periodic/ale_periodic.np=4',
                 'Regression/2D/periodic/eulrotper.np=1',
                 topdir='Benchmarks' )
-        xt = ru.get_results_test_time(
-                    fn,
-                    'Benchmarks/Prototype/1DFlyer/flyer_1d_lag.np=4' )
-        assert abs( xt - 17 ) < 2
-
-        tr = fmtresults.TestResults( fn )
-        np,nd,nf,nt,nr,unk = tr.getCounts()
-        assert np == 2 and nd == 1 and nf == 1
-        assert nt == 0 and nr == 0 and unk == 0
-
-    def test_read_test_results_version_2_format(self):
-        ""
-        fn = 'results.2016_02_17.Linux.gnu4.bnb'
-        util.writefile( fn, results_version_2_example )
-        time.sleep(1)
-
-        ru.assert_results_file_has_tests(
-                fn,
-                'Prototype/1DFlyer/flyer_1d_eul.np=4',
-                'Prototype/1DFlyer/flyer_1d_lag.np=4',
-                'Regression/2D/periodic/ale_periodic.np=4',
-                'Regression/2D/periodic/eulrotper.np=1',
-                topdir='Benchmarks' )
-        xt = ru.get_results_test_time(
+        xt = ru.get_results_test_time_from_file(
                     fn,
                     'Benchmarks/Prototype/1DFlyer/flyer_1d_lag.np=4' )
         assert abs( xt - 17 ) < 2
@@ -118,7 +95,7 @@ class the_tests( vtu.vvtestTestCase ):
                 'Regression/2D/remesh_app/lbnox_multiblock.np=1',
                 'Regression/2D/remesh_app/lbnox_multiblock.np=3',
                 topdir='Benchmarks' )
-        xt = ru.get_results_test_time(
+        xt = ru.get_results_test_time_from_file(
                     fn,
                     'Benchmarks/Prototype/1DFlyer/flyer_1d_lag.np=4' )
         assert abs( xt - 24 ) < 2
@@ -136,10 +113,40 @@ class the_tests( vtu.vvtestTestCase ):
         assert tr.machine() == 'ascic101'
         assert tr.testdir() == '/projects/alegra/BnB/bnb/TestResults.ceelan.ON=gnu49'
 
+    def test_results_merge_from_older_formats(self):
+        ""
+        filev1 = 'results.2009-05-11.tbird'
+        util.writefile( filev1, results_version_1_example )
+        filev2 = 'results.2016_02_17.Linux.gnu4.bnb'
+        util.writefile( filev2, results_version_2_example )
+        filev3 = 'results.2019_07_02.ceelan.gnu49.bnb'
+        util.writefile( filev3, results_version_3_example )
+        time.sleep(1)
+
+        tr = fmtresults.TestResults( filev3 )
+        tr.mergeRuntimes( filev2 )
+        tr.mergeRuntimes( filev1 )
+
+        xt = ru.get_results_test_time(
+                    tr,
+                    'Benchmarks/Prototype/1DFlyer/flyer_1d_eul.np=4' )
+        assert abs( xt - 658 ) < 2
+
+        xt = ru.get_results_test_time(
+                    tr,
+                    'Benchmarks/Prototype/1DFlyer/flyer_1d_euler.np=4' )
+        assert abs( xt - 661 ) < 2
+
+        xt = ru.get_results_test_time(
+                    tr,
+                    'Benchmarks/Regression/2D/adaptivity/bar' )
+        assert abs( xt - 15 ) < 2
+
 
 results_version_1_example = \
 """\
 FILE_VERSION=results1
+ROOT_RELATIVE=Benchmarks/Regression/2D
 TEST_DIRECTORY=unknown
 PLATFORM=tbird
 COMPILER=
@@ -157,11 +164,12 @@ Benchmarks/Regression/2D/cable_sgemp
 results_version_2_example = \
 """\
 FILE_VERSION=results2
+ROOT_RELATIVE=Benchmarks
 TEST_DIRECTORY=/scratch/rrdrake/bnb/TestResults.Linux
 PLATFORM=Linux
 COMPILER=gnu4
 
-Benchmarks/Prototype/1DFlyer/flyer_1d_eul.np=4 Wed_Feb_17_20:19:08_2016 xtime=661 done pass
+Benchmarks/Prototype/1DFlyer/flyer_1d_euler.np=4 Wed_Feb_17_20:19:08_2016 xtime=661 done pass
 Benchmarks/Prototype/1DFlyer/flyer_1d_lag.np=4 Wed_Feb_17_21:08:36_2016 xtime=17 done pass
 Benchmarks/Regression/2D/periodic/ale_periodic.np=4 Wed_Feb_17_21:06:56_2016 xtime=4 done fail
 Benchmarks/Regression/2D/periodic/eulrotper.np=1 Wed_Feb_17_21:13:04_2016 xtime=2 done diff
@@ -170,6 +178,7 @@ Benchmarks/Regression/2D/periodic/eulrotper.np=1 Wed_Feb_17_21:13:04_2016 xtime=
 results_version_3_example = \
 """\
 FILE_VERSION=results3
+ROOT_RELATIVE=Benchmarks
 PLATFORM=ceelan
 COMPILER=gnu49
 MACHINE=ascic101

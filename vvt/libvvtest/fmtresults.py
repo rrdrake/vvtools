@@ -33,11 +33,7 @@ class TestResults:
         self.dcache = {}  # magic remove this
 
         if results_filename:
-            if type(results_filename) == type(''):
-                self.readResults( results_filename )
-            else:
-                # assume TestResults object, which mergeRuntimes() can handle
-                self.mergeRuntimes( results_filename )
+            self.readResults( results_filename )
 
     def platform  (self): return self.hdr.get('PLATFORM',None)
     def compiler  (self): return self.hdr.get('COMPILER',None)
@@ -322,56 +318,44 @@ class TestResults:
         the current test if the execution date is more recent.  If the test
         does not exist in this object yet, it is added.
         """
-        if type(filename) == type(''):
+        fmt,vers,hdr,nskip = read_file_header( filename )
 
-            fmt,vers,hdr,nskip = read_file_header( filename )
+        if not fmt or fmt != 'results':
+            raise Exception( "File format is not a single platform test " + \
+                             "results format: " + filename )
 
-            if not fmt or fmt != 'results':
-              raise Exception( "File format is not a single platform test " + \
-                               "results format: " + filename )
-
-            fp = open( filename, 'r' )
-            n = 0
-            d = None
-            line = fp.readline()
-            while line:
-              if n < nskip:
+        fp = open( filename, 'r' )
+        n = 0
+        d = None
+        line = fp.readline()
+        while line:
+            if n < nskip:
                 pass
-              elif line.strip():
+            elif line.strip():
                 if vers < 2:
-                  if line[:3] == "   ":
+                    if line[:3] == "   ":
+                        L = line.split()
+                        tn = L[0]
+                        aD = read_attrs( L[1:] )
+                        dt1 = self.testAttrs( d, tn ).get( 'xdate', 0 )
+                        dt2 = aD.get( 'xdate', 0 )
+                        if dt2 >= dt1:
+                            self.addTestName( d, tn, aD )
+                    else:
+                        s = line.strip()
+                        if s: d = s
+                else:
                     L = line.split()
-                    tn = L[0]
+                    d  = os.path.dirname( L[0] )
+                    tn = os.path.basename( L[0] )
                     aD = read_attrs( L[1:] )
                     dt1 = self.testAttrs( d, tn ).get( 'xdate', 0 )
                     dt2 = aD.get( 'xdate', 0 )
                     if dt2 >= dt1:
-                      self.addTestName( d, tn, aD )
-                  else:
-                    s = line.strip()
-                    if s: d = s
-                else:
-                  L = line.split()
-                  d  = os.path.dirname( L[0] )
-                  tn = os.path.basename( L[0] )
-                  aD = read_attrs( L[1:] )
-                  dt1 = self.testAttrs( d, tn ).get( 'xdate', 0 )
-                  dt2 = aD.get( 'xdate', 0 )
-                  if dt2 >= dt1:
-                    self.addTestName( d, tn, aD )
-              n += 1
-              line = fp.readline()
-            fp.close()
-
-        else:
-            # assume argument is a TestResults file
-            tr = filename
-            for d,tD in tr.dataD.items():
-                for tn,aD in tD.items():
-                    dt1 = self.testAttrs( d, tn ).get( 'xdate', 0 )
-                    dt2 = aD.get( 'xdate', 0 )
-                    if dt2 >= dt1:
                         self.addTestName( d, tn, aD )
+            n += 1
+            line = fp.readline()
+        fp.close()
 
     def _accumulate_date_range(self, attrD):
         ""
@@ -536,34 +520,26 @@ class MultiResults:
         if not fmt or fmt != "multi":
           raise Exception( "File format is not a multi-platform test " + \
                            "results format: " + filename )
+        if vers < 2:
+          raise Exception( "Multi-platform test results format version " + \
+                           "not supported: " + str(vers) )
 
         fp = open( filename, 'r' )
         n = 0
-        d = None
         line = fp.readline()
         while line:
-          if n < nskip:
-            pass
-          elif line.strip():
-            if vers < 2:
-              if line[:3] == "   ":
+            if n < nskip:
+                pass
+            elif line.strip():
                 L = line.split()
-                tn = L[0]
+                d  = os.path.dirname( L[0] )
+                tn = os.path.basename( L[0] )
                 pc = L[1]
                 aD = read_attrs( L[2:] )
                 self.addTestName( d, tn, pc, aD )
-              else:
-                s = line.strip()
-                if s: d = s
-            else:
-              L = line.split()
-              d  = os.path.dirname( L[0] )
-              tn = os.path.basename( L[0] )
-              pc = L[1]
-              aD = read_attrs( L[2:] )
-              self.addTestName( d, tn, pc, aD )
-          n += 1
-          line = fp.readline()
+            n += 1
+            line = fp.readline()
+
         fp.close()
 
     def getRootRelative(self, testkey ):
