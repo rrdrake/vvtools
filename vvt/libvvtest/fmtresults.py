@@ -456,102 +456,6 @@ class MultiResults:
         aD = pD.get( platcplr, {} )
         return aD
 
-    def lookupRuntime(self, testspec, platcplr):
-        """
-        Looks up and returns the test run time in the database of times.  If
-        the test cannot be found, None is returned.
-
-        Significant effort is spent to be flexible and allow for a variety of
-        use cases.
-
-          - If the entire test tree is checked out from version control, we
-            want this routine to be fast.
-          - If a subset of the test tree is checked out, we want the test
-            times to still be found in the database.
-          - If a test directory is tarred up and moved somewhere else (and so
-            that the version control information is lost), we still want the
-            test times to be found in the database.
-
-        Some of the corner cases can be made to run faster and more robustly
-        if special files are committed to the test tree in strategic locations.
-        The file name is "rootrelative.txt" and contains the path to the
-        directory it is located in relative to the top of the test tree. For
-        example, the contents of this file in "Benchmarks/Regression/3D" might
-        be
-
-            # this file is used by the test harness and must contain the
-            # path from the top of the test tree to the current directory
-            Benchmarks/Regression/3D
-
-        The content of the last line is used as the root-relative directory.
-        Strategic places are directories that contain a lot of files and in
-        directories that contain a lot of tests in subdirectories.
-        """
-        # Note: If performance is an issue, one idea could be to implement the
-        #       following:
-        #         - if a solid root-rel directory is determined, use that
-        #           directory to compare future test directories to see if
-        #           they are subdirectories
-        #         - if a subsequent test directory is a subdirectory, then
-        #           reconstruct the path from the established root-rel
-        #           directory to the new test directory
-
-        testkey = os.path.basename( testspec.getExecuteDirectory() )
-        tdir = os.path.dirname( testspec.getFilepath() )
-
-        rootrel = self.dcache.get( tdir, None )
-
-        if rootrel == None:
-          rootrel = self.getRootRelative( testkey )
-          if rootrel == None:
-            rootrel = file_rootrel( tdir )
-            if rootrel == None:
-              rootrel = _svn_rootrel( tdir )
-              if rootrel == None:
-                rootrel = _direct_rootrel( tdir )
-          if rootrel == None:
-            # mark this directory so we don't waste time trying again
-            rootrel = ''
-          else:
-            assert rootrel and not os.path.isabs(rootrel)
-            rootd = os.path.normpath(rootrel).split( os.sep )[0]
-            if rootd not in self.rtime_roots:
-              self._load_runtimes( tdir, rootrel )
-              self.rtime_roots.append( rootd )
-          self.dcache[tdir] = rootrel
-
-        if rootrel != '':
-          testD = self.dataD.get( rootrel, None )
-          if testD == None:
-            # assume no test info available
-            return None
-          t = self._get_time( testD, testkey, platcplr )
-          if t != None:
-            return t
-          # look for tests with the same base name and compute max
-          s = testspec.getName() + '.'
-          n = len(s)
-          for k in testD.keys():
-            if k[:n] == s:
-              t2 = self._get_time( testD, k, platcplr )
-              if t == None: t = t2
-              else:         t = max( t, t2 )
-          return t
-
-        dL = self.tmap.get( testkey, None )
-        if dL != None:
-          # take the max over each matching test
-          t = None
-          for d in dL:
-            testD = self.dataD[d]
-            t2 = self._get_time( testD, testkey, platcplr )
-            if t2 != None:
-              if t == None: t = t2
-              else:         t = max( t, t2 )
-          return t
-
-        return None
-
     def getTime(self, rootrel, testkey, platcplr):
         """
         Get the execution time of the given test.  If the test is not in the
@@ -562,79 +466,6 @@ class MultiResults:
         if t != None:
           return t, aD.get( 'result', None )
         return None,None
-
-    def _get_time(self, testD, testkey, platcplr):
-        """
-        Given a test dict for a particular root-relative directory, the test
-        key is used to lookup the run time.  If the test key does not exist in
-        the directory, None is returned.  If the test key exists but the
-        given platform/compiler combination does not, the max over each
-        platform/compiler entries will be computed and returned.
-        """
-        pD = testD.get( testkey, None )
-        if pD != None:
-          # test key exists in this root-relative directory
-          aD = pD.get( platcplr, None )
-          if aD != None:
-            # platform/compiler exists for this test
-            return aD.get( 'xtime', None )
-          tmax = None
-          # take max of all times with the same platform but different compiler
-          plat = platcplr.split('/')[0]
-          for pc,aD in pD.items():
-            if pc.split('/')[0] == plat:
-              t = aD.get('xtime',None)
-              if t != None:
-                if tmax == None: tmax = t
-                else: tmax = max( tmax, t )
-          if tmax == None:
-            # take max of all platform/compiler combinations for this test
-            for aD in pD.values():
-              t = aD.get('xtime',None)
-              if t != None:
-                if tmax == None: tmax = t
-                else: tmax = max( tmax, t )
-          return tmax
-
-        # no entry for test key in the given directory dictionary
-        return None
-
-    def mergeTest(self, testspec, platcplr):
-        """
-        This method is to be used when merging in test results from a previous
-        run.  It uses the root-relative path to the test and the test key
-        (the test name plus any parameter names and values) as a unique
-        identifier.
-
-        The test root is the top of the test directory tree (in our case, the
-        "Benchmarks" directory).  The root-relative path is the relative path
-        from the root to the test specification file.  These paths are always
-        as they exist under version control.
-
-        This function should have a fairly high degree of confidence in
-        determining the root relative directory so that the test results are
-        not placed into the wrong directory.  It first tries to use the
-        version control and if that fails, it looks for one of the root-
-        relative files.  If both of these fail, the test is not merged in.
-
-        For performance, a cache of computed root-relative directories is kept.
-        """
-        tdir = testspec.getDirectory()
-
-        rootrel = self.dcache.get( tdir, None )
-
-        if rootrel == None:
-          rootrel = _svn_rootrel( tdir )
-          if rootrel == None:
-            rootrel = file_rootrel( tdir )
-          if rootrel == None:
-            # mark this directory so we don't waste time trying again
-            rootrel = ''
-          self.dcache[tdir] = rootrel
-
-        if rootrel != '':
-          testkey = os.path.basename( testspec.getExecuteDirectory() )
-          self.addTestName( rootrel, testkey, platcplr, testspec.getAttrs() )
 
     def addTestName(self, rootrel, testkey, platcplr, attrD):
         """
@@ -746,25 +577,6 @@ class MultiResults:
           return dL[0]
         return None
 
-    def _load_runtimes(self, tdir, rootrel):
-        """
-        Subtract off the 'rootrel' trailing path from 'tdir' then look for a
-        "runtimes.txt" file there.  If found, read it into self.rtimeD.
-        """
-        assert os.path.isabs(tdir) and not os.path.isabs(rootrel)
-        while 1:
-          d1,b1 = os.path.split( tdir )
-          d2,b2 = os.path.split( rootrel )
-          if b1 != b2:
-            return
-          if not d2 or d2 == '.':
-            break
-          tdir = d1
-          rootrel = d2
-        f = os.path.join( tdir, "runtimes.txt" )
-        if os.path.exists(f):
-          read_runtimes( self.rtimeD, f )
-
 
 def read_file_header( filename ):
     """
@@ -779,10 +591,7 @@ def read_file_header( filename ):
     "FILE_VERSION" was not found.  The header lines is the number of lines
     of header data in the file.
     """
-    if type(filename) == type(''):
-      fp = open( filename, 'r' )
-    else:
-      fp = filename  # assume a file object
+    fp = open( filename, 'r' )
 
     cnt = 0
     hdr = {}
@@ -816,25 +625,6 @@ def read_file_header( filename ):
       return t,n,hdr,cnt
 
     return None,None,hdr,cnt
-
-
-def _direct_rootrel(tdir):
-    """
-    Determines the root-relative directory of a test in 'tdir' by
-    traversing up until the directory "Benchmarks" is found.
-    """
-    dirL = []
-    while 1:
-      d,b = os.path.split(tdir)
-      if not b or d == tdir:
-        break
-      dirL.insert( 0, b )
-      if b == "Benchmarks":
-        break
-      tdir = d
-    if len(dirL) == 0 or dirL[0] != "Benchmarks":
-      return None
-    return '/'.join( dirL )
 
 
 def file_rootrel(tdir):
@@ -882,17 +672,13 @@ def _svn_rootrel(tdir):
     except Exception: return None
 
     # run svn info to get the relative URL and the repository URL
-    try:
-      import subprocess
-    except Exception:
-      subprocess = None
-    if subprocess:
-      p = subprocess.Popen( 'svn info', shell=True,
-              stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-              stderr=subprocess.STDOUT, close_fds=True )
-      ip,fp = (p.stdin, p.stdout)
-    else:
-      ip,fp = os.popen4( 'svn info' )
+    import subprocess
+
+    p = subprocess.Popen( 'svn info', shell=True,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, close_fds=True )
+    ip,fp = (p.stdin, p.stdout)
+
     url = None
     relurl = None
     repo = None
