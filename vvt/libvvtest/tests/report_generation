@@ -83,6 +83,22 @@ class unit_tests( vtu.vvtestTestCase ):
         i = reports.select_test_based_on_attributes( attrs1, attrs2, 'state=done' )
         assert i < 0
 
+    def test_date_map_object(self):
+        ""
+        tm3 = 1562630042.488 # == Mon Jul  8 17:54:02 2019
+        tm2 = tm3 - 24*60*60
+        tm1 = tm2 - 24*60*60
+
+        class FakeResultsMatrix:
+            def minFileDate(self): return tm1
+            def maxFileDate(self): return tm2
+
+        dmap = reports.create_date_map( tm3, None, FakeResultsMatrix() )
+        assert len( dmap.getDateList() ) == 2
+
+        dmap = reports.create_date_map( tm3, 5, FakeResultsMatrix() )
+        assert len( dmap.getDateList() ) == 5
+
 
 ############################################################################
 

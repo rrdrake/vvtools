@@ -387,10 +387,10 @@ def create_date_map( curtm, daysback, rmat ):
     if daysback == None:
         dmin = rmat.minFileDate()
     else:
-        df = fmtresults.date_round_down( curtm-optD['-d']*24*60*60 )
+        df = fmtresults.date_round_down( curtm-daysback*24*60*60 )
         dmin = min( df, rmat.minFileDate() )
 
-    dmax = max(  0, rmat.maxFileDate() )
+    dmax = max( 0, rmat.maxFileDate() )
 
     dmap = DateMap( dmin, dmax )
 
