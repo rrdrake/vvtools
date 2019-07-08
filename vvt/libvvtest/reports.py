@@ -71,22 +71,6 @@ class ResultsMatrix:
 
         return L
 
-    def _get_platcplr(self, trL):
-        """
-        Given a row of the matrix, returns the platform and compiler names
-        of the most recent test results object.  Ignores test results objects
-        if either the platform name or compiler name is None or empty.
-        """
-        dupL = [] + trL
-        dupL.reverse()
-
-        for fdate,tr in dupL:
-            p,c = tr.platform(), tr.compiler()
-            if p and c:
-                return p,c
-
-        return None, None
-
     def location(self, platcplr):
         """
         For the given 'platcplr', return a sorted list of the
@@ -177,7 +161,10 @@ class ResultsMatrix:
                 
                 else:
                     if filedate in D:
-                        i = self._tie_break( D[filedate], attrD, result )
+                        i = select_test_based_on_attributes(
+                                    D[filedate],
+                                    attrD,
+                                    result )
                         if i > 0:
                             D[filedate] = attrD  # prefer new test results
                     else:
@@ -190,7 +177,10 @@ class ResultsMatrix:
                     elif abs( filedate - maxloc[0] ) < 2:
                         # the test appears in more than one results file
                         # on the same file date, so try to break the tie
-                        i = self._tie_break( maxloc[2], attrD, result )
+                        i = select_test_based_on_attributes(
+                                    maxloc[2],
+                                    attrD,
+                                    result )
                         if i > 0:
                             maxloc = [ filedate, loc, attrD ]
         
@@ -202,51 +192,52 @@ class ResultsMatrix:
         
         return L,loc
 
-    def _tie_break(self, attrs1, attrs2, result):
-        """
-        Given the result attributes from two different executions of the same
-        test, this returns -1 if the first execution wins, 1 if the second
-        execution wins, or zero if the tie could not be broken.  The 'result'
-        argument is None or a result string produced from the
-        TestResults.collectResults() method.
-        """
-        # None is used as an "in progress" mark; in this case, always
-        # choose the other one
-        if attrs1 == None:
-            return 1
-        elif attrs2 == None:
-            return -1
 
-        if result != None:
-            # break tie using the preferred result
-            if result.startswith( 'state=' ):
-                rs = result.split( 'state=' )[1]
-                r1 = attrs1.get( 'state', '' )
-                r2 = attrs2.get( 'state', '' )
-            else:
-                assert result.startswith( 'result=' )
-                rs = result.split( 'result=' )[1]
-                r1 = attrs1.get( 'result', '' )
-                r2 = attrs2.get( 'result', '' )
-            if r1 == rs and r2 != rs:
-                # only previous entry has preferred result
-                return -1
-            elif r2 == rs and r1 != rs:
-                # only new entry has preferred result
-                return 1
+def select_test_based_on_attributes( attrs1, attrs2, result ):
+    """
+    Given the result attributes from two different executions of the same
+    test, this returns -1 if the first execution wins, 1 if the second
+    execution wins, or zero if the tie could not be broken.  The 'result'
+    argument is None or a result string produced from the
+    TestResults.collectResults() method.
+    """
+    # None is used as an "in progress" mark; in this case, always
+    # choose the other one
+    if attrs1 == None:
+        return 1
+    elif attrs2 == None:
+        return -1
 
-        d1 = attrs1.get( 'xdate', None )
-        d2 = attrs2.get( 'xdate', None )
-        if d2 == None:
-            # new entry does not have an execution date
+    if result != None:
+        # break tie using the preferred result
+        if result.startswith( 'state=' ):
+            rs = result.split( 'state=' )[1]
+            r1 = attrs1.get( 'state', '' )
+            r2 = attrs2.get( 'state', '' )
+        else:
+            assert result.startswith( 'result=' )
+            rs = result.split( 'result=' )[1]
+            r1 = attrs1.get( 'result', '' )
+            r2 = attrs2.get( 'result', '' )
+        if r1 == rs and r2 != rs:
+            # only previous entry has preferred result
             return -1
-        elif d1 == None or d2 > d1:
-            # old entry does not have an execution date or new entry
-            # executed more recently
+        elif r2 == rs and r1 != rs:
+            # only new entry has preferred result
             return 1
 
-        # unable to break the tie
-        return 0
+    d1 = attrs1.get( 'xdate', None )
+    d2 = attrs2.get( 'xdate', None )
+    if d2 == None:
+        # new entry does not have an execution date
+        return -1
+    elif d1 == None or d2 > d1:
+        # old entry does not have an execution date or new entry
+        # executed more recently
+        return 1
+
+    # unable to break the tie
+    return 0
 
 
 class DateMap:
