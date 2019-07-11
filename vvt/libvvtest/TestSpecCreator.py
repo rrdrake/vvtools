@@ -12,7 +12,7 @@ from . import xmlwrapper
 from . import TestSpec
 from . import FilterExpressions
 
-from .ParameterSet import ParameterSet
+from .paramset import ParameterSet
 from .ScriptReader import ScriptReader, check_parse_attributes_section
 from .errors import TestSpecError
 

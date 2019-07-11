@@ -11,7 +11,7 @@ import tempfile
 import shutil
 
 from . import TestSpec
-from .ParameterSet import ParameterSet
+from .paramset import ParameterSet
 from .testcase import TestCase
 
 version = 33
