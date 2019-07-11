@@ -49,12 +49,20 @@ class TestSpec:
         """
         return os.path.dirname( self.getFilename() )
     
-    def getExecuteDirectory(self):
+    def getExecuteDirectory_magik(self):
         """
         The directory containing getFilepath() followed by a subdir containing
         the test name and the test parameters, such as "some/dir/myname.np=4".
         """
         return self.xdir
+
+    def getID(self):
+        """
+        A tuple uniquely identifying this test, which is composed of the
+        test filename relative to the scan root, the test name, and the test
+        parameters with values.
+        """
+        return self.testid
 
     def getSpecificationForm(self):
         """
@@ -320,8 +328,8 @@ class TestSpec:
                                    # names to lists of values
 
         # initial execute directory; recomputed by setParameters()
-        self.xdir = os.path.normpath( \
-                        os.path.join( os.path.dirname(filepath), name ) )
+        self.xdir = self._compute_execute_directory()
+        self.testid = self._compute_id()
 
         # always add the test specification file to the linked file list
         self.lnfiles.append( (os.path.basename(self.filepath),None) )
@@ -377,22 +385,42 @@ class TestSpec:
 
     def setParameters(self, param_dict):
         """
-        Set the key/value pairs for this test and reset the execute directory.
+        Set the key/value pairs for this test and reset the ID and execute
+        directory.
         """
         self.params.clear()
         self.params.update( param_dict )
 
-        b = self.getName()
+        self.xdir = self._compute_execute_directory()
+
+        self.testid = self._compute_id()
+
+    def _compute_id(self):
+        ""
+        lst = [ self.filepath, self.name ]
+        lst.extend( self._get_parameters_as_list() )
+        return tuple( lst )
+
+    def _compute_execute_directory(self):
+        ""
+        bname = self.getName()
+
+        paramL = self._get_parameters_as_list()
+        if len( paramL ) > 0:
+            bname += '.' + '.'.join(paramL)
+
+        dname = os.path.dirname( self.getFilepath() )
+
+        return os.path.normpath( os.path.join( dname, bname ) )
+
+    def _get_parameters_as_list(self):
+        ""
+        L = []
         if len(self.params) > 0:
-            L = []
             for n,v in self.params.items():
                 L.append( n + '=' + v )
             L.sort()
-            b = b + '.' + '.'.join(L)
-
-        d = os.path.dirname( self.getFilepath() )
-
-        self.xdir = os.path.normpath( os.path.join( d, b ) )
+        return L
 
     def setParameterSet(self, param_set):
         """

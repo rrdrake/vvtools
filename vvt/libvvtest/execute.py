@@ -93,9 +93,11 @@ def run_batch( batch, tlist, xlist, perms, results_writer,
               ' '.join(NF) )
     for tcase0,tcase1 in nrL:
         assert tcase0.numDependencies() > 0 and tcase1 != None
-        xdir = tcase1.getSpec().getExecuteDirectory()
-        print3( '*** Warning: test "'+tcase0.getSpec().getExecuteDirectory()+'"',
-                'notrun due to dependency "' + xdir + '"' )
+        # magic: add stage to these
+        xdir0 = tcase0.getSpec().getExecuteDirectory_magik()
+        xdir1 = tcase1.getSpec().getExecuteDirectory_magik()
+        print3( '*** Warning: test "'+xdir0+'"',
+                'notrun due to dependency "' + xdir1 + '"' )
 
     print3()
     results_writer.postrun( tlist )
@@ -179,9 +181,11 @@ def run_test_list( qsub_id, tlist, xlist, test_dir, plat,
     for tcase in tcaseL:
         deptx = tcase.getBlockingDependency()
         assert tcase.numDependencies() > 0 and deptx != None
-        xdir = deptx.getSpec().getExecuteDirectory()
-        print3( '*** Warning: test "'+tcase.getSpec().getExecuteDirectory()+'"',
-                'notrun due to dependency "' + xdir + '"' )
+        # magic: add stage to these
+        xdir = tcase.getSpec().getExecuteDirectory_magik()
+        depxdir = deptx.getSpec().getExecuteDirectory_magik()
+        print3( '*** Warning: test "'+xdir+'"',
+                'notrun due to dependency "' + depxdir + '"' )
 
     print3()
     results_writer.postrun( tlist )
@@ -192,7 +196,8 @@ def run_test_list( qsub_id, tlist, xlist, test_dir, plat,
 
 def exec_path( testspec, test_dir ):
     ""
-    xdir = testspec.getExecuteDirectory()
+    xdir = testspec.getExecuteDirectory_magik()
+    # magic: add in stage here
     return pathutil.relative_execute_directory( xdir, test_dir, os.getcwd() )
 
 
@@ -204,7 +209,8 @@ def run_baseline( xlist, plat ):
         tspec = tcase.getSpec()
         texec = tcase.getExec()
 
-        xdir = tspec.getExecuteDirectory()
+        # magic: add stage here
+        xdir = tspec.getExecuteDirectory_magik()
 
         sys.stdout.write( "baselining "+xdir+"..." )
 

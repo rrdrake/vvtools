@@ -47,7 +47,7 @@ class TestCase:
 
         append = True
         for i,tdep in enumerate( self.deps ):
-            if tdep.hasSameExecuteDirectory( testdep ):
+            if tdep.hasSameTestID( testdep ):
                 if not self.deps[i].hasTestExec():
                     self.deps[i] = testdep
                 append = False

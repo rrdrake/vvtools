@@ -24,10 +24,10 @@ class TestDependency:
         ""
         return self.tcase.getExec() != None
 
-    def hasSameExecuteDirectory(self, testdep):
+    def hasSameTestID(self, testdep):
         ""
-        xdir1 = self.tcase.getSpec().getExecuteDirectory()
-        xdir2 = testdep.tcase.getSpec().getExecuteDirectory()
+        xdir1 = self.tcase.getSpec().getID()
+        xdir2 = testdep.tcase.getSpec().getID()
 
         return xdir1 == xdir2
 
@@ -44,7 +44,7 @@ class TestDependency:
 
     def getMatchDirectory(self):
         ""
-        return self.matchpat, self.tcase.getSpec().getExecuteDirectory()
+        return self.matchpat, self.tcase.getSpec().getExecuteDirectory_magik()
 
     def isBlocking(self):
         ""
@@ -112,7 +112,7 @@ def find_tests_by_execute_directory_match( xdir, pattern, xdir2tcase ):
 
     The first of these that matches at least one test will be returned.
 
-    A python set of xdir is returned.
+    A python set of TestSpec ID is returned.
     """
     tbase = os.path.dirname( xdir )
     if tbase == '.':
@@ -122,20 +122,23 @@ def find_tests_by_execute_directory_match( xdir, pattern, xdir2tcase ):
 
     L1 = [] ; L2 = [] ; L3 = [] ; L4 = []
 
-    for xdir in xdir2tcase.keys():
+    for tcase in xdir2tcase.values():
+
+        xdir = tcase.getSpec().getExecuteDirectory_magik()
+        tid = tcase.getSpec().getID()
 
         p1 = os.path.normpath( tbase+pattern )
         if fnmatch.fnmatch( xdir, p1 ):
-            L1.append( xdir )
+            L1.append( tid )
 
         if fnmatch.fnmatch( xdir, tbase+'*/'+pattern ):
-            L2.append( xdir )
+            L2.append( tid )
 
         if fnmatch.fnmatch( xdir, pattern ):
-            L3.append( xdir )
+            L3.append( tid )
 
         if fnmatch.fnmatch( xdir, '*'+pattern ):
-            L4.append( xdir )
+            L4.append( tid )
 
     for L in [ L1, L2, L3, L4 ]:
         if len(L) > 0:
@@ -150,7 +153,7 @@ def connect_analyze_dependencies( analyze, tcaseL, xdir2testexec ):
         tspec = tcase.getSpec()
         if not tspec.isAnalyze():
             connect_dependency( analyze, tcase )
-            gxt = xdir2testexec.get( tspec.getExecuteDirectory(), None )
+            gxt = xdir2testexec.get( tspec.getID(), None )
             if gxt != None:
                 gxt.setHasDependent()
 
@@ -160,11 +163,11 @@ def check_connect_dependencies( tcase, xdir2tcase, xdir2testexec ):
     tspec = tcase.getSpec()
 
     for dep_pat,expr in tspec.getDependencies():
-        xdir = tspec.getExecuteDirectory()
+        xdir = tspec.getExecuteDirectory_magik()
         depL = find_tests_by_execute_directory_match(
                                         xdir, dep_pat, xdir2tcase )
-        for dep_xdir in depL:
-            bakup = xdir2tcase.get( dep_xdir, None )
-            dep_obj = xdir2testexec.get( dep_xdir, bakup )
+        for dep_id in depL:
+            bakup = xdir2tcase.get( dep_id, None )
+            dep_obj = xdir2testexec.get( dep_id, bakup )
             if dep_obj != None:
                 connect_dependency( tcase, dep_obj, dep_pat, expr )

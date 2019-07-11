@@ -49,7 +49,7 @@ class TestInformationPrinter:
             tspec = tcase.getSpec()
             sdt = tcase.getStat().getStartDate()
             duration = datetime.timedelta( seconds=int(now-sdt) )
-            xdir = tspec.getExecuteDirectory()
+            xdir = tspec.getExecuteDirectory_magik()  # magic: add stage
             self.println( "    *", xdir,
                           '({0} elapsed)'.format(duration) )
 
@@ -63,7 +63,7 @@ class TestInformationPrinter:
             self.println( '    * qbat.{0}'.format(qid),
                           '({0} since submitting)'.format(duration) )
             for tcase in batch_job.testL:
-                xdir = tcase.getSpec().getExecuteDirectory()
+                xdir = tcase.getSpec().getExecuteDirectory_magik()  # magic: add stage
                 self.println( '      *', xdir )
 
     def println(self, *args):

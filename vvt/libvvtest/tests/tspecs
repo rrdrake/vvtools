@@ -264,8 +264,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
 
         tL = create_tests( '.', 'ok3a.xml', nofltr )
         assert len(tL) == 2
-        kys = {}
-        for t in tL: kys[t.getExecuteDirectory()] = None
+        kys = set( [ t.getID() for t in tL ] )
         assert len(kys) == 2, "keys must be unique"
         pL = []
         for t in tL:
@@ -1444,7 +1443,8 @@ def create_tests( rootpath, relpath, rtconfig ):
     ""
     creator = TestCreator( rtconfig )
     tL = creator.fromFile( rootpath, relpath, None )
-    sortL = [ (ts.getExecuteDirectory(),ts) for ts in tL ]
+    # magic: add stage to this
+    sortL = [ (ts.getExecuteDirectory_magik(),ts) for ts in tL ]
     sortL.sort()
     tL = [ T[1] for T in sortL ]
     return tL

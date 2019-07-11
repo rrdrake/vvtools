@@ -45,7 +45,7 @@ class TestResults:
         """
         Adds the test results for this test to the database.
         """
-        testkey = os.path.basename( testspec.getExecuteDirectory() )
+        testkey = make_test_key( testspec )
         self.addTestName( rootrel, testkey, testspec.getAttrs() )
 
     def addTestName(self, rootrel, testkey, attrD):
@@ -554,6 +554,13 @@ class MultiResults:
         return None
 
 
+def make_test_key( tspec ):
+    ""
+    key = os.path.basename( tspec.getExecuteDirectory_magik() )
+    # magic: add in stage, if any
+    return key
+
+
 def read_file_header( filename ):
     """
     A header is:
@@ -765,7 +772,7 @@ class LookupCache:
         """
         platid = self.platname+'/'+self.cplrname
 
-        testkey = os.path.basename( testspec.getExecuteDirectory() )
+        testkey = make_test_key( testspec )
         tdir = testspec.getDirectory()
 
         # the most reliable runtime will be in the testing directory, but for

@@ -19,7 +19,7 @@ class TestFilter:
         ok = True
 
         tspec = tcase.getSpec()
-        xdir = tspec.getExecuteDirectory()
+        xdir = tspec.getExecuteDirectory_magik()
         if subdir and subdir != xdir and not is_subdir( subdir, xdir ):
             ok = False
             tcase.getStat().markSkipBySubdirectoryFilter()
@@ -146,7 +146,7 @@ class TestFilter:
 
     def applyPermanent(self, tcase_map):
         ""
-        for xdir,tcase in tcase_map.items():
+        for tcase in tcase_map.values():
 
             self.checkParameters( tcase, permanent=True ) and \
                 self.checkKeywords( tcase, results_keywords=False ) and \
@@ -168,7 +168,7 @@ class TestFilter:
 
             subdir = clean_up_filter_directory( filter_dir )
 
-            for xdir,tcase in tcase_map.items():
+            for tcase in tcase_map.values():
 
                 tspec = tcase.getSpec()
 
@@ -196,9 +196,11 @@ class TestFilter:
 
             # first, generate list with times
             tL = []
-            for xdir,tcase in tcase_map.items():
+            for tcase in tcase_map.values():
                 tm = tcase.getStat().getRuntime( None )
                 if tm == None: tm = 0
+                # magic: add stage here
+                xdir = tcase.getSpec().getExecuteDirectory_magik()
                 tL.append( (tm,xdir,tcase) )
             tL.sort()
 

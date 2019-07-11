@@ -40,7 +40,8 @@ class TestList:
 
         self.groups = None  # a ParameterizeAnalyzeGroups class instance
 
-        self.tcasemap = {}  # TestSpec xdir -> TestCase object
+        self.xdirmap = {}  # TestSpec xdir -> TestCase object
+        self.tcasemap = {}  # TestSpec ID -> TestCase object
 
         self.rtconfig = runtime_config
         self.creator = testcreator
@@ -270,7 +271,8 @@ class TestList:
                     if c == 'n':
                         subL.append( t.getName() )
                     elif c == 'x':
-                        subL.append( t.getExecuteDirectory() )
+                        # magic: add in stage here
+                        subL.append( t.getExecuteDirectory_magik() )
                     elif c == 't':
                         tm = tcase.getStat().getRuntime( None )
                         if tm == None: tm = 0
@@ -326,26 +328,29 @@ class TestList:
           testL = []
 
         for tspec in testL:
-            # this new test is ignored if it was already read from source
-            # (or a different test source but the same relative path from root)
-            xdir = tspec.getExecuteDirectory()
 
-            if xdir in self.tcasemap:
-                tcase = self.tcasemap[ xdir ]
+            xdir = tspec.getExecuteDirectory_magik()
+
+            # ignore tests with duplicate execution directories
+            if xdir in self.xdirmap:  # magic: and no stages or same stage
+                tcase = self.xdirmap[ xdir ]
                 tspec1 = tcase.getSpec()
                 print3( '*** warning:',
                     'ignoring test with duplicate execution directory\n',
-                    '      first  :', tspec1.getFilename() + '\n',
-                    '      second :', tspec.getFilename() + '\n',
-                    '      execute:', xdir )
+                    '      first   :', tspec1.getFilename() + '\n',
+                    '      second  :', tspec.getFilename() + '\n',
+                    '      exec dir:', xdir )
             else:
-                self.tcasemap[xdir] = TestCase( tspec )
+                testid = tspec.getID()
+                tcase = TestCase( tspec )
+                self.tcasemap[testid] = tcase
+                self.xdirmap[xdir] = tcase
 
     def addTest(self, tcase):
         """
         Add/overwrite a test in the list.
         """
-        self.tcasemap[ tcase.getSpec().getExecuteDirectory() ] = tcase
+        self.tcasemap[ tcase.getSpec().getID() ] = tcase
 
     def _check_create_parameterize_analyze_group_map(self):
         ""

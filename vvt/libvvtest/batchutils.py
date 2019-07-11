@@ -59,7 +59,8 @@ class BatchScriptWriter:
         for np in self.xlist.getTestExecProcList():
           xL = []
           for tcase in self.xlist.getTestExecList(np):
-            xdir = tcase.getSpec().getExecuteDirectory()
+            xdir = tcase.getSpec().getExecuteDirectory_magik()
+            # magic: add stage here
             xL.append( (tcase.getSpec().getAttr('timeout'),xdir,tcase) )
           xL.sort()
           grpL = []
@@ -420,9 +421,9 @@ class BatchScheduler:
             # only add tests to the stopped list that are done
             for tcase in bjob.testL:
 
-                xdir = tcase.getSpec().getExecuteDirectory()
+                tid = tcase.getSpec().getID()
 
-                job_tcase = jobtests.get( xdir, None )
+                job_tcase = jobtests.get( tid, None )
                 if job_tcase and job_tcase.getStat().isDone():
                     tL.append( tcase )
                     self.xlist.testDone( tcase )

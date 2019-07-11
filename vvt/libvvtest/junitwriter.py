@@ -98,7 +98,8 @@ class JUnitWriter:
 
         xt = max( 0.0, tcase.getStat().getRuntime( 0.0 ) )
 
-        fp.write( '<testcase name="'+tspec.getExecuteDirectory()+'"' + \
+        xdir = tspec.getExecuteDirectory_magik()  # magic: add stage here
+        fp.write( '<testcase name="'+xdir+'"' + \
                            ' classname="'+pkgclass+'" time="'+str(xt)+'">\n' )
 
         if result == 'fail' or result == 'timeout':
@@ -116,7 +117,8 @@ class JUnitWriter:
 
     def make_execute_log_section(self, tcase, max_KB):
         ""
-        logdir = pjoin( self.testdir, tcase.getSpec().getExecuteDirectory() )
+        xdir = tcase.getSpec().getExecuteDirectory_magik()  # magic: add stage here
+        logdir = pjoin( self.testdir, xdir )
         logfile = pjoin( logdir, 'execute.log' )
 
         try:

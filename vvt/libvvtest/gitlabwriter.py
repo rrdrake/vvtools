@@ -97,8 +97,9 @@ class GitLabMarkDownConverter:
 
     def createTestFile(self, tcase):
         ""
-        xdir = tcase.getSpec().getExecuteDirectory()
-        base = xdir.replace( os.sep, '_' )
+        # magic: add stage here
+        xdir = tcase.getSpec().getExecuteDirectory_magik()
+        base = xdir.replace( os.sep, '_' ).replace( ' ', '_' )
         fname = pjoin( self.destdir, base+'.md' )
 
         srcdir = pjoin( self.test_dir, xdir )
@@ -174,7 +175,7 @@ def format_gitlab_table_line( tcase, add_link ):
     result = tcase.getStat().getResultStatus()
     dt = outpututils.format_test_run_date( tcase )
     tm = outpututils.format_test_run_time( tcase )
-    path = tspec.getExecuteDirectory()
+    path = tspec.getExecuteDirectory_magik()
 
     makelink = ( add_link and result in ['diff','fail','timeout'] )
 

@@ -31,13 +31,14 @@ def initialize_for_execution( tcase, test_dir, platform,
 
     tstat.resetResults()
 
-    wdir = os.path.join( test_dir, tspec.getExecuteDirectory() )
+    xdir = tspec.getExecuteDirectory_magik()
+    wdir = os.path.join( test_dir, xdir )
     texec.setRunDirectory( wdir )
 
     if not os.path.exists( wdir ):
         os.makedirs( wdir )
 
-    perms.set( tspec.getExecuteDirectory() )
+    perms.set( xdir )
 
     if tspec.getSpecificationForm() == 'xml':
         write_xml_run_script( tcase, commondb, config, platform, perms )

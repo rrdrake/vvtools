@@ -68,7 +68,7 @@ class TestExecList:
                 else:
                     self.xtlist[np] = [ tcase ]
 
-                xtD[ tspec.getExecuteDirectory() ] = tcase
+                xtD[ tspec.getID() ] = tcase
 
         # sort tests longest running first; 
         self.sortTestExecList()
@@ -102,7 +102,8 @@ class TestExecList:
             for tcase in tcaseL:
                 tm = tcase.getStat().getRuntime( None )
                 if tm == None: tm = 0
-                xdir = tcase.getSpec().getExecuteDirectory()
+                xdir = tcase.getSpec().getExecuteDirectory_magik()
+                # magic: add in stage here
                 sortL.append( (tm,xdir,tcase) )
             sortL.sort()
             sortL.reverse()
@@ -153,7 +154,7 @@ class TestExecList:
             tcase = self._pop_next_test( npL )
 
         if tcase != None:
-            self.started[ tcase.getSpec().getExecuteDirectory() ] = tcase
+            self.started[ tcase.getSpec().getID() ] = tcase
 
         return tcase
 
@@ -190,10 +191,10 @@ class TestExecList:
 
     def testDone(self, tcase):
         ""
-        xdir = tcase.getSpec().getExecuteDirectory()
+        xid = tcase.getSpec().getID()
         self.tlist.appendTestResult( tcase )
-        self.started.pop( xdir, None )
-        self.stopped[ xdir ] = tcase
+        self.started.pop( xid, None )
+        self.stopped[ xid ] = tcase
 
     def numDone(self):
         """

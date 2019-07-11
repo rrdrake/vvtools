@@ -91,8 +91,7 @@ class TestListReader:
                     self.finish = eval( val )[1]
                 else:
                     tcase = string_to_test( val )
-                    xdir = tcase.getSpec().getExecuteDirectory()
-                    self.tests[ xdir ] = tcase
+                    self.tests[ tcase.getSpec().getID() ] = tcase
 
             except Exception:
                 pass

@@ -126,11 +126,11 @@ class validate_plugin_unit_tests( vtu.vvtestTestCase ):
         assert tcase.getStat().skipTest()
 
         tcase = vtu.make_fake_TestCase( keywords=['good'] )
-        tf.applyPermanent( { tcase.getSpec().getExecuteDirectory() : tcase } )
+        tf.applyPermanent( { tcase.getSpec().getID() : tcase } )
         assert not tcase.getStat().skipTest()
 
         tcase = vtu.make_fake_TestCase( keywords=['bad','good'] )
-        tf.applyPermanent( { tcase.getSpec().getExecuteDirectory() : tcase } )
+        tf.applyPermanent( { tcase.getSpec().getID() : tcase } )
         assert tcase.getStat().skipTest()
 
     def test_validate_function_receives_test_parameters(self):

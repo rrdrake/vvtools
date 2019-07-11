@@ -189,15 +189,6 @@ def get_depencency_expr( tspec, dep_name ):
 
 #######################################
 
-def make_tspec_map( *dirlist ):
-    ""
-    D = {}
-    for sd in dirlist:
-        D[ sd ] = None
-
-    return D
-
-
 class Function_find_tests_by_execute_directory_match( vtu.vvtestTestCase ):
 
     def setUp(self):
@@ -206,105 +197,90 @@ class Function_find_tests_by_execute_directory_match( vtu.vvtestTestCase ):
 
     def test_base_match(self):
         ""
-        xL = make_tspec_map( 'subdir/testB', 'subdir/testC' )
-        S = find_tests_by_execute_directory_match( 'subdir/testA', 'testB', xL )
-        assert has_same_values( S, ['subdir/testB'] )
+        xD = make_tspec_map( 'subdir/testB', 'subdir/testC' )
+        S = find_tests_by_execute_directory_match( 'subdir/testA', 'testB', xD )
+        assert_test_id_set( xD, S, 'subdir/testB' )
 
-        xL = make_tspec_map( 'subdir/testC', 'subdir1/testB', 'subdir2/testB' )
-        S = find_tests_by_execute_directory_match( 'subdir2/testA', 'testB', xL )
-        assert has_same_values( S, ['subdir2/testB'] )
+        xD = make_tspec_map( 'subdir/testC', 'subdir1/testB', 'subdir2/testB' )
+        S = find_tests_by_execute_directory_match( 'subdir2/testA', 'testB', xD )
+        assert_test_id_set( xD, S, 'subdir2/testB' )
 
-        xL = make_tspec_map( 'subdir/testC', 'subdir1/testB', 'subdir2/testB' )
-        S = find_tests_by_execute_directory_match( 'subdir1/testA', 'testB', xL )
-        assert has_same_values( S, ['subdir1/testB'] )
+        xD = make_tspec_map( 'subdir/testC', 'subdir1/testB', 'subdir2/testB' )
+        S = find_tests_by_execute_directory_match( 'subdir1/testA', 'testB', xD )
+        assert_test_id_set( xD, S, 'subdir1/testB' )
 
-        xL = make_tspec_map( 'subdir/testB', 'subdir/testC', 'subdir/down/testB' )
-        S = find_tests_by_execute_directory_match( 'subdir/testA', 'testB', xL )
-        assert has_same_values( S, ['subdir/testB'] )
+        xD = make_tspec_map( 'subdir/testB', 'subdir/testC', 'subdir/down/testB' )
+        S = find_tests_by_execute_directory_match( 'subdir/testA', 'testB', xD )
+        assert_test_id_set( xD, S, 'subdir/testB' )
 
-        xL = make_tspec_map( 'testB', 'testC' )
-        S = find_tests_by_execute_directory_match( 'testA', 'testB', xL )
-        assert has_same_values( S, ['testB'] )
+        xD = make_tspec_map( 'testB', 'testC' )
+        S = find_tests_by_execute_directory_match( 'testA', 'testB', xD )
+        assert_test_id_set( xD, S, 'testB' )
 
-        xL = make_tspec_map( 'testB', 'testC', 'down/testB' )
-        S = find_tests_by_execute_directory_match( 'subdir/testA', 'testB', xL )
-        assert has_same_values( S, ['testB'] )
+        xD = make_tspec_map( 'testB', 'testC', 'down/testB' )
+        S = find_tests_by_execute_directory_match( 'subdir/testA', 'testB', xD )
+        assert_test_id_set( xD, S, 'testB' )
 
     def test_subdir_match(self):
         ""
-        xL = make_tspec_map( 'subdir/testB' )
-        S = find_tests_by_execute_directory_match( 'testA', 'testB', xL )
-        assert has_same_values( S, ['subdir/testB'] )
+        xD = make_tspec_map( 'subdir/testB' )
+        S = find_tests_by_execute_directory_match( 'testA', 'testB', xD )
+        assert_test_id_set( xD, S, 'subdir/testB' )
 
-        xL = make_tspec_map( 'top/subdir/testB' )
-        S = find_tests_by_execute_directory_match( 'top/testA', 'testB', xL )
-        assert has_same_values( S, ['top/subdir/testB'] )
+        xD = make_tspec_map( 'top/subdir/testB' )
+        S = find_tests_by_execute_directory_match( 'top/testA', 'testB', xD )
+        assert_test_id_set( xD, S, 'top/subdir/testB' )
 
-        xL = make_tspec_map( 'subdir/testB', 'subdir/deep/testB' )
-        S = find_tests_by_execute_directory_match( 'testA', 'testB', xL )
-        assert has_same_values( S, ['subdir/deep/testB','subdir/testB'] )
+        xD = make_tspec_map( 'subdir/testB', 'subdir/deep/testB' )
+        S = find_tests_by_execute_directory_match( 'testA', 'testB', xD )
+        assert_test_id_set( xD, S, 'subdir/deep/testB','subdir/testB' )
 
-        xL = make_tspec_map( 'top/subdir/testB', 'top/subdir/deep/testB' )
-        S = find_tests_by_execute_directory_match( 'top/testA', 'testB', xL )
-        assert has_same_values( S, ['top/subdir/deep/testB','top/subdir/testB'] )
+        xD = make_tspec_map( 'top/subdir/testB', 'top/subdir/deep/testB' )
+        S = find_tests_by_execute_directory_match( 'top/testA', 'testB', xD )
+        assert_test_id_set( xD, S, 'top/subdir/deep/testB','top/subdir/testB' )
 
-        xL = make_tspec_map( 'subdir/testB', 'subdir/deep/testB' )
-        S = find_tests_by_execute_directory_match( 'testA', 't*B', xL )
-        assert has_same_values( S, ['subdir/deep/testB','subdir/testB'] )
+        xD = make_tspec_map( 'subdir/testB', 'subdir/deep/testB' )
+        S = find_tests_by_execute_directory_match( 'testA', 't*B', xD )
+        assert_test_id_set( xD, S, 'subdir/deep/testB','subdir/testB' )
 
-        xL = make_tspec_map( 'subdir1/deep2/testB', 'subdir1/deep1/testB', 'subdir2/testB' )
-        S = find_tests_by_execute_directory_match( 'subdir1/testA', 'testB', xL )
-        assert has_same_values( S, ['subdir1/deep1/testB','subdir1/deep2/testB'] )
+        xD = make_tspec_map( 'subdir1/deep2/testB', 'subdir1/deep1/testB', 'subdir2/testB' )
+        S = find_tests_by_execute_directory_match( 'subdir1/testA', 'testB', xD )
+        assert_test_id_set( xD, S, 'subdir1/deep1/testB','subdir1/deep2/testB' )
 
-        xL = make_tspec_map( 'subdir1/deep2/testB', 'subdir1/deep1/testB', 'subdir2/testB' )
-        S = find_tests_by_execute_directory_match( 'subdir1/testA', 't*B', xL )
-        assert has_same_values( S, ['subdir1/deep1/testB','subdir1/deep2/testB'] )
+        xD = make_tspec_map( 'subdir1/deep2/testB', 'subdir1/deep1/testB', 'subdir2/testB' )
+        S = find_tests_by_execute_directory_match( 'subdir1/testA', 't*B', xD )
+        assert_test_id_set( xD, S, 'subdir1/deep1/testB','subdir1/deep2/testB' )
 
     def test_absolute_path_pattern(self):
         ""
-        xL = make_tspec_map( 'subdir1/testB', 'subdir2/testB' )
+        xD = make_tspec_map( 'subdir1/testB', 'subdir2/testB' )
         S = find_tests_by_execute_directory_match(
-                            'subdir1/testA', 'subdir2/testB', xL )
-        assert has_same_values( S, ['subdir2/testB'] )
+                            'subdir1/testA', 'subdir2/testB', xD )
+        assert_test_id_set( xD, S, 'subdir2/testB' )
 
-        xL = make_tspec_map( 'subdir1/testB', 'subdir2/subdir1/testB' )
+        xD = make_tspec_map( 'subdir1/testB', 'subdir2/subdir1/testB' )
         S = find_tests_by_execute_directory_match(
-                            'subdir1/testA', 'subdir1/testB', xL )
-        assert has_same_values( S, ['subdir1/testB'] )
+                            'subdir1/testA', 'subdir1/testB', xD )
+        assert_test_id_set( xD, S, 'subdir1/testB' )
 
     def test_general_pattern(self):
         ""
-        xL = make_tspec_map( 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' )
+        xD = make_tspec_map( 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' )
         S = find_tests_by_execute_directory_match(
-                            'subdir3/testA', 't*B', xL )
-        assert has_same_values( S, ['subdir1/testB', 'subdir2/testB'] )
+                            'subdir3/testA', 't*B', xD )
+        assert_test_id_set( xD, S, 'subdir1/testB', 'subdir2/testB' )
 
     def test_relative_directory_test_location(self):
         ""
-        xL = make_tspec_map( 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' )
+        xD = make_tspec_map( 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' )
         S = find_tests_by_execute_directory_match(
-                            'subdir3/testA', '../subdir1/*B', xL )
-        assert has_same_values( S, ['subdir1/testB'] )
+                            'subdir3/testA', '../subdir1/*B', xD )
+        assert_test_id_set( xD, S, 'subdir1/testB' )
 
-        xL = make_tspec_map( 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' )
+        xD = make_tspec_map( 'subdir1/testB', 'subdir2/testB', 'subdir3/testA' )
         S = find_tests_by_execute_directory_match(
-                            'subdir3/testA', '../sub*/*B', xL )
-        assert has_same_values( S, ['subdir1/testB','subdir2/testB'] )
-
-
-#######################################
-
-def make_TestSpec_test_case( name ):
-    ""
-    ts = TestSpec( name, os.getcwd(), name+'.vvt' )
-    return TestCase( ts, None )
-
-
-def make_TestExec_test_case( name ):
-    ""
-    ts = TestSpec( name, os.getcwd(), name+'.vvt' )
-    tx = TestExec()
-    return TestCase( ts, tx )
+                            'subdir3/testA', '../sub*/*B', xD )
+        assert_test_id_set( xD, S, 'subdir1/testB','subdir2/testB' )
 
 
 class dependency_related_functions( vtu.vvtestTestCase ):
@@ -365,6 +341,45 @@ class dependency_related_functions( vtu.vvtestTestCase ):
 
 
 #######################################
+
+def make_tspec_map( *dirlist ):
+    ""
+    D = {}
+    for sd in dirlist:
+        d,b = os.path.split( sd )
+        tcase = make_TestSpec_test_case( b, d )
+        D[ tcase.getSpec().getID() ] = tcase
+
+    return D
+
+
+def assert_test_id_set( id2tcase, idset, *testdirs ):
+    ""
+    assert len(idset) == len(testdirs)
+    dirset = set()
+    for tid in idset:
+        xdir = id2tcase[tid].getSpec().getExecuteDirectory_magik()
+        dirset.add( xdir )
+    assert len( idset ) == len( dirset )
+    assert dirset == set( testdirs )
+
+
+def make_TestSpec_test_case( name, subdir=None ):
+    ""
+    if subdir: subdir = os.path.normpath( subdir ) + '/'
+    else:      subdir = ''
+
+    ts = TestSpec( name, os.getcwd(), subdir+name+'.vvt' )
+
+    return TestCase( ts, None )
+
+
+def make_TestExec_test_case( name ):
+    ""
+    ts = TestSpec( name, os.getcwd(), name+'.vvt' )
+    tx = TestExec()
+    return TestCase( ts, tx )
+
 
 def has_same_values( container1, container2 ):
     ""
