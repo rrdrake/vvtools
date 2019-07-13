@@ -1,0 +1,115 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+
+import vvtestutils as vtu
+import testutils as util
+from testutils import print3
+
+import libvvtest.paramset as ParameterSet
+from libvvtest.TestSpec import TestSpec
+from libvvtest.testcase import TestCase
+from libvvtest.ScriptReader import ScriptReader
+from libvvtest.RuntimeConfig import RuntimeConfig
+
+import libvvtest.TestSpecCreator as TSC
+
+
+class staged_parameters( vtu.vvtestTestCase ):
+
+    def test_marking_parameters_as_staged(self):
+        ""
+        pset = ParameterSet.ParameterSet()
+        pset.addParameterGroup( ('stage','np'), [ ('1','1'), ('2','4') ] )
+
+        tmap = {}
+        for pdict in pset.getInstances():
+            ts = TestSpec( 'aname', os.getcwd(), 'aname.vvt' )
+            ts.setParameters( pdict )
+            ts.markStagedParameters( 'stage', 'np' )
+
+            tmap[ ts.getID() ] = ts
+
+            assert ts.getExecuteDirectory_magik() == 'aname.np'
+
+            if pdict['np'] == '1':
+                assert ts.getDisplayString().endswith( 'stage=1(np=1)' )
+            else:
+                assert pdict['np'] == '4'
+                assert ts.getDisplayString().endswith( 'stage=2(np=4)' )
+
+        assert len( tmap ) == 2
+
+    def test_consistency(self):
+        ""
+        pass
+        # marking staging parameters when they are not parameters
+        # changing the parameters when the markings have already been set
+
+    def test_parse_staged_parameters(self):
+        ""
+        util.writefile( 'blue.vvt', """
+            #VVT: parameterize (staged) : np = 1 8 1
+            """ )
+        time.sleep(1)
+
+        vspecs = ScriptReader( 'blue.vvt' )
+        for spec in vspecs.getSpecList():
+            print3( 'magic: spec', spec.keyword, spec.attrs )
+        evaluator = TSC.ExpressionEvaluator( 'atari', [] )
+        pset = TSC.parseTestParameters_scr( vspecs, 'blue', evaluator, None )
+
+        assert len( pset.getInstances() ) == 3
+        assert pset.getStagedGroup() == [ 'stage', 'np' ]
+
+    def test_parsing_script_with_staged_parameterize(self):
+        ""
+        util.writefile( 'blue.vvt', """
+            #VVT: parameterize (staged) : np = 1 8 1
+            """ )
+        time.sleep(1)
+
+        creator = TSC.TestCreator( RuntimeConfig() )
+        tL = creator.fromFile( os.getcwd(), 'blue.vvt', None )
+
+        assert len(tL) == 3
+        sortL = []
+        testid2testcase = {}
+        for ts in tL:
+            print3( 'magic: xdir', ts.getExecuteDirectory_magik() )
+            assert ts.getExecuteDirectory_magik() == 'blue.np'
+            tcase = TestCase( ts, None )
+            sortL.append( (ts.getDisplayString(),tcase) )
+            testid2testcase[ ts.getID() ] = tcase
+
+        sortL.sort()
+        tc0,tc1,tc2 = [ T[1] for T in sortL ]
+
+        # test that tc1 depends on tc0 and tc2 depends on tc1
+        # find_tests_by_execute_directory_match(
+        #         tc1.getExecuteDirectory_magik(),
+        #         tc1.getDependencies()
+
+"""
+magic:
+    - test more than one staging set
+    - look for places where getDisplayString is used and add testing with
+      stages
+    - does it make sense to baseline stages??
+    - test case where more than one parameterize is staged, an error
+"""
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

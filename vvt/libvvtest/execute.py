@@ -93,9 +93,8 @@ def run_batch( batch, tlist, xlist, perms, results_writer,
               ' '.join(NF) )
     for tcase0,tcase1 in nrL:
         assert tcase0.numDependencies() > 0 and tcase1 != None
-        # magic: add stage to these
-        xdir0 = tcase0.getSpec().getExecuteDirectory_magik()
-        xdir1 = tcase1.getSpec().getExecuteDirectory_magik()
+        xdir0 = tcase0.getSpec().getDisplayString()
+        xdir1 = tcase1.getSpec().getDisplayString()
         print3( '*** Warning: test "'+xdir0+'"',
                 'notrun due to dependency "' + xdir1 + '"' )
 
@@ -181,9 +180,8 @@ def run_test_list( qsub_id, tlist, xlist, test_dir, plat,
     for tcase in tcaseL:
         deptx = tcase.getBlockingDependency()
         assert tcase.numDependencies() > 0 and deptx != None
-        # magic: add stage to these
-        xdir = tcase.getSpec().getExecuteDirectory_magik()
-        depxdir = deptx.getSpec().getExecuteDirectory_magik()
+        xdir = tcase.getSpec().getDisplayString()
+        depxdir = deptx.getSpec().getDisplayString()
         print3( '*** Warning: test "'+xdir+'"',
                 'notrun due to dependency "' + depxdir + '"' )
 
@@ -196,8 +194,7 @@ def run_test_list( qsub_id, tlist, xlist, test_dir, plat,
 
 def exec_path( testspec, test_dir ):
     ""
-    xdir = testspec.getExecuteDirectory_magik()
-    # magic: add in stage here
+    xdir = testspec.getDisplayString()
     return pathutil.relative_execute_directory( xdir, test_dir, os.getcwd() )
 
 
@@ -209,8 +206,7 @@ def run_baseline( xlist, plat ):
         tspec = tcase.getSpec()
         texec = tcase.getExec()
 
-        # magic: add stage here
-        xdir = tspec.getExecuteDirectory_magik()
+        xdir = tspec.getDisplayString()
 
         sys.stdout.write( "baselining "+xdir+"..." )
 

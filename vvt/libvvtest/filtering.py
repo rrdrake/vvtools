@@ -199,8 +199,7 @@ class TestFilter:
             for tcase in tcase_map.values():
                 tm = tcase.getStat().getRuntime( None )
                 if tm == None: tm = 0
-                # magic: add stage here
-                xdir = tcase.getSpec().getExecuteDirectory_magik()
+                xdir = tcase.getSpec().getDisplayString()
                 tL.append( (tm,xdir,tcase) )
             tL.sort()
 

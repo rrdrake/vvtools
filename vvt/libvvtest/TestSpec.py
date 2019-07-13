@@ -56,6 +56,26 @@ class TestSpec:
         """
         return self.xdir
 
+    def getDisplayString(self):
+        """
+        """
+        dis = self.getExecuteDirectory_magik()
+
+        stageL = self.stages.items()
+        stageL.sort()
+
+        for stage_name,params in stageL:
+            paramL = list( params )
+            paramL.sort()
+            pL = []
+            for param in paramL:
+                pL.append( param+'='+self.params[param] )
+
+            dis += ' ' + stage_name+'='+self.params[stage_name]
+            dis += '('+','.join( pL )+')'
+
+        return dis
+
     def getID(self):
         """
         A tuple uniquely identifying this test, which is composed of the
@@ -229,8 +249,9 @@ class TestSpec:
         Returns a list of ( xdir pattern, result expression ) specifying
         test dependencies and their expected results.
 
-        The xdir pattern should be matched against the execution directory
-        of the dependency test, for example "subdir/name*.np=8".
+        The xdir pattern is a shell pattern (not a regular expression) and
+        will be matched against the execution directory of the dependency
+        test.  For example "subdir/name*.np=8".
 
         The result expression is a FilterExpressions.WordExpression object
         and should be evaluated against the dependency test result.  For
@@ -326,6 +347,7 @@ class TestSpec:
                                    # allowed characters are restricted
         self.paramset = None       # for parent tests, this maps parameter
                                    # names to lists of values
+        self.stages = {}
 
         # initial execute directory; recomputed by setParameters()
         self.xdir = self._compute_execute_directory()
@@ -395,6 +417,11 @@ class TestSpec:
 
         self.testid = self._compute_id()
 
+    def markStagedParameters(self, stage_param, param0, *params):
+        ""
+        self.stages[ stage_param ] = [ param0 ] + list( params )
+        self.xdir = self._compute_execute_directory()
+
     def _compute_id(self):
         ""
         lst = [ self.filepath, self.name ]
@@ -405,7 +432,7 @@ class TestSpec:
         ""
         bname = self.getName()
 
-        paramL = self._get_parameters_as_list()
+        paramL = self._get_parameters_as_list( staged=True )
         if len( paramL ) > 0:
             bname += '.' + '.'.join(paramL)
 
@@ -413,14 +440,34 @@ class TestSpec:
 
         return os.path.normpath( os.path.join( dname, bname ) )
 
-    def _get_parameters_as_list(self):
+    def _get_parameters_as_list(self, staged=False):
         ""
         L = []
         if len(self.params) > 0:
             for n,v in self.params.items():
-                L.append( n + '=' + v )
+                if self._hide_parameter( n, staged ):
+                    pass
+                elif self._compress_parameter( n, staged ):
+                    L.append( n )
+                else:
+                    L.append( n + '=' + v )
             L.sort()
+
         return L
+
+    def _hide_parameter(self, param, staged):
+        ""
+        if staged:
+            return param in self.stages
+        return False
+
+    def _compress_parameter(self, param, staged):
+        ""
+        if staged:
+            for paramL in self.stages.values():
+                if param in paramL:
+                    return True
+        return False
 
     def setParameterSet(self, param_set):
         """

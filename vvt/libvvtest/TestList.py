@@ -271,8 +271,7 @@ class TestList:
                     if c == 'n':
                         subL.append( t.getName() )
                     elif c == 'x':
-                        # magic: add in stage here
-                        subL.append( t.getExecuteDirectory_magik() )
+                        subL.append( t.getDisplayString() )
                     elif c == 't':
                         tm = tcase.getStat().getRuntime( None )
                         if tm == None: tm = 0

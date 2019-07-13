@@ -556,8 +556,8 @@ class MultiResults:
 
 def make_test_key( tspec ):
     ""
-    key = os.path.basename( tspec.getExecuteDirectory_magik() )
-    # magic: add in stage, if any
+    key = os.path.basename( tspec.getDisplayString() )
+    key = key.replace( ' ', '|' )
     return key
 
 

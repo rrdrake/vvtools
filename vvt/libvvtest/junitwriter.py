@@ -98,7 +98,7 @@ class JUnitWriter:
 
         xt = max( 0.0, tcase.getStat().getRuntime( 0.0 ) )
 
-        xdir = tspec.getExecuteDirectory_magik()  # magic: add stage here
+        xdir = tspec.getDisplayString()
         fp.write( '<testcase name="'+xdir+'"' + \
                            ' classname="'+pkgclass+'" time="'+str(xt)+'">\n' )
 
@@ -117,7 +117,7 @@ class JUnitWriter:
 
     def make_execute_log_section(self, tcase, max_KB):
         ""
-        xdir = tcase.getSpec().getExecuteDirectory_magik()  # magic: add stage here
+        xdir = tcase.getSpec().getDisplayString()
         logdir = pjoin( self.testdir, xdir )
         logfile = pjoin( logdir, 'execute.log' )
 

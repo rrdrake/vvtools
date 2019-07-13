@@ -271,28 +271,50 @@ class execute_tests( vtu.vvtestTestCase ):
             <rtest name="param">
               <parameterize hello="world mars"/>
               <execute>
-                sleep 1
                 echo "parm=$hello"
               </execute>
             </rtest>""" )
+        util.writefile( "blue.vvt", """
+            #VVT: parameterize : hello = foo bar
+            import vvtest_util as vvt
+            print ( 'parm='+vvt.hello )
+            """ )
+        time.sleep(1)
+
+        vtu.runvvtest().assertCounts( total=4, npass=4 )
+
+        # force a parameter to take on a user defined value
+
+        vtu.runvvtest( '-S hello=jupiter' ).assertCounts( total=2, npass=2 )
+
+        vrun = vtu.runvvtest( '-i' )
+        vrun.assertCounts( total=6, npass=6 )
+
+        assert vrun.countTestLines( 'hello=jupiter' ) == 2
+        assert vrun.countTestLines( 'hello=mars' ) == 1
+        assert vrun.countTestLines( 'hello=world' ) == 1
+        assert vrun.countTestLines( 'hello=foo' ) == 1
+        assert vrun.countTestLines( 'hello=bar' ) == 1
+
+        assert vrun.countGrepLogs( 'parm=jupiter' ) == 2
+        assert vrun.countGrepLogs( 'parm=mars' ) == 1
+        assert vrun.countGrepLogs( 'parm=world' ) == 1
+        assert vrun.countGrepLogs( 'parm=foo' ) == 1
+        assert vrun.countGrepLogs( 'parm=bar' ) == 1
+
+    def test_cannot_force_a_parameter_in_a_group(self):
+        ""
+        util.writefile( "red.vvt", """
+            #VVT: parameterize : hello,bye = foo,bar blah,punk
+            import vvtest_util as vvt
+            print ( 'parm='+vvt.hello )
+            """ )
         time.sleep(1)
 
         vtu.runvvtest().assertCounts( total=2, npass=2 )
 
-        # force a parameter to take on a user defined value
-
-        vtu.runvvtest( '-S hello=jupiter' ).assertCounts( total=1, npass=1 )
-
-        vrun = vtu.runvvtest( '-i' )
-        vrun.assertCounts( total=3, npass=3 )
-
-        assert vrun.countTestLines( 'hello=jupiter' ) == 1
-        assert vrun.countTestLines( 'hello=mars' ) == 1
-        assert vrun.countTestLines( 'hello=world' ) == 1
-
-        assert vrun.countGrepLogs( 'parm=jupiter' ) == 1
-        assert vrun.countGrepLogs( 'parm=mars' ) == 1
-        assert vrun.countGrepLogs( 'parm=world' ) == 1
+        vrun = vtu.runvvtest( '-S hello=jupiter' )
+        vrun.assertCounts( total=0, npass=0 )
 
     def test_that_the_test_specification_file_is_automatically_soft_linked(self):
         ""

@@ -59,8 +59,7 @@ class BatchScriptWriter:
         for np in self.xlist.getTestExecProcList():
           xL = []
           for tcase in self.xlist.getTestExecList(np):
-            xdir = tcase.getSpec().getExecuteDirectory_magik()
-            # magic: add stage here
+            xdir = tcase.getSpec().getDisplayString()
             xL.append( (tcase.getSpec().getAttr('timeout'),xdir,tcase) )
           xL.sort()
           grpL = []

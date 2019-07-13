@@ -20,8 +20,8 @@ class TestExecList:
         self.tlist = tlist
 
         self.xtlist = {}  # np -> list of TestCase objects
-        self.started = {}  # TestSpec xdir -> TestCase object
-        self.stopped = {}  # TestSpec xdir -> TestCase object
+        self.started = {}  # TestSpec ID -> TestCase object
+        self.stopped = {}  # TestSpec ID -> TestCase object
 
     def createTestExecs(self, test_dir, platform, config, perms):
         """
@@ -102,8 +102,7 @@ class TestExecList:
             for tcase in tcaseL:
                 tm = tcase.getStat().getRuntime( None )
                 if tm == None: tm = 0
-                xdir = tcase.getSpec().getExecuteDirectory_magik()
-                # magic: add in stage here
+                xdir = tcase.getSpec().getDisplayString()
                 sortL.append( (tm,xdir,tcase) )
             sortL.sort()
             sortL.reverse()

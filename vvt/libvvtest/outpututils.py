@@ -32,8 +32,7 @@ def XstatusString( tcase, test_dir, cwd ):
     s += ' %-4s' % format_test_run_time( tcase )
     s += ' %14s' % format_test_run_date( tcase )
 
-    xdir = ref.getExecuteDirectory_magik()
-    # magic: add in stage
+    xdir = ref.getDisplayString()
     s += ' ' + pathutil.relative_execute_directory( xdir, test_dir, cwd )
 
     if skipreason:

@@ -97,8 +97,7 @@ class GitLabMarkDownConverter:
 
     def createTestFile(self, tcase):
         ""
-        # magic: add stage here
-        xdir = tcase.getSpec().getExecuteDirectory_magik()
+        xdir = tcase.getSpec().getDisplayString()
         base = xdir.replace( os.sep, '_' ).replace( ' ', '_' )
         fname = pjoin( self.destdir, base+'.md' )
 

@@ -147,6 +147,9 @@ def find_tests_by_execute_directory_match( xdir, pattern, xdir2tcase ):
     return set()
 
 
+# magic: change xdir2testexec variable name to testid2testcase or something
+#        do this for the call chain, all the way back to execlist.py
+
 def connect_analyze_dependencies( analyze, tcaseL, xdir2testexec ):
     ""
     for tcase in tcaseL:

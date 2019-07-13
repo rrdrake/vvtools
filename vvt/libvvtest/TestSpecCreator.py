@@ -215,8 +215,7 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
 
 def createScriptTest( tname, vspecs, rootpath, relpath,
                       force_params, evaluator ):
-    """
-    """
+    ""
     paramset = parseTestParameters_scr( vspecs, tname, evaluator, force_params )
     numparams = len( paramset.getParameters() )
 
@@ -228,10 +227,13 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
 
     else:
         # take a cartesian product of all the parameter values
+        staged = paramset.getStagedGroup()
         for pdict in paramset.getInstances():
             # create the test and add to test list
             t = TestSpec.TestSpec( tname, rootpath, relpath )
             t.setParameters( pdict )
+            if staged:
+                t.markStagedParameters( *staged )
             testL.append(t)
     
     if len(testL) > 0:
@@ -437,7 +439,7 @@ def parseKeywords_scr( tspec, vspecs, tname ):
 def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
     """
     Parses the parameter settings for a script test file.
-        
+
         #VVT: parameterize : np=1 4
         #VVT: parameterize (testname=mytest_fast) : np=1 4
         #VVT: parameterize (platforms=Cray or redsky) : np=128
@@ -447,7 +449,7 @@ def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
         #VVT: parameterize : np,dt,dh = 1, 0.1  , 0.2
         #VVT::                          4, 0.01 , 0.02
         #VVT::                          8, 0.001, 0.002
-    
+
     Returns a dictionary mapping combined parameter names to lists of the
     combined values.  For example,
 
@@ -458,7 +460,7 @@ def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
         { (pA,) : [ (value1,), (value2,) ] }
 
     And this
-        
+
         #VVT: parameterize : pA=value1 value2
         #VVT: parameterize : pB=val1 val2
 
@@ -470,24 +472,23 @@ def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
     And this
 
         #VVT: parameterize : pA,pB = value1,val1 value2,val2
-    
+
     would return
 
         { (pA,pB) : [ (value1,val1), (value2,val2) ] }
     """
-    cpat = re.compile( '[\t ]*,[\t ]*' )
-
     paramset = ParameterSet()
+    staged = False
 
     for spec in vspecs.getSpecList( 'parameterize' ):
-        
+
         lnum = spec.lineno
 
         if spec.attrs and \
            ( 'parameters' in spec.attrs or 'parameter' in spec.attrs ):
             raise TestSpecError( "parameters attribute not allowed here, " + \
                                  "line " + str(lnum) )
-        
+
         if not filterAttr_scr( spec.attrs, tname, None, evaluator, lnum ):
             continue
 
@@ -507,62 +508,118 @@ def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
                                      'line ' + str(lnum) )
 
         if len(nL) == 1:
-            
-            if force_params != None and nL[0] in force_params:
-                vL = force_params[ nL[0] ]
-            else:
-                vL = L[1].strip().split()
-            
-            for v in vL:
-                if not allowableString(v):
-                    raise TestSpecError( 'invalid parameter value: "' + \
-                                         v+'", line ' + str(lnum) )
-
-            dup = find_duplicate_value( vL )
-            if dup:
-                raise TestSpecError( 'duplicate parameter value: "'+dup + \
-                                     '", line ' + str(lnum) )
-
-            paramset.addParameter( nL[0], vL )
-
+            valL = get_param_values( force_params, nL[0], L[1] )
+            check_parameter_values( valL, lnum )
         else:
-            
-            if force_params != None:
-                for n in nL:
-                    if n in force_params:
-                        raise TestSpecError( 'cannot force a grouped ' + \
-                                    'parameter name: "' + \
-                                    n+'", line ' + str(lnum) )
-            
-            vL = []
-            for s in cpat.sub( ',', L[1].strip() ).split():
-                gL = s.split(',')
-                if len(gL) != len(nL):
-                    raise TestSpecError( 'malformed parameter list: "' + \
-                                          s+'", line ' + str(lnum) )
-                for v in gL:
-                    if not allowableString(v):
-                        raise TestSpecError( 'invalid parameter value: "' + \
-                                             v+'", line ' + str(lnum) )
-                vL.append( gL )
+            valL = get_param_group_values( nL, L[1], lnum )
+            check_forced_group_parameter( force_params, nL, lnum )
 
-            dup = find_duplicate_value( vL )
-            if dup:
-                raise TestSpecError( 'duplicate parameter value: "' + \
-                                     ','.join(dup) + '", line ' + str(lnum) )
+        staged = check_for_staging( spec.attrs, staged, lnum )
 
-            paramset.addParameterGroup( nL, vL )
+        if staged:
+            insert_staging( spec.attrs, nL, valL, paramset )
+
+        check_for_duplicate_parameter( valL, lnum )
+
+        if len(nL) == 1:
+            paramset.addParameter( nL[0], valL )
+        else:
+            paramset.addParameterGroup( nL, valL, staged )
 
     return paramset
 
 
-def find_duplicate_value( lst ):
+def check_for_staging( spec_attrs, staged, lineno ):
     ""
-    for val in lst:
-        if lst.count( val ) > 1:
-            return val
+    if spec_attrs and 'staged' in spec_attrs:
+        if staged:
+            raise TestSpecError( 'only one parameterize can be staged' + \
+                                 ', line ' + str(lineno) )
 
-    return None
+        return True
+
+    return False
+
+
+def insert_staging( spec_attrs, names, values, paramset ):
+    ""
+    if len( names ) == 1:
+        values[:] = [ [str(i),v] for i,v in enumerate(values) ]
+    else:
+        values[:] = [ [str(i)]+vL for i,vL in enumerate(values) ]
+
+    names[:] = [ 'stage' ] + names
+
+
+def check_parameter_values( value_list, lineno ):
+    ""
+    for v in value_list:
+        if not allowableString(v):
+            raise TestSpecError( 'invalid parameter value: "' + \
+                                 v+'", line ' + str(lineno) )
+
+
+def get_param_values( force_params, param_name, value_string ):
+    ""
+    if force_params != None and param_name in force_params:
+        vals = force_params[ param_name ]
+    else:
+        vals = value_string.strip().split()
+
+    return vals
+
+
+spaced_comma_pattern = re.compile( '[\t ]*,[\t ]*' )
+
+def get_param_group_values( name_list, value_string, lineno ):
+    ""
+    compressed_string = spaced_comma_pattern.sub( ',', value_string.strip() )
+
+    vL = []
+    for s in compressed_string.split():
+
+        gL = s.split(',')
+        if len(gL) != len(name_list):
+            raise TestSpecError( 'malformed parameter list: "' + \
+                                  s+'", line ' + str(lineno) )
+
+        check_parameter_values( gL, lineno )
+
+        vL.append( gL )
+
+    return vL
+
+
+def check_forced_group_parameter( force_params, name_list, lineno ):
+    ""
+    if force_params != None:
+        for n in name_list:
+            if n in force_params:
+                raise TestSpecError( 'cannot force a grouped ' + \
+                                     'parameter name: "' + \
+                                     n+'", line ' + str(lineno) )
+
+
+def check_for_duplicate_parameter( paramlist, lineno ):
+    ""
+    for val in paramlist:
+        if paramlist.count( val ) > 1:
+
+            if is_list_or_tuple(val):
+                dup = ','.join(val)
+            else:
+                dup = str(val)
+
+            raise TestSpecError( 'duplicate parameter value: "'+dup + \
+                                 '", line ' + str(lineno) )
+
+
+def is_list_or_tuple( obj ):
+    ""
+    if type(obj) in [ type(()), type([]) ]:
+        return True
+
+    return False
 
 
 def parseAnalyze_scr( t, vspecs, evaluator ):

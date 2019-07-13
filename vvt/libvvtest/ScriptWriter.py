@@ -44,7 +44,7 @@ def writeScript( testcase, filename, lang, config, plat, test_dir ):
         w.add( 'import os, sys',
                '',
                'NAME = "'+tname+'"',
-               'TESTID = "'+testobj.getExecuteDirectory_magik()+'"',  # magic: add stage here
+               'TESTID = "'+testobj.getDisplayString()+'"',
                'PLATFORM = "'+platname+'"',
                'COMPILER = "'+cplrname+'"',
                'VVTESTSRC = "'+tdir+'"',
@@ -144,7 +144,7 @@ def writeScript( testcase, filename, lang, config, plat, test_dir ):
 
         w.add( '',
                'NAME="'+tname+'"',
-               'TESTID="'+testobj.getExecuteDirectory_magik()+'"',  # magic: add stage here
+               'TESTID="'+testobj.getDisplayString()+'"',
                'PLATFORM="'+platname+'"',
                'COMPILER="'+cplrname+'"',
                'VVTESTSRC="'+tdir+'"',

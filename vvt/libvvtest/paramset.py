@@ -38,6 +38,7 @@ class ParameterSet:
     def __init__(self):
         ""
         self.params = {}
+        self.staged = None
         self.instances = []
 
     def addParameter(self, name, value_list):
@@ -48,12 +49,18 @@ class ParameterSet:
         values_list = [ [val] for val in value_list ]
         self.addParameterGroup( names, values_list )
 
-    def addParameterGroup(self, names, values_list):
+    def addParameterGroup(self, names, values_list, staged=False):
         """
         Such as ('paramA','paramB'), [ ['A1','B1'], ['A2','B2'] ].
         """
         self.params[ tuple(names) ] = list(values_list)
+        if staged:
+            self.staged = list( names )
         self._constructInstances()
+
+    def getStagedGroup(self):
+        ""
+        return self.staged
 
     def applyParamFilter(self, param_filter_function):
         """
@@ -102,10 +109,9 @@ class ParameterSet:
             self.instances = []
 
         else:
-            instL = [ {} ]  # need a seed for the accumulation algorithm
+            instL = [ {} ]  # a seed for the accumulation algorithm
             for names,values in self.params.items():
-                instL = \
-                    accumulate_parameter_group_list( instL, names, values )
+                instL = accumulate_parameter_group_list( instL, names, values )
             self.instances = instL
 
 
