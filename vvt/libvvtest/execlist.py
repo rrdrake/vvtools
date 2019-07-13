@@ -48,7 +48,6 @@ class TestExecList:
         ""
         self.xtlist = {}
 
-        xtD = {}
         for tcase in self.tlist.getTests():
 
             tspec = tcase.getSpec()
@@ -68,14 +67,12 @@ class TestExecList:
                 else:
                     self.xtlist[np] = [ tcase ]
 
-                xtD[ tspec.getID() ] = tcase
-
         # sort tests longest running first; 
         self.sortTestExecList()
 
-        self._connect_execute_dependencies( xtD )
+        self._connect_execute_dependencies()
 
-    def _connect_execute_dependencies(self, xdir2testexec):
+    def _connect_execute_dependencies(self):
         ""
         tmap = self.tlist.getTestMap()
         groups = self.tlist.getGroupMap()
@@ -86,9 +83,9 @@ class TestExecList:
 
             if tspec.isAnalyze():
                 grpL = groups.getGroup( tcase )
-                depend.connect_analyze_dependencies( tcase, grpL, xdir2testexec )
+                depend.connect_analyze_dependencies( tcase, grpL, tmap )
 
-            depend.check_connect_dependencies( tcase, tmap, xdir2testexec )
+            depend.check_connect_dependencies( tcase, tmap )
 
     def sortTestExecList(self):
         """

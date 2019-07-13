@@ -100,7 +100,7 @@ def connect_dependency( from_tcase, to_tcase, pattrn=None, expr=None ):
         to_tcase.setHasDependent()
 
 
-def find_tests_by_execute_directory_match( xdir, pattern, xdir2tcase ):
+def find_tests_by_pattern( xdir, pattern, xdir2tcase ):
     """
     Given 'xdir' dependent execute directory, the shell glob 'pattern' is
     matched against the execute directories in the 'xdir2tcase', in this order:
@@ -147,30 +147,25 @@ def find_tests_by_execute_directory_match( xdir, pattern, xdir2tcase ):
     return set()
 
 
-# magic: change xdir2testexec variable name to testid2testcase or something
-#        do this for the call chain, all the way back to execlist.py
-
-def connect_analyze_dependencies( analyze, tcaseL, xdir2testexec ):
+def connect_analyze_dependencies( analyze, tcaseL, testcasemap ):
     ""
     for tcase in tcaseL:
         tspec = tcase.getSpec()
         if not tspec.isAnalyze():
             connect_dependency( analyze, tcase )
-            gxt = xdir2testexec.get( tspec.getID(), None )
+            gxt = testcasemap.get( tspec.getID(), None )
             if gxt != None:
                 gxt.setHasDependent()
 
 
-def check_connect_dependencies( tcase, xdir2tcase, xdir2testexec ):
+def check_connect_dependencies( tcase, testcasemap ):
     ""
     tspec = tcase.getSpec()
 
     for dep_pat,expr in tspec.getDependencies():
         xdir = tspec.getExecuteDirectory_magik()
-        depL = find_tests_by_execute_directory_match(
-                                        xdir, dep_pat, xdir2tcase )
+        depL = find_tests_by_pattern( xdir, dep_pat, testcasemap )
         for dep_id in depL:
-            bakup = xdir2tcase.get( dep_id, None )
-            dep_obj = xdir2testexec.get( dep_id, bakup )
+            dep_obj = testcasemap.get( dep_id, None )
             if dep_obj != None:
                 connect_dependency( tcase, dep_obj, dep_pat, expr )
