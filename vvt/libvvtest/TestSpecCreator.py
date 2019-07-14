@@ -134,8 +134,8 @@ def create_testlist( evaluator, rootpath, relpath, force_params ):
         
         tL = []
         for tname in nameL:
-            L = createTestName( tname, filedoc, rootpath, relpath,
-                                force_params, evaluator )
+            L = createXmlTest( tname, filedoc, rootpath, relpath,
+                               force_params, evaluator )
             tL.extend( L )
     
     elif ext == '.vvt':
@@ -157,28 +157,14 @@ def create_testlist( evaluator, rootpath, relpath, force_params ):
     return tL
 
 
-def createTestName( tname, filedoc, rootpath, relpath, force_params,
-                    evaluator ):
-    """
-    """
+def createXmlTest( tname, filedoc, rootpath, relpath, force_params, evaluator ):
+    ""
     paramset = parseTestParameters( filedoc, tname, evaluator, force_params )
     numparams = len( paramset.getParameters() )
 
     # create the test instances
-    
-    testL = []
 
-    if numparams == 0:
-        t = TestSpec.TestSpec( tname, rootpath, relpath )
-        testL.append(t)
-
-    else:
-        # take a cartesian product of all the parameter values
-        for pdict in paramset.getInstances():
-            # create the test and add to test list
-            t = TestSpec.TestSpec( tname, rootpath, relpath )
-            t.setParameters( pdict )
-            testL.append(t)
+    testL = generate_test_objects( tname, rootpath, relpath, paramset )
 
     if len(testL) > 0:
         # check for parameterize/analyze
@@ -202,14 +188,13 @@ def createTestName( tname, filedoc, rootpath, relpath, force_params,
     # parse and set the rest of the XML file for each test
     
     for t in testL:
-
         parseKeywords          ( t, filedoc, tname )
         parse_include_platform ( t, filedoc )
         parseTimeouts          ( t, filedoc, evaluator )
         parseExecuteList       ( t, filedoc, evaluator )
         parseFiles             ( t, filedoc, evaluator )
         parseBaseline          ( t, filedoc, evaluator )
-    
+
     return testL
 
 
@@ -333,7 +318,6 @@ class TestStager:
 def check_add_analyze_test( paramset, testL, vspecs, evaluator ):
     ""
     if len(testL) > 0:
-        # check for parameterize/analyze
 
         t = testL[0]
 
