@@ -217,25 +217,121 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
                       force_params, evaluator ):
     ""
     paramset = parseTestParameters_scr( vspecs, tname, evaluator, force_params )
-    numparams = len( paramset.getParameters() )
 
+    testL = generate_test_objects( tname, rootpath, relpath, paramset )
+
+    if paramset.getStagedGroup():
+        stager = TestStager( paramset.getStagedGroup(), testL )
+        stager.markTestList()
+        stager.addDependencies()
+
+    check_add_analyze_test( paramset, testL, vspecs, evaluator )
+
+    for t in testL:
+        parseKeywords_scr     ( t, vspecs, tname )
+        parse_enable_platform ( t, vspecs )
+        parseFiles_scr        ( t, vspecs, evaluator )
+        parseTimeouts_scr     ( t, vspecs, evaluator )
+        parseBaseline_scr     ( t, vspecs, evaluator )
+        parseDependencies_scr ( t, vspecs, evaluator )
+        parse_preload_label   ( t, vspecs, evaluator )
+
+    return testL
+
+
+def generate_test_objects( tname, rootpath, relpath, paramset ):
+    ""
     testL = []
 
+    numparams = len( paramset.getParameters() )
     if numparams == 0:
         t = TestSpec.TestSpec( tname, rootpath, relpath )
         testL.append(t)
 
     else:
         # take a cartesian product of all the parameter values
-        staged = paramset.getStagedGroup()
         for pdict in paramset.getInstances():
             # create the test and add to test list
             t = TestSpec.TestSpec( tname, rootpath, relpath )
             t.setParameters( pdict )
-            if staged:
-                t.markStagedParameters( *staged )
             testL.append(t)
-    
+
+    return testL
+
+
+class TestStager:
+
+    def __init__(self, stage_group, tspec_list):
+        ""
+        self.nameL = stage_group[0]
+        self.valueL = stage_group[1]
+        self.testL = tspec_list
+
+    def markTestList(self):
+        ""
+        for tspec in self.testL:
+            tspec.markStagedParameters( *self.nameL )
+
+    def addDependencies(self):
+        ""
+        stage_name = self.nameL[0]
+        stage_values = [ vals[0] for vals in self.valueL ]
+
+        for i,dep_stage_val in enumerate(stage_values):
+            if i < len(stage_values)-1:
+                stage_value = stage_values[i+1]
+                for tspec in self._get_tests_at_stage( stage_value ):
+                    self._add_dependency( tspec, dep_stage_val )
+
+    def _add_dependency(self, from_tspec, dep_stage_val):
+        ""
+        stage_name = self.nameL[0]
+
+        params = from_tspec.getParameters()
+        params[ stage_name ] = dep_stage_val
+        dep_test = self._find_stage_test( params )
+
+        wx = create_dependency_result_expression( None )
+        from_tspec.addDependency( dep_test.getDisplayString(), wx )
+
+    def _get_tests_at_stage(self, stage_value):
+        ""
+        stage_name = self.nameL[0]
+
+        matchL = []
+        for tspec in self.testL:
+            val = tspec.getParameterValue( stage_name )
+            if val == stage_value:
+                matchL.append( tspec )
+
+        return matchL
+
+    def _find_stage_test(self, params):
+        ""
+        stage_param_names = self.nameL[1:]
+
+        for n in stage_param_names:
+            params.pop( n )
+
+        matchL = []
+
+        for tspec in self.testL:
+
+            tryparams = {}
+            for n,v in tspec.getParameters().items():
+                if n not in stage_param_names:
+                    tryparams[ n ] = v
+
+            if tryparams == params:
+                matchL.append( tspec )
+
+        assert len( matchL ) == 1
+
+        return matchL[0]
+
+
+def check_add_analyze_test( paramset, testL, vspecs, evaluator ):
+    ""
     if len(testL) > 0:
         # check for parameterize/analyze
 
@@ -245,6 +341,7 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
 
         if analyze_spec:
 
+            numparams = len( paramset.getParameters() )
             if numparams == 0:
                 raise TestSpecError( 'an analyze requires at least one ' + \
                                      'parameter to be defined' )
@@ -257,18 +354,6 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
             parent.setAnalyzeScript( analyze_spec )
             if not analyze_spec.startswith('-'):
                 parent.addLinkFile( analyze_spec )
-
-    for t in testL:
-
-        parseKeywords_scr     ( t, vspecs, tname )
-        parse_enable_platform ( t, vspecs )
-        parseFiles_scr        ( t, vspecs, evaluator )
-        parseTimeouts_scr     ( t, vspecs, evaluator )
-        parseBaseline_scr     ( t, vspecs, evaluator )
-        parseDependencies_scr ( t, vspecs, evaluator )
-        parse_preload_label   ( t, vspecs, evaluator )
-
-    return testL
 
 
 def reparse_test_object( evaluator, testobj ):
@@ -544,9 +629,9 @@ def check_for_staging( spec_attrs, staged, lineno ):
 def insert_staging( spec_attrs, names, values, paramset ):
     ""
     if len( names ) == 1:
-        values[:] = [ [str(i),v] for i,v in enumerate(values) ]
+        values[:] = [ [str(i),v] for i,v in enumerate(values, start=1) ]
     else:
-        values[:] = [ [str(i)]+vL for i,vL in enumerate(values) ]
+        values[:] = [ [str(i)]+vL for i,vL in enumerate(values, start=1) ]
 
     names[:] = [ 'stage' ] + names
 

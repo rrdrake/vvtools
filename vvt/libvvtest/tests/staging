@@ -21,6 +21,7 @@ from libvvtest.TestSpec import TestSpec
 from libvvtest.testcase import TestCase
 from libvvtest.ScriptReader import ScriptReader
 from libvvtest.RuntimeConfig import RuntimeConfig
+import libvvtest.depend as depend
 
 import libvvtest.TestSpecCreator as TSC
 
@@ -64,13 +65,13 @@ class staged_parameters( vtu.vvtestTestCase ):
         time.sleep(1)
 
         vspecs = ScriptReader( 'blue.vvt' )
-        for spec in vspecs.getSpecList():
-            print3( 'magic: spec', spec.keyword, spec.attrs )
         evaluator = TSC.ExpressionEvaluator( 'atari', [] )
         pset = TSC.parseTestParameters_scr( vspecs, 'blue', evaluator, None )
 
         assert len( pset.getInstances() ) == 3
-        assert pset.getStagedGroup() == [ 'stage', 'np' ]
+        nL,vL = pset.getStagedGroup()
+        assert nL == [ 'stage', 'np' ]
+        assert vL == [ ['1','1'], ['2','8'], ['3','1'] ]
 
     def test_parsing_script_with_staged_parameterize(self):
         ""
@@ -95,10 +96,29 @@ class staged_parameters( vtu.vvtestTestCase ):
         sortL.sort()
         tc0,tc1,tc2 = [ T[1] for T in sortL ]
 
-        # test that tc1 depends on tc0 and tc2 depends on tc1
-        # find_tests_by_execute_directory_match(
-        #         tc1.getExecuteDirectory_magik(),
-        #         tc1.getDependencies()
+        assert has_dependency( tc1, tc0 )
+        assert has_dependency( tc2, tc1 )
+
+
+def has_dependency( testcase, dep_test ):
+    ""
+    tmap = { testcase.getSpec().getID() : testcase,
+             dep_test.getSpec().getID() : dep_test }
+
+    xdir = testcase.getSpec().getExecuteDirectory_magik()
+    idset = set()
+    for pat,expr in testcase.getSpec().getDependencies():
+        idset.update( depend.find_tests_by_pattern( xdir, pat, tmap ) )
+
+    assert len(idset) <= 1
+
+    if len(idset) > 0:
+        tcase = tmap[ idset.pop() ]
+        assert id(tcase) == id(dep_test)
+        return True
+
+    return False
+
 
 """
 magic:

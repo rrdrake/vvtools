@@ -463,12 +463,14 @@ class ParameterSet_getParameters( vtu.vvtestTestCase ):
 
 class mark_staged( vtu.vvtestTestCase ):
 
-    def test_stage_parameters_settter_and_getters(self):
+    def test_staged_parameters_set_and_get(self):
         ""
         pset = ParameterSet.ParameterSet()
         assert pset.getStagedGroup() == None
-        pset.addParameterGroup( ['stage','np'], [ ['1','1'], ['2','4'] ], True )
-        assert pset.getStagedGroup() == [ 'stage', 'np' ]
+        pset.addParameterGroup( ('stage','np'), [ ['1','1'], ['2','4'] ], True )
+        nL,vL = pset.getStagedGroup()
+        assert nL == [ 'stage', 'np' ]
+        assert vL == [ ['1','1'], ['2','4'] ]
 
 
 ############################################################################

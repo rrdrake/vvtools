@@ -55,12 +55,14 @@ class ParameterSet:
         """
         self.params[ tuple(names) ] = list(values_list)
         if staged:
-            self.staged = list( names )
+            self.staged = ( list( names ), list( values_list ) )
         self._constructInstances()
 
     def getStagedGroup(self):
         ""
-        return self.staged
+        if self.staged:
+            return self.staged[0], self.staged[1]  # names list, values list
+        return None
 
     def applyParamFilter(self, param_filter_function):
         """

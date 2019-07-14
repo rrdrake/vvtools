@@ -124,7 +124,7 @@ def find_tests_by_pattern( xdir, pattern, xdir2tcase ):
 
     for tcase in xdir2tcase.values():
 
-        xdir = tcase.getSpec().getExecuteDirectory_magik()
+        xdir = tcase.getSpec().getDisplayString()
         tid = tcase.getSpec().getID()
 
         p1 = os.path.normpath( tbase+pattern )
