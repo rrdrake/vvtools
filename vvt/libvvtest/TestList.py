@@ -327,23 +327,11 @@ class TestList:
           testL = []
 
         for tspec in testL:
-
-            xdir = tspec.getExecuteDirectory_magik()
-
-            # ignore tests with duplicate execution directories
-            if xdir in self.xdirmap:  # magic: and no stages or same stage
-                tcase = self.xdirmap[ xdir ]
-                tspec1 = tcase.getSpec()
-                print3( '*** warning:',
-                    'ignoring test with duplicate execution directory\n',
-                    '      first   :', tspec1.getFilename() + '\n',
-                    '      second  :', tspec.getFilename() + '\n',
-                    '      exec dir:', xdir )
-            else:
+            if not self._is_duplicate_execute_directory( tspec ):
                 testid = tspec.getID()
                 tcase = TestCase( tspec )
                 self.tcasemap[testid] = tcase
-                self.xdirmap[xdir] = tcase
+                self.xdirmap[ tspec.getExecuteDirectory_magik() ] = tcase
 
     def addTest(self, tcase):
         """
@@ -356,6 +344,48 @@ class TestList:
         if self.groups == None:
             self.groups = ParameterizeAnalyzeGroups()
             self.groups.rebuild( self.tcasemap )
+
+    def _is_duplicate_execute_directory(self, tspec):
+        ""
+        xdir = tspec.getExecuteDirectory_magik()
+
+        tcase0 = self.xdirmap.get( xdir, None )
+
+        if tcase0 != None and \
+           not tests_are_related_by_staging( tcase0.getSpec(), tspec ):
+
+            tspec0 = tcase0.getSpec()
+
+            print3( '*** warning:',
+                'ignoring test with duplicate execution directory\n',
+                '      first   :', tspec0.getFilename() + '\n',
+                '      second  :', tspec.getFilename() + '\n',
+                '      exec dir:', xdir )
+
+            ddir = tspec.getDisplayString()
+            if ddir != xdir:
+                print3( '       test id :', ddir )
+
+            return True
+
+        return False
+
+
+def tests_are_related_by_staging( tspec1, tspec2 ):
+    ""
+    xdir1 = tspec1.getExecuteDirectory_magik()
+    disp1 = tspec1.getDisplayString()
+
+    xdir2 = tspec2.getExecuteDirectory_magik()
+    disp2 = tspec2.getDisplayString()
+
+    if xdir1 == xdir2 and \
+       tspec1.getFilename() == tspec2.getFilename() and \
+       xdir1 != disp1 and disp1.startswith( xdir1 ) and \
+       xdir2 != disp2 and disp2.startswith( xdir2 ):
+        return True
+
+    return False
 
 
 def check_make_directory_containing_file( filename ):

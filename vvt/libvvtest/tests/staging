@@ -87,7 +87,6 @@ class staged_parameters( vtu.vvtestTestCase ):
         sortL = []
         testid2testcase = {}
         for ts in tL:
-            print3( 'magic: xdir', ts.getExecuteDirectory_magik() )
             assert ts.getExecuteDirectory_magik() == 'blue.np'
             tcase = TestCase( ts, None )
             sortL.append( (ts.getDisplayString(),tcase) )
@@ -99,11 +98,37 @@ class staged_parameters( vtu.vvtestTestCase ):
         assert has_dependency( tc1, tc0 )
         assert has_dependency( tc2, tc1 )
 
+    def test_full_integration_run_with_staging(self):
+        ""
+        # magic: remove debugging in there
+        util.writefile( 'blue.vvt', """
+            #VVT: parameterize (staged) : np = 1 3 1
+            import vvtest_util as vvt
+            print ( 'blue_stage='+vvt.stage + ' blue_np='+vvt.np  )
+            """ )
+        util.writefile( 'green.vvt', """
+            #VVT: parameterize (staged) : np = 2 3
+            #VVT: parameterize : part = piston valve
+            import vvtest_util as vvt
+            print ( 'green_stage='+vvt.stage + 'green_np='+vvt.np + 'green_part='+vvt.part )
+            """ )
+        time.sleep(1)
 
-def has_dependency( testcase, dep_test ):
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-n 10' )
+            vrun.assertCounts( total=7, npass=7 )
+
+            # magic: check values
+            # assert vrun.countGrepLogs( 'blue_stage=1 blue_np=1' ) == 1
+
+
+def has_dependency( testcase, dep_testcase ):
     ""
     tmap = { testcase.getSpec().getID() : testcase,
-             dep_test.getSpec().getID() : dep_test }
+             dep_testcase.getSpec().getID() : dep_testcase }
 
     xdir = testcase.getSpec().getExecuteDirectory_magik()
     idset = set()
@@ -114,20 +139,10 @@ def has_dependency( testcase, dep_test ):
 
     if len(idset) > 0:
         tcase = tmap[ idset.pop() ]
-        assert id(tcase) == id(dep_test)
+        assert id(tcase) == id(dep_testcase)
         return True
 
     return False
-
-
-"""
-magic:
-    - test more than one staging set
-    - look for places where getDisplayString is used and add testing with
-      stages
-    - does it make sense to baseline stages??
-    - test case where more than one parameterize is staged, an error
-"""
 
 
 ############################################################################
