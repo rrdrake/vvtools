@@ -8,89 +8,120 @@ import os, sys
 import shutil
 import glob
 
+from . import CommonSpec
 from . import cshScriptWriter
 from . import ScriptWriter
 from .makecmd import MakeScriptCommand
 
 
-def initialize_for_execution( tcase, test_dir, platform,
-                              commondb, config, usrplugin, perms ):
-    """
-    The platform is a Platform object.  The test_dir is the top level
-    testing directory, which is either an absolute path or relative to
-    the current working directory.
-    """
-    tspec = tcase.getSpec()
-    texec = tcase.getExec()
-    tstat = tcase.getStat()
+class TestRunner:
 
-    handler = ExecutionHandler( tcase, perms, config, platform, usrplugin )
-    texec.setExecutionHandler( handler )
+    def __init__(self, test_dir, platform, config, usrplugin, perms):
+        """
+        The platform is a Platform object.  The test_dir is the top level
+        testing directory, which is either an absolute path or relative to
+        the current working directory.
+        """
+        self.test_dir = test_dir
+        self.platform = platform
+        self.config = config
+        self.usrplugin = usrplugin
+        self.perms = perms
 
-    texec.setTimeout( tspec.getAttr( 'timeout', 0 ) )
+        self.commondb = None
 
-    tstat.resetResults()
+    def initialize_for_execution(self, tcase):
+        ""
+        tspec = tcase.getSpec()
+        texec = tcase.getExec()
+        tstat = tcase.getStat()
 
-    xdir = tspec.getExecuteDirectory_magik()
-    wdir = os.path.join( test_dir, xdir )
-    texec.setRunDirectory( wdir )
+        handler = ExecutionHandler( tcase,
+                                    self.perms,
+                                    self.config,
+                                    self.platform,
+                                    self.usrplugin )
+        texec.setExecutionHandler( handler )
 
-    if not os.path.exists( wdir ):
-        os.makedirs( wdir )
+        texec.setTimeout( tspec.getAttr( 'timeout', 0 ) )
 
-    perms.set( xdir )
+        tstat.resetResults()
 
-    if tspec.getSpecificationForm() == 'xml':
-        write_xml_run_script( tcase, commondb, config, platform, perms )
-    else:
-        write_script_utils( tcase, test_dir, config, platform, perms )
+        xdir = tspec.getExecuteDirectory_magik()
+        wdir = os.path.join( self.test_dir, xdir )
+        texec.setRunDirectory( wdir )
 
+        if not os.path.exists( wdir ):
+            os.makedirs( wdir )
 
-def write_xml_run_script( tcase, commondb, config, platform, perms ):
-    ""
-    # no 'form' defaults to the XML test specification format
+        self.perms.set( xdir )
 
-    tspec = tcase.getSpec()
-    texec = tcase.getExec()
-    rundir = texec.getRunDirectory()
+        if tspec.getSpecificationForm() == 'xml':
+            self.write_xml_run_script( tcase )
+        else:
+            self.write_script_utils( tcase )
 
-    script_file = os.path.join( rundir, 'runscript' )
+    def getCommonXMLDB(self, tspec):
+        ""
+        if tspec.getSpecificationForm() == 'xml':
+            if self.commondb == None:
+                d = os.path.join( self.config.get('toolsdir'), 'libvvtest' )
+                c = self.config.get('configdir')
+                self.commondb = CommonSpec.loadCommonSpec( d, c )
 
-    if config.get('refresh') or not os.path.exists( script_file ):
+            return self.commondb
 
-        troot = tspec.getRootpath()
-        assert os.path.isabs( troot )
-        tdir = os.path.dirname( tspec.getFilepath() )
-        srcdir = os.path.normpath( os.path.join( troot, tdir ) )
+        return None
 
-        # note that this writes a different sequence if the test is an
-        # analyze test
-        cshScriptWriter.writeScript( tspec, commondb, platform,
-                                     config.get('toolsdir'),
-                                     config.get('exepath'),
-                                     srcdir,
-                                     config.get('onopts'),
-                                     config.get('offopts'),
-                                     script_file )
+    def write_xml_run_script(self, tcase):
+        ""
+        # no 'form' defaults to the XML test specification format
 
-        perms.set( os.path.abspath( script_file ) )
+        tspec = tcase.getSpec()
+        texec = tcase.getExec()
+        rundir = texec.getRunDirectory()
 
+        script_file = os.path.join( rundir, 'runscript' )
 
-def write_script_utils( tcase, test_dir, config, platform, perms ):
-    ""
-    texec = tcase.getExec()
-    rundir = texec.getRunDirectory()
+        if self.config.get('refresh') or not os.path.exists( script_file ):
 
-    for lang in ['py','sh']:
+            troot = tspec.getRootpath()
+            assert os.path.isabs( troot )
+            tdir = os.path.dirname( tspec.getFilepath() )
+            srcdir = os.path.normpath( os.path.join( troot, tdir ) )
 
-        script_file = os.path.join( rundir, 'vvtest_util.'+lang )
+            # note that this writes a different sequence if the test is an
+            # analyze test
+            cshScriptWriter.writeScript( tspec,
+                                         self.getCommonXMLDB( tspec ),
+                                         self.platform,
+                                         self.config.get('toolsdir'),
+                                         self.config.get('exepath'),
+                                         srcdir,
+                                         self.config.get('onopts'),
+                                         self.config.get('offopts'),
+                                         script_file )
 
-        if config.get('refresh') or not os.path.exists( script_file ):
-            ScriptWriter.writeScript( tcase, script_file,
-                                      lang, config, platform,
-                                      test_dir )
+            self.perms.set( os.path.abspath( script_file ) )
 
-            perms.set( os.path.abspath( script_file ) )
+    def write_script_utils(self, tcase):
+        ""
+        texec = tcase.getExec()
+        rundir = texec.getRunDirectory()
+
+        for lang in ['py','sh']:
+
+            script_file = os.path.join( rundir, 'vvtest_util.'+lang )
+
+            if self.config.get('refresh') or not os.path.exists( script_file ):
+                ScriptWriter.writeScript( tcase,
+                                          script_file,
+                                          lang,
+                                          self.config,
+                                          self.platform,
+                                          self.test_dir )
+
+                self.perms.set( os.path.abspath( script_file ) )
 
 
 class ExecutionHandler:

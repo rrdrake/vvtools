@@ -6,7 +6,6 @@
 
 import os, sys
 
-from . import CommonSpec
 from .TestExec import TestExec
 from . import depend
 from . import testrunner
@@ -27,16 +26,14 @@ class TestExecList:
         """
         Creates the set of TestExec objects from the active test list.
         """
-        d = os.path.join( config.get('toolsdir'), 'libvvtest' )
-        c = config.get('configdir')
-        xdb = CommonSpec.loadCommonSpec( d, c )
+        runner = testrunner.TestRunner( test_dir, platform,
+                                        config, self.plugin,
+                                        perms )
 
         self._createTestExecList( perms )
         
         for tcase in self.getTestExecList():
-            testrunner.initialize_for_execution( tcase, test_dir, platform,
-                                                 xdb, config, self.plugin,
-                                                 perms )
+            runner.initialize_for_execution( tcase )
 
     def markTestsWithDependents(self):
         ""
