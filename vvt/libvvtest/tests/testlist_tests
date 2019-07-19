@@ -318,9 +318,9 @@ class TestList_results_file( vtu.vvtestTestCase ):
 
         read_TestList_and_check_fake_test( rfile )
 
-    def test_a_workflow_using_a_results_suffix(self):
+    def test_a_workflow_using_a_rundate(self):
         ""
-        tl = write_TestList_with_fake_test( 'testlist', results_suffix=True )
+        tl = write_TestList_with_fake_test( 'testlist', rundate=True )
         sfx = tl.getResultsSuffix()
         time.sleep(2)
 
@@ -340,14 +340,14 @@ class TestList_results_file( vtu.vvtestTestCase ):
         time.sleep(1)
 
         # create suffix for the include files
-        sfx = tl.setResultsSuffix()
+        sfx = tl.setRunDate()
 
         # write include test list file containing suffix attribute
         tcase = list( tl.getTests() )[0]
         tlincl = TestList.TestList( 'subtests' )
-        tlincl.setResultsSuffix( sfx )
+        tlincl.setRunDate( sfx )
         tl.addTest( tcase )
-        tlincl.stringFileWrite( include_results_suffix=True )
+        tlincl.writeTransferFile()
         time.sleep(1)
 
         # start the comprehensive results file (with the include in it)
@@ -560,19 +560,22 @@ def write_test_list_with_fake_test( filename, **kwargs ):
 
 def write_TestList_with_fake_test( filename, **kwargs ):
     ""
-    dosuffix = kwargs.pop( 'results_suffix', False )
+    dosuffix = kwargs.pop( 'rundate', False )
 
     tl = TestList.TestList( filename )
 
     if dosuffix:
-        tl.setResultsSuffix()
+        tl.setRunDate()
 
     tcase = get_fake_TestCase()
     for k,v in kwargs.items():
         tcase.getSpec().setAttr( k, v )
     tl.addTest( tcase )
 
-    tl.stringFileWrite( include_results_suffix=dosuffix )
+    if dosuffix:
+        tl.writeTransferFile()
+    else:
+        tl.stringFileWrite()
 
     return tl
 

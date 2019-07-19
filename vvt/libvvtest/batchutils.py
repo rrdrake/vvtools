@@ -90,7 +90,7 @@ class BatchScriptWriter:
             print3( 'rm -rf '+d )
             pathutil.fault_tolerant_remove( d )
 
-    def writeQsubScripts(self, results_suffix):
+    def writeQsubScripts(self, rundate):
         """
         """
         config = self.rtdata.getConfiguration()
@@ -105,7 +105,7 @@ class BatchScriptWriter:
         
         qid = 0
         for qL in self.qsublists:
-          self.make_queue_batch( qid, qL, qsubids, commonopts, results_suffix )
+          self.make_queue_batch( qid, qL, qsubids, commonopts, rundate )
           qid += 1
 
         qidL = list( qsubids.keys() )
@@ -118,7 +118,7 @@ class BatchScriptWriter:
             d = self.namer.getSubdir( i )
             self.perms.recurse( d )
 
-    def make_queue_batch(self, qnumber, qlist, npD, comopts, results_suffix):
+    def make_queue_batch(self, qnumber, qlist, npD, comopts, rundate):
         """
         """
         qidstr = str(qnumber)
@@ -126,7 +126,7 @@ class BatchScriptWriter:
         testlistfname = self.namer.getTestListName( qidstr )
 
         tl = TestList.TestList( testlistfname )
-        tl.setResultsSuffix( results_suffix )
+        tl.setRunDate( rundate )
 
         tL = []
         maxnp = 0
@@ -160,13 +160,13 @@ class BatchScriptWriter:
 
         npD[qnumber] = maxnp
         pout = self.namer.getBatchOutputName( qnumber )
-        tout = self.namer.getTestListName( qnumber ) + '.' + results_suffix
+        tout = self.namer.getTestListName( qnumber ) + '.' + rundate
 
         jb = BatchJob( maxnp, pout, tout, tL,
                        self.read_interval, self.read_timeout )
         self.accountant.addJob( qnumber, jb )
         
-        tl.stringFileWrite( include_results_suffix=True )
+        tl.writeTransferFile()
         
         fn = self.namer.getBatchScriptName( qidstr )
         fp = open( fn, "w" )

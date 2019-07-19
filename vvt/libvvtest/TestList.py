@@ -32,7 +32,7 @@ class TestList:
             # use case: scanning tests, but never reading or writing
             self.filename = None
 
-        self.results_suffix = None
+        self.rundate = None
         self.results_file = None
 
         self.datestamp = None
@@ -47,24 +47,22 @@ class TestList:
         self.creator = testcreator
         self.testfilter = testfilter
 
-    def setResultsSuffix(self, suffix=None):
+    def setRunDate(self, suffix=None):
         ""
         if suffix:
-            self.results_suffix = suffix
-        elif not self.results_suffix:
-            self.results_suffix = time.strftime( "%Y-%m-%d_%H:%M:%S" )
+            self.rundate = suffix
+        elif not self.rundate:
+            self.rundate = time.strftime( "%Y-%m-%d_%H:%M:%S" )
 
-        return self.results_suffix
+        return self.rundate
 
     def getResultsSuffix(self):
         ""
-        return self.results_suffix
+        return self.rundate
 
-    def stringFileWrite(self, include_results_suffix=False):
+    def stringFileWrite(self):
         """
-        Writes all the tests in this container to the test list file.  If
-        'include_results_suffix' is True, the results suffix is written as
-        an attribute in the file.
+        Writes all the tests in this container to the test list file.
         """
         assert self.filename
 
@@ -72,11 +70,25 @@ class TestList:
 
         tlw = testlistio.TestListWriter( self.filename )
 
-        if include_results_suffix:
-            assert self.results_suffix
-            tlw.start( results_suffix=self.results_suffix )
-        else:
-            tlw.start()
+        tlw.start()
+
+        for tcase in self.tcasemap.values():
+            tlw.append( tcase )
+
+        tlw.finish()
+
+    def writeTransferFile(self):
+        """
+        Writes all the tests in this container to the test list file.  The
+        results suffix is written as an attribute in the file.
+        """
+        assert self.filename
+
+        check_make_directory_containing_file( self.filename )
+
+        tlw = testlistio.TestListWriter( self.filename )
+
+        tlw.start( rundate=self.rundate )
 
         for tcase in self.tcasemap.values():
             tlw.append( tcase )
@@ -85,9 +97,9 @@ class TestList:
 
     def initializeResultsFile(self):
         ""
-        self.setResultsSuffix()
+        self.setRunDate()
 
-        rfile = self.filename + '.' + self.results_suffix
+        rfile = self.filename + '.' + self.rundate
         
         self.results_file = testlistio.TestListWriter( rfile )
 
@@ -99,8 +111,8 @@ class TestList:
         """
         Appends the given filename to the test results file.
         """
-        assert self.results_suffix, 'suffix must have already been set'
-        inclf = testlist_path + '.' + self.results_suffix
+        assert self.rundate, 'suffix must have already been set'
+        inclf = testlist_path + '.' + self.rundate
         self.results_file.addIncludeFile( inclf )
 
     def appendTestResult(self, tcase):
@@ -126,7 +138,7 @@ class TestList:
             tlr = testlistio.TestListReader( self.filename )
             tlr.read()
 
-            self.results_suffix = tlr.getAttr( 'results_suffix', None )
+            self.rundate = tlr.getAttr( 'rundate', None )
 
             for xdir,tcase in tlr.getTests().items():
                 if xdir not in self.tcasemap:
@@ -171,7 +183,7 @@ class TestList:
 
     def inlineIncludeFiles(self):
         ""
-        rfile = self.filename + '.' + self.results_suffix
+        rfile = self.filename + '.' + self.rundate
         testlistio.inline_include_files( rfile )
 
     def getDateStamp(self, default=None):

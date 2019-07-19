@@ -45,11 +45,11 @@ class TestListWriter:
         finally:
             fp.close()
 
-    def append(self, tcase):
+    def append(self, tcase, transfer=False):
         ""
         fp = open( self.filename, 'a' )
         try:
-            fp.write( test_to_string( tcase ) + '\n' )
+            fp.write( test_to_string( tcase, transfer ) + '\n' )
         finally:
             fp.close()
 
@@ -279,7 +279,7 @@ def remove_attrs_with_None_for_a_value( attrdict ):
             attrdict.pop( k )
 
 
-def test_to_string( tcase ):
+def test_to_string( tcase, transfer=False ):
     """
     Returns a string with no newlines containing the file path, parameter
     names/values, and attribute names/values.
