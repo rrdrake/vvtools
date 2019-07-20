@@ -1377,6 +1377,19 @@ class test_file_reparse( vtu.vvtestTestCase ):
         assert len( pset ) == 1
         assert pset[ ('size',) ] == [ ['tiny'], ['big'] ]
 
+    def test_transfer_of_hasdependent_mark_through_string_write_read(self):
+        ""
+        tcase = vtu.make_fake_TestCase()
+        tcase.setHasDependent()
+
+        sid = tio.test_to_string( tcase )
+        tcase2 = tio.string_to_test( sid )
+        assert not tcase2.hasDependent()
+
+        sid = tio.test_to_string( tcase, transfer=True )
+        tcase3 = tio.string_to_test( sid )
+        assert tcase3.hasDependent()
+
 
 def reparse_test_string( stringid ):
     ""

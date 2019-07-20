@@ -91,7 +91,7 @@ class TestList:
         tlw.start( rundate=self.rundate )
 
         for tcase in self.tcasemap.values():
-            tlw.append( tcase )
+            tlw.append( tcase, transfer=True )
 
         tlw.finish()
 

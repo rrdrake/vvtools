@@ -95,8 +95,6 @@ class BatchScriptWriter:
         """
         config = self.rtdata.getConfiguration()
 
-        self.xlist.markTestsWithDependents()
-
         self.removeBatchDirectories()
 
         commonopts = self.cmd_opts_string

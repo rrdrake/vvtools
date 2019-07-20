@@ -35,12 +35,6 @@ class TestExecList:
         for tcase in self.getTestExecList():
             runner.initialize_for_execution( tcase )
 
-    def markTestsWithDependents(self):
-        ""
-        for tcase in self.getTestExecList():
-            if tcase.hasDependent():
-                tcase.getSpec().setAttr( 'hasdependent', True )
-
     def _createTestExecList(self, perms):
         ""
         self.xtlist = {}
@@ -54,9 +48,6 @@ class TestExecList:
                 assert tspec.constructionCompleted()
 
                 tcase.setExec( TestExec() )
-
-                if tspec.getAttr( 'hasdependent', False ):
-                    tcase.setHasDependent()
 
                 np = int( tspec.getParameters().get('np', 0) )
                 if np in self.xtlist:

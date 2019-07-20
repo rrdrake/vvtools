@@ -302,6 +302,10 @@ def test_to_string( tcase, transfer=False ):
 
     testdict['attrs'] = tspec.getAttrs()
 
+    if transfer:
+        if tcase.hasDependent():
+            testdict['hasdependent'] = True
+
     s = repr( testdict )
 
     return s
@@ -333,7 +337,12 @@ def string_to_test( strid ):
     for k,v in testdict['attrs'].items():
         tspec.setAttr( k, v )
 
-    return TestCase( tspec )
+    tcase = TestCase( tspec )
+
+    if testdict.get( 'hasdependent', False ):
+        tcase.setHasDependent()
+
+    return tcase
 
 
 def print3( *args ):
