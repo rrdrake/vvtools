@@ -23,6 +23,8 @@ from libvvtest.filtering import PlatformEvaluator
 from libvvtest.errors import TestSpecError
 import libvvtest.FilterExpressions as FilterExpressions
 from libvvtest.RuntimeConfig import RuntimeConfig
+from libvvtest.testcase import TestCase
+import libvvtest.testlistio as tio
 
 
 class XML_ElementTree_tests( vtu.vvtestTestCase ):
@@ -121,8 +123,6 @@ class XML_test_specifications( vtu.vvtestTestCase ):
 
     def test_parameterize_analyze_at_top_level(self):
         ""
-        nofltr = RuntimeConfig( platform_name='dummy' )
-
         util.writefile( 'atest.xml', """
             <rtest name="atest">
               <keywords> junk1 junk2 </keywords>
@@ -142,49 +142,40 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <baseline parameters="np=4"> # script here </baseline>
             </rtest>""" )
 
-        tL = create_tests( '.', 'atest.xml', nofltr )
+        tL = create_tests( 'atest.xml' )
         for ti in tL:
-          print3( ti )
+            print3( ti )
         assert len(tL) == 6
 
     def test_specifying_keywords(self):
         ""
-        nofltr = RuntimeConfig( platform_name='dummy' )
-
         util.writefile( 'bad1.xml', """
             <rtest>
               <keywords> junk1 junk2 </keywords>
             </rtest>""" )
 
-        try: create_tests( '.', 'bad1.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad1.xml' )
 
         util.writefile( 'bad2.xml', """
             <rtest name="ate/st">
               <keywords> junk1 junk2 </keywords>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad2.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad2.xml' )
 
         util.writefile( 'bad3.xml', """
             <rtest name="atest">
               <keywords> junk1 ju/nk2 </keywords>
             </rtest>""" )
 
-        try: create_tests( '.', 'bad3.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad3.xml' )
 
         util.writefile( 'ok1.xml', """
             <rtest name="atest">
               <keywords> junk1 junk2 </keywords>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok1.xml', nofltr )
+        tL = create_tests( 'ok1.xml' )
         assert len(tL) == 1
         kL = tL[0].getKeywords()
         kL.sort()
@@ -199,7 +190,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <keywords> junk2 </keywords>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok2.xml', nofltr )
+        tL = create_tests( 'ok2.xml' )
         assert len(tL) == 1
         kL = tL[0].getKeywords()
         kL.sort()
@@ -212,49 +203,39 @@ class XML_test_specifications( vtu.vvtestTestCase ):
 
     def test_specifying_parameters(self):
         ""
-        nofltr = RuntimeConfig( platform_name='dummy' )
-
         util.writefile( 'bad4.xml', """
             <rtest name="atest">
               <parameterize/>
             </rtest>""" )
 
-        create_tests( '.', 'bad4.xml', nofltr )
+        create_tests( 'bad4.xml' )
 
         util.writefile( 'bad5.xml', """
             <rtest name="atest">
               <parameterize h=r="2"/>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad5.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected an exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad5.xml' )
 
         util.writefile( 'bad6.xml', """
             <rtest name="atest">
               <parameterize p=" "/>
             </rtest>""" )
 
-        try: create_tests( '.', 'bad6.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad6.xml' )
 
         util.writefile( 'bad7.xml', """
             <rtest name="atest">
               <parameterize p="val1 val/2"/>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad7.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad7.xml' )
 
         util.writefile( 'ok3.xml', """
             <rtest name="atest">
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok3.xml', nofltr )
+        tL = create_tests( 'ok3.xml' )
         assert len(tL) == 1
 
         util.writefile( 'ok3a.xml', """
@@ -262,7 +243,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize pname="val1 val2"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok3a.xml', nofltr )
+        tL = create_tests( 'ok3a.xml' )
         assert len(tL) == 2
         kys = set( [ t.getID() for t in tL ] )
         assert len(kys) == 2, "keys must be unique"
@@ -281,7 +262,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize parm="valA"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok4.xml', nofltr )
+        tL = create_tests( 'ok4.xml' )
         assert len(tL) == 1
         pL = paramGather(tL)
         print3( "param list", pL )
@@ -293,7 +274,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize parm="valA valB valC"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok5.xml', nofltr )
+        tL = create_tests( 'ok5.xml' )
         assert len(tL) == 6
         pL = paramGather(tL)
         print3( "param list", pL )
@@ -307,7 +288,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize parm="valA"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok6.xml', nofltr )
+        tL = create_tests( 'ok6.xml' )
         assert len(tL) == 2
         pL = paramGather(tL)
         print3( "param list", pL )
@@ -318,7 +299,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize paramA="A1 A2" paramB="B1 B2"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok6b.xml', nofltr )
+        tL = create_tests( 'ok6b.xml' )
         assert len(tL) == 2
         pL = paramGather(tL)
         print3( "param list", pL )
@@ -329,7 +310,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize paramA="A1" paramB="B1 "/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok6c.xml', nofltr )
+        tL = create_tests( 'ok6c.xml' )
         assert len(tL) == 1
         pL = paramGather(tL)
         print3( "param list", pL )
@@ -341,7 +322,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize paramC="C1 C2"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok6d.xml', nofltr )
+        tL = create_tests( 'ok6d.xml' )
         assert len(tL) == 4
         pL = paramGather(tL)
         print3( "param list", pL )
@@ -356,7 +337,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize paramC="C1 C2"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok6e.xml', nofltr )
+        tL = create_tests( 'ok6e.xml' )
         assert len(tL) == 2
         pL = paramGather(tL)
         print3( "param list", pL )
@@ -368,18 +349,14 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize paramA="A1 A2" paramB="B1 "/>
             </rtest>""" )
 
-        try: create_tests( '.', 'bad7b.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad7b.xml' )
 
         util.writefile( 'bad7c.xml', """
             <rtest name="atest">
               <parameterize paramA="" paramB=" "/>
             </rtest>""" )
 
-        try: create_tests( '.', 'bad7c.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad7c.xml' )
 
         util.writefile( 'ok6f.xml', """
             <rtest name="atest">
@@ -390,9 +367,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
 
         wx = FilterExpressions.WordExpression('fast')
         uf = RuntimeConfig( keyword_expr=wx )
-        try: tL = create_tests( '.', 'ok6f.xml', uf )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'ok6f.xml', uf )
 
         # duplicate parameterize blocks
         util.writefile( 'ok6h.xml', """
@@ -401,7 +376,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize paramA="A1 A2" paramB="B1 B2"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok6h.xml', nofltr )
+        tL = create_tests( 'ok6h.xml' )
         assert len(tL) == 2
         pL = paramGather(tL)
         print3( "param list", pL )
@@ -414,7 +389,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize paramA="A1" paramB="B1"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok6i.xml', nofltr )
+        tL = create_tests( 'ok6i.xml' )
         assert len(tL) == 1
         pL = paramGather(tL)
         print3( "param list", pL )
@@ -427,23 +402,20 @@ class XML_test_specifications( vtu.vvtestTestCase ):
 
     def test_platform_specifications(self):
         ""
-        nofltr = RuntimeConfig( platform_name='dummy' )
-
         util.writefile( 'bad10.xml', """
             <rtest name="atest">
               <include platforms="some/value"/>
             </rtest>""" )
 
         self.assertRaises( TestSpecError,
-                create_tests, '.', 'bad10.xml', nofltr )
+                create_tests, 'bad10.xml' )
 
         util.writefile( 'bad11.xml', """
             <rtest name="atest">
               <include platforms="" parameters="some value"/>
             </rtest>""" )
 
-        self.assertRaises( TestSpecError,
-                create_tests, '.', 'bad11.xml', nofltr )
+        self.assertRaises( TestSpecError, create_tests, 'bad11.xml' )
 
         util.writefile( 'bad12.xml', """
             <rtest name="atest">
@@ -451,14 +423,13 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <include platforms="" parameters="some=value =value"/>
             </rtest>""" )
 
-        self.assertRaises( TestSpecError,
-                create_tests, '.', 'bad12.xml', nofltr )
+        self.assertRaises( TestSpecError, create_tests, 'bad12.xml' )
 
         util.writefile( 'ok7.xml', """
             <rtest name="atest">
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok7.xml', nofltr )
+        tL = create_tests( 'ok7.xml' )
         assert len(tL) == 1
 
         util.writefile( 'ok8.xml', """
@@ -659,11 +630,11 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         uf = RuntimeConfig( platform_name='IRIX' )
-        tL = create_tests( '.', 'ok15.xml', uf )
+        tL = create_tests( 'ok15.xml', uf )
         assert len(tL) == 1
         assert tL[0].getParameterValue('np') == '1'
         uf = RuntimeConfig( platform_name='something' )
-        tL = create_tests( '.', 'ok15.xml', uf )
+        tL = create_tests( 'ok15.xml', uf )
         assert len(tL) == 2
         assert ( tL[0].getParameterValue('np') == '1' and \
                  tL[1].getParameterValue('np') == '4' ) or \
@@ -678,10 +649,10 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         uf = RuntimeConfig( platform_name='IRIX' )
-        tL = create_tests( '.', 'ok16.xml', uf )
+        tL = create_tests( 'ok16.xml', uf )
         assert len(tL) == 2
         uf = RuntimeConfig( platform_name='something' )
-        tL = create_tests( '.', 'ok16.xml', uf )
+        tL = create_tests( 'ok16.xml', uf )
         assert len(tL) == 4
 
         util.writefile( 'ok17.xml', """
@@ -693,12 +664,12 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         uf = RuntimeConfig( platform_name='IRIX' )
-        tL = create_tests( '.', 'ok17.xml', uf )
+        tL = create_tests( 'ok17.xml', uf )
         assert len(tL) == 1
         assert tL[0].getParameterValue('np') == '1' and \
                tL[0].getParameterValue('hsize') == '1.0'
         uf = RuntimeConfig( platform_name='something' )
-        tL = create_tests( '.', 'ok17.xml', uf )
+        tL = create_tests( 'ok17.xml', uf )
         assert len(tL) == 4
 
         util.writefile( 'ok18.xml', """
@@ -709,52 +680,41 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         uf = RuntimeConfig( platform_name='IRIX' )
-        tL = create_tests( '.', 'ok18.xml', uf )
+        tL = create_tests( 'ok18.xml', uf )
         assert len(tL) == 2
         uf = RuntimeConfig( platform_name='something' )
-        tL = create_tests( '.', 'ok18.xml', uf )
+        tL = create_tests( 'ok18.xml', uf )
         assert len(tL) == 4
 
     def test_timeout_specifications(self):
         ""
-        nofltr = RuntimeConfig( platform_name='dummy' )
-
         util.writefile( 'bad16.xml', """
             <rtest name="atest">
               <timeout value=""/>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad16.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad16.xml' )
 
         util.writefile( 'bad17.xml', """
             <rtest name="atest">
               <timeout value="xyz"/>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad17.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad17.xml' )
 
         util.writefile( 'bad18.xml', """
             <rtest name="atest">
               <timeout value="-1"/>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad18.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad18.xml' )
 
         util.writefile( 'ok20.xml', """
             <rtest name="atest">
               <timeout value="240"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok20.xml', nofltr )
+        tL = create_tests( 'ok20.xml' )
         assert len(tL) == 1
         assert tL[0].getTimeout() == 240
 
@@ -765,27 +725,22 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         uf = RuntimeConfig( platform_name='anything' )
-        tL = create_tests( '.', 'ok23.xml', uf )
+        tL = create_tests( 'ok23.xml', uf )
         assert len(tL) == 1
         assert tL[0].getTimeout() == 240
         uf = RuntimeConfig( platform_name='SunOS' )
-        tL = create_tests( '.', 'ok23.xml', uf )
+        tL = create_tests( 'ok23.xml', uf )
         assert len(tL) == 1
         assert tL[0].getTimeout() == 300
 
     def test_execution_fragments(self):
         ""
-        nofltr = RuntimeConfig( platform_name='dummy' )
-
         util.writefile( 'bad22.xml', """
             <rtest name="atest">
               <execute name="ab/c"> # frag </execute>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad22.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad22.xml' )
 
         util.writefile( 'ok25.xml', """
             <rtest name="atest">
@@ -794,7 +749,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <execute expect="anyexit"> echo "dummy = $dummy" </execute>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok25.xml', nofltr )
+        tL = create_tests( 'ok25.xml' )
         assert len(tL) == 1
         xL = tL[0].getExecutionList()
         assert len(xL) == 3
@@ -813,44 +768,35 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <execute ifdef="_NAME"> # frag </execute>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad22a.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad22a.xml' )
 
         util.writefile( 'bad22b.xml', """
             <rtest name="atest">
               <execute ifdef="3NAME"> # frag </execute>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad22b.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad22b.xml' )
 
         util.writefile( 'bad22c.xml', """
             <rtest name="atest">
               <execute ifdef="NAME."> # frag </execute>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad22c.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad22c.xml' )
 
         util.writefile( 'ok25a.xml', """
             <rtest name="atest">
               <execute ifdef="VNAME"> # frag </execute>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok25a.xml', nofltr )
+        tL = create_tests( 'ok25a.xml' )
         assert len(tL) == 1
         t = tL[0]
         print3( t.getExecutionList() )
         assert len( t.getExecutionList() ) == 0, \
                "VNAME should have to be in the environment"
         os.environ[ 'VNAME' ] = "somevalue"
-        tL = create_tests( '.', 'ok25a.xml', nofltr )
+        tL = create_tests( 'ok25a.xml' )
         assert len(tL) == 1
         t = tL[0]
         assert len( t.getExecutionList() ) == 1, \
@@ -858,57 +804,40 @@ class XML_test_specifications( vtu.vvtestTestCase ):
 
     def test_copy_and_link_files_specifications(self):
         ""
-        nofltr = RuntimeConfig( platform_name='dummy' )
-
         util.writefile( 'bad23.xml', """
             <rtest name="atest">
               <copy_files>   </copy_files>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad23.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad23.xml' )
 
         util.writefile( 'bad24.xml', """
             <rtest name="atest">
               <link_files linkname="file1"> file1 file2 </link_files>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad24.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad24.xml' )
 
         util.writefile( 'bad24b.xml', """
             <rtest name="atest">
               <link_files> /path/file1 </link_files>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad24b.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad24b.xml' )
 
         util.writefile( 'bad24c.xml', """
             <rtest name="atest">
               <link_files linkname="/path/file1"> file1 </link_files>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad24c.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad24c.xml' )
 
         util.writefile( 'bad24d.xml', """
             <rtest name="atest">
               <link_files linkname="/path/file1"> /apath/file1 </link_files>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad24d.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad24d.xml' )
 
         # this section tests using test_name attribute for backward compatibility
         util.writefile( 'ok26b.xml', """
@@ -917,7 +846,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <link_files test_name="file3.in"> file3 </link_files>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok26b.xml', nofltr )
+        tL = create_tests( 'ok26b.xml' )
         assert len(tL) == 1
         cpL = tL[0].getCopyFiles()
         cpL.sort()
@@ -938,7 +867,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <link_files linkname="file3.in"> file3 </link_files>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok26.xml', nofltr )
+        tL = create_tests( 'ok26.xml' )
         assert len(tL) == 1
         cpL = tL[0].getCopyFiles()
         cpL.sort()
@@ -960,7 +889,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <link_files parameters="np=4" linkname="file"> file.4 </link_files>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok27.xml', nofltr )
+        tL = create_tests( 'ok27.xml' )
         assert len(tL) == 2
         for t in tL:
           if t.getParameterValue('np') == '1':
@@ -988,7 +917,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <copy_files parameters="np=4" linkname="file"> file.4 </copy_files>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok28.xml', nofltr )
+        tL = create_tests( 'ok28.xml' )
         assert len(tL) == 2
         for t in tL:
           if t.getParameterValue('np') == '1':
@@ -1007,24 +936,19 @@ class XML_test_specifications( vtu.vvtestTestCase ):
 
     def test_baseline_specifications(self):
         ""
-        nofltr = RuntimeConfig( platform_name='dummy' )
-
         util.writefile( 'bad25.xml', """
             <rtest name="atest">
               <baseline destination="file1" file="file1 file2"/>
             </rtest>""" )
 
-        try:
-          create_tests( '.', 'bad25.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad25.xml' )
 
         util.writefile( 'ok29.xml', """
             <rtest name="atest">
               <baseline file="afile.exo"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok29.xml', nofltr )
+        tL = create_tests( 'ok29.xml' )
         assert len(tL) == 1
         bL = tL[0].getBaselineFiles()
         assert len(bL) == 1
@@ -1035,7 +959,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <baseline file="afile.exo" destination="bfile.exo"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok30.xml', nofltr )
+        tL = create_tests( 'ok30.xml' )
         assert len(tL) == 1
         bL = tL[0].getBaselineFiles()
         assert len(bL) == 1
@@ -1047,7 +971,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <baseline> set dummy = 10 </baseline>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok31.xml', nofltr )
+        tL = create_tests( 'ok31.xml' )
         assert len(tL) == 1
         bL = tL[0].getBaselineFiles()
         assert len(bL) == 1
@@ -1061,7 +985,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <baseline parameters="np=1" file="file.exo" destination="file.base_exo"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok32.xml', nofltr )
+        tL = create_tests( 'ok32.xml' )
         assert len(tL) == 2
         for t in tL:
           bL = t.getBaselineFiles()
@@ -1080,14 +1004,14 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         uf = RuntimeConfig( platform_name='SunOS' )
-        tL = create_tests( '.', 'ok33.xml', uf )
+        tL = create_tests( 'ok33.xml', uf )
         assert len(tL) == 1
         assert not tL[0].getBaselineScript()
         bL = tL[0].getBaselineFiles()
         assert len(bL) == 1
         assert bL[0] == ('file.exo', 'file.SunOS_exo')
         uf = RuntimeConfig( platform_name='Linux' )
-        tL = create_tests( '.', 'ok33.xml', uf )
+        tL = create_tests( 'ok33.xml', uf )
         assert len(tL) == 1
         assert not tL[0].getBaselineScript()
         bL = tL[0].getBaselineFiles()
@@ -1096,41 +1020,39 @@ class XML_test_specifications( vtu.vvtestTestCase ):
 
     def test_refreshing_a_TestSpec_object(self):
         ""
-        nofltr = RuntimeConfig( platform_name='dummy' )
-
         util.writefile( 'bad26.xml', """
             <rtest name="atest">
             </rtest>""" )
 
-        tL = create_tests( '.', 'bad26.xml', nofltr )
+        tL = create_tests( 'bad26.xml' )
         assert len(tL) == 1
         util.writefile( 'bad26.xml', """
             <rtest name="atest">
               <parameterize np="1"/>
             </rtest>""" )
 
-        reparse_test( tL[0], RuntimeConfig() )
+        reparse_test( tL[0] )
 
         util.writefile( 'bad27.xml', """
             <rtest name="atest">
               <parameterize np="1"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'bad27.xml', nofltr )
+        tL = create_tests( 'bad27.xml' )
         assert len(tL) == 1
         util.writefile( 'bad27.xml', """
             <rtest name="atest">
               <parameterize np="4"/>
             </rtest>""" )
 
-        reparse_test( tL[0], RuntimeConfig() )
+        reparse_test( tL[0] )
 
         util.writefile( 'bad28.xml', """
             <rtest name="atest">
               <parameterize np="1 4"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'bad28.xml', nofltr )
+        tL = create_tests( 'bad28.xml' )
         assert len(tL) == 2
         util.writefile( 'bad28.xml', """
             <rtest name="atest">
@@ -1139,14 +1061,14 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         for t in tL:
-          reparse_test( t, RuntimeConfig() )
+          reparse_test( t )
 
         util.writefile( 'bad29.xml', """
             <rtest name="atest">
               <parameterize np="1 4"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'bad29.xml', nofltr )
+        tL = create_tests( 'bad29.xml' )
         assert len(tL) == 2
         util.writefile( 'bad29.xml', """
             <rtest name="atest2">
@@ -1154,14 +1076,14 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         for t in tL:
-          reparse_test( t, RuntimeConfig() )
+          reparse_test( t )
 
         util.writefile( 'bad30.xml', """
             <rtest name="atest">
               <parameterize np="1 4"/>
             </rtest>""" )
 
-        tL = create_tests( '.', 'bad30.xml', nofltr )
+        tL = create_tests( 'bad30.xml' )
         assert len(tL) == 2
         util.writefile( 'bad30.xml', """
             <rtest>
@@ -1169,9 +1091,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         for t in tL:
-          try: reparse_test( t, RuntimeConfig() )
-          except TestSpecError: print3( sys.exc_info()[1] )
-          else: raise Exception( "expected a TestSpecError exception" )
+            self.assertRaises( TestSpecError, reparse_test, t )
 
         util.writefile( 'ok34.xml', """
             <rtest name="atest">
@@ -1185,7 +1105,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         uf = RuntimeConfig( platform_name='Linux' )
-        tL = create_tests( '.', 'ok34.xml', uf )
+        tL = create_tests( 'ok34.xml', uf )
         assert len(tL) == 2
         for t in tL:
           print3( t )
@@ -1210,8 +1130,6 @@ class XML_test_specifications( vtu.vvtestTestCase ):
 
     def test_build_option_specifications(self):
         ""
-        nofltr = RuntimeConfig( platform_name='dummy' )
-
         util.writefile( 'ok35.xml', """
             <rtest name="atest">
               <include options="2D and ( tridev or tri8 )"/>
@@ -1225,15 +1143,12 @@ class XML_test_specifications( vtu.vvtestTestCase ):
 
     def test_parameterize_analyze_combinations(self):
         ""
-        nofltr = RuntimeConfig( platform_name='dummy' )
-
         util.writefile( 'ok38.xml', """
             <rtest name="atest">
               <analyze>echo "hello from analyze"</analyze>
             </rtest>""" )
 
-        self.assertRaises( Exception,
-                create_tests, '.', 'ok38.xml', nofltr )
+        self.assertRaises( Exception, create_tests, 'ok38.xml' )
 
         util.writefile( 'ok39.xml', """
             <rtest name="atest">
@@ -1241,7 +1156,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <analyze>echo "hello from analyze"</analyze>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok39.xml', nofltr )
+        tL = create_tests( 'ok39.xml' )
         assert len(tL) == 3
         print3( "with parameterize/analyze 4:", tL )
         assert tL[0].isAnalyze()
@@ -1256,13 +1171,13 @@ class XML_test_specifications( vtu.vvtestTestCase ):
             </rtest>""" )
 
         uf = RuntimeConfig( platform_name='SunOS' )
-        tL = create_tests( '.', 'ok43.xml', uf )
+        tL = create_tests( 'ok43.xml', uf )
         assert len(tL) == 2
         uf = RuntimeConfig( platform_name='Linux' )
-        tL = create_tests( '.', 'ok43.xml', uf )
+        tL = create_tests( 'ok43.xml', uf )
         assert len(tL) == 3
         uf = RuntimeConfig( platform_name='tbird' )
-        tL = create_tests( '.', 'ok43.xml', uf )
+        tL = create_tests( 'ok43.xml', uf )
         assert len(tL) == 3
 
     def regexes(self, *patterns):
@@ -1274,8 +1189,6 @@ class XML_test_specifications( vtu.vvtestTestCase ):
 
     def test_using_RuntimeConfig_filtering(self):
         ""
-        nofltr = RuntimeConfig( platform_name='dummy' )
-
         util.writefile( 'regexfile.txt', """
             One line 
             Line Two, then
@@ -1368,8 +1281,6 @@ class XML_test_specifications( vtu.vvtestTestCase ):
 
     def test_file_globbing_and_source_file_specification(self):
         ""
-        nofltr = RuntimeConfig( platform_name='dummy' )
-
         util.writefile( 'globfile1.txt', """
             a file""" )
 
@@ -1397,7 +1308,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <glob_link parameters="np=4"> notme*_glob.txt </glob_link>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok51.xml', nofltr )
+        tL = create_tests( 'ok51.xml' )
         assert len(tL) == 1
         L = tL[0].getCopyFiles() ; L.sort()
         assert L == [('glob*.txt',None)]
@@ -1419,7 +1330,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <source_files> notme*_glob.txt cond*_glob.txt </source_files>
             </rtest>""" )
 
-        tL = create_tests( '.', 'ok52.xml', nofltr )
+        tL = create_tests( 'ok52.xml' )
         assert len(tL) == 1
         L = tL[0].getSourceFiles() ; L.sort()
         assert L == ['baseline_glob.base_txt', 'cond*_glob.txt',
@@ -1432,26 +1343,81 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <source_files parameters="np=1"> glob*.txt </source_files>
             </rtest>""" )
 
-        try: create_tests( '.', 'bad31.xml', nofltr )
-        except TestSpecError: print3( sys.exc_info()[1] )
-        else: raise Exception( "expected a TestSpecError exception" )
+        self.assertRaises( TestSpecError, create_tests, 'bad31.xml' )
+
+
+class test_file_reparse( vtu.vvtestTestCase ):
+
+    def test_reparsing_an_analyze_test(self):
+        ""
+        util.writefile( 'atest.xml', """
+            <rtest name="atest">
+              <parameterize np="1 4"/>
+              <analyze> echo foobar </analyze>
+            </rtest>""" )
+        util.writefile( 'btest.vvt', """
+            #VVT: parameterize : size = tiny big
+            #VVT: analyze : -a
+            """ )
+        time.sleep(1)
+
+        tcase = parse_create_analyze_test( 'atest.xml' )
+        sid = tio.test_to_string( tcase )
+        tcase2 = reparse_test_string( sid )
+        assert tcase2.getSpec().isAnalyze()
+        pset = tcase2.getSpec().getParameterSet().getParameters()
+        assert len( pset ) == 1
+        assert pset[ ('np',) ] == [ ['1'], ['4'] ]
+
+        tcase = parse_create_analyze_test( 'btest.vvt' )
+        sid = tio.test_to_string( tcase )
+        tcase2 = reparse_test_string( sid )
+        assert tcase2.getSpec().isAnalyze()
+        pset = tcase2.getSpec().getParameterSet().getParameters()
+        assert len( pset ) == 1
+        assert pset[ ('size',) ] == [ ['tiny'], ['big'] ]
+
+
+def reparse_test_string( stringid ):
+    ""
+    tcase = tio.string_to_test( stringid )
+
+    creator = TestCreator( RuntimeConfig() )
+    creator.reparse( tcase.getSpec() )
+
+    return tcase
+
+
+def parse_create_analyze_test( filename ):
+    ""
+    creator = TestCreator( RuntimeConfig() )
+
+    tL = creator.fromFile( '.', filename, None )
+
+    analyzeL = filter( lambda ts: ts.isAnalyze(), tL )
+    assert len( analyzeL ) == 1
+
+    return TestCase( analyzeL[0] )
 
 
 #####################################################################
 
-def create_tests( rootpath, relpath, rtconfig ):
+def create_tests( relpath, rtconfig=None ):
     ""
+    if rtconfig == None:
+        rtconfig = RuntimeConfig( platform_name='dummy' )
+
     creator = TestCreator( rtconfig )
-    tL = creator.fromFile( rootpath, relpath, None )
+    tL = creator.fromFile( os.getcwd(), relpath, None )
     sortL = [ (ts.getDisplayString(),ts) for ts in tL ]
     sortL.sort()
     tL = [ T[1] for T in sortL ]
     return tL
 
 
-def reparse_test( testobj, rtconfig ):
+def reparse_test( testobj ):
     ""
-    creator = TestCreator( rtconfig )
+    creator = TestCreator( RuntimeConfig() )
     creator.reparse( testobj )
 
 
@@ -1474,7 +1440,7 @@ def paramGather(testL):
 def create_and_eval_option_expr( filename, options, boolean_result ):
     ""
     rtcfg = RuntimeConfig( option_list=options )
-    tL = create_tests( '.', filename, rtcfg )
+    tL = create_tests( filename, rtcfg )
     assert len(tL) == 1
     exprL = tL[0].getOptionEnableExpressions()
     assert len(exprL) == 1
@@ -1488,7 +1454,7 @@ def create_test_and_eval_platform_expr( filename, platname, boolean_result,
     rtcfg = RuntimeConfig( platform_name=platname,
                            set_platform_expr=platform_expr,
                            option_list=option_list )
-    tL = create_tests( '.', filename, rtcfg )
+    tL = create_tests( filename, rtcfg )
 
     exprL = tL[0].getPlatformEnableExpressions()
     pev = PlatformEvaluator( exprL )
@@ -1513,7 +1479,7 @@ def create_and_search_files( filename, globlist, regexes, test_count ):
     rtcfg = RuntimeConfig( search_file_globs=globlist,
                            search_regexes=regexes )
 
-    tL = create_tests( '.', filename, rtcfg )
+    tL = create_tests( filename, rtcfg )
 
     cnt = 0
 

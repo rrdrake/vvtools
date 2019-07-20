@@ -186,6 +186,8 @@ class TestFilter:
                     #   self.checkPlatform( tcase )
                     #   self.checkOptions( tcase )
                     #   self.userValidation( tcase )
+                    # although checkPlatform() & checkOptions() is because
+                    # those expressions can affect the tests that are created
 
             self.filterByCummulativeRuntime( tcase_map )
 

@@ -23,6 +23,7 @@ import libvvtest.testlistio as tio
 import libvvtest.TestList as TestList
 import libvvtest.TestSpec as TestSpec
 from libvvtest.testcase import TestCase
+import libvvtest.paramset as ParameterSet
 
 
 class TestSpec_to_and_from_string( vtu.vvtestTestCase ):
@@ -32,13 +33,22 @@ class TestSpec_to_and_from_string( vtu.vvtestTestCase ):
 
     def test_converting_a_test_to_a_string_and_back(self):
         ""
-        tcase = get_fake_TestCase()
+        tcase = create_TestCase()
 
         sid = tio.test_to_string( tcase )
         assert '\n' not in sid
-        ts2 = tio.string_to_test(sid)
+        tcase2 = tio.string_to_test( sid )
 
-        assert_TestCase_same_as_fake( ts2 )
+        assert_TestCase_same_as_fake( tcase2 )
+
+    def test_converting_an_analyze_test_to_string_and_back(self):
+        ""
+        tcase = create_fake_analyze_TestCase()
+
+        sid = tio.test_to_string( tcase )
+        tcase2 = tio.string_to_test( sid )
+
+        assert tcase2.getSpec().isAnalyze()
 
 
 class test_list_file_read_write( vtu.vvtestTestCase ):
@@ -89,7 +99,7 @@ class test_list_file_read_write( vtu.vvtestTestCase ):
         ""
         tlw = tio.TestListWriter( 'tests.out' )
         tlw.start()
-        tcase = get_fake_TestCase()
+        tcase = create_TestCase()
         tlw.append( tcase )
 
         time.sleep(1)
@@ -166,7 +176,7 @@ class test_list_file_read_write( vtu.vvtestTestCase ):
         ""
         tlw = tio.TestListWriter( 'tests.out' )
         tlw.start()
-        tcase = get_fake_TestCase_with_results()
+        tcase = create_TestCase_with_results()
         tlw.append( tcase )
 
         time.sleep(1)
@@ -371,7 +381,7 @@ class TestList_results_file( vtu.vvtestTestCase ):
         ""
         tl = TestList.TestList( 'testlist' )
         rfile = tl.initializeResultsFile()
-        tcase = get_fake_TestCase()
+        tcase = create_TestCase()
         tl.appendTestResult( tcase )
 
         time.sleep(1)
@@ -389,7 +399,7 @@ class TestList_results_file( vtu.vvtestTestCase ):
         ""
         tl = TestList.TestList( 'testlist' )
         rfile = tl.initializeResultsFile()
-        tcase = get_fake_TestCase()
+        tcase = create_TestCase()
         tl.appendTestResult( tcase )
 
         time.sleep(1)
@@ -461,7 +471,7 @@ example_testlist_version_32 = \
 
 ############################################################################
 
-def get_fake_TestCase():
+def create_TestCase():
     ""
     ts = TestSpec.TestSpec( 'atest', os.getcwd(), 'atest.xml' )
 
@@ -513,11 +523,26 @@ def assert_TestCase_same_as_fake( tcase, rootdir=None ):
     assert tspec.getAttr('aname7') == None
 
 
-def get_fake_TestCase_with_results():
+def create_TestCase_with_results():
     ""
-    tcase = get_fake_TestCase()
+    tcase = create_TestCase()
 
     tcase.getStat().markStarted( time.time() )
+
+    return tcase
+
+
+def create_fake_analyze_TestCase():
+    ""
+    tspec = TestSpec.TestSpec( 'atest', os.getcwd(), 'atest.vvt' )
+
+    pset = ParameterSet.ParameterSet()
+    pset.addParameter( 'A', ['a1','a2'] )
+    tspec.setParameterSet( pset )
+
+    tcase = TestCase( tspec )
+
+    assert tcase.getSpec().isAnalyze()
 
     return tcase
 
@@ -551,7 +576,7 @@ def write_test_list_with_fake_test( filename, **kwargs ):
     ""
     tlw = tio.TestListWriter( filename )
     tlw.start()
-    tcase = get_fake_TestCase()
+    tcase = create_TestCase()
     for k,v in kwargs.items():
         tcase.getSpec().setAttr( k, v )
     tlw.append( tcase )
@@ -567,7 +592,7 @@ def write_TestList_with_fake_test( filename, **kwargs ):
     if dosuffix:
         tl.setRunDate()
 
-    tcase = get_fake_TestCase()
+    tcase = create_TestCase()
     for k,v in kwargs.items():
         tcase.getSpec().setAttr( k, v )
     tl.addTest( tcase )
@@ -583,7 +608,7 @@ def write_TestList_with_fake_test( filename, **kwargs ):
 def write_TestList_fake_results( testlistobj ):
     ""
     rfile = testlistobj.initializeResultsFile()
-    tcase = get_fake_TestCase_with_results()
+    tcase = create_TestCase_with_results()
     testlistobj.appendTestResult( tcase )
     testlistobj.writeFinished()
 
