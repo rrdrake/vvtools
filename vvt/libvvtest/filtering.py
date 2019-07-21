@@ -19,7 +19,7 @@ class TestFilter:
         ok = True
 
         tspec = tcase.getSpec()
-        xdir = tspec.getExecuteDirectory_magik()
+        xdir = tspec.getExecuteDirectory()
         if subdir and subdir != xdir and not is_subdir( subdir, xdir ):
             ok = False
             tcase.getStat().markSkipBySubdirectoryFilter()

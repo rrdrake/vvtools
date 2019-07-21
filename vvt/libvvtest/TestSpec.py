@@ -49,7 +49,7 @@ class TestSpec:
         """
         return os.path.dirname( self.getFilename() )
     
-    def getExecuteDirectory_magik(self):
+    def getExecuteDirectory(self):
         """
         The directory containing getFilepath() followed by a subdir containing
         the test name and the test parameters, such as "some/dir/myname.np=4".
@@ -59,7 +59,7 @@ class TestSpec:
     def getDisplayString(self):
         """
         """
-        dis = self.getExecuteDirectory_magik()
+        dis = self.getExecuteDirectory()
 
         stageL = self.stages.items()
         stageL.sort()

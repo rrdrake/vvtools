@@ -44,7 +44,7 @@ class TestDependency:
 
     def getMatchDirectory(self):
         ""
-        return self.matchpat, self.tcase.getSpec().getExecuteDirectory_magik()
+        return self.matchpat, self.tcase.getSpec().getExecuteDirectory()
 
     def isBlocking(self):
         ""
@@ -163,7 +163,7 @@ def check_connect_dependencies( tcase, testcasemap ):
     tspec = tcase.getSpec()
 
     for dep_pat,expr in tspec.getDependencies():
-        xdir = tspec.getExecuteDirectory_magik()
+        xdir = tspec.getExecuteDirectory()
         depL = find_tests_by_pattern( xdir, dep_pat, testcasemap )
         for dep_id in depL:
             dep_obj = testcasemap.get( dep_id, None )

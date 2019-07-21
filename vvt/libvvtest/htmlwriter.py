@@ -84,7 +84,7 @@ class HTMLWriter:
 
             tspec = tcase.getSpec()
 
-            tdir = pjoin( self.testdir, tspec.getExecuteDirectory_magik() )
+            tdir = pjoin( self.testdir, tspec.getExecuteDirectory() )
             assert cwd == tdir[:len(cwd)]
             reltdir = tdir[len(cwd)+1:]
 

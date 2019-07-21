@@ -164,7 +164,7 @@ class BatchScriptWriter:
                        self.read_interval, self.read_timeout )
         self.accountant.addJob( qnumber, jb )
         
-        tl.writeTransferFile()
+        tl.stringFileWrite( extended=True )
         
         fn = self.namer.getBatchScriptName( qidstr )
         fp = open( fn, "w" )

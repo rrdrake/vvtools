@@ -174,7 +174,7 @@ def format_gitlab_table_line( tcase, add_link ):
     result = tcase.getStat().getResultStatus()
     dt = outpututils.format_test_run_date( tcase )
     tm = outpututils.format_test_run_time( tcase )
-    path = tspec.getExecuteDirectory_magik()
+    path = tspec.getExecuteDirectory()
 
     makelink = ( add_link and result in ['diff','fail','timeout'] )
 

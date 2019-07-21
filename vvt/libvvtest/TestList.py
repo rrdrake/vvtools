@@ -60,9 +60,11 @@ class TestList:
         ""
         return self.rundate
 
-    def stringFileWrite(self):
+    def stringFileWrite(self, extended=False):
         """
-        Writes all the tests in this container to the test list file.
+        Writes all the tests in this container to the test list file.  If
+        'extended' is True, additional information is written to make the
+        file more self-contained.
         """
         assert self.filename
 
@@ -70,10 +72,13 @@ class TestList:
 
         tlw = testlistio.TestListWriter( self.filename )
 
-        tlw.start()
+        if extended:
+            tlw.start( rundate=self.rundate )
+        else:
+            tlw.start()
 
         for tcase in self.tcasemap.values():
-            tlw.append( tcase )
+            tlw.append( tcase, extended=extended )
 
         tlw.finish()
 
@@ -343,7 +348,7 @@ class TestList:
                 testid = tspec.getID()
                 tcase = TestCase( tspec )
                 self.tcasemap[testid] = tcase
-                self.xdirmap[ tspec.getExecuteDirectory_magik() ] = tcase
+                self.xdirmap[ tspec.getExecuteDirectory() ] = tcase
 
     def addTest(self, tcase):
         """
@@ -359,7 +364,7 @@ class TestList:
 
     def _is_duplicate_execute_directory(self, tspec):
         ""
-        xdir = tspec.getExecuteDirectory_magik()
+        xdir = tspec.getExecuteDirectory()
 
         tcase0 = self.xdirmap.get( xdir, None )
 
@@ -385,10 +390,10 @@ class TestList:
 
 def tests_are_related_by_staging( tspec1, tspec2 ):
     ""
-    xdir1 = tspec1.getExecuteDirectory_magik()
+    xdir1 = tspec1.getExecuteDirectory()
     disp1 = tspec1.getDisplayString()
 
-    xdir2 = tspec2.getExecuteDirectory_magik()
+    xdir2 = tspec2.getExecuteDirectory()
     disp2 = tspec2.getDisplayString()
 
     if xdir1 == xdir2 and \

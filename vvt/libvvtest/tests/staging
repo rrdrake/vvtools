@@ -41,7 +41,7 @@ class staged_parameters( vtu.vvtestTestCase ):
 
             tmap[ ts.getID() ] = ts
 
-            assert ts.getExecuteDirectory_magik() == 'aname.np'
+            assert ts.getExecuteDirectory() == 'aname.np'
 
             if pdict['np'] == '1':
                 assert ts.getDisplayString().endswith( 'stage=1(np=1)' )
@@ -87,7 +87,7 @@ class staged_parameters( vtu.vvtestTestCase ):
         sortL = []
         testid2testcase = {}
         for ts in tL:
-            assert ts.getExecuteDirectory_magik() == 'blue.np'
+            assert ts.getExecuteDirectory() == 'blue.np'
             tcase = TestCase( ts, None )
             sortL.append( (ts.getDisplayString(),tcase) )
             testid2testcase[ ts.getID() ] = tcase
@@ -130,7 +130,7 @@ def has_dependency( testcase, dep_testcase ):
     tmap = { testcase.getSpec().getID() : testcase,
              dep_testcase.getSpec().getID() : dep_testcase }
 
-    xdir = testcase.getSpec().getExecuteDirectory_magik()
+    xdir = testcase.getSpec().getExecuteDirectory()
     idset = set()
     for pat,expr in testcase.getSpec().getDependencies():
         idset.update( depend.find_tests_by_pattern( xdir, pat, tmap ) )

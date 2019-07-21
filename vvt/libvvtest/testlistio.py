@@ -45,11 +45,11 @@ class TestListWriter:
         finally:
             fp.close()
 
-    def append(self, tcase, transfer=False):
+    def append(self, tcase, extended=False):
         ""
         fp = open( self.filename, 'a' )
         try:
-            fp.write( test_to_string( tcase, transfer ) + '\n' )
+            fp.write( test_to_string( tcase, extended ) + '\n' )
         finally:
             fp.close()
 
@@ -279,7 +279,7 @@ def remove_attrs_with_None_for_a_value( attrdict ):
             attrdict.pop( k )
 
 
-def test_to_string( tcase, transfer=False ):
+def test_to_string( tcase, extended=False ):
     """
     Returns a string with no newlines containing the file path, parameter
     names/values, and attribute names/values.
@@ -302,12 +302,8 @@ def test_to_string( tcase, transfer=False ):
 
     testdict['attrs'] = tspec.getAttrs()
 
-    if transfer:
-        if tcase.hasDependent():
-            testdict['hasdependent'] = True
-        depL = tcase.getDepDirectories()
-        if len( depL ) > 0:
-            testdict['depdirs'] = depL
+    if extended:
+        insert_extended_test_info( tcase, testdict )
 
     s = repr( testdict )
 
@@ -342,6 +338,23 @@ def string_to_test( strid ):
 
     tcase = TestCase( tspec )
 
+    check_load_extended_info( tcase, testdict )
+
+    return tcase
+
+
+def insert_extended_test_info( tcase, testdict ):
+    ""
+    if tcase.hasDependent():
+        testdict['hasdependent'] = True
+
+    depL = tcase.getDepDirectories()
+    if len( depL ) > 0:
+        testdict['depdirs'] = depL
+
+
+def check_load_extended_info( tcase, testdict ):
+    ""
     if testdict.get( 'hasdependent', False ):
         tcase.setHasDependent()
 
@@ -349,8 +362,6 @@ def string_to_test( strid ):
     if depL:
         for pat,xdir in depL:
             tcase.addDepDirectory( pat, xdir )
-
-    return tcase
 
 
 def print3( *args ):

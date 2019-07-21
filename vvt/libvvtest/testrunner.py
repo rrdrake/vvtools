@@ -47,7 +47,7 @@ class TestRunner:
 
         tstat.resetResults()
 
-        xdir = tspec.getExecuteDirectory_magik()
+        xdir = tspec.getExecuteDirectory()
         wdir = os.path.join( self.test_dir, xdir )
         texec.setRunDirectory( wdir )
 
