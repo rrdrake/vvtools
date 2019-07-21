@@ -305,6 +305,9 @@ def test_to_string( tcase, transfer=False ):
     if transfer:
         if tcase.hasDependent():
             testdict['hasdependent'] = True
+        depL = tcase.getDepDirectories()
+        if len( depL ) > 0:
+            testdict['depdirs'] = depL
 
     s = repr( testdict )
 
@@ -341,6 +344,11 @@ def string_to_test( strid ):
 
     if testdict.get( 'hasdependent', False ):
         tcase.setHasDependent()
+
+    depL = testdict.get( 'depdirs', None )
+    if depL:
+        for pat,xdir in depL:
+            tcase.addDepDirectory( pat, xdir )
 
     return tcase
 

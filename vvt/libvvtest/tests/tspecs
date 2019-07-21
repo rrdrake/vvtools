@@ -1390,6 +1390,27 @@ class test_file_reparse( vtu.vvtestTestCase ):
         tcase3 = tio.string_to_test( sid )
         assert tcase3.hasDependent()
 
+    def test_transfer_dep_dirs_through_string_write_read(self):
+        ""
+        tcase = vtu.make_fake_TestCase()
+        tcase.addDepDirectory( 'A*', 'foo/Atest' )
+        tcase.addDepDirectory( 'B*', 'bar/Btest' )
+
+        sid = tio.test_to_string( tcase, transfer=True )
+        tcase2 = tio.string_to_test( sid )
+
+        matchL = tcase2.getDepDirectories()
+        assert len( matchL ) == 2
+        pat,xdir = matchL[0]
+        if pat == 'A*':
+            assert xdir == 'foo/Atest'
+            pat,xdir = matchL[1]
+            assert pat == 'B*' and xdir == 'bar/Btest'
+        else:
+            assert pat == 'B*' and xdir == 'bar/Btest'
+            pat,xdir = matchL[1]
+            assert pat == 'A*' and xdir == 'foo/Atest'
+
 
 def reparse_test_string( stringid ):
     ""

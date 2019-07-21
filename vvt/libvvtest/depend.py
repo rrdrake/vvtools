@@ -26,10 +26,10 @@ class TestDependency:
 
     def hasSameTestID(self, testdep):
         ""
-        xdir1 = self.tcase.getSpec().getID()
-        xdir2 = testdep.tcase.getSpec().getID()
+        tid1 = self.tcase.getSpec().getID()
+        tid2 = testdep.tcase.getSpec().getID()
 
-        return xdir1 == xdir2
+        return tid1 == tid2
 
     def satisfiesResult(self, result):
         ""

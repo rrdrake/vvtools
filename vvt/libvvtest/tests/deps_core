@@ -38,14 +38,12 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
             """ )
         time.sleep(1)
 
-        nofltr = RuntimeConfig()
-
-        tL = create_tests( '.', 'testX.py.vvt', nofltr )
+        tL = create_tests( 'testX.py.vvt' )
         assert len(tL) == 1
         assert_dependencies( tL[0], 'testY' )
         assert get_depencency_expr( tL[0], 'testY' ) == None
 
-        tL = create_tests( '.', 'testA.py.vvt', nofltr )
+        tL = create_tests( 'testA.py.vvt' )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testC', 'testB' )
@@ -62,9 +60,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
             """ )
         time.sleep(1)
 
-        nofltr = RuntimeConfig()
-
-        tL = create_tests( '.', 'testX.py.vvt', nofltr )
+        tL = create_tests( 'testX.py.vvt' )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testY', 'testZ' )
@@ -75,7 +71,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
             assert not wx.evaluate( lambda word: word == "diff" )
             assert wx.evaluate( lambda word: word == "fail" )
 
-        tL = create_tests( '.', 'testA.py.vvt', nofltr )
+        tL = create_tests( 'testA.py.vvt' )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testB' )
@@ -92,9 +88,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
             """ )
         time.sleep(1)
 
-        nofltr = RuntimeConfig()
-
-        tL = create_tests( '.', 'testX.py.vvt', nofltr )
+        tL = create_tests( 'testX.py.vvt' )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testY', 'testZ' )
@@ -113,9 +107,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
             """ )
         time.sleep(1)
 
-        nofltr = RuntimeConfig()
-
-        tL = create_tests( '.', 'testX.py.vvt', nofltr )
+        tL = create_tests( 'testX.py.vvt' )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testB', 'testW', 'testY', 'testZ' )
@@ -143,7 +135,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         fltr = RuntimeConfig( platform_name='XBox' )
 
-        tL = create_tests( '.', 'testX.py.vvt', fltr )
+        tL = create_tests( 'testX.py.vvt', fltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testY' )
@@ -155,7 +147,7 @@ class Parse_Dependencies( vtu.vvtestTestCase ):
 
         fltr = RuntimeConfig( platform_name='PlayStation' )
 
-        tL = create_tests( '.', 'testX.py.vvt', fltr )
+        tL = create_tests( 'testX.py.vvt', fltr )
         assert len(tL) == 1
 
         assert_dependencies( tL[0], 'testZ' )
@@ -339,6 +331,42 @@ class dependency_related_functions( vtu.vvtestTestCase ):
         assert tcase.numDependencies() == 1
         assert tcase.getBlockingDependency().getExec() != None
 
+    def test_add_dep_with_match_pattern(self):
+        ""
+        tcase1 = make_TestSpec_test_case( 'atest' )
+        tcase2 = make_TestSpec_test_case( 'btest' )
+
+        tcase1.addDependency( tcase2, 'btest*' )
+
+        matchL = tcase1.getDepDirectories()
+        assert len( matchL ) == 1
+        pat,xdir = matchL[0]
+        assert pat == 'btest*' and xdir == 'btest'
+
+    def test_add_dep_directory(self):
+        ""
+        tcase = make_TestSpec_test_case( 'atest' )
+
+        tcase.addDepDirectory( 'btest*', 'blah/btest' )
+
+        matchL = tcase.getDepDirectories()
+        assert len( matchL ) == 1
+        pat,xdir = matchL[0]
+        assert pat == 'btest*' and xdir == 'blah/btest'
+
+    def test_that_TestCase_deps_take_precedence_over_addDepDirectory(self):
+        ""
+        tA = vtu.make_fake_TestCase( name='Atest' )
+        tA.addDepDirectory( 'B*', 'sdir/Btest.np=4' )
+
+        tB = vtu.make_fake_TestCase( name='Btest' )
+        tA.addDependency( tB, 'Bt*' )
+
+        matchL = tA.getDepDirectories()
+        assert len( matchL ) == 1
+        pat,xdir = matchL[0]
+        assert pat == 'Bt*' and xdir == 'sdir/Btest.np=4'
+
 
 #######################################
 
@@ -381,21 +409,14 @@ def make_TestExec_test_case( name ):
     return TestCase( ts, tx )
 
 
-def has_same_values( container1, container2 ):
+def create_tests( relpath, rtconfig=None ):
     ""
-    L1 = list(container1)
-    L1.sort()
+    if rtconfig == None:
+        rtconfig = RuntimeConfig()
 
-    L2 = list(container2)
-    L2.sort()
-
-    return L1 == L2
-
-
-def create_tests( rootpath, relpath, rtconfig ):
-    ""
     creator = TestCreator( rtconfig )
-    tL = creator.fromFile( rootpath, relpath, None )
+    tL = creator.fromFile( '.', relpath, None )
+
     return tL
 
 

@@ -15,6 +15,7 @@ class TestCase:
 
         self.tstat = TestStatus( testspec )
         self.deps = []
+        self.depdirs = {}  # xdir -> match pattern
         self.has_dependent = False
 
     def getSpec(self):
@@ -48,6 +49,7 @@ class TestCase:
         append = True
         for i,tdep in enumerate( self.deps ):
             if tdep.hasSameTestID( testdep ):
+                # if same test ID, prefer the one with a TestExec
                 if not self.deps[i].hasTestExec():
                     self.deps[i] = testdep
                 append = False
@@ -55,6 +57,7 @@ class TestCase:
 
         if append:
             self.deps.append( testdep )
+            self.addDepDirectory( *testdep.getMatchDirectory() )
 
     def numDependencies(self):
         ""
@@ -76,12 +79,11 @@ class TestCase:
 
         return False
 
-    def getMatchDirectories(self):
+    def addDepDirectory(self, match_pattern, exec_dir):
         ""
-        L = []
+        self.depdirs[ exec_dir ] = match_pattern
 
-        for tdep in self.deps:
-            L.append( tdep.getMatchDirectory() )
-
-        return L
-
+    def getDepDirectories(self):
+        ""
+        matchL = [ (T[1],T[0]) for T in self.depdirs.items() ]
+        return matchL

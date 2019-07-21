@@ -35,7 +35,7 @@ def writeScript( testcase, filename, lang, config, plat, test_dir ):
     platname = plat.getName()
     cplrname = plat.getCompiler()
 
-    dep_list = testcase.getMatchDirectories()
+    dep_list = testcase.getDepDirectories()
 
     w = LineWriter()
 
