@@ -40,6 +40,16 @@ class generate_tests( vtu.vvtestTestCase ):
         lines = util.grepfiles( pattern, fpat )
         assert len( lines ) == expected_count
 
+    def grep_test_directories(self, pattern, expected_count, subdir=None):
+        ""
+        if subdir:
+            loc = glob.glob( subdir+'/TestResults*' )[0]
+        else:
+            loc = glob.glob( 'TestResults*' )[0]
+
+        fL = util.findfiles( pattern, loc )
+        assert len( fL ) == expected_count
+
     def assert_9_testlist(self, subdir=None):
         ""
         self.grep_testlist( 'null', 1, subdir )
@@ -52,6 +62,17 @@ class generate_tests( vtu.vvtestTestCase ):
         self.grep_testlist( 'two*gimp', 2, subdir )
         self.grep_testlist( 'val1*val2', 0, subdir )
         self.grep_testlist( 'val2*val1', 0, subdir )
+
+    def assert_9_test_directories(self, subdir=None):
+        ""
+        self.grep_test_directories( 'null', 1, subdir )
+        self.grep_test_directories( 'boom.*', 2, subdir )
+        self.grep_test_directories( 'double.*', 6, subdir )
+        self.grep_test_directories( 'double.one*val1*', 3, subdir )
+        self.grep_test_directories( 'double.one*val2*', 3, subdir )
+        self.grep_test_directories( 'double*two*gimp', 2, subdir )
+        self.grep_test_directories( 'double*val1*val2*', 0, subdir )
+        self.grep_test_directories( 'double*val2*val1*', 0, subdir )
 
     def test_generating_a_parameterized_test(self):
         """
@@ -122,15 +143,14 @@ class generate_tests( vtu.vvtestTestCase ):
 
         # try an absolute path
 
-        vrun = vtu.runvvtest( '-g '+os.path.abspath( 'subdir' ),
-                               chdir='temp2' )
+        vrun = vtu.runvvtest( '-g '+os.path.abspath( 'subdir' ), chdir='temp2' )
         vrun.assertCounts( total=9, notrun=9 )
         self.assert_9_testlist( 'temp2' )
         assert not os.path.exists('temp2/testlist')
 
         # check the runscript with -g
         vrun = vtu.runvvtest( '-g ../subdir', chdir='temp3' )
-        assert len( util.findfiles( 'runscript', 'temp3' ) ) == 9
+        self.assert_9_test_directories( 'temp3' )
 
         # try out the -S option with -g
         vrun = vtu.runvvtest( '-gS hello=jupiter subdir' )

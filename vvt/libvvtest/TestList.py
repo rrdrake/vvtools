@@ -82,24 +82,6 @@ class TestList:
 
         tlw.finish()
 
-    def writeTransferFile(self):
-        """
-        Writes all the tests in this container to the test list file.  The
-        results suffix is written as an attribute in the file.
-        """
-        assert self.filename
-
-        check_make_directory_containing_file( self.filename )
-
-        tlw = testlistio.TestListWriter( self.filename )
-
-        tlw.start( rundate=self.rundate )
-
-        for tcase in self.tcasemap.values():
-            tlw.append( tcase, transfer=True )
-
-        tlw.finish()
-
     def initializeResultsFile(self):
         ""
         self.setRunDate()
@@ -234,20 +216,20 @@ class TestList:
 
         self.testfilter.applyPermanent( self.tcasemap )
 
-        finalize_analyze_tests( self.groups )
+        check_analyze_tests_after_filtering( self.groups )
 
         self.numactive = count_active( self.tcasemap )
 
     def determineActiveTests(self, filter_dir=None,
                                    analyze_only=False,
-                                   baseline=False):
+                                   baseline=False,
+                                   apply_filters=True):
         ""
         self._check_create_parameterize_analyze_group_map()
 
-        self.testfilter.applyRuntime( self.tcasemap, filter_dir )
-
-        if not baseline:
-            finalize_analyze_tests( self.groups )
+        if apply_filters:
+            self.testfilter.applyRuntime( self.tcasemap, filter_dir )
+            check_analyze_tests_after_filtering( self.groups )
 
         refresh_active_tests( self.tcasemap, self.creator )
 
@@ -422,7 +404,7 @@ def mark_skips_for_baselining( tcase_map ):
                 tcase.getStat().markSkipByBaselineHandling()
 
 
-def finalize_analyze_tests( groups ):
+def check_analyze_tests_after_filtering( groups ):
     ""
     for analyze, tcaseL in groups.iterateGroups():
 

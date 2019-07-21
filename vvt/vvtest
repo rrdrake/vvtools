@@ -984,12 +984,12 @@ def restartTests( opts, optD, rtdata ):
     qid = opts.qsub_id
     if qid == None:
         tfile = os.path.join( test_dir, testlist_name )
+        apply_filters = True
     else:
         # batch jobs have --qsub-id set and land here
         namer = batchutils.BatchFileNamer( test_dir, testlist_name )
         tfile = namer.getTestListName( qid )
-        # prevent the run scripts from being written again
-        config.set( 'refresh', False )
+        apply_filters = False
 
     tlist = make_TestList( rtdata, tfile )
 
@@ -1005,7 +1005,7 @@ def restartTests( opts, optD, rtdata ):
 
     reld = rtdata.getFilterPath()
 
-    tlist.determineActiveTests( filter_dir=reld )
+    tlist.determineActiveTests( filter_dir=reld, apply_filters=apply_filters )
 
     perms = rtdata.getPermissionsObject()
 

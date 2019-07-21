@@ -591,7 +591,7 @@ def findfiles( pattern, topdir, *topdirs ):
 
     for top in dL:
         for dirpath,dirnames,filenames in os.walk( top ):
-            for f in filenames:
+            for f in filenames+dirnames:
                 if fnmatch.fnmatch( f, pattern ):
                     fS.add( os.path.join( dirpath, f ) )
 
