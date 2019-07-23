@@ -110,14 +110,14 @@ class naming_schemes( unittest.TestCase ):
     def setUp(self):
         util.setup_test( cleanout=False )
 
-    def test_default_uses_year_month_for_branch_and_day_hour_for_directory(self):
+    def test_default_includes_year_month_for_branch_and_more_for_directory(self):
         ""
         tm1 = time.time()
         bn,sb = branch_name_and_directory()
 
         ym = time.strftime( "%Y_%m", time.localtime(tm1) )
         assert ym in bn
-        dh = time.strftime( "%d_%H", time.localtime(tm1) )
+        dh = time.strftime( "%Y_%m_%d_%H", time.localtime(tm1) )
         assert dh in sb
 
         tm2 = tm1 - 60*24*60*60

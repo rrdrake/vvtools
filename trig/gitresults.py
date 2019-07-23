@@ -65,7 +65,7 @@ def branch_name_and_directory( subdir_suffix='',
 
     tup = time.localtime(epochdate)
     branch = time.strftime( "results_%Y_%m", tup )
-    subdir = time.strftime( "%d_%H", tup )
+    subdir = time.strftime( "%Y_%m_%d_%H", tup )
 
     subdir += subdir_suffix
 
