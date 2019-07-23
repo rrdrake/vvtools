@@ -724,7 +724,7 @@ def has_world_execute( path ):
 
 def probe_for_two_different_groups():
     ""
-    x,out = runcmd( 'groups' )
+    x,out = runcmd( 'groups', raise_on_error=False )
     grp1,grp2 = out.strip().split()[:2]
     assert grp1 and grp2 and grp1 != grp2
     return grp1,grp2
