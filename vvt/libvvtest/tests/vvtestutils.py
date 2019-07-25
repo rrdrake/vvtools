@@ -36,6 +36,7 @@ import libvvtest.testcase as testcase
 import libvvtest.teststatus as teststatus
 from libvvtest.RuntimeConfig import RuntimeConfig
 from libvvtest.userplugin import UserPluginBridge, import_module_by_name
+import libvvtest.paramset as ParameterSet
 
 
 ##########################################################################
@@ -624,6 +625,27 @@ def make_fake_TestCase( result=None, runtime=None, name='atest',
 
     if runtime != None:
         tstat.setRuntime( runtime )
+
+    return tcase
+
+
+def make_fake_staged_TestCase( stage_index=0 ):
+    ""
+    tcase = make_fake_TestCase()
+    tspec = tcase.getSpec()
+
+    pset = ParameterSet.ParameterSet()
+    pset.addParameterGroup( ('stage','np'), [ ('1','1'), ('2','4'), ('3','1') ] )
+
+    if stage_index == 0:
+        tspec.setParameters( { 'stage':'1', 'np':'1' } )
+        tspec.setStagedParameters( True, False, 'stage', 'np' )
+    elif stage_index == 1:
+        tspec.setParameters( { 'stage':'2', 'np':'4' } )
+        tspec.setStagedParameters( False, False, 'stage', 'np' )
+    elif stage_index == 2:
+        tspec.setParameters( { 'stage':'3', 'np':'1' } )
+        tspec.setStagedParameters( False, True, 'stage', 'np' )
 
     return tcase
 

@@ -7,6 +7,7 @@
 import os, sys
 import shutil
 import glob
+import fnmatch
 
 from . import CommonSpec
 from . import cshScriptWriter
@@ -86,14 +87,8 @@ class ExecutionHandler:
 
     def check_redirect_output_to_log_file(self, baseline):
         ""
-        if baseline:
-            logfname = 'baseline.log'
-        elif not self.config.get('logfile'):
-            logfname = None
-        else:
-            logfname = 'execute.log'
-
-        if logfname != None:
+        if self.config.get('logfile'):
+            logfname = get_execution_log_filename( self.tcase, baseline )
             redirect_stdout_stderr_to_filename( logfname )
             self.perms.set( os.path.abspath( logfname ) )
 
@@ -101,7 +96,8 @@ class ExecutionHandler:
         ""
         if self.config.get('preclean') and \
            not self.config.get('analyze') and \
-           not baseline:
+           not baseline and \
+           self.tcase.getSpec().isFirstStage():
             self.preclean()
 
     def preclean(self):
@@ -119,7 +115,8 @@ class ExecutionHandler:
             xL.append( 'runscript' )
 
         for f in os.listdir('.'):
-            if f not in xL and not f.startswith( 'vvtest_util' ):
+            if f not in xL and not f.startswith( 'vvtest_util' ) and \
+               not fnmatch.fnmatch( f, 'execute_*.log' ):
                 if os.path.islink( f ):
                     os.remove( f )
                 elif os.path.isdir(f):
@@ -301,11 +298,12 @@ class ExecutionHandler:
         if val: os.environ['PYTHONPATH'] = pth + ':' + val
         else:   os.environ['PYTHONPATH'] = pth
 
-    def check_postclean(self):
+    def check_run_postclean(self):
         ""
         if self.config.get('postclean') and \
            self.tcase.getStat().passed() and \
-           not self.tcase.hasDependent():
+           not self.tcase.hasDependent() and \
+           self.tcase.getSpec().isLastStage():
             self.postclean()
 
     def postclean(self):
@@ -328,8 +326,10 @@ class ExecutionHandler:
 
         rundir = self.tcase.getExec().getRunDirectory()
 
+        # magic: this is ugly, and duplicates with preclean somewhat
         for f in os.listdir( rundir ):
-            if f not in xL and not f.startswith( 'vvtest_util' ):
+            if f not in xL and not f.startswith( 'vvtest_util' ) and \
+               not fnmatch.fnmatch( f, 'execute_*.log' ):
                 fp = os.path.join( rundir, f )
                 if os.path.islink( fp ):
                     os.remove( fp )
@@ -381,7 +381,7 @@ class ExecutionHandler:
         rundir = self.tcase.getExec().getRunDirectory()
         self.perms.recurse( rundir )
 
-        self.check_postclean()
+        self.check_run_postclean()
 
         self.platform.giveProcs( self.tcase.getExec().getResourceObject() )
 
@@ -484,6 +484,20 @@ class ExecutionHandler:
                                           self.test_dir )
 
                 self.perms.set( os.path.abspath( script_file ) )
+
+
+def get_execution_log_filename( tcase, baseline ):
+    ""
+    stageid = tcase.getSpec().getStageID()
+
+    if baseline:
+        logfname = 'baseline.log'
+    elif stageid != None:
+        logfname = 'execute_'+stageid+'.log'
+    else:
+        logfname = 'execute.log'
+
+    return logfname
 
 
 def echo_test_execution_info( testname, cmd_list, timeout ):

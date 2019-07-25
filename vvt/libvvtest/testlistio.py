@@ -300,6 +300,10 @@ def test_to_string( tcase, extended=False ):
     else:
         testdict['params'] = tspec.getParameters()
 
+    staged = tspec.getStagedParameters()
+    if staged:
+        testdict['staged'] = staged
+
     testdict['attrs'] = tspec.getAttrs()
 
     if extended:
@@ -332,6 +336,11 @@ def string_to_test( strid ):
         tspec.setParameters( testdict['params'] )
 
     tspec.setKeywords( testdict['keywords'] )
+
+    staged = testdict.get( 'staged', None )
+    if staged:
+        tspec.setStagedParameters( staged[0], staged[1],
+                                   staged[2], *(staged[3:]) )
 
     for k,v in testdict['attrs'].items():
         tspec.setAttr( k, v )

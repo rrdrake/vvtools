@@ -1411,6 +1411,18 @@ class test_file_reparse( vtu.vvtestTestCase ):
             pat,xdir = matchL[1]
             assert pat == 'A*' and xdir == 'foo/Atest'
 
+    def test_transfer_of_staging_through_string_write_read(self):
+        ""
+        tcase = vtu.make_fake_staged_TestCase()
+        tcase.getSpec().getStageID() == 'stage=1'
+
+        sid = tio.test_to_string( tcase )
+        tcase2 = tio.string_to_test( sid )
+
+        assert tcase2.getSpec().getStageID() == 'stage=1'
+        assert tcase2.getSpec().isFirstStage()
+        assert not tcase2.getSpec().isLastStage()
+
 
 def reparse_test_string( stringid ):
     ""

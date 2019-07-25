@@ -61,10 +61,10 @@ class TestSpec:
         """
         dis = self.getExecuteDirectory()
 
-        stageL = self.stages.items()
-        stageL.sort()
+        if self.staged:
 
-        for stage_name,params in stageL:
+            stage_name,params = self.staged
+
             paramL = list( params )
             paramL.sort()
             pL = []
@@ -83,6 +83,27 @@ class TestSpec:
         parameters with values.
         """
         return self.testid
+
+    def getStageID(self):
+        ""
+        if self.staged:
+            stage_name = self.staged[0]
+            stage_value = self.params[ stage_name ]
+            return stage_name+'='+stage_value
+
+        return None
+
+    def isFirstStage(self):
+        """
+        True if this test is not staged or this is the first stage.
+        """
+        return self.first_stage
+
+    def isLastStage(self):
+        """
+        True if this test is not staged or this is the last stage.
+        """
+        return self.last_stage
 
     def getSpecificationForm(self):
         """
@@ -347,7 +368,9 @@ class TestSpec:
                                    # allowed characters are restricted
         self.paramset = None       # for parent tests, this maps parameter
                                    # names to lists of values
-        self.stages = {}           # stage param name -> list of param names
+        self.staged = None         # ( stage param name, list of param names )
+        self.first_stage = True
+        self.last_stage = True
 
         # initial execute directory; recomputed by setParameters()
         self.xdir = self._compute_execute_directory()
@@ -417,10 +440,23 @@ class TestSpec:
 
         self.testid = self._compute_id()
 
-    def markStagedParameters(self, stage_name, param_name0, *param_names):
+    def setStagedParameters(self, is_first_stage, is_last_stage,
+                                  stage_name, *param_names):
         ""
-        self.stages[ stage_name ] = [ param_name0 ] + list( param_names )
+        self.first_stage = is_first_stage
+        self.last_stage = is_last_stage
+
+        self.staged = [ stage_name, list( param_names ) ]
+
         self.xdir = self._compute_execute_directory()
+
+    def getStagedParameters(self):
+        ""
+        if self.staged:
+            return [ self.first_stage, self.last_stage ] + \
+                   [ self.staged[0] ] + self.staged[1]
+
+        return None
 
     def _compute_id(self):
         ""
@@ -432,7 +468,7 @@ class TestSpec:
         ""
         bname = self.getName()
 
-        paramL = self._get_parameters_as_list( staged=True )
+        paramL = self._get_parameters_as_list( compress_stage=True )
         if len( paramL ) > 0:
             bname += '.' + '.'.join(paramL)
 
@@ -440,14 +476,14 @@ class TestSpec:
 
         return os.path.normpath( os.path.join( dname, bname ) )
 
-    def _get_parameters_as_list(self, staged=False):
+    def _get_parameters_as_list(self, compress_stage=False):
         ""
         L = []
         if len(self.params) > 0:
             for n,v in self.params.items():
-                if self._hide_parameter( n, staged ):
+                if self._hide_parameter( n, compress_stage ):
                     pass
-                elif self._compress_parameter( n, staged ):
+                elif self._compress_parameter( n, compress_stage ):
                     L.append( n )
                 else:
                     L.append( n + '=' + v )
@@ -455,18 +491,17 @@ class TestSpec:
 
         return L
 
-    def _hide_parameter(self, param_name, staged):
+    def _hide_parameter(self, param_name, compress_stage):
         ""
-        if staged:
-            return param_name in self.stages
+        if compress_stage and self.staged:
+            return param_name == self.staged[0]
         return False
 
-    def _compress_parameter(self, param_name, staged):
+    def _compress_parameter(self, param_name, compress_stage):
         ""
-        if staged:
-            for paramL in self.stages.values():
-                if param_name in paramL:
-                    return True
+        if compress_stage and self.staged:
+            if param_name in self.staged[1]:
+                return True
         return False
 
     def setParameterSet(self, param_set):

@@ -254,8 +254,15 @@ class TestStager:
 
     def markTestList(self):
         ""
+        stage_name = self.nameL[0]
+        stage_values = [ vals[0] for vals in self.valueL ]
+
         for tspec in self.testL:
-            tspec.markStagedParameters( *self.nameL )
+            stage_value = tspec.getParameterValue( stage_name )
+            idx = stage_values.index( stage_value )
+            is_first = ( idx == 0 )
+            is_last = ( idx == len(stage_values)-1 )
+            tspec.setStagedParameters( is_first, is_last, *self.nameL )
 
     def addDependencies(self):
         ""

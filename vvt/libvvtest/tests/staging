@@ -37,7 +37,11 @@ class staged_parameters( vtu.vvtestTestCase ):
         for pdict in pset.getInstances():
             ts = TestSpec( 'aname', os.getcwd(), 'aname.vvt' )
             ts.setParameters( pdict )
-            ts.markStagedParameters( 'stage', 'np' )
+
+            if pdict['stage'] == '1':
+                ts.setStagedParameters( True, False, 'stage', 'np' )
+            else:
+                ts.setStagedParameters( False, True, 'stage', 'np' )
 
             tmap[ ts.getID() ] = ts
 
@@ -45,17 +49,43 @@ class staged_parameters( vtu.vvtestTestCase ):
 
             if pdict['np'] == '1':
                 assert ts.getDisplayString().endswith( 'stage=1(np=1)' )
+                assert ts.getStageID() == 'stage=1'
+                assert ts.isFirstStage()
+                assert not ts.isLastStage()
             else:
                 assert pdict['np'] == '4'
                 assert ts.getDisplayString().endswith( 'stage=2(np=4)' )
+                assert ts.getStageID() == 'stage=2'
+                assert not ts.isFirstStage()
+                assert ts.isLastStage()
 
         assert len( tmap ) == 2
+
+    def test_stage_index_accessor(self):
+        ""
+        tcase = vtu.make_fake_TestCase()
+        assert tcase.getSpec().isFirstStage()
+        assert tcase.getSpec().isLastStage()
+
+        tcase = vtu.make_fake_staged_TestCase( stage_index=0 )
+        assert tcase.getSpec().isFirstStage()
+        assert not tcase.getSpec().isLastStage()
+
+        tcase = vtu.make_fake_staged_TestCase( stage_index=1 )
+        assert not tcase.getSpec().isFirstStage()
+        assert not tcase.getSpec().isLastStage()
+
+        tcase = vtu.make_fake_staged_TestCase( stage_index=2 )
+        assert not tcase.getSpec().isFirstStage()
+        assert tcase.getSpec().isLastStage()
 
     def test_consistency(self):
         ""
         pass
         # marking staging parameters when they are not parameters
         # changing the parameters when the markings have already been set
+        # multiple parameters in a stage
+        # test post-clean with staging
 
     def test_parse_staged_parameters(self):
         ""
@@ -95,12 +125,19 @@ class staged_parameters( vtu.vvtestTestCase ):
         sortL.sort()
         tc0,tc1,tc2 = [ T[1] for T in sortL ]
 
+        assert tc0.getSpec().isFirstStage()
+        assert not tc1.getSpec().isFirstStage()
+        assert not tc2.getSpec().isFirstStage()
+
+        assert not tc0.getSpec().isLastStage()
+        assert not tc1.getSpec().isLastStage()
+        assert tc2.getSpec().isLastStage()
+
         assert has_dependency( tc1, tc0 )
         assert has_dependency( tc2, tc1 )
 
     def test_full_integration_run_with_staging(self):
         ""
-        # magic: remove debugging in there
         util.writefile( 'blue.vvt', """
             #VVT: parameterize (staged) : np = 1 3 1
             import vvtest_util as vvt
@@ -110,7 +147,7 @@ class staged_parameters( vtu.vvtestTestCase ):
             #VVT: parameterize (staged) : np = 2 3
             #VVT: parameterize : part = piston valve
             import vvtest_util as vvt
-            print ( 'green_stage='+vvt.stage + 'green_np='+vvt.np + 'green_part='+vvt.part )
+            print ( 'green_stage='+vvt.stage + ' green_np='+vvt.np + ' green_part='+vvt.part )
             """ )
         time.sleep(1)
 
@@ -118,11 +155,27 @@ class staged_parameters( vtu.vvtestTestCase ):
 
             vtu.remove_results()
 
-            vrun = vtu.runvvtest( '-n 10' )
+            vrun = vtu.runvvtest( '-n 10', batch=batch )
             vrun.assertCounts( total=7, npass=7 )
 
-            # magic: check values
-            # assert vrun.countGrepLogs( 'blue_stage=1 blue_np=1' ) == 1
+            assert len( util.grepfiles( 'blue_stage=1 blue_np=1',
+                                        '*/blue.np/exec*.log' ) ) == 1
+            assert len( util.grepfiles( 'blue_stage=2 blue_np=3',
+                                        '*/blue.np/exec*.log' ) ) == 1
+            assert len( util.grepfiles( 'blue_stage=3 blue_np=1',
+                                        '*/blue.np/exec*.log' ) ) == 1
+
+            assert len( util.grepfiles( 'green_stage=1 green_np=2 green_part=piston',
+                                        '*/green.np.part=piston/exec*.log' ) ) == 1
+            assert len( util.grepfiles( 'green_stage=1 green_np=2 green_part=valve',
+                                        '*/green.np.part=valve/exec*.log' ) ) == 1
+            assert len( util.grepfiles( 'green_stage=2 green_np=3 green_part=piston',
+                                        '*/green.np.part=piston/exec*.log' ) ) == 1
+            assert len( util.grepfiles( 'green_stage=2 green_np=3 green_part=valve',
+                                        '*/green.np.part=valve/exec*.log' ) ) == 1
+
+# magic:
+#   - a restart will also fail, bc the staging is not reparsed
 
 
 def has_dependency( testcase, dep_testcase ):
