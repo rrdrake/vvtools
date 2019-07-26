@@ -179,9 +179,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
         assert len(tL) == 1
         kL = tL[0].getKeywords()
         kL.sort()
-        print3( "keywords", kL )
-        assert len(kL) == 3
-        assert kL[0] == 'atest' and kL[1] == 'junk1' and kL[2] == 'junk2'
+        assert kL == [ 'atest', 'junk1', 'junk2', 'ok1' ]
 
         util.writefile( 'ok2.xml', """
             <rtest name="atest">
@@ -194,10 +192,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
         assert len(tL) == 1
         kL = tL[0].getKeywords()
         kL.sort()
-        print3( "keywords", kL )
-        assert len(kL) == 4
-        assert kL[0] == 'atest' and kL[1] == 'exename'
-        assert kL[2] == 'junk1' and kL[3] == 'junk2'
+        assert kL == [ 'atest', 'exename', 'junk1', 'junk2', 'ok2' ]
         assert tL[0].hasKeyword('atest')
         assert not tL[0].hasKeyword('junk')
 
@@ -1111,7 +1106,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
           print3( t )
           kL = t.getKeywords()
           kL.sort()
-          assert kL == ["alegra", "atest", "key1", "key2", "np"]
+          assert kL == [ "alegra", "atest", "key1", "key2", "np", "ok34" ]
           assert t.getTimeout() == 120
           xL = t.getExecutionList()
           assert len(xL) == 1
@@ -1440,7 +1435,7 @@ def parse_create_analyze_test( filename ):
 
     tL = creator.fromFile( '.', filename, None )
 
-    analyzeL = filter( lambda ts: ts.isAnalyze(), tL )
+    analyzeL = list( filter( lambda ts: ts.isAnalyze(), tL ) )
     assert len( analyzeL ) == 1
 
     return TestCase( analyzeL[0] )

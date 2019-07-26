@@ -5,6 +5,7 @@
 # Government retains certain rights in this software.
 
 import os
+from os.path import basename
 
 varname_chars_list = "abcdefghijklmnopqrstuvwxyz" + \
                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "0123456789_"
@@ -123,6 +124,7 @@ class TestSpec:
         if include_implicit:
             kwset = set( self.getParameterNames() )
             kwset.add( self.name )
+            kwset.add( os.path.splitext( basename( self.getFilepath() ) )[0] )
             for n,s,x,b in self.execL:
                 if n:
                     kwset.add( n )
@@ -377,7 +379,7 @@ class TestSpec:
         self.testid = self._compute_id()
 
         # always add the test specification file to the linked file list
-        self.lnfiles.append( (os.path.basename(self.filepath),None) )
+        self.lnfiles.append( (basename(self.filepath),None) )
     
     def __str__(self):
         return 'TestSpec(name=' + str(self.name) + ', xdir=' + self.xdir + ')'
