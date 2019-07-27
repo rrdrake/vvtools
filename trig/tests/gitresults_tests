@@ -104,6 +104,33 @@ class the_tests( unittest.TestCase ):
         dat = util.readfile( 'check2nd/'+subdir+'/data4.txt' )
         assert dat.strip() == 'data file four'
 
+    def test_second_set_of_results_with_overlapping_files(self):
+        ""
+        self.add_first_set_of_results()
+
+        git = GitInterface()
+        git.clone( self.url, '2nd', 'master' )
+
+        res = ResultsHandler( git )
+        branch,subdir = res.setNamingScheme()
+        rdir = res.createResultsDirectory()
+
+        util.writefile( rdir+'/data2.txt', 'data file two dot one' )
+        util.writefile( rdir+'/data3.txt', 'data file three dot zero' )
+
+        res.pushResults( 'my second, overlapping results' )
+
+        git2 = GitInterface( self.url, 'check2nd' )
+        assert os.path.exists( 'check2nd/file.txt' )
+        git2.checkoutBranch( branch )
+
+        dat = util.readfile( 'check2nd/'+subdir+'/data1.txt' )
+        assert dat.strip() == 'data file one'
+        dat = util.readfile( 'check2nd/'+subdir+'/data2.txt' )
+        assert dat.strip() == 'data file two dot one'
+        dat = util.readfile( 'check2nd/'+subdir+'/data3.txt' )
+        assert dat.strip() == 'data file three dot zero'
+
 
 class naming_schemes( unittest.TestCase ):
 
