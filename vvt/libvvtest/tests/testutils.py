@@ -669,6 +669,38 @@ class change_directory:
         os.chdir( self.cwd )
 
 
+class set_environ:
+    """
+    with set_environ( name=value, name=value, ... ):
+        pass
+    """
+
+    def __init__(self, **kwargs):
+        ""
+        self.kwargs = dict( kwargs )
+        self.save_environ = None
+
+    def __enter__(self):
+        ""
+        self.save_environ = dict( os.environ )
+        for n,v in self.kwargs.items():
+            if v == None:
+                if n in os.environ:
+                    del os.environ[n]
+            else:
+                os.environ[n] = v
+
+    def __exit__(self, type, value, traceback):
+        ""
+        if self.save_environ != None:
+            for n,v in list( os.environ.items() ):
+                if n not in self.save_environ:
+                    del os.environ[n]
+            for n,v in self.save_environ.items():
+                if n not in os.environ or os.environ[n] != v:
+                    os.environ[n] = v
+
+
 def has_owner_execute( path ):
     ""
     fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
