@@ -12,6 +12,7 @@ sys.excepthook = sys.__excepthook__
 import os
 from os.path import abspath
 import time
+import shutil
 
 import vvtestutils as vtu
 import testutils as util
@@ -461,24 +462,123 @@ class the_core_make_execute_command_function( vtu.vvtestTestCase ):
     def test_running_in_a_directory_containing_a_colon(self):
         ""
         util.writefile( 'sub:dir/atest.vvt', """
-            import os, sys
-            print ( 'before', sys.path )
-            import script_util.standard_utilities as util
-            print ( 'after', sys.path )
             import vvtest_util as vvt
-            for n in ['NAME','TESTID','TESTROOT','SRCDIR']:
-                util.print3( n, '=', eval( 'vvt.'+n ) )
+            print ( 'coolname='+vvt.NAME )
+            print ( 'src dir='+vvt.SRCDIR )
+            import script_util as util
+            util.exit_diff()
             """ )
         time.sleep(1)
 
         vrun = vtu.runvvtest( chdir='sub:dir' )
-        vrun.assertCounts( total=1, npass=1 )
+        vrun.assertCounts( total=1, diff=1 )
 
-        assert vrun.countGrepLogs( 'NAME = atest' ) == 1
-        assert vrun.countGrepLogs( 'TESTID = atest' ) == 1
-        lineL = vrun.greplogs( 'SRCDIR =' )
+        assert vrun.countGrepLogs( 'coolname=atest' ) == 1
+        lineL = vrun.greplogs( 'src dir=' )
         assert len( lineL ) == 1
-        assert lineL[0].split( ' = ', 1 )[1].strip() == abspath( 'sub:dir' )
+        assert lineL[0].split( '=', 1 )[1].strip() == abspath( 'sub:dir' )
+
+    def test_running_vvtest_out_of_a_directory_containing_a_colon(self):
+        ""
+        os.mkdir( 'install:dir' )
+
+        copy_vvtest_into_directory( 'install:dir' )
+        vvtest = abspath( 'install:dir/vvtest' )
+
+        util.writefile( 'rundir/atest.vvt', """
+            import vvtest_util as vvt
+            print ( 'coolname='+vvt.NAME )
+            import script_util as util
+            util.exit_diff()
+            """ )
+
+        time.sleep(1)
+
+        os.chdir( 'rundir' )
+        x,out = util.runcmd( vvtest )
+
+        assert len( util.grepfiles( 'coolname=atest', '*/atest/execute.log' ) ) == 1
+        assert len( util.greplines( 'atest *diff', out ) ) > 0
+
+    def test_the_set_environ_utility_context_manager(self):
+        ""
+        os.environ['A_NAME_NOBODY_WOULD_USE_606'] = 'value1'
+        os.environ['A_NAME_NOBODY_WOULD_USE_505'] = 'value2'
+        os.environ['A_NAME_NOBODY_WOULD_USE_404'] = 'value3'
+        os.environ['A_NAME_NOBODY_WOULD_USE_202'] = 'value4'
+
+        with util.set_environ( A_NAME_NOBODY_WOULD_USE_707='addvalue',
+                               A_NAME_NOBODY_WOULD_USE_606='changevalue',
+                               A_NAME_NOBODY_WOULD_USE_101=None,
+                               A_NAME_NOBODY_WOULD_USE_404=None ):
+            assert os.environ['A_NAME_NOBODY_WOULD_USE_707'] == 'addvalue'
+            assert os.environ['A_NAME_NOBODY_WOULD_USE_606'] == 'changevalue'
+            assert 'A_NAME_NOBODY_WOULD_USE_101' not in os.environ
+            assert 'A_NAME_NOBODY_WOULD_USE_404' not in os.environ
+
+            del os.environ['A_NAME_NOBODY_WOULD_USE_505']
+            os.environ['A_NAME_NOBODY_WOULD_USE_202'] = 'newvalue'
+            os.environ['A_NAME_NOBODY_WOULD_USE_303'] = 'newvariable'
+
+        assert os.environ['A_NAME_NOBODY_WOULD_USE_606'] == 'value1'
+        assert os.environ['A_NAME_NOBODY_WOULD_USE_505'] == 'value2'
+        assert os.environ['A_NAME_NOBODY_WOULD_USE_404'] == 'value3'
+        assert os.environ['A_NAME_NOBODY_WOULD_USE_202'] == 'value4'
+
+        del os.environ['A_NAME_NOBODY_WOULD_USE_606']
+        del os.environ['A_NAME_NOBODY_WOULD_USE_505']
+        del os.environ['A_NAME_NOBODY_WOULD_USE_404']
+        del os.environ['A_NAME_NOBODY_WOULD_USE_202']
+
+        assert 'A_NAME_NOBODY_WOULD_USE_707' not in os.environ
+        assert 'A_NAME_NOBODY_WOULD_USE_303' not in os.environ
+
+    def test_running_vvtest_with_PYTHONPATH_set(self):
+        ""
+        pth = '/some/fake/dir1:/some/fake/dir2:/some/fake/dir3'
+
+        util.writefile( 'atest.vvt', """
+            import os
+            import vvtest_util as vvt
+            print ( 'coolname='+vvt.NAME )
+            assert '"""+pth+"""' in os.environ['PYTHONPATH']
+            import script_util as util
+            util.exit_diff()
+            """ )
+        time.sleep(1)
+
+        with util.set_environ( PYTHONPATH=pth ):
+            x,out = util.runcmd( vtu.vvtest_file )
+
+        assert len( util.grepfiles( 'coolname=atest', '*/atest/execute.log' ) ) == 1
+        assert len( util.greplines( 'atest *diff', out ) ) > 0
+
+    def test_running_vvtest_without_PYTHONPATH_set(self):
+        ""
+        util.writefile( 'atest.vvt', """
+            import os
+            import vvtest_util as vvt
+            print ( 'coolname='+vvt.NAME )
+            print ( 'pypath='+str( os.environ.get('PYTHONPATH',None) ) )
+            import script_util as util
+            util.exit_diff()
+            """ )
+        time.sleep(1)
+
+        with util.set_environ( PYTHONPATH=None ):
+            x,out = util.runcmd( vtu.vvtest_file )
+
+        assert len( util.grepfiles( 'coolname=atest', '*/atest/execute.log' ) ) == 1
+        assert len( util.greplines( 'atest *diff', out ) ) > 0
+
+
+def copy_vvtest_into_directory( dest_dir ):
+    ""
+    shutil.copy( vtu.vvtest_file, dest_dir+'/vvtest' )
+    vvtest = abspath( dest_dir+'/vvtest' )
+    for fn in os.listdir( vtu.vvtdir ):
+        if fn != 'vvtest':
+            os.symlink( vtu.vvtdir+'/'+fn, dest_dir+'/'+fn )
 
 
 ########################################################################

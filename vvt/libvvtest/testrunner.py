@@ -8,6 +8,7 @@ import os, sys
 import shutil
 import glob
 import fnmatch
+from os.path import join as pjoin
 
 from . import CommonSpec
 from . import cshScriptWriter
@@ -51,7 +52,7 @@ class TestRunner:
         tstat.resetResults()
 
         xdir = tspec.getExecuteDirectory()
-        wdir = os.path.join( self.test_dir, xdir )
+        wdir = pjoin( self.test_dir, xdir )
         texec.setRunDirectory( wdir )
 
         if not os.path.exists( wdir ):
@@ -63,7 +64,7 @@ class TestRunner:
         ""
         if tspec.getSpecificationForm() == 'xml':
             if self.commondb == None:
-                d = os.path.join( self.config.get('toolsdir'), 'libvvtest' )
+                d = pjoin( self.config.get('toolsdir'), 'libvvtest' )
                 c = self.config.get('configdir')
                 self.commondb = CommonSpec.loadCommonSpec( d, c )
 
@@ -148,16 +149,15 @@ class ExecutionHandler:
         tspec = self.tcase.getSpec()
 
         srcdir = os.path.normpath(
-                      os.path.join(
-                          tspec.getRootpath(),
-                          os.path.dirname( tspec.getFilepath() ) ) )
+                      pjoin( tspec.getRootpath(),
+                             os.path.dirname( tspec.getFilepath() ) ) )
 
         ok = True
 
         # first establish the soft linked files
         for srcname,tstname in tspec.getLinkFiles():
 
-            f = os.path.normpath( os.path.join( srcdir, srcname ) )
+            f = os.path.normpath( pjoin( srcdir, srcname ) )
 
             srcL = []
             if os.path.exists(f):
@@ -209,7 +209,7 @@ class ExecutionHandler:
         # files to be copied
         for srcname,tstname in tspec.getCopyFiles():
 
-            f = os.path.normpath( os.path.join( srcdir, srcname ) )
+            f = os.path.normpath( pjoin( srcdir, srcname ) )
 
             srcL = []
             if os.path.exists(f):
@@ -281,22 +281,46 @@ class ExecutionHandler:
             os.environ['TIMEOUT'] = str( int( t ) )
             os.environ['VVTEST_TIMEOUT'] = str( int( t ) )
 
-    def set_environ_for_python_execution(self, baseline):
+    def set_PYTHONPATH(self, baseline):
         """
-        set up python pathing to make import of script utils easy
+        When running Python in a test, the sys.path must include a few vvtest
+        directories as well as the user's config dir.  This can be done with
+        PYTHONPATH *unless* a directory contains a colon, which messes up
+        Python's handling of the paths.
+
+        To work in this case, sys.path is set in the vvtest_util.py file.
+        The user's test just imports vvtest_util.py first thing.  However,
+        importing vvtest_util.py assumes the execute directory is in sys.path
+        on startup.  Normally it would be, but this can fail to be the case
+        if the script is a soft link (which it is for the test script).
+
+        The solution is to make sure PYTHONPATH contains an empty directory,
+        which Python will expand to the current working directory. Note that
+        versions of Python before 3.4 would allow the value of PYTHONPATH to
+        be an empty string, but for 3.4 and later, it must at least be a single
+        colon.
+
+        [July 2019] To preserve backward compatibility for tests that do not
+        import vvtest_util.py first thing, the directories are placed in
+        PYTHONPATH here too (but only those that do not contain colons).
         """
-        pth = os.getcwd()
-        if self.config.get('configdir'):
-            # make sure the config dir comes before vvtest/config
-            pth += ':'+self.config.get('configdir')
+        val = ''
 
-        d = self.config.get('toolsdir')
-        pth += ':'+os.path.join( d, 'config' )
-        pth += ':'+d
+        cfgd = self.config.get( 'configdir' )
+        if cfgd and ':' not in cfgd:
+            val += ':'+cfgd
 
-        val = os.environ.get( 'PYTHONPATH', '' )
-        if val: os.environ['PYTHONPATH'] = pth + ':' + val
-        else:   os.environ['PYTHONPATH'] = pth
+        tdir = self.config.get( 'toolsdir' )
+        if ':' not in tdir:
+            val += ':'+pjoin( tdir, 'config' ) + ':'+tdir
+
+        if 'PYTHONPATH' in os.environ:
+            val += ':'+os.environ['PYTHONPATH']
+
+        if not val:
+            val = ':'
+
+        os.environ['PYTHONPATH'] = val
 
     def check_run_postclean(self):
         ""
@@ -330,7 +354,7 @@ class ExecutionHandler:
         for f in os.listdir( rundir ):
             if f not in xL and not f.startswith( 'vvtest_util' ) and \
                not fnmatch.fnmatch( f, 'execute_*.log' ):
-                fp = os.path.join( rundir, f )
+                fp = pjoin( rundir, f )
                 if os.path.islink( fp ):
                     os.remove( fp )
                 elif os.path.isdir( fp ):
@@ -345,11 +369,11 @@ class ExecutionHandler:
 
         troot = tspec.getRootpath()
         tdir = os.path.dirname( tspec.getFilepath() )
-        srcdir = os.path.normpath( os.path.join( troot, tdir ) )
+        srcdir = os.path.normpath( pjoin( troot, tdir ) )
 
         # TODO: add file globbing for baseline files
         for fromfile,tofile in tspec.getBaselineFiles():
-            dst = os.path.join( srcdir, tofile )
+            dst = pjoin( srcdir, tofile )
             sys.stdout.write( "baseline: cp -p "+fromfile+" "+dst+'\n' )
             sys.stdout.flush()
             shutil.copy2( fromfile, dst )
@@ -419,7 +443,7 @@ class ExecutionHandler:
         self.check_write_mpi_machine_file()
         self.check_set_working_files( baseline )
 
-        self.set_environ_for_python_execution( baseline )
+        self.set_PYTHONPATH( baseline )
 
         pyexe = self.apply_plugin_preload()
 
@@ -443,14 +467,14 @@ class ExecutionHandler:
         texec = self.tcase.getExec()
         rundir = texec.getRunDirectory()
 
-        script_file = os.path.join( rundir, 'runscript' )
+        script_file = pjoin( rundir, 'runscript' )
 
         if self.config.get('refresh') or not os.path.exists( script_file ):
 
             troot = tspec.getRootpath()
             assert os.path.isabs( troot )
             tdir = os.path.dirname( tspec.getFilepath() )
-            srcdir = os.path.normpath( os.path.join( troot, tdir ) )
+            srcdir = os.path.normpath( pjoin( troot, tdir ) )
 
             # note that this writes a different sequence if the test is an
             # analyze test
@@ -473,7 +497,7 @@ class ExecutionHandler:
 
         for lang in ['py','sh']:
 
-            script_file = os.path.join( rundir, 'vvtest_util.'+lang )
+            script_file = pjoin( rundir, 'vvtest_util.'+lang )
 
             if self.config.get('refresh') or not os.path.exists( script_file ):
                 ScriptWriter.writeScript( self.tcase,

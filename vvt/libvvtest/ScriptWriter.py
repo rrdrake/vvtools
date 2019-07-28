@@ -59,6 +59,13 @@ def writeScript( testcase, filename, lang, config, plat, test_dir ):
         else:
             w.add( 'CONFIGDIR = ""' )
 
+        # order matters; configdir should be the first entry in sys.path
+        w.add( '',
+               'sys.path.insert( 0, "'+tdir+'" )',
+               'sys.path.insert( 0, "'+tdir+'/config" )' )
+        if configdir:
+            w.add( 'sys.path.insert( 0, "'+configdir+'" )' )
+
         w.add( '',
                'diff_exit_status = 64',
                'opt_analyze = "--execute_analysis_sections" in sys.argv[1:]' )
