@@ -20,8 +20,6 @@ import testutils as util
 from testutils import print3
 
 trigdir = dirname( trigutil.testsrcdir )
-postmod = util.create_module_from_filename( trigdir+'/postresults' )
-
 postcmd = sys.executable + ' ' + trigdir+'/postresults'
 
 
@@ -34,43 +32,6 @@ class the_tests( unittest.TestCase ):
         self.url = trigutil.create_local_bare_repository( 'example' )
         trigutil.push_file_to_repo( self.url, 'afile.txt', 'file contents' )
         time.sleep(1)
-
-    def test_clone_target_repo(self):
-        ""
-        pst = postmod.Poster( self.url )
-        localdir = pst.cloneRepo()
-
-        assert os.path.isdir( localdir )
-        assert os.path.isfile( localdir+'/.git/config' )
-        assert os.path.samefile( os.getcwd(), dirname( localdir ) )
-        assert os.path.isfile( localdir+'/afile.txt' )
-
-    def test_create_handler_and_results_directory(self):
-        ""
-        pst = postmod.Poster( self.url )
-        pst.cloneRepo()
-        rdir = pst.createHandler( 'mysuffix' )
-
-        assert os.path.isdir( rdir )
-        assert rdir.endswith( '.mysuffix' )
-
-    def test_push_result_files_and_cleanup(self):
-        ""
-        pst = postmod.Poster( self.url )
-        localdir = pst.cloneRepo()
-        rdir = pst.createHandler( 'mysuffix' )
-
-        util.writefile( rdir+'/results.txt', 'everything passes - booya' )
-        time.sleep(1)
-
-        branch = pst.push( 'add results' )
-        pst.cleanup()
-
-        util.runcmd( 'git clone '+self.url+' checkit' )
-        util.runcmd( 'git checkout '+branch, chdir='checkit' )
-        assert len( util.findfiles( 'results.txt', 'checkit' ) ) == 1
-
-        assert not os.path.exists( localdir )
 
     def test_command_line_help(self):
         ""

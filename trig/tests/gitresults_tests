@@ -10,7 +10,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
-from os.path import abspath
+from os.path import abspath, dirname
 import time
 import unittest
 
@@ -18,15 +18,15 @@ import trigtestutils as trigutil
 import testutils as util
 from testutils import print3
 
-from gitresults import ResultsHandler
+from gitresults import GitResults
 from gitresults import create_orphan_branch, branch_name_and_directory
 from gitinterface import GitInterface
 
 
-
-class the_tests( unittest.TestCase ):
+class the_GitResults_class( unittest.TestCase ):
 
     def setUp(self):
+        ""
         util.setup_test()
 
         self.url = trigutil.create_local_bare_repository( 'example' )
@@ -49,19 +49,52 @@ class the_tests( unittest.TestCase ):
         assert os.path.isfile( 'ex/resdir/.create' )
         assert not os.path.exists( 'ex/file.txt' )
 
+    def test_clone_target_repo(self):
+        ""
+        gr = GitResults( self.url )
+        localdir = gr.getCloneDirectory()
+
+        assert os.path.isdir( localdir )
+        assert os.path.isfile( localdir+'/.git/config' )
+        assert os.path.samefile( os.getcwd(), dirname( localdir ) )
+        assert os.path.isfile( localdir+'/file.txt' )
+
+    def test_create_handler_and_results_directory(self):
+        ""
+        gr = GitResults( self.url )
+        rdir = gr.createBranchLocation( 'mysuffix' )
+
+        assert os.path.isdir( rdir )
+        assert rdir.endswith( '.mysuffix' )
+
+    def test_push_result_files_and_cleanup(self):
+        ""
+        gr = GitResults( self.url )
+        localdir = gr.getCloneDirectory()
+        rdir = gr.createBranchLocation( 'mysuffix' )
+
+        util.writefile( rdir+'/results.txt', 'everything passes - booya' )
+        time.sleep(1)
+
+        branch = gr.pushResults( 'add results' )
+        gr.cleanup()
+
+        util.runcmd( 'git clone '+self.url+' checkit' )
+        util.runcmd( 'git checkout '+branch, chdir='checkit' )
+        assert len( util.findfiles( 'results.txt', 'checkit' ) ) == 1
+
+        assert not os.path.exists( localdir )
+
     def add_first_set_of_results(self):
         ""
-        git = GitInterface()
-        git.clone( self.url, branch='master' )
-
-        res = ResultsHandler( git )
-        branch,subdir = res.setNamingScheme()
-        rdir = res.createResultsDirectory()
+        res = GitResults( self.url )
+        rdir = res.createBranchLocation()
+        subdir = os.path.basename( rdir )
 
         util.writefile( rdir+'/data1.txt', 'data file one' )
         util.writefile( rdir+'/data2.txt', 'data file two' )
 
-        res.pushResults( 'my first results' )
+        branch = res.pushResults( 'my first results' )
 
         # check that the branch got pushed
         git = GitInterface()
@@ -80,17 +113,14 @@ class the_tests( unittest.TestCase ):
         ""
         self.add_first_set_of_results()
 
-        git = GitInterface()
-        git.clone( self.url, '2nd', 'master' )
-
-        res = ResultsHandler( git )
-        branch,subdir = res.setNamingScheme()
-        rdir = res.createResultsDirectory()
+        res = GitResults( self.url )
+        rdir = res.createBranchLocation()
+        subdir = os.path.basename( rdir )
 
         util.writefile( rdir+'/data3.txt', 'data file three' )
         util.writefile( rdir+'/data4.txt', 'data file four' )
 
-        res.pushResults( 'my second results' )
+        branch = res.pushResults( 'my second results' )
 
         git2 = GitInterface()
         git2.clone( self.url, 'check2nd', branch )
@@ -108,17 +138,14 @@ class the_tests( unittest.TestCase ):
         ""
         self.add_first_set_of_results()
 
-        git = GitInterface()
-        git.clone( self.url, '2nd', 'master' )
-
-        res = ResultsHandler( git )
-        branch,subdir = res.setNamingScheme()
-        rdir = res.createResultsDirectory()
+        res = GitResults( self.url )
+        rdir = res.createBranchLocation()
+        subdir = os.path.basename( rdir )
 
         util.writefile( rdir+'/data2.txt', 'data file two dot one' )
         util.writefile( rdir+'/data3.txt', 'data file three dot zero' )
 
-        res.pushResults( 'my second, overlapping results' )
+        branch = res.pushResults( 'my second, overlapping results' )
 
         git2 = GitInterface( self.url, 'check2nd' )
         assert os.path.exists( 'check2nd/file.txt' )

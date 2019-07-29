@@ -5,53 +5,83 @@ import time
 import tempfile
 import shutil
 
-from gitinterface import GitInterface, change_directory
+from gitinterface import GitInterface, change_directory, print3
 
 
-class ResultsHandler:
-    
-    def __init__(self, gitinterface_obj):
+class GitResults:
+
+    def __init__(self, results_repo_url, working_directory=None):
         ""
-        self.git = gitinterface_obj
+        if not working_directory:
+            working_directory = os.getcwd()
 
-    def setNamingScheme(self, subdir_suffix='',
-                              epochdate=None,
-                              granularity='month'):
+        tmpdir = tempfile.mkdtemp( '', 'gitresults_work_clone_', os.getcwd() )
+
+        self.git = GitInterface()
+
+        print3( 'Cloning', results_repo_url, 'into', tmpdir )
+        self.git.clone( results_repo_url, tmpdir, branch='master' )
+
+    def getCloneDirectory(self):
         ""
-        bn,sb = branch_name_and_directory( subdir_suffix, epochdate, granularity )
+        return self.git.getRootDir()
 
-        self.branch = bn
-        self.subdir = sb
+    def createBranchLocation(self, directory_suffix='',
+                                   epochdate=None,
+                                   granularity='month'):
+        ""
+        branch,self.subdir = branch_name_and_directory(
+                                directory_suffix,
+                                epochdate,
+                                granularity )
 
-        return bn, sb
+        print3( 'Using directory', branch, 'on branch', self.subdir )
 
-    def createResultsDirectory(self):
-        """
-        Create or checkout results directory according to the naming scheme.
-        Returns absolute path to the results directory.
-        """
-        with change_directory( self.git.getRootDir() ):
-
-            if self.branch in self.git.listRemoteBranches():
-
-                self.git.checkoutBranch( self.branch )
-
-                if not os.path.exists( self.subdir ):
-                    os.mkdir( self.subdir )
-
-            else:
-                create_orphan_branch( self.git, self.branch, self.subdir )
-
-            rdir = os.path.abspath( self.subdir )
-
+        rdir = get_results_orphan_branch( self.git, branch, self.subdir )
         assert os.path.isdir( rdir )
+
         return rdir
 
-    def pushResults(self, commit_message):
+    def pushResults(self, message):
         ""
+        branch = self.git.currentBranch()
+
+        print3( 'Pushing results...' )
         self.git.add( self.subdir )
-        self.git.commit( commit_message )
+        self.git.commit( message )
         self.git.push()
+
+        return branch
+
+    def cleanup(self):
+        ""
+        check_remove_directory( self.git.getRootDir() )
+
+
+def get_results_orphan_branch( git, branch, subdir ):
+    ""
+    with change_directory( git.getRootDir() ):
+
+        if branch in git.listRemoteBranches():
+
+            git.checkoutBranch( branch )
+
+            if not os.path.exists( subdir ):
+                os.mkdir( subdir )
+
+        else:
+            create_orphan_branch( git, branch, subdir )
+
+        rdir = os.path.abspath( subdir )
+
+    return rdir
+
+
+def check_remove_directory( dirpath ):
+    ""
+    if os.path.exists( dirpath ):
+        print3( 'rm -r '+dirpath )
+        shutil.rmtree( dirpath )
 
 
 def branch_name_and_directory( subdir_suffix='',
@@ -67,7 +97,8 @@ def branch_name_and_directory( subdir_suffix='',
     branch = time.strftime( "results_%Y_%m", tup )
     subdir = time.strftime( "%Y_%m_%d_%H", tup )
 
-    subdir += subdir_suffix
+    if subdir_suffix:
+        subdir += '.'+subdir_suffix
 
     return branch, subdir
 

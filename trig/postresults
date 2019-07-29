@@ -16,8 +16,7 @@ import shutil
 import string
 import random
 
-from gitinterface import GitInterface
-from gitresults import ResultsHandler
+from gitresults import GitResults
 
 
 help_string = '''
@@ -53,13 +52,12 @@ def main():
     else:
         testdir = opts.args[0]
 
-    pst = Poster( opts.gitlab )
-    pst.cloneRepo()
-    rdir = pst.createHandler( opts.suffix )
+    pst = GitResults( opts.gitlab )
+    rdir = pst.createBranchLocation( opts.suffix )
 
     write_vvtest_results( opts.vvtest, rdir, testdir )
 
-    branch = pst.push( opts.message )
+    branch = pst.pushResults( opts.message )
     pst.cleanup()
 
 
@@ -114,63 +112,6 @@ def write_vvtest_results( vvtest, todir, testdir ):
     subprocess.check_call( cmd, shell=True, cwd=testdir )
 
 
-class Poster:
-
-    def __init__(self, url):
-        ""
-        self.url = url
-
-    def cloneRepo(self):
-        ""
-        tmpdir = make_temp_subdir_name()
-
-        check_remove_directory( tmpdir )
-
-        self.git = GitInterface()
-
-        print3( 'Cloning', self.url, 'into', tmpdir )
-        self.git.clone( self.url, tmpdir, branch='master' )
-
-        return self.git.getRootDir()
-
-    def createHandler(self, suffix):
-        ""
-        self.hnd = ResultsHandler( self.git )
-
-        br,sb = self.hnd.setNamingScheme( subdir_suffix='.'+suffix )
-        print3( 'Using directory', sb, 'on branch', br )
-
-        rdir = self.hnd.createResultsDirectory()
-
-        return rdir
-
-    def push(self, message):
-        ""
-        branch = self.git.currentBranch()
-
-        print3( 'Pushing results...' )
-        self.hnd.pushResults( message )
-
-        return branch
-
-    def cleanup(self):
-        ""
-        check_remove_directory( self.git.getRootDir() )
-
-
-def check_remove_directory( dirpath ):
-    ""
-    if os.path.exists( dirpath ):
-        print3( 'rm -r '+dirpath )
-        shutil.rmtree( dirpath )
-
-
-def make_temp_subdir_name():
-    ""
-    seq = string.ascii_uppercase + string.digits
-    cL = [ random.choice( seq ) for _ in range(8) ]
-    tdir = "postresults_tempdir_"+''.join( cL )
-    return tdir
 
 
 def errorexit( message ):
