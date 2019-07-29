@@ -12,27 +12,10 @@ import time
 import shlex
 
 import libvvtest.cmdline as cmdline
-import libvvtest.vvplatform as vvplatform
 import libvvtest.misc as misc
-import libvvtest.TestSpec as TestSpec
-import libvvtest.TestExec as TestExec
-import libvvtest.TestList as TestList
 from libvvtest.execlist import TestExecList
-import libvvtest.batchutils as batchutils
-import libvvtest.FilterExpressions as FilterExpressions
-from libvvtest.RuntimeConfig import RuntimeConfig
-import libvvtest.testlistio as testlistio
-import libvvtest.resultswriter as resultswriter
-import libvvtest.consolewriter as consolewriter
 import libvvtest.pathutil as pathutil
-from libvvtest.teststatus import RESULTS_KEYWORDS
-from libvvtest.TestSpecCreator import TestCreator
-import libvvtest.userplugin as userplugin
-from libvvtest.filtering import TestFilter
-from libvvtest.scanner import TestFileScanner
 from libvvtest.errors import FatalError
-import libvvtest.extract as extract
-from libvvtest.timeout import TimeHandler
 import libvvtest.location as location
 import libvvtest.execute as execute
 
@@ -175,6 +158,10 @@ class MainEntry:
 
     def constructFilteringObjects(self):
         ""
+        from libvvtest.TestSpecCreator import TestCreator
+        from libvvtest.filtering import TestFilter
+        from libvvtest.timeout import TimeHandler
+
         platobj = self.rtdata.getPlatformObject()
 
         rtconfig = construct_RuntimeConfig( platobj, self.opts, self.optD )
@@ -183,8 +170,7 @@ class MainEntry:
         creator = TestCreator( rtconfig )
         self.rtdata.setTestCreator( creator )
 
-        plugmod = import_plugin_module()
-        plug = userplugin.UserPluginBridge( rtconfig, plugmod )
+        plug = import_plugin_module( rtconfig )
         self.rtdata.setUserPlugin( plug )
 
         testfilter = TestFilter( rtconfig, plug )
@@ -197,8 +183,10 @@ class MainEntry:
         self.rtdata.setTestTimeHandler( timehandler )
 
 
-def import_plugin_module():
+def import_plugin_module( rtconfig ):
     ""
+    import libvvtest.userplugin as userplugin
+
     try:
         plugmod = userplugin.import_module_by_name( USER_PLUGIN_MODULE_NAME )
 
@@ -208,7 +196,9 @@ def import_plugin_module():
         print3( '*** user plugin disabled\n' )
         plugmod = None
 
-    return plugmod
+    plug = userplugin.UserPluginBridge( rtconfig, plugmod )
+
+    return plug
 
 
 class Configuration:
@@ -371,6 +361,8 @@ class RuntimeData:
 
 def construct_platform_instance( toolsdir, opts, optD ):
     ""
+    import libvvtest.vvplatform as vvplatform
+
     plat = vvplatform.create_Platform_instance(
                 toolsdir,
                 opts.plat,
@@ -387,6 +379,8 @@ def construct_platform_instance( toolsdir, opts, optD ):
 
 def construct_RuntimeConfig( plat, opts, optD ):
     ""
+    from libvvtest.RuntimeConfig import RuntimeConfig
+
     rtconfig = RuntimeConfig( \
                   param_expr_list=optD['param_list'],
                   keyword_expr=optD['keyword_expr'],
@@ -474,6 +468,8 @@ class InformationMode:
 
     def printKeywordUnion(self, tlist):
         ""
+        from libvvtest.teststatus import RESULTS_KEYWORDS
+
         print3( "\nresults keywords: " + ' '.join( RESULTS_KEYWORDS ) )
         kd = {}
         for tcase in tlist.getActiveTests():
@@ -504,6 +500,8 @@ class InformationMode:
 
 def make_TestList( rtdata, filename ):
     ""
+    import libvvtest.TestList as TestList
+
     rtconfig = rtdata.getRuntimeConfig()
     creator = rtdata.getTestCreator()
     testfilter = rtdata.getTestFilter()
@@ -515,6 +513,8 @@ def make_TestList( rtdata, filename ):
 
 def scan_test_source_directories( tlist, scan_dirs, setparams ):
     ""
+    from libvvtest.scanner import TestFileScanner
+
     scan = TestFileScanner( tlist, setparams )
 
     # default scan directory is the current working directory
@@ -567,6 +567,8 @@ def extractTestFiles( param_dict, dirs, target_dir, rtdata ):
     source area and copies the files used for each test into a separate
     directory.
     """
+    import libvvtest.extract as extract
+
     tlist = make_TestList( rtdata, None )
 
     scan_test_source_directories( tlist, dirs, param_dict )
@@ -778,6 +780,8 @@ def check_for_currently_running_vvtest( resultsfiles, optforce ):
 
         if len(resultsfiles) > 0:
 
+            import libvvtest.testlistio as testlistio
+
             rfile = resultsfiles[-1]
 
             tlr = testlistio.TestListReader( rfile )
@@ -802,6 +806,8 @@ def make_results_writer( opts, optD,
                          test_dir, perms,
                          platobj, cmdL ):
     ""
+    import libvvtest.consolewriter as consolewriter
+
     verb = determine_verbose_integer( opts.dash_v )
 
     conobj = consolewriter.ConsoleWriter( sys.stdout, test_dir, verbose=verb )
@@ -842,6 +848,7 @@ def make_results_writer( opts, optD,
             wlistobj.setOutputDate( opts.results_date )
             wlistobj.setNamingTags( optD['onopts'], opts.results_tag )
 
+    import libvvtest.resultswriter as resultswriter
     writer = resultswriter.ResultsWriter( conobj, htmlobj, junitobj,
                                           gitlabobj, wlistobj )
 
@@ -897,6 +904,8 @@ class Batcher:
         """
         The 'tlist' is a TestList class instance.
         """
+        import libvvtest.batchutils as batchutils
+
         self.rtdata = rtdata
         self.opts = opts
         self.optD = optD
@@ -987,6 +996,7 @@ def restartTests( opts, optD, rtdata ):
         apply_filters = True
     else:
         # batch jobs have --qsub-id set and land here
+        import libvvtest.batchutils as batchutils
         namer = batchutils.BatchFileNamer( test_dir, testlist_name )
         tfile = namer.getTestListName( qid )
         apply_filters = False
