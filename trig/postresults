@@ -40,6 +40,8 @@ OPTIONS
                         default suffix is "vvtest_results"
     --message=<commit message>
                       : the repository commit message
+    --epoch=<seconds> : use this epoch time (seconds since epoch); defaults
+                        to current time
 '''
 
 
@@ -53,7 +55,7 @@ def main():
         testdir = opts.args[0]
 
     pst = GitResults( opts.gitlab )
-    rdir = pst.createBranchLocation( opts.suffix )
+    rdir = pst.createBranchLocation( opts.suffix, opts.epoch )
 
     write_vvtest_results( opts.vvtest, rdir, testdir )
 
@@ -71,6 +73,7 @@ class Options:
         self.suffix = 'vvtest_results'
         self.gitlab = None
         self.message = 'add test results'
+        self.epoch = None
 
         self.parse_options( argv )
 
@@ -78,7 +81,7 @@ class Options:
         ""
         optL,argL = getopt( argv, 'h',
                             [ 'help', 'vvtest=', 'suffix=', 'gitlab=',
-                              'message=' ] )
+                              'message=', 'epoch=' ] )
 
         for n,v in optL:
 
@@ -98,6 +101,9 @@ class Options:
 
             elif n == '--message':
                 self.message = v
+
+            elif n == '--epoch':
+                self.epoch = int( float(v)+0.5 )
 
         if not self.gitlab:
             errorexit( 'the --gitlab option must be given' )

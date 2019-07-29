@@ -66,10 +66,12 @@ class the_tests( unittest.TestCase ):
 
         time.sleep(1)
 
+        epoch = 1532875122.82  # Sun Jul 29 08:38:18 2018
         cmd = postcmd+' --gitlab '+self.url + \
                 ' --vvtest '+abspath('fakevvtest') + \
                 ' --message "special commit message"' + \
                 ' --suffix special_results' + \
+                ' --epoch '+str( epoch ) + \
                 ' testarea'
         util.runcmd( cmd )
 
@@ -80,6 +82,7 @@ class the_tests( unittest.TestCase ):
 
         fn = util.globfile( 'checkit/*/*.txt' )
         assert os.path.split(fn)[1] == 'fake_results.txt'
+        assert '2018_07' in fn
         subdir = basename( dirname( fn ) )
         assert subdir.endswith( '.special_results' )
 
