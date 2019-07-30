@@ -134,6 +134,15 @@ class variable_substiution_tests( unittest.TestCase ):
         assert vx.expand( '$var1$var2$var1', D ) == 'valAvalBvalA'
         assert vx.expand( '${var1}${var2}${var1}', D ) == 'valAvalBvalA'
 
+    def test_non_string_expansion(self):
+        ""
+        vx = command.VariableExpander()
+
+        assert vx.expand( 'X=$vname', { 'vname':42 } ) == 'X=42'
+        val = vx.expand( 'X=$vname', { 'vname':4.2 } )
+        assert val.startswith('X=4.') and abs( float(val[2:]) - 4.2 ) < 0.001
+        assert vx.expand( 'X=$vname', { 'vname':None } ) == 'X=None'
+
 
 def assert_EscapedArgument( in_arg, out_arg, out_shell, out_shell_no_expand ):
     ""

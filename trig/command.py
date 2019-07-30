@@ -500,10 +500,8 @@ class VariableExpander:
             else:
                 varname = astring[i+1:j]
 
-            value = variable_dict.get( varname, None )
-
-            if value != None:
-                s += astring[pos:i] + value
+            if varname in variable_dict:
+                s += astring[pos:i] + str( variable_dict[varname] )
                 pos = j
 
         if pos < len(astring):
