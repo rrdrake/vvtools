@@ -31,9 +31,10 @@ USER_PLUGIN_MODULE_NAME = 'vvtest_user_plugin'
 
 class MainEntry:
 
-    def __init__(self, argv):
+    def __init__(self, argv, vvtestdir):
         ""
         self.argv = argv
+        self.vvtestdir = vvtestdir
 
     def constructObjects(self):
         ""
@@ -41,11 +42,14 @@ class MainEntry:
 
         check_for_bootstrap_file()
 
+        # gr = load_gitresults_module( self.vvtestdir )
+        # help(gr.GitResults)  # magic
+
         # this may call sys.exit (for help or errors)
         self.opts, self.optD, self.dirs = \
             cmdline.parse_command_line( self.argv[1:], version )
 
-        self.rtdata = RuntimeData( self.argv, get_tools_directory() )
+        self.rtdata = RuntimeData( self.argv, self.vvtestdir )
 
         self.constructConfiguration()
 
@@ -109,7 +113,7 @@ class MainEntry:
     def constructConfiguration(self):
         ""
         config = create_configuration( self.opts, self.optD,
-                                       self.rtdata.getToolsDir() )
+                                       self.rtdata.getVvtestDir() )
         self.rtdata.setConfiguration( config )
 
     def readCacheData(self):
@@ -134,7 +138,7 @@ class MainEntry:
 
     def constructPlatform(self):
         ""
-        plat = construct_platform_instance( self.rtdata.getToolsDir(),
+        plat = construct_platform_instance( self.rtdata.getVvtestDir(),
                                             self.opts, self.optD )
         self.rtdata.setPlatformObject( plat )
 
@@ -149,7 +153,7 @@ class MainEntry:
     def constructResultsWriter(self, start_time):
         ""
         resw = make_results_writer( self.opts, self.optD, start_time,
-                                    self.rtdata.getToolsDir(),
+                                    self.rtdata.getVvtestDir(),
                                     self.rtdata.getTestResultsDir(),
                                     self.rtdata.getPermissionsObject(),
                                     self.rtdata.getPlatformObject(),
@@ -204,7 +208,7 @@ def import_plugin_module( rtconfig ):
 class Configuration:
     
     defaults = { \
-                 'toolsdir':None,  # the top level tools directory
+                 'vvtestdir':None,  # the top level vvtest directory
                  'configdir':None,  # the configuration directory
                  'exepath':None,  # the path to the executables
                  'onopts':[],
@@ -236,11 +240,11 @@ class Configuration:
           self.attrs[n] = v
 
 
-def create_configuration( opts, optD, toolsdir ):
+def create_configuration( opts, optD, vvtestdir ):
     ""
     config = Configuration()
 
-    config.set( 'toolsdir', toolsdir )
+    config.set( 'vvtestdir', vvtestdir )
 
     if optD['onopts']:
         config.set( 'onopts', optD['onopts'] )
@@ -255,7 +259,7 @@ def create_configuration( opts, optD, toolsdir ):
     else:
         d = os.getenv( 'VVTEST_CONFIGDIR' )
         if d == None:
-            d = os.path.join( toolsdir, 'config' )
+            d = os.path.join( vvtestdir, 'config' )
         config.set( 'configdir', os.path.abspath(d) )
 
     config.set( 'refresh', not opts.dash_m )
@@ -281,16 +285,16 @@ def create_configuration( opts, optD, toolsdir ):
 
 class RuntimeData:
 
-    def __init__(self, cmdL, toolsdir):
+    def __init__(self, cmdL, vvtestdir):
         """
-        The 'toolsdir' is the directory containing this script.
+        The 'vvtestdir' is the directory containing the vvtest script.
         """
         self.cmdL = [ os.path.abspath( cmdL[0] ) ]
         self.cmdL.extend( cmdL[1:] )
 
-        self.toolsdir = toolsdir
+        self.vvtestdir = vvtestdir
 
-    def getToolsDir(self): return self.toolsdir
+    def getVvtestDir(self): return self.vvtestdir
 
     def setConfiguration(self, config): self.config = config
     def getConfiguration(self): return self.config
@@ -359,12 +363,12 @@ class RuntimeData:
         return self.filterdir
 
 
-def construct_platform_instance( toolsdir, opts, optD ):
+def construct_platform_instance( vvtestdir, opts, optD ):
     ""
     import libvvtest.vvplatform as vvplatform
 
     plat = vvplatform.create_Platform_instance(
-                toolsdir,
+                vvtestdir,
                 opts.plat,
                 optD['platopt_dict'],  # --platopt
                 opts.dash_e,
@@ -802,7 +806,7 @@ def determine_verbose_integer( dash_v ):
 
 
 def make_results_writer( opts, optD,
-                         start_time, toolsdir,
+                         start_time, vvtestdir,
                          test_dir, perms,
                          platobj, cmdL ):
     ""
@@ -835,6 +839,10 @@ def make_results_writer( opts, optD,
 
         if opts.gitlab:
             import libvvtest.gitlabwriter as gitlabwriter
+
+            # gr = load_gitresults_module( vvtestdir )
+            # print3( 'magic: gr', help(gr.GitResults) )
+
             gitlabobj = gitlabwriter.GitLabWriter( perms,
                                                    opts.gitlab,
                                                    test_dir )
@@ -860,7 +868,7 @@ def make_results_writer( opts, optD,
     writer.setRunAttr( rundir=test_dir )
     writer.setRunAttr( curdir=os.getcwd() )
     writer.setRunAttr( python=sys.executable )
-    writer.setRunAttr( vvtest=toolsdir )
+    writer.setRunAttr( vvtest=vvtestdir )
     writer.setRunAttr( PYTHONPATH=os.environ.get( 'PYTHONPATH', '' ) )
     writer.setRunAttr( PATH=os.environ.get( 'PATH', '' ) )
     writer.setRunAttr( LOADEDMODULES=os.environ.get( 'LOADEDMODULES', '' ) )
@@ -1093,14 +1101,6 @@ def print3( *args, **kwargs ):
 
 ###########################################################################
 
-def get_tools_directory():
-    ""
-    d = sys.path[0]
-    if not d:                  d = os.getcwd()
-    elif not os.path.isabs(d): d = os.path.abspath(d)
-    return d
-
-
 def check_for_bootstrap_file():
     """
     if vvtest_bootstrap.py exists in the same directory as vvtest,
@@ -1121,7 +1121,7 @@ def check_for_bootstrap_file():
 
 def insert_configdir_into_sys_path( rtdata ):
     ""
-    d1 = os.path.normpath( os.path.join( rtdata.getToolsDir(), 'config' ) )
+    d1 = os.path.normpath( os.path.join( rtdata.getVvtestDir(), 'config' ) )
 
     d2 = rtdata.getConfiguration().get( 'configdir' )
     if d2:
@@ -1134,6 +1134,17 @@ def insert_configdir_into_sys_path( rtdata ):
 
     else:
         sys.path.insert( 1, d1 )
+
+
+def load_gitresults_module( vvtestdir ):
+    ""
+    print ( 'magic: vvtestdir '+vvtestdir )
+    trigdir = os.path.normpath( os.path.join( vvtestdir, '..', 'trig' ) )
+    print ( 'magic: trigdir '+trigdir )
+    if trigdir not in sys.path:
+        sys.path.insert( 1, trigdir )
+    import gitresults
+    return gitresults
 
 
 def make_PermissionSetter( test_dir, optperms ):
@@ -1155,10 +1166,21 @@ def make_PermissionSetter( test_dir, optperms ):
 
 ##############################################################################
 
+def get_vvtest_directory():
+    ""
+    # if vvtest is a soft link, this will follow it
+    d = sys.path[0]
+    if not d:                  d = os.getcwd()
+    elif not os.path.isabs(d): d = os.path.abspath(d)
+    return d
+
+
 if __name__ == '__main__':
     ""
+    vvtestdir = get_vvtest_directory()
+
     try:
-        main = MainEntry( sys.argv )
+        main = MainEntry( sys.argv, vvtestdir )
         main.constructObjects()
 
         exitstat = main.execute()

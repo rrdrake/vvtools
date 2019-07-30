@@ -16,14 +16,14 @@ expect_status_replace_re = re.compile('[$][(]EXPECT_STATUS[)]')
 
 
 def writeScript( tspec, xdb, plat, \
-                 toolsdir, projdir, srcdir, \
+                 vvtestdir, projdir, srcdir, \
                  onopts, offopts,
                  scriptname ):
     """
       tspec is a TestSpec object
       xdb is a CommonSpecDB object
       plat is a Platform object
-      toolsdir is the top level toolset directory containing this script
+      vvtestdir is the top level directory containing vvtest
       projdir is the directory to the executables
       srcdir is the directory containing the test description
       onopts is a list of -o options (not a dictionary)
@@ -99,7 +99,7 @@ def writeScript( tspec, xdb, plat, \
       'echo "PLATFORM = $PLATFORM"',
       'set COMPILER = ' + plat.getCompiler(),
       'echo "COMPILER = $COMPILER"',
-      'set TOOLSET_DIR = ' + toolsdir,
+      'set TOOLSET_DIR = ' + vvtestdir,
       'echo "TOOLSET_DIR = $TOOLSET_DIR"' ] )
     if projdir:
       line_list.append( 'set PROJECT = ' + projdir )

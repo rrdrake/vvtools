@@ -64,7 +64,7 @@ class TestRunner:
         ""
         if tspec.getSpecificationForm() == 'xml':
             if self.commondb == None:
-                d = pjoin( self.config.get('toolsdir'), 'libvvtest' )
+                d = pjoin( self.config.get('vvtestdir'), 'libvvtest' )
                 c = self.config.get('configdir')
                 self.commondb = CommonSpec.loadCommonSpec( d, c )
 
@@ -310,7 +310,7 @@ class ExecutionHandler:
         if cfgd and ':' not in cfgd:
             val += ':'+cfgd
 
-        tdir = self.config.get( 'toolsdir' )
+        tdir = self.config.get( 'vvtestdir' )
         if ':' not in tdir:
             val += ':'+pjoin( tdir, 'config' ) + ':'+tdir
 
@@ -481,7 +481,7 @@ class ExecutionHandler:
             cshScriptWriter.writeScript( tspec,
                                          self.commondb,
                                          self.platform,
-                                         self.config.get('toolsdir'),
+                                         self.config.get('vvtestdir'),
                                          self.config.get('exepath'),
                                          srcdir,
                                          self.config.get('onopts'),

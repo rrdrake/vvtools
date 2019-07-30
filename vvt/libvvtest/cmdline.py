@@ -617,9 +617,10 @@ def create_parser( argvlist, vvtest_version ):
         help='Writes a test summary file in the JUnit XML format.' )
     grp.add_argument( '--html', metavar='FILENAME',
         help='Write a test summary file in HTML format.' )
-    grp.add_argument( '--gitlab', metavar='DIRECTORY',
+    grp.add_argument( '--gitlab', metavar='LOCATION',
         help='Write test summary as a set of files in the GitLab '
-             'Flavored Markdown format.' )
+             'Flavored Markdown format.  If LOCATION is a Git repository '
+             'URL, then push files to results branches.' )
 
     grp = psr.add_argument_group( 'Other operating modes' )
     grp.add_argument( '-b', dest='dash_b', action='store_true',

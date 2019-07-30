@@ -278,7 +278,7 @@ class Platform:
         return None
 
 
-def create_Platform_instance( toolsdir, platname, platopts, usenv,
+def create_Platform_instance( vvtestdir, platname, platopts, usenv,
                               numprocs, maxprocs,
                               onopts, offopts,
                               qsubid ):
@@ -297,22 +297,22 @@ def create_Platform_instance( toolsdir, platname, platopts, usenv,
     if offopts:          optdict['-O']         = offopts
     if qsubid != None:   optdict['--qsub-id']  = qsubid
 
-    return construct_Platform( toolsdir, optdict )
+    return construct_Platform( vvtestdir, optdict )
 
 
-def construct_Platform( toolsdir, optdict, **kwargs ):
+def construct_Platform( vvtestdir, optdict, **kwargs ):
     """
     This function constructs a Platform object, determines the platform &
     compiler, and loads the platform plugin.
     """
-    assert toolsdir
-    assert os.path.exists( toolsdir )
-    assert os.path.isdir( toolsdir )
+    assert vvtestdir
+    assert os.path.exists( vvtestdir )
+    assert os.path.isdir( vvtestdir )
     
     if 'debug' in kwargs:
-        print3( 'construct_Platform A:', toolsdir, optdict )
+        print3( 'construct_Platform A:', vvtestdir, optdict )
 
-    plat = Platform( toolsdir, optdict )
+    plat = Platform( vvtestdir, optdict )
 
     # set the platform name and compiler name
     try:
@@ -445,7 +445,7 @@ def print3( *args ):
 if __name__ == "__main__":
     """
     """
-    toolsdir = os.path.dirname(mydir)
-    sys.path.insert( 1, os.path.join( toolsdir, 'config' ) )
-    plat = construct_Platform( toolsdir, {} )
+    vvtestdir = os.path.dirname(mydir)
+    sys.path.insert( 1, os.path.join( vvtestdir, 'config' ) )
+    plat = construct_Platform( vvtestdir, {} )
     plat.display()

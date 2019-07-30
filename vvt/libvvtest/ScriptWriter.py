@@ -22,7 +22,7 @@ def writeScript( testcase, filename, lang, config, plat, test_dir ):
     
     configdir = config.get('configdir')
 
-    tdir = config.get('toolsdir')
+    tdir = config.get('vvtestdir')
     assert tdir
     vvtlib = os.path.join( tdir, 'libvvtest' )
 

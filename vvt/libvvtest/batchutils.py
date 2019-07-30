@@ -188,7 +188,7 @@ class BatchScriptWriter:
           if qtime < 600: taopts += ' -T ' + str(qtime*0.90)
           else:           taopts += ' -T ' + str(qtime-120)
         
-        cmd = self.rtdata.getToolsDir()+'/vvtest ' + taopts + ' || exit 1'
+        cmd = self.rtdata.getVvtestDir()+'/vvtest ' + taopts + ' || exit 1'
         fp.writelines( [ cmd+'\n\n' ] )
         
         # echo a marker to determine when a clean batch job exit has occurred
