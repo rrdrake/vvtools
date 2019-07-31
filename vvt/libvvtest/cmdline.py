@@ -461,7 +461,7 @@ def create_parser( argvlist, vvtest_version ):
               'expression, such as "-k fast" or "-k fail/diff" '
               '(subhelp: keywords).' )
     grp.add_argument( '-K', dest='dash_K', action='append',
-        help='Filter tests by including those with a keyword or keyword '
+        help='Filter tests by excluding those with a keyword or keyword '
              'expression, such as "-K long" or "-K fail/notdone".' )
     grp.add_argument( '-R', dest='dash_R', action='store_true',
         help='Rerun tests.  Normally tests are not run if they previously '
