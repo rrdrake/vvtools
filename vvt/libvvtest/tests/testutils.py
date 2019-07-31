@@ -647,6 +647,53 @@ def list_all_directories( rootpath ):
     return pL
 
 
+def read_xml_file( filename ):
+    ""
+    import xml
+    import xml.dom.minidom as minidom
+    doc = minidom.parse( filename )
+    return doc
+
+
+def print_xml( domnode, indent='' ):
+    ""
+    if domnode.localName:
+        print3( indent, domnode.localName )
+    if domnode.hasChildNodes():
+        for nd in domnode.childNodes:
+            print_xml( nd, indent+'  ' )
+
+
+def find_child_xml_node( node, childname ):
+    ""
+    child = None
+
+    if node.hasChildNodes():
+        for subnd in node.childNodes:
+            if subnd.nodeName and subnd.nodeName.strip() == childname:
+                child = subnd
+                break
+
+    return child
+
+
+def get_subtext_from_xml_node( node ):
+    """
+    Concatenates XML element content from all children and their children.
+    """
+    txt = ''
+
+    if node.hasChildNodes():
+        for subnd in node.childNodes:
+            if subnd.nodeValue and subnd.nodeValue.strip():
+                txt += subnd.nodeValue
+            for subsubnd in subnd.childNodes:
+                if subsubnd.nodeValue and subsubnd.nodeValue.strip():
+                    txt += subsubnd.nodeValue
+
+    return txt
+
+
 class change_directory:
     """
     with change_directory( 'subdir' ):

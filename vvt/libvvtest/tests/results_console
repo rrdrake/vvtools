@@ -1,0 +1,329 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import re
+
+try:
+    from StringIO import StringIO
+except Exception:
+    from io import StringIO
+
+import vvtestutils as vtu
+import testutils as util
+from testutils import print3
+
+import libvvtest.outpututils as outpututils
+from libvvtest.consolewriter import ConsoleWriter
+
+
+class consolue_output_tests( vtu.vvtestTestCase ):
+
+    def makeTest(self, result=None, runtime=None, name='atest'):
+        ""
+        return vtu.make_fake_TestCase( result, runtime, name )
+
+    def getFakeTestList(self):
+        ""
+        return [ self.makeTest( 'pass' ),
+                 self.makeTest( 'fail' ),
+                 self.makeTest( 'fail' ),
+                 self.makeTest( 'diff' ),
+                 self.makeTest( 'diff' ),
+                 self.makeTest( 'diff' ),
+                 self.makeTest( 'timeout' ),
+                 self.makeTest( 'notdone' ),
+                 self.makeTest( 'notrun' ),
+                 self.makeTest( 'notrun' ),
+                 self.makeTest( 'notrun' ),
+                 self.makeTest( 'skip' ),
+                 self.makeTest( 'skip' ),
+               ]
+
+    def test_partition_then_summary_string(self):
+        ""
+        tL = self.getFakeTestList()
+
+        parts = outpututils.partition_tests_by_result( tL )
+        sumry = outpututils.results_summary_string( parts )
+        vtu.assert_summary_string( sumry, npass=1, fail=2, diff=3,
+                                          timeout=1, notdone=1, notrun=3,
+                                          skip=2 )
+
+    def assert_test_list_summary(self, output):
+        ""
+        assert re.search( 'completed.* 7', output ) != None
+        assert re.search( '1 pass', output ) != None
+        assert re.search( '3 diff', output ) != None
+        assert re.search( '2 fail', output ) != None
+        assert re.search( '1 timeout', output ) != None
+        assert re.search( 'notdone.* 1', output ) != None
+        assert re.search( 'notrun.* 3', output ) != None
+        assert re.search( 'skip.* 2', output ) != None
+        assert re.search( '2 due to ', output ) != None
+        assert re.search( 'total.* 13', output ) != None
+
+    def assert_test_list_counts_for_notrun_notdone(self, string_value):
+        ""
+        cntD = vtu.parse_vvtest_counts( string_value )
+        assert cntD['total'] == 7
+        assert cntD['diff'] == 3
+        assert cntD['fail'] == 2
+        assert cntD['timeout'] == 1
+        assert cntD['notdone'] == 1
+        assert cntD['notrun'] == 0
+        assert cntD['skip'] == 0
+
+    def assert_test_list_counts_for_active(self, string_value):
+        ""
+        cntD = vtu.parse_vvtest_counts( string_value )
+        assert cntD['total'] == 11
+        assert cntD['diff'] == 3
+        assert cntD['fail'] == 2
+        assert cntD['timeout'] == 1
+        assert cntD['notdone'] == 1
+        assert cntD['notrun'] == 3
+        assert cntD['skip'] == 0
+
+    def assert_test_list_counts_for_all(self, string_value):
+        ""
+        cntD = vtu.parse_vvtest_counts( string_value )
+        assert cntD['total'] == 13
+        assert cntD['diff'] == 3
+        assert cntD['fail'] == 2
+        assert cntD['timeout'] == 1
+        assert cntD['notdone'] == 1
+        assert cntD['notrun'] == 3
+        assert cntD['skip'] == 2
+
+    def test_abbreviated_console_output(self):
+        ""
+        tlist = MockTestList( self.getFakeTestList() )
+
+        sio = StringIO()
+        conwr = ConsoleWriter( sio, os.getcwd() )
+        conwr.writeListSummary( tlist, 'Test list:' )
+
+        val = sio.getvalue()
+        print3( val )
+        self.assert_test_list_summary( val )
+        assert 'Test list:' in val
+        assert 'Summary:' not in val
+
+        sio = StringIO()
+        conwr = ConsoleWriter( sio, os.getcwd() )
+        conwr.writeListSummary( tlist, 'Summary:' )
+
+        val = sio.getvalue()
+        self.assert_test_list_summary( val )
+        assert 'Test list:' not in val
+        assert 'Summary:' in val
+
+    def test_prerun_console_output(self):
+        ""
+        tlist = MockTestList( self.getFakeTestList() )
+
+        sio = StringIO()
+        conwr = ConsoleWriter( sio, os.getcwd() )
+        conwr.writeActiveList( tlist, True )
+
+        val = sio.getvalue()
+        assert not val.strip()
+
+        sio = StringIO()
+        conwr = ConsoleWriter( sio, os.getcwd() )
+        conwr.writeActiveList( tlist, False )
+
+        val = sio.getvalue()
+        print3( val )
+        self.assert_test_list_counts_for_active( val )
+
+        sio = StringIO()
+        conwr = ConsoleWriter( sio, os.getcwd(), verbose=2 )
+        conwr.writeActiveList( tlist, True )
+
+        val = sio.getvalue()
+        print3( val )
+        self.assert_test_list_counts_for_active( val )
+
+        sio = StringIO()
+        conwr = ConsoleWriter( sio, os.getcwd(), verbose=3 )
+        conwr.writeActiveList( tlist, True )
+
+        val = sio.getvalue()
+        print3( val )
+        self.assert_test_list_counts_for_all( val )
+
+    def test_postrun_console_output(self):
+        ""
+        tlist = MockTestList( self.getFakeTestList() )
+
+        sio = StringIO()
+        conwr = ConsoleWriter( sio, os.getcwd() )
+        conwr.writeResultsList( tlist )
+        conwr.writeListSummary( tlist, 'Summary:' )
+
+        val = sio.getvalue()
+        print3( val )
+        self.assert_test_list_summary( val )
+        self.assert_test_list_counts_for_notrun_notdone( val )
+
+        sio = StringIO()
+        conwr = ConsoleWriter( sio, os.getcwd() )
+        conwr.setMaxNonPass( 3 )
+        conwr.writeResultsList( tlist )
+        conwr.writeListSummary( tlist, 'Summary:' )
+
+        val = sio.getvalue()
+        print3( val )
+        self.assert_test_list_summary( val )
+        cntD = vtu.parse_vvtest_counts( val )
+        assert cntD['total'] == 3
+
+    def test_postrun_console_output_with_all_tests_passing_except_last(self):
+        ""
+        tlist = MockTestList( [ self.makeTest( 'pass' ),
+                                self.makeTest( 'pass' ),
+                                self.makeTest( 'pass' ),
+                                self.makeTest( 'fail' ) ] )
+
+        sio = StringIO()
+        conwr = ConsoleWriter( sio, os.getcwd() )
+        conwr.setMaxNonPass( 2 )
+        conwr.writeResultsList( tlist )
+        conwr.writeListSummary( tlist, 'Summary:' )
+
+        val = sio.getvalue()
+        print3( val )
+        cntD = vtu.parse_vvtest_counts( val )
+        assert cntD['total'] == 1
+
+    def test_max_detail_console_list_output(self):
+        ""
+        tlist = MockTestList( self.getFakeTestList() )
+
+        sio = StringIO()
+        conwr = ConsoleWriter( sio, os.getcwd(), verbose=3 )
+        conwr.writeResultsList( tlist )
+        conwr.writeListSummary( tlist, 'Summary:' )
+
+        val = sio.getvalue()
+        print3( val )
+        cntD = vtu.parse_vvtest_counts( val )
+        assert cntD['skip'] == 2
+
+    def test_no_normal_console_output_when_another_output_is_requested(self):
+        ""
+        util.writefile( 'passtest.vvt', """
+            pass
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=1, npass=1 )
+
+        vrun = vtu.runvvtest( '-i' )
+        assert vrun.countLines( 'passtest *pass' ) == 1
+
+        vrun = vtu.runvvtest( '-i --html red.htm' )
+        assert vrun.countLines( 'passtest *pass' ) == 0
+
+        vrun = vtu.runvvtest( '-i --junit ju.xml' )
+        assert vrun.countLines( 'passtest *pass' ) == 0
+
+        vrun = vtu.runvvtest( '-i --gitlab .' )
+        assert vrun.countLines( 'passtest *pass' ) == 0
+
+    def test_list_output_using_double_verbose_flag(self):
+        ""
+        util.writefile( 'passtest.vvt', """
+            pass
+            """ )
+        util.writefile( 'difftest.vvt', """
+            import sys
+            import vvtest_util as vvt
+            sys.exit( vvt.diff_exit_status )
+            """ )
+        util.writefile( 'keywtest.vvt', """
+            #VVT: keywords = chevy
+            pass
+            """ )
+        util.writefile( 'plattest.vvt', """
+            #VVT: enable (platforms="XBox")
+            pass
+            """ )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-v -v -K chevy', batch=batch )
+            vrun.assertCounts( total=4, npass=1, diff=1, skip=2 )
+
+    def test_no_tests_to_run_means_no_list_output_unless_verbose_option_given(self):
+        ""
+        util.writefile( 'chevytest.vvt', """
+            #VVT: keywords = chevy
+            pass
+            """ )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-K chevy',
+                                  batch=batch, addverbose=False )
+            vrun.assertCounts( total=0 )
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-v -K chevy',
+                                  batch=batch, addverbose=False )
+            vrun.assertCounts( total=0 )
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '-vv -K chevy',
+                                  batch=batch, addverbose=False )
+            vrun.assertCounts( total=1, skip=1 )
+
+
+###########################################################################
+
+class MockTestList:
+
+    def __init__(self, list_of_TestCase):
+        ""
+        self.tspecs = list_of_TestCase
+
+    def getTests(self):
+        ""
+        return self.tspecs
+
+    def getActiveTests(self, sorting=''):
+        ""
+        tL = []
+        for tcase in self.tspecs:
+            tspec = tcase.getSpec()
+            if not tcase.getStat().skipTest():
+                xdir = tspec.getDisplayString()
+                tL.append( (tspec.getName(), xdir, id(tcase), tcase) )
+        tL.sort()
+
+        return [ T[-1] for T in tL ]
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )

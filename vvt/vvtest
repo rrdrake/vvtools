@@ -8,6 +8,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
+from os.path import join as pjoin
 import time
 import shlex
 
@@ -41,9 +42,6 @@ class MainEntry:
         start_time = time.time()
 
         check_for_bootstrap_file()
-
-        # gr = load_gitresults_module( self.vvtestdir )
-        # help(gr.GitResults)  # magic
 
         # this may call sys.exit (for help or errors)
         self.opts, self.optD, self.dirs = \
@@ -259,7 +257,7 @@ def create_configuration( opts, optD, vvtestdir ):
     else:
         d = os.getenv( 'VVTEST_CONFIGDIR' )
         if d == None:
-            d = os.path.join( vvtestdir, 'config' )
+            d = pjoin( vvtestdir, 'config' )
         config.set( 'configdir', os.path.abspath(d) )
 
     config.set( 'refresh', not opts.dash_m )
@@ -464,7 +462,7 @@ class InformationMode:
         ""
         test_dir = self.rtdata.getTestResultsDir()
 
-        tfile = os.path.join( test_dir, testlist_name )
+        tfile = pjoin( test_dir, testlist_name )
         if not os.path.exists( tfile ):
             tfile = None
 
@@ -540,7 +538,7 @@ def generateTestList( opts, optD, dirs, rtdata ):
 
     test_dir = os.path.abspath( testsubdir )
 
-    tfile = os.path.join( test_dir, testlist_name )
+    tfile = pjoin( test_dir, testlist_name )
 
     tlist = make_TestList( rtdata, tfile )
 
@@ -593,7 +591,7 @@ def writeCommandInfo( opts, optD, rtdata, test_dir, plat, perms ):
     """
     config = rtdata.getConfiguration()
 
-    f = os.path.join(test_dir, 'test.cache')
+    f = pjoin(test_dir, 'test.cache')
     if not os.path.exists( f ):
         fp = open( f, "w" )
         fp.write( 'VERSION=' + str(version) + '\n' )
@@ -714,7 +712,7 @@ def runTests( opts, optD, rtdata, dirs ):
 
     # determine the directory that stores the test results
     test_dir = os.path.abspath( testsubdir )
-    tfile = os.path.join( test_dir, testlist_name )
+    tfile = pjoin( test_dir, testlist_name )
 
     tlist = make_TestList( rtdata, tfile )
 
@@ -1000,7 +998,7 @@ def restartTests( opts, optD, rtdata ):
 
     qid = opts.qsub_id
     if qid == None:
-        tfile = os.path.join( test_dir, testlist_name )
+        tfile = pjoin( test_dir, testlist_name )
         apply_filters = True
     else:
         # batch jobs have --qsub-id set and land here
@@ -1061,7 +1059,7 @@ def baselineTests( opts, optD, rtdata ):
     test_dir = rtdata.getTestResultsDir()
     plugin = rtdata.getUserPlugin()
 
-    tfile = os.path.join( test_dir, testlist_name )
+    tfile = pjoin( test_dir, testlist_name )
 
     tlist = make_TestList( rtdata, tfile )
 
@@ -1113,7 +1111,7 @@ def check_for_bootstrap_file():
         # to allow for vvtest to be a soft link to an installed vvtest area,
         # look for a bootstrap file in the directory containing the soft link
         bindir = os.path.dirname( os.path.abspath( sys.argv[0] ) )
-        boot = os.path.join( bindir, 'vvtest_bootstrap.py' )
+        boot = pjoin( bindir, 'vvtest_bootstrap.py' )
         if os.path.exists( boot ):
             sys.path.append( bindir )
             import vvtest_bootstrap
@@ -1121,7 +1119,7 @@ def check_for_bootstrap_file():
 
 def insert_configdir_into_sys_path( rtdata ):
     ""
-    d1 = os.path.normpath( os.path.join( rtdata.getVvtestDir(), 'config' ) )
+    d1 = os.path.normpath( pjoin( rtdata.getVvtestDir(), 'config' ) )
 
     d2 = rtdata.getConfiguration().get( 'configdir' )
     if d2:
@@ -1134,17 +1132,6 @@ def insert_configdir_into_sys_path( rtdata ):
 
     else:
         sys.path.insert( 1, d1 )
-
-
-def load_gitresults_module( vvtestdir ):
-    ""
-    print ( 'magic: vvtestdir '+vvtestdir )
-    trigdir = os.path.normpath( os.path.join( vvtestdir, '..', 'trig' ) )
-    print ( 'magic: trigdir '+trigdir )
-    if trigdir not in sys.path:
-        sys.path.insert( 1, trigdir )
-    import gitresults
-    return gitresults
 
 
 def make_PermissionSetter( test_dir, optperms ):
@@ -1175,9 +1162,18 @@ def get_vvtest_directory():
     return d
 
 
+def adjust_sys_path_for_dependencies( vvtestdir ):
+    ""
+    trigdir = os.path.normpath( pjoin( vvtestdir, '..', 'trig' ) )
+    if trigdir not in sys.path:
+        sys.path.insert( 1, trigdir )
+
+
 if __name__ == '__main__':
     ""
     vvtestdir = get_vvtest_directory()
+
+    adjust_sys_path_for_dependencies( vvtestdir )
 
     try:
         main = MainEntry( sys.argv, vvtestdir )

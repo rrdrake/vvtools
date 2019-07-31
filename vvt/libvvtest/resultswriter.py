@@ -8,8 +8,6 @@ import os, sys
 import time
 import traceback
 
-from os.path import join as pjoin
-
 from . import outpututils
 
 
@@ -24,8 +22,6 @@ class ResultsWriter:
         self.wlistobj = wlistobj
 
         self.runattrs = {}
-
-    ### prerun, info, postrun, final, setRunAttr are the interface functions
 
     def setRunAttr(self, **kwargs):
         ""
@@ -58,9 +54,7 @@ class ResultsWriter:
 
     def final(self, atestlist):
         ""
-        tm = time.time()
-        self.runattrs['finishdate'] = str(tm) + ' / ' + time.ctime(tm)
-        self.setElapsedTime( tm )
+        self._mark_finished()
 
         self.check_write_html( atestlist )
         self.check_write_junit( atestlist )
@@ -88,7 +82,13 @@ class ResultsWriter:
         if self.wlistobj:
             self.wlistobj.writeList( atestlist, self.runattrs, inprogress )
 
-    def setElapsedTime(self, finishtime):
+    def _mark_finished(self):
+        ""
+        tm = time.time()
+        self.runattrs['finishdate'] = str(tm) + ' / ' + time.ctime(tm)
+        self._set_elapsed_time( tm )
+
+    def _set_elapsed_time(self, finishtime):
         ""
         start = self.runattrs.get( 'startdate', None )
         if start:

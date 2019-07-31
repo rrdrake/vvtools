@@ -1,0 +1,441 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import time
+import glob
+from os.path import getsize as getfsize
+
+try:
+    from StringIO import StringIO
+except Exception:
+    from io import StringIO
+
+import vvtestutils as vtu
+import testutils as util
+from testutils import print3
+
+import libvvtest.gitlabwriter as gitlabwriter
+
+from libvvtest.RuntimeConfig import RuntimeConfig
+from libvvtest.TestSpecCreator import TestCreator
+from libvvtest.teststatus import TestStatus, DIFF_EXIT_STATUS
+from libvvtest.testcase import TestCase
+
+
+class gitlab_output_format_tests( vtu.vvtestTestCase ):
+
+    def makeTest(self, result=None, runtime=None, name='atest'):
+        ""
+        return vtu.make_fake_TestCase( result, runtime, name )
+
+    def test_turning_a_path_to_a_markdown_link(self):
+        ""
+        s = gitlabwriter.format_test_path_for_gitlab( 'sub/name.np=1', False )
+        assert s == 'sub/name.np=1'
+
+        s = gitlabwriter.format_test_path_for_gitlab( 'sub/name.np=1', True )
+        assert s == '[sub/name.np=1](sub_name.np=1.md)'
+
+    def test_write_table_line_for_a_test(self):
+        ""
+        tcase = self.makeTest( 'pass', 5 )
+        line = gitlabwriter.format_gitlab_table_line( tcase, True )
+        print3( line )
+        sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
+        assert len(sL) == 4
+        assert sL[0] == 'pass' and sL[2] == '5s'
+        assert sL[3] == 'sdir/atest.np=4'
+
+        tcase = self.makeTest( 'fail', 7 )
+        line = gitlabwriter.format_gitlab_table_line( tcase, True )
+        print3( line )
+        sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
+        assert len(sL) == 4
+        assert sL[0] == 'fail' and sL[2] == '7s'
+        assert sL[3] == '[sdir/atest.np=4](sdir_atest.np=4.md)'
+
+        tcase = self.makeTest( 'fail', 7 )
+        line = gitlabwriter.format_gitlab_table_line( tcase, False )
+        print3( line )
+        sL = [ s.strip() for s in line.split( '|' )[1:-1] ]
+        assert len(sL) == 4
+        assert sL[0] == 'fail' and sL[2] == '7s'
+        assert sL[3] == 'sdir/atest.np=4'
+
+    def test_write_gitlab_results_table(self):
+        ""
+        tL = [ self.makeTest( 'pass', 5, 'good' ),
+               self.makeTest( 'diff', 5, 'bad' ) ]
+
+        sio = StringIO()
+        gitlabwriter.write_gitlab_results_table( sio, 'mixed', tL, 100 )
+
+        val = sio.getvalue()
+        print3( val )
+        assert len( util.greplines( 'Result*Date*Time*Path', val ) ) == 1
+        assert len( util.greplines( '| sdir/good.np=4 |', val ) ) == 1
+        line = grepforline( 'sdir/bad.np=4', val ).rstrip()
+        assert line.endswith( '[sdir/bad.np=4](sdir_bad.np=4.md) |' )
+
+    def test_write_results_table_with_max_path_links(self):
+        ""
+        tL = [ self.makeTest( 'diff', 5, 'testA' ),
+               self.makeTest( 'diff', 5, 'testB' ),
+               self.makeTest( 'diff', 5, 'testC' ),
+               self.makeTest( 'diff', 5, 'testD' ) ]
+
+        sio = StringIO()
+        gitlabwriter.write_gitlab_results_table( sio, 'diff', tL, 2 )
+
+        val = sio.getvalue()
+        print3( val )
+
+        line = grepforline( 'sdir/testA.np=4', val ).rstrip()
+        assert line.endswith( '[sdir/testA.np=4](sdir_testA.np=4.md) |' )
+
+        line = grepforline( 'sdir/testB.np=4', val ).rstrip()
+        assert line.endswith( '[sdir/testB.np=4](sdir_testB.np=4.md) |' )
+
+        line = grepforline( 'sdir/testC.np=4', val ).rstrip()
+        assert line.endswith( 'sdir/testC.np=4 |' )
+
+        line = grepforline( 'sdir/testD.np=4', val ).rstrip()
+        assert line.endswith( 'sdir/testD.np=4 |' )
+
+    def test_that_large_results_tables_go_to_separate_file(self):
+        ""
+        tL = [ self.makeTest( 'fail', 5, 'testA' ),
+               self.makeTest( 'fail', 5, 'testB' ),
+               self.makeTest( 'fail', 5, 'testC' ),
+               self.makeTest( 'fail', 5, 'testD' ) ]
+
+        sio = StringIO()
+        gitlabwriter.write_gitlab_results( sio, 'fail', tL, 'large.md', 2, 3 )
+        time.sleep(1)
+
+        val = sio.getvalue()
+        assert len( util.greplines( 'Tests that fail = 4', val ) ) == 1
+        assert 'large.md' in val
+        assert 'sdir/test' not in val
+        assert len( util.grepfiles( 'Tests that fail = 4', 'large.md' ) ) == 1
+        assert len( util.grepfiles( 'sdir/test', 'large.md' ) ) == 4
+
+        fval = util.readfile( 'large.md' )
+
+        line = grepforline( 'sdir/testC.np=4', fval ).rstrip()
+        assert line.endswith( '[sdir/testC.np=4](sdir_testC.np=4.md) |' )
+
+        line = grepforline( 'sdir/testD.np=4', fval ).rstrip()
+        assert line.endswith( 'sdir/testD.np=4 |' )
+
+    def test_an_empty_test_list_will_not_write_a_table(self):
+        ""
+        tL = []
+
+        sio = StringIO()
+        gitlabwriter.write_gitlab_results( sio, 'fail', tL, 'nope.md', 2, 3 )
+        time.sleep(1)
+
+        val = sio.getvalue()
+        print3( val )
+        assert len( util.greplines( 'Tests that fail', val ) ) == 1
+        assert len( util.greplines( 'Result*Date*Time*Path', val ) ) == 0
+
+    def test_file_meta_data_collection(self):
+        ""
+        util.writefile( 'subdir/zeebra.txt', "I am a zeebra.\n" * 20 )
+        time.sleep(1)
+        util.writefile( 'subdir/ardvaark.txt', "I am an ardvaark.\n" * 21 )
+        time.sleep(1)
+
+        fL,width = gitlabwriter.get_directory_file_list( 'subdir' )
+        assert fL == [ 'zeebra.txt', 'ardvaark.txt' ]
+        assert width == 12
+
+        meta = gitlabwriter.get_file_meta_data_string( 'subdir/zeebra.txt', 10 )
+        print3( meta )
+
+        meta = gitlabwriter.get_file_meta_data_string( 'subdir/foobar.txt', 10 )
+        print3( meta )
+        assert 'error: ' in meta
+
+        os.symlink( 'ardvaark.txt', 'subdir/ardvark.txt' )
+        time.sleep(1)
+
+        meta = gitlabwriter.get_file_meta_data_string( 'subdir/ardvark.txt', 10 )
+        print3( meta )
+        assert 'error:' not in meta
+
+    def test_write_gitlab_collapsable_file_contents(self):
+        ""
+        util.writefile( 'file.txt', """
+            Text with a < and a > and a & and some "quotes" too.
+            ```
+            This is line two.
+            """ )
+        time.sleep(1)
+
+        sio = StringIO()
+        fn = os.path.abspath('file.txt')
+        gitlabwriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
+
+        val = sio.getvalue()
+        #print3( val )
+        assert len( util.greplines( '<code>label', val ) ) == 1
+        assert fn not in val
+        assert 'Text with a' in val
+        assert '< and a > and a & and some "quotes"' in val
+        assert val.count( '```' ) == 2 and "'''" in val
+
+        sio = StringIO()
+        fn = os.path.abspath('file.exo')
+        gitlabwriter.write_gitlab_formatted_file( sio, fn, False, 'label', 10 )
+
+        val = sio.getvalue()
+        #print3( val )
+        assert len( util.greplines( '<code>label', val ) ) == 1
+        assert fn not in val
+        assert 'Text with a' not in val
+        assert 'file not archived' in val
+
+    def test_write_gitlab_collapsable_file_with_read_error(self):
+        ""
+        sio = StringIO()
+        fn = os.path.abspath('file.txt')
+        gitlabwriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
+
+        val = sio.getvalue()
+        #print3( val )
+        assert fn in val
+        assert 'error reading file:' in val
+        assert 'Traceback' in val
+
+    def test_write_gitlab_collapsable_file_with_leading_backticks(self):
+        ""
+        util.writefile( 'file.txt', """```
+            Another line.
+            """ )
+        time.sleep(1)
+
+        sio = StringIO()
+        fn = os.path.abspath('file.txt')
+        gitlabwriter.write_gitlab_formatted_file( sio, fn, True, 'label', 10 )
+
+        val = sio.getvalue()
+        #print3( val )
+        assert 'Another line' in val
+        assert val.count( '```' ) == 2 and val.count( "'''" ) == 1
+
+    def test_stream_file_contents_to_gitlab_collapsable_format(self):
+        ""
+        class MockSelector:
+            def include(self, filename):
+                return True
+
+        self.write_file_pair()
+        time.sleep(1)
+
+        sio = StringIO()
+        gitlabwriter.stream_gitlab_files( sio, '.', MockSelector(), 10 )
+
+        val = sio.getvalue()
+        #print3( val )
+        assert 'This is line two' in val
+        assert 'file.txt' in val
+        assert 'execute.log' in val
+        assert 'This is the stdout and stderr' in val
+
+    def write_file_pair(self, subdir='.'):
+        ""
+        util.writefile( os.path.join( subdir,'file.txt' ), """
+            Text with a < and a > and a & and some "quotes" too.
+            This is line two.
+            """ )
+        util.writefile( os.path.join( subdir,'execute.log' ), """
+            This is the stdout and stderr
+            from running the test.
+            """ )
+
+    def test_stream_file_contents_but_exclude_certain_files(self):
+        ""
+        class MockSelector:
+            def include(self, filename):
+                return os.path.splitext(filename)[1] == '.log'
+
+        self.write_file_pair()
+        time.sleep(1)
+
+        sio = StringIO()
+        gitlabwriter.stream_gitlab_files( sio, '.', MockSelector(), 10 )
+
+        val = sio.getvalue()
+        #print3( val )
+        assert 'This is line two' not in val
+        assert 'execute.log' in val
+
+    def test_create_file_with_directory_contents(self):
+        ""
+        self.write_file_pair( 'subdir' )
+        util.writefile( 'subdir/junk.exo', """
+            this should not be included
+            """ )
+        time.sleep(1)
+
+        preamble = 'Houston, we have a problem.'
+        converter = gitlabwriter.GitLabMarkDownConverter( None, None )
+        converter.createGitlabDirectoryContents(
+                                    'results.md', preamble, 'subdir' )
+        time.sleep(1)
+
+        assert len( util.grepfiles( preamble, 'results.md' ) ) == 1
+        assert len( util.grepfiles( 'file.txt', 'results.md' ) ) == 1
+        assert len( util.grepfiles( 'execute.log', 'results.md' ) ) == 1
+        assert len( util.grepfiles( 'should not be included', 'results.md' ) ) == 0
+
+    def test_create_file_directory_contents_but_directory_does_not_exist(self):
+        ""
+        preamble = 'Houston, we have a problem.'
+        converter = gitlabwriter.GitLabMarkDownConverter( None, None )
+        converter.createGitlabDirectoryContents(
+                                    'results.md', preamble, 'subdir' )
+        time.sleep(1)
+
+        assert len( util.grepfiles( preamble, 'results.md' ) ) == 1
+        assert len( util.grepfiles( 'error collecting files', 'results.md' ) ) == 1
+        assert len( util.grepfiles( 'Traceback', 'results.md' ) ) == 1
+
+    def test_test_run_attributes(self):
+        ""
+        conv = gitlabwriter.GitLabMarkDownConverter( '.', '.' )
+        conv.saveResults( [] )
+        time.sleep(1)
+
+        fval = util.readfile( 'TestResults.md' ).strip()
+        val = fval.split( '## Tests that', 1 )[0]
+        assert val.strip() == ''
+
+        conv = gitlabwriter.GitLabMarkDownConverter( '.', '.' )
+        tm = time.time()
+        conv.setRunAttr( startdate=str(tm)+' / '+time.ctime(tm),
+                         finishdate=str(tm+10)+' / '+time.ctime(tm+10) )
+        conv.saveResults( [] )
+        time.sleep(1)
+
+        fval = util.readfile( 'TestResults.md' ).strip()
+        val = fval.split( '## Tests that', 1 )[0]
+        assert len( util.greplines( 'startdate', val ) ) == 1
+        assert len( util.greplines( 'finishdate', val ) ) == 1
+
+    def test_create_markdown_file_for_a_test(self):
+        ""
+        write_three_test_files()
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
+
+        nofltr = RuntimeConfig( platform_name=vrun.platformName() )
+        creator = TestCreator( nofltr )
+        tL = creator.fromFile( '.', 'DiffTest.xml', None )
+        tst = tL[0]
+
+        tstat = TestStatus( tst )
+        tstat.markStarted( time.time() )
+        tstat.markDone( DIFF_EXIT_STATUS )
+        tstat.setRuntime( 3 )
+
+        conv = gitlabwriter.GitLabMarkDownConverter( vrun.resultsDir(), '.' )
+        conv.createTestFile( TestCase( tst ) )
+        time.sleep(1)
+
+        mdfile = util.globfile( 'DiffTest.*.md' )
+        xdir = os.path.join( vrun.resultsDir(), tst.getExecuteDirectory() )
+        assert len( util.grepfiles( 'Run directory:*'+xdir, mdfile ) ) == 1
+        assert len( util.grepfiles( 'Result:*DiffTest *diff *', mdfile ) ) == 1
+
+    def test_producing_gitlab_markdown_results_files(self):
+        ""
+        write_three_test_files()
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
+
+        vrun = vtu.runvvtest( '-i --gitlab=../gfm', chdir=vrun.resultsDir() )
+        time.sleep(1)
+
+        assert getfsize( 'gfm/TestResults.md' ) > 800
+        assert getfsize( 'gfm/FailTest.md' ) > 3000
+        assert getfsize( 'gfm/DiffTest.np=1.md' ) > 1000
+        assert getfsize( 'gfm/DiffTest.np=2.md' ) > 1000
+        assert len( glob.glob( 'gfm/*param*' ) ) == 0
+
+    def test_producing_gitlab_markdown_as_part_of_execution(self):
+        ""
+        write_three_test_files()
+        time.sleep(1)
+
+        vrun = vtu.runvvtest( '--gitlab gfm' )
+        vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
+        time.sleep(1)
+
+        assert getfsize( 'gfm/TestResults.md' ) > 800
+        assert getfsize( 'gfm/FailTest.md' ) > 3000
+        assert getfsize( 'gfm/DiffTest.np=1.md' ) > 1000
+        assert getfsize( 'gfm/DiffTest.np=2.md' ) > 1000
+        assert len( glob.glob( 'gfm/*param*' ) ) == 0
+
+        fval = util.readfile( 'gfm/TestResults.md' ).strip()
+        val = fval.split( '## Tests that', 1 )[0]
+        assert len( util.greplines( 'startdate', val ) ) == 1
+        assert len( util.greplines( 'finishdate', val ) ) == 1
+        assert len( util.greplines( ' vvtest =', val ) ) == 1
+        assert len( util.greplines( ' python =', val ) ) == 1
+        assert len( util.greplines( ' PATH =', val ) ) == 1
+        elap = util.greplines( 'elapsed', val )[0].split('=')[1].strip()
+        assert int( elap[:-1] ) > 1
+
+
+def write_three_test_files():
+    ""
+    util.writefile( "subdir/param.vvt", """
+        #VVT: parameterize : hello = world mars
+        import time
+        time.sleep(1)
+        """ )
+    util.writefile( "FailTest.vvt", """
+        import os, sys, time
+        import vvtest_util as vvt
+        time.sleep(2)
+        raise Exception( 'pitch a fake exception' )
+        """)
+    util.writefile( "DiffTest.xml", """
+        <rtest name="DiffTest">
+            <parameterize np="1 2"/>
+            <execute>
+                sleep 3
+                echo "fake difference of 29"
+                set have_diff = yes
+            </execute>
+        </rtest>""")
+
+
+def grepforline( pattern, multi_line_string ):
+    ""
+    lineL = util.greplines( pattern, multi_line_string )
+    assert len( lineL ) == 1
+    return lineL[0]
+
+
+############################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
