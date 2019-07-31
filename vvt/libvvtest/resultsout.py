@@ -10,8 +10,7 @@ import time
 from . import outpututils
 
 
-# magic: better name here (this is a container class with info) dispatch?
-class ResultsWriter:
+class ResultsWriters:
 
     def __init__(self):
         ""

@@ -150,12 +150,12 @@ class MainEntry:
 
     def constructResultsWriter(self, start_time):
         ""
-        resw = construct_results_writer( self.opts, self.optD, start_time,
-                                         self.rtdata.getVvtestDir(),
-                                         self.rtdata.getTestResultsDir(),
-                                         self.rtdata.getPermissionsObject(),
-                                         self.rtdata.getPlatformObject(),
-                                         self.rtdata.cmdL )
+        resw = construct_results_writers( self.opts, self.optD, start_time,
+                                          self.rtdata.getVvtestDir(),
+                                          self.rtdata.getTestResultsDir(),
+                                          self.rtdata.getPermissionsObject(),
+                                          self.rtdata.getPlatformObject(),
+                                          self.rtdata.cmdL )
         self.rtdata.setResultsWriter( resw )
 
     def constructFilteringObjects(self):
@@ -803,50 +803,50 @@ def determine_verbose_integer( dash_v ):
     return verb
 
 
-def construct_results_writer( opts, optD,
-                              start_time, vvtestdir,
-                              test_dir, perms,
-                              platobj, cmdL ):
+def construct_results_writers( opts, optD,
+                               start_time, vvtestdir,
+                               test_dir, perms,
+                               platobj, cmdL ):
     ""
-    import libvvtest.resultswriter as resultswriter
+    import libvvtest.resultsout as resultsout
 
-    writer = resultswriter.ResultsWriter()
+    writers = resultsout.ResultsWriters()
 
     conobj = construct_console_writer( test_dir, opts, optD )
-    writer.addWriter( conobj )
+    writers.addWriter( conobj )
 
     if opts.qsub_id == None:
 
         if opts.html:
             htmlobj = construct_html_writer( test_dir, opts, optD, perms )
-            writer.addWriter( htmlobj )
+            writers.addWriter( htmlobj )
 
         if opts.junit:
             junitobj = construct_junit_writer( test_dir, opts, optD, perms )
-            writer.addWriter( junitobj )
+            writers.addWriter( junitobj )
 
         if opts.gitlab:
             wr = construct_gitlab_writer( test_dir, opts, optD, perms )
-            writer.addWriter( wr )
+            writers.addWriter( wr )
 
         if opts.save_results:
             wr = construct_testlist_writer( test_dir, opts, optD, perms, platobj )
-            writer.addWriter( wr )
+            writers.addWriter( wr )
 
-    writer.setRunAttr( startdate=str(start_time)+' / '+time.ctime(start_time) )
-    writer.setRunAttr( platform=platobj.getName() )
-    writer.setRunAttr( compiler=platobj.getCompiler() )
-    writer.setRunAttr( commandline=' '.join( cmdL ) )
-    writer.setRunAttr( hostname=os.uname()[1] )
-    writer.setRunAttr( rundir=test_dir )
-    writer.setRunAttr( curdir=os.getcwd() )
-    writer.setRunAttr( python=sys.executable )
-    writer.setRunAttr( vvtest=vvtestdir )
-    writer.setRunAttr( PYTHONPATH=os.environ.get( 'PYTHONPATH', '' ) )
-    writer.setRunAttr( PATH=os.environ.get( 'PATH', '' ) )
-    writer.setRunAttr( LOADEDMODULES=os.environ.get( 'LOADEDMODULES', '' ) )
+    writers.setRunAttr( startdate=str(start_time)+' / '+time.ctime(start_time) )
+    writers.setRunAttr( platform=platobj.getName() )
+    writers.setRunAttr( compiler=platobj.getCompiler() )
+    writers.setRunAttr( commandline=' '.join( cmdL ) )
+    writers.setRunAttr( hostname=os.uname()[1] )
+    writers.setRunAttr( rundir=test_dir )
+    writers.setRunAttr( curdir=os.getcwd() )
+    writers.setRunAttr( python=sys.executable )
+    writers.setRunAttr( vvtest=vvtestdir )
+    writers.setRunAttr( PYTHONPATH=os.environ.get( 'PYTHONPATH', '' ) )
+    writers.setRunAttr( PATH=os.environ.get( 'PATH', '' ) )
+    writers.setRunAttr( LOADEDMODULES=os.environ.get( 'LOADEDMODULES', '' ) )
 
-    return writer
+    return writers
 
 
 def construct_console_writer( test_dir, opts, optD ):
