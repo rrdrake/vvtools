@@ -22,6 +22,8 @@ class ConsoleWriter:
         self.sortspec = None
         self.maxnonpass = 32
 
+        self.suppress_info = False
+
     def setSortingSpecification(self, sortspec):
         ""
         self.sortspec = sortspec
@@ -30,6 +32,30 @@ class ConsoleWriter:
         ""
         assert num > 0
         self.maxnonpass = num
+
+    def setSuppressInfo(self):
+        ""
+        self.suppress_info = True
+
+    def prerun(self, atestlist, runinfo, abbreviate=True):
+        ""
+        self.writeActiveList( atestlist, abbreviate )
+        self.writeListSummary( atestlist, 'Test list:' )
+
+    def info(self, atestlist, runinfo):
+        ""
+        if not self.suppress_info:
+            self.writeActiveList( atestlist, abbreviate=False )
+            self.writeListSummary( atestlist, 'Summary:' )
+
+    def postrun(self, atestlist, runinfo):
+        ""
+        self.writeResultsList( atestlist )
+        self.writeListSummary( atestlist, 'Summary:' )
+
+    def final(self, atestlist, runinfo):
+        ""
+        pass
 
     def writeListSummary(self, atestlist, label):
         ""

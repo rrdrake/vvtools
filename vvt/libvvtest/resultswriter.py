@@ -6,22 +6,21 @@
 
 import os, sys
 import time
-import traceback
 
 from . import outpututils
 
 
+# magic: better name here (this is a container class with info) dispatch?
 class ResultsWriter:
 
-    def __init__(self, conobj, htmlobj, junitobj, gitlabobj, wlistobj ):
+    def __init__(self):
         ""
-        self.conobj = conobj
-        self.htmlobj = htmlobj
-        self.junitobj = junitobj
-        self.gitlabobj = gitlabobj
-        self.wlistobj = wlistobj
-
+        self.writers = []
         self.runattrs = {}
+
+    def addWriter(self, writer):
+        ""
+        self.writers.append( writer )
 
     def setRunAttr(self, **kwargs):
         ""
@@ -29,58 +28,25 @@ class ResultsWriter:
 
     def prerun(self, atestlist, abbreviate=True):
         ""
-        self.conobj.writeActiveList( atestlist, abbreviate )
-        self.conobj.writeListSummary( atestlist, 'Test list:' )
-
-        self.check_write_testlist( atestlist, inprogress=True )
+        for wr in self.writers:
+            wr.prerun( atestlist, self.runattrs, abbreviate )
 
     def info(self, atestlist):
         ""
-        if not self.htmlobj and not self.junitobj and not self.gitlabobj:
-            self.conobj.writeActiveList( atestlist, abbreviate=False )
-            self.conobj.writeListSummary( atestlist, 'Summary:' )
-
-        self.check_write_html( atestlist )
-        self.check_write_junit( atestlist )
-        self.check_write_gitlab( atestlist )
-        self.check_write_testlist( atestlist )
+        for wr in self.writers:
+            wr.info( atestlist, self.runattrs )
 
     def postrun(self, atestlist):
         ""
-        self.conobj.writeResultsList( atestlist )
-        self.conobj.writeListSummary( atestlist, 'Summary:' )
-
-        self.check_write_testlist( atestlist )
+        for wr in self.writers:
+            wr.postrun( atestlist, self.runattrs )
 
     def final(self, atestlist):
         ""
         self._mark_finished()
 
-        self.check_write_html( atestlist )
-        self.check_write_junit( atestlist )
-        self.check_write_gitlab( atestlist )
-
-    ###
-
-    def check_write_html(self, atestlist):
-        ""
-        if self.htmlobj:
-            self.htmlobj.writeDocument( atestlist )
-
-    def check_write_junit(self, atestlist):
-        ""
-        if self.junitobj:
-            self.junitobj.writeFile( atestlist )
-
-    def check_write_gitlab(self, atestlist):
-        ""
-        if self.gitlabobj:
-            self.gitlabobj.writeFiles( atestlist, self.runattrs )
-
-    def check_write_testlist(self, atestlist, inprogress=False):
-        ""
-        if self.wlistobj:
-            self.wlistobj.writeList( atestlist, self.runattrs, inprogress )
+        for wr in self.writers:
+            wr.final( atestlist, self.runattrs )
 
     def _mark_finished(self):
         ""

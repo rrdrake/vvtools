@@ -19,6 +19,22 @@ class HTMLWriter:
         self.filename = os.path.normpath( os.path.abspath( output_filename ) )
         self.testdir = results_test_dir
 
+    def prerun(self, atestlist, runinfo, abbreviate=True):
+        ""
+        pass
+
+    def info(self, atestlist, runinfo):
+        ""
+        self.writeDocument( atestlist )
+
+    def postrun(self, atestlist, runinfo):
+        ""
+        pass
+
+    def final(self, atestlist, runinfo):
+        ""
+        self.writeDocument( atestlist )
+
     def writeDocument(self, tlist):
         """
         Opens and writes an HTML summary file in the test directory.

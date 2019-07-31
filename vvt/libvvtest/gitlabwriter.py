@@ -22,6 +22,22 @@ class GitLabWriter:
 
         self.sortspec = None
 
+    def prerun(self, atestlist, runinfo, abbreviate=True):
+        ""
+        pass
+
+    def info(self, atestlist, runinfo):
+        ""
+        self.writeFiles( atestlist, runinfo )
+
+    def postrun(self, atestlist, runinfo):
+        ""
+        pass
+
+    def final(self, atestlist, runinfo):
+        ""
+        self.writeFiles( atestlist, runinfo )
+
     def setSortingSpecification(self, sortspec):
         ""
         self.sortspec = sortspec

@@ -26,6 +26,22 @@ class JUnitWriter:
         ""
         self.datestamp = datestamp
 
+    def prerun(self, atestlist, runinfo, abbreviate=True):
+        ""
+        pass
+
+    def info(self, atestlist, runinfo):
+        ""
+        self.writeFile( atestlist )
+
+    def postrun(self, atestlist, runinfo):
+        ""
+        pass
+
+    def final(self, atestlist, runinfo):
+        ""
+        self.writeFile( atestlist )
+
     def writeFile(self, atestlist):
         """
         This collects information from the given test list (a python list of

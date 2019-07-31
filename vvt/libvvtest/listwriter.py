@@ -6,7 +6,6 @@
 
 import os, sys
 import time
-from os.path import join as pjoin
 
 from . import outpututils
 from . import fmtresults
@@ -51,6 +50,22 @@ class ListWriter:
         ""
         self.onopts = on_option_list
         self.ftag = final_tag
+
+    def prerun(self, atestlist, runinfo, abbreviate=True):
+        ""
+        self.writeList( atestlist, runinfo, inprogress=True )
+
+    def info(self, atestlist, runinfo):
+        ""
+        self.writeList( atestlist, runinfo )
+
+    def postrun(self, atestlist, runinfo):
+        ""
+        self.writeList( atestlist, runinfo )
+
+    def final(self, atestlist, runinfo):
+        ""
+        pass
 
     def writeList(self, atestlist, runattrs, inprogress=False):
         ""

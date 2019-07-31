@@ -150,12 +150,12 @@ class MainEntry:
 
     def constructResultsWriter(self, start_time):
         ""
-        resw = make_results_writer( self.opts, self.optD, start_time,
-                                    self.rtdata.getVvtestDir(),
-                                    self.rtdata.getTestResultsDir(),
-                                    self.rtdata.getPermissionsObject(),
-                                    self.rtdata.getPlatformObject(),
-                                    self.rtdata.cmdL )
+        resw = construct_results_writer( self.opts, self.optD, start_time,
+                                         self.rtdata.getVvtestDir(),
+                                         self.rtdata.getTestResultsDir(),
+                                         self.rtdata.getPermissionsObject(),
+                                         self.rtdata.getPlatformObject(),
+                                         self.rtdata.cmdL )
         self.rtdata.setResultsWriter( resw )
 
     def constructFilteringObjects(self):
@@ -803,60 +803,35 @@ def determine_verbose_integer( dash_v ):
     return verb
 
 
-def make_results_writer( opts, optD,
-                         start_time, vvtestdir,
-                         test_dir, perms,
-                         platobj, cmdL ):
+def construct_results_writer( opts, optD,
+                              start_time, vvtestdir,
+                              test_dir, perms,
+                              platobj, cmdL ):
     ""
-    import libvvtest.consolewriter as consolewriter
+    import libvvtest.resultswriter as resultswriter
 
-    verb = determine_verbose_integer( opts.dash_v )
+    writer = resultswriter.ResultsWriter()
 
-    conobj = consolewriter.ConsoleWriter( sys.stdout, test_dir, verbose=verb )
-    conobj.setSortingSpecification( optD['sort_letters'] )
-
-    htmlobj = None
-    junitobj = None
-    gitlabobj = None
-    wlistobj = None
+    conobj = construct_console_writer( test_dir, opts, optD )
+    writer.addWriter( conobj )
 
     if opts.qsub_id == None:
 
         if opts.html:
-            import libvvtest.htmlwriter as htmlwriter
-            htmlobj = htmlwriter.HTMLWriter( perms,
-                                             opts.html,
-                                             test_dir )
+            htmlobj = construct_html_writer( test_dir, opts, optD, perms )
+            writer.addWriter( htmlobj )
 
         if opts.junit:
-            import libvvtest.junitwriter as junitwriter
-            junitobj = junitwriter.JUnitWriter( perms,
-                                                opts.junit,
-                                                test_dir )
-            junitobj.setOutputDate( opts.results_date )
+            junitobj = construct_junit_writer( test_dir, opts, optD, perms )
+            writer.addWriter( junitobj )
 
         if opts.gitlab:
-            import libvvtest.gitlabwriter as gitlabwriter
-
-            # gr = load_gitresults_module( vvtestdir )
-            # print3( 'magic: gr', help(gr.GitResults) )
-
-            gitlabobj = gitlabwriter.GitLabWriter( perms,
-                                                   opts.gitlab,
-                                                   test_dir )
-            gitlabobj.setSortingSpecification( optD['sort_letters'] )
+            wr = construct_gitlab_writer( test_dir, opts, optD, perms )
+            writer.addWriter( wr )
 
         if opts.save_results:
-            import libvvtest.listwriter as listwriter
-            wlistobj = listwriter.ListWriter( perms,
-                                              platobj.testingDirectory(),
-                                              test_dir )
-            wlistobj.setOutputDate( opts.results_date )
-            wlistobj.setNamingTags( optD['onopts'], opts.results_tag )
-
-    import libvvtest.resultswriter as resultswriter
-    writer = resultswriter.ResultsWriter( conobj, htmlobj, junitobj,
-                                          gitlabobj, wlistobj )
+            wr = construct_testlist_writer( test_dir, opts, optD, perms, platobj )
+            writer.addWriter( wr )
 
     writer.setRunAttr( startdate=str(start_time)+' / '+time.ctime(start_time) )
     writer.setRunAttr( platform=platobj.getName() )
@@ -872,6 +847,70 @@ def make_results_writer( opts, optD,
     writer.setRunAttr( LOADEDMODULES=os.environ.get( 'LOADEDMODULES', '' ) )
 
     return writer
+
+
+def construct_console_writer( test_dir, opts, optD ):
+    ""
+    import libvvtest.consolewriter as consolewriter
+
+    verb = determine_verbose_integer( opts.dash_v )
+
+    conobj = consolewriter.ConsoleWriter( sys.stdout, test_dir, verbose=verb )
+
+    conobj.setSortingSpecification( optD['sort_letters'] )
+
+    if opts.html or opts.junit or opts.gitlab or opts.save_results:
+        conobj.setSuppressInfo()
+
+    return conobj
+
+
+def construct_html_writer( test_dir, opts, optD, perms ):
+    ""
+    import libvvtest.htmlwriter as htmlwriter
+
+    htmlobj = htmlwriter.HTMLWriter( perms, opts.html, test_dir )
+
+    return htmlobj
+
+
+def construct_junit_writer( test_dir, opts, optD, perms ):
+    ""
+    import libvvtest.junitwriter as junitwriter
+
+    junitobj = junitwriter.JUnitWriter( perms, opts.junit, test_dir )
+
+    junitobj.setOutputDate( opts.results_date )
+
+    return junitobj
+
+
+def construct_gitlab_writer( test_dir, opts, optD, perms ):
+    ""
+    import libvvtest.gitlabwriter as gitlabwriter
+
+    # gr = load_gitresults_module( vvtestdir )
+    # print3( 'magic: gr', help(gr.GitResults) )
+
+    gitlabobj = gitlabwriter.GitLabWriter( perms, opts.gitlab, test_dir )
+
+    gitlabobj.setSortingSpecification( optD['sort_letters'] )
+
+    return gitlabobj
+
+
+def construct_testlist_writer( test_dir, opts, optD, perms, platobj ):
+    ""
+    import libvvtest.listwriter as listwriter
+
+    wlistobj = listwriter.ListWriter( perms,
+                                      platobj.testingDirectory(),
+                                      test_dir )
+
+    wlistobj.setOutputDate( opts.results_date )
+    wlistobj.setNamingTags( optD['onopts'], opts.results_tag )
+
+    return wlistobj
 
 
 def batchTestList( opts, optD, rtdata,
