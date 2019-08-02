@@ -32,10 +32,11 @@ USER_PLUGIN_MODULE_NAME = 'vvtest_user_plugin'
 
 class MainEntry:
 
-    def __init__(self, argv, vvtestdir):
+    def __init__(self, argv, vvtestdir, exepath):
         ""
         self.argv = argv
         self.vvtestdir = vvtestdir
+        self.exepath = exepath
 
     def constructObjects(self):
         ""
@@ -47,7 +48,7 @@ class MainEntry:
         self.opts, self.optD, self.dirs = \
             cmdline.parse_command_line( self.argv[1:], version )
 
-        self.rtdata = RuntimeData( self.argv, self.vvtestdir )
+        self.rtdata = RuntimeData( self.argv, self.vvtestdir, self.exepath )
 
         self.constructConfiguration()
 
@@ -283,16 +284,19 @@ def create_configuration( opts, optD, vvtestdir ):
 
 class RuntimeData:
 
-    def __init__(self, cmdL, vvtestdir):
+    def __init__(self, cmdL, vvtestdir, exepath):
         """
-        The 'vvtestdir' is the directory containing the vvtest script.
+        'vvtestdir' is the directory containing the vvtest script
+        'exepath' is the absolute path to vvtest (without following soft links)
         """
         self.cmdL = [ os.path.abspath( cmdL[0] ) ]
         self.cmdL.extend( cmdL[1:] )
 
         self.vvtestdir = vvtestdir
+        self.exepath = exepath
 
     def getVvtestDir(self): return self.vvtestdir
+    def getVvtestPath(self): return self.exepath
 
     def setConfiguration(self, config): self.config = config
     def getConfiguration(self): return self.config
@@ -919,15 +923,23 @@ def batchTestList( opts, optD, rtdata,
     """
     The 'tlist' is a TestList class instance.
     """
+    import libvvtest.batchutils as batchutils
+
     assert opts.qsub_id == None
 
     qsublimit = opts.batch_limit
     if qsublimit == None:
         qsublimit = plat.getDefaultQsubLimit()
 
-    batch = Batcher( rtdata, opts, optD,
-                     plat, tlist, xlist, perms,
-                     test_dir, qsublimit )
+    vvtestcmd = vvtest_command_line_for_batch( opts, optD,
+                                               rtdata.getVvtestPath(),
+                                               rtdata.getConfiguration() )
+
+    batch = batchutils.Batcher( vvtestcmd, testlist_name,
+                                plat, tlist, xlist, perms,
+                                test_dir, qsublimit,
+                                opts.batch_length,
+                                opts.max_timeout )
 
     plat.display()
 
@@ -941,88 +953,32 @@ def batchTestList( opts, optD, rtdata,
                            test_dir, qsublimit )
 
 
-class Batcher:
-    
-    def __init__(self, rtdata, opts, optD,
-                       plat, tlist, xlist, perms,
-                       test_dir, qsublimit):
-        """
-        The 'tlist' is a TestList class instance.
-        """
-        import libvvtest.batchutils as batchutils
+def vvtest_command_line_for_batch( opts, optD, vvtestpath, config ):
+    ""
+    cmd = vvtestpath
 
-        self.rtdata = rtdata
-        self.opts = opts
-        self.optD = optD
-        self.plat = plat
-        self.tlist = tlist
-        self.xlist = xlist
-        self.perms = perms
+    if opts.dash_e: cmd += ' -e'
+    if opts.dash_m: cmd += ' -m'
+    if opts.postclean: cmd += ' -C'
+    if opts.analyze: cmd += ' -a'
 
-        clean_exit_marker = "queue job finished cleanly"
+    if opts.perms:
+        cmd += ' --perms '+','.join( opts.perms )
 
-        self.accountant = batchutils.BatchAccountant()
+    if config.get('configdir'):
+        cmd += ' --config='+config.get('configdir')
 
-        self.namer = batchutils.BatchFileNamer( test_dir, testlist_name )
+    if optD['platopt_dict']:
+        for k,v in optD['platopt_dict'].items():
+            if v:
+                cmd += ' --platopt ' + k + '=' + v
+            else:
+                cmd += ' --platopt ' + k 
 
-        self.scheduler = batchutils.BatchScheduler(
-                            tlist, xlist,
-                            self.accountant, self.namer,
-                            perms, plat, qsublimit,
-                            clean_exit_marker )
+    for arg in config.get('testargs'):
+        cmd += ' --test-args="'+arg+'"'
 
-        config = self.rtdata.getConfiguration()
-
-        cmd_opts = ''
-        if self.opts.dash_e: cmd_opts += ' -e'
-        if self.opts.dash_m: cmd_opts += ' -m'
-        if self.opts.postclean: cmd_opts += ' -C'
-        if self.opts.analyze: cmd_opts += ' -a'
-        if self.opts.perms:
-            cmd_opts += ' --perms '+','.join( self.opts.perms )
-        if config.get('configdir'):
-            cmd_opts += ' --config='+config.get('configdir')
-        if self.optD['platopt_dict']:
-            for k,v in self.optD['platopt_dict'].items():
-                if v:
-                    cmd_opts += ' --platopt ' + k + '=' + v
-                else:
-                    cmd_opts += ' --platopt ' + k 
-        for arg in config.get('testargs'):
-            cmd_opts += ' --test-args="'+arg+'"'
-
-        self.batscriptor = batchutils.BatchScriptWriter(
-                                              self.rtdata, self.namer,
-                                              self.accountant, self.perms,
-                                              self.xlist, self.plat,
-                                              cmd_opts,
-                                              self.opts.batch_length,
-                                              self.opts.max_timeout,
-                                              clean_exit_marker )
-        self.batscriptor.createTestGroups()
-
-    def getScheduler(self):
-        return self.scheduler
-
-    def getNumNotRun(self):
-        ""
-        return self.accountant.numToDo()
-
-    def getNumStarted(self):
-        ""
-        return self.accountant.numStarted()
-
-    def getStarted(self):
-        ""
-        return self.accountant.getStarted()
-
-    def writeQsubScripts(self, rundate):
-        ""
-        self.batscriptor.writeQsubScripts( rundate )
-
-    def getIncludeFiles(self):
-        ""
-        return self.batscriptor.getIncludeFiles()
+    return cmd
 
 
 def restartTests( opts, optD, rtdata ):
@@ -1210,12 +1166,13 @@ def adjust_sys_path_for_dependencies( vvtestdir ):
 
 if __name__ == '__main__':
     ""
+    exepath = os.path.normpath( os.path.abspath( sys.argv[0] ) )
     vvtestdir = get_vvtest_directory()
 
     adjust_sys_path_for_dependencies( vvtestdir )
 
     try:
-        main = MainEntry( sys.argv, vvtestdir )
+        main = MainEntry( sys.argv, vvtestdir, exepath )
         main.constructObjects()
 
         exitstat = main.execute()

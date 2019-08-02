@@ -10,7 +10,9 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
+from os.path import abspath
 import time
+import glob
 
 import vvtestutils as vtu
 import testutils as util
@@ -30,12 +32,11 @@ class Testing_boostrap_file( vtu.vvtestTestCase ):
         vrun = vtu.runvvtest()
         vrun.assertCounts( npass=1 )
 
-    def run_soft_linked_vvtest_and_expect_one_test_pass(self, args=''):
+    def run_soft_linked_vvtest_and_expect_one_test_pass(self, args='',
+                                                              batch=False):
         ""
-        cmd = os.path.abspath( 'vvtest' )
-        cmd += ' -v --plat ' + vtu.core_platform_name()
-        if args:
-            cmd += ' ' + args
+        cmd = vtu.vvtest_command_line( args, batch=batch,
+                                       vvtestpath=abspath( 'vvtest' ) )
 
         x,out = util.runcmd( cmd )
         assert x == 0
@@ -55,21 +56,40 @@ class Testing_boostrap_file( vtu.vvtestTestCase ):
 
     def test_with_a_bootstrap_file(self):
         ""
-        util.writefile( 'hello.py.vvt', """
+        util.writefile( 'hello.vvt', """
             import os, sys
             print ( "special env var="+os.environ['SPECIAL_TEST_VAR'] )
             """ )
         os.symlink( vtu.vvtest_file, 'vvtest' )
         util.writefile( 'vvtest_bootstrap.py', """
-            import os
+            import os, time
             os.environ['SPECIAL_TEST_VAR'] = 'special value'
+            fp = open( '"""+abspath('bscheck_')+"""'+str(os.getpid()), 'at' )
+            fp.write( 'PWD='+os.getcwd() + os.linesep )
+            fp.close()
+            time.sleep(1)
             """ )
         time.sleep(1)
 
-        self.run_soft_linked_vvtest_and_expect_one_test_pass()
+        for batch in [False,True]:
 
-        assert len( util.grepfiles( 'var=special value',
-                    'TestResults*/hello.py*/execute.log' ) ) == 1
+            vtu.remove_results()
+            for fn in util.findfiles( 'bscheck_*', '.' ):
+                os.remove( fn )
+            time.sleep(1)
+
+            self.run_soft_linked_vvtest_and_expect_one_test_pass( batch=batch )
+
+            assert len( util.grepfiles( 'var=special value',
+                        'TestResults*/hello*/execute.log' ) ) == 1
+
+            fL = util.findfiles( 'bscheck_*', '.' )
+            if batch:
+                # both the initial vvtest execution and the batch job should
+                # have run the bootstrap file
+                assert len(fL) == 2
+            else:
+                assert len(fL) == 1
 
     def test_a_bootstrap_file_setting_the_config_dir(self):
         ""
@@ -82,7 +102,7 @@ class Testing_boostrap_file( vtu.vvtestTestCase ):
         os.symlink( vtu.vvtest_file, 'vvtest' )
         util.writefile( 'vvtest_bootstrap.py', """
             import os
-            os.environ['VVTEST_CONFIGDIR'] = '"""+os.path.abspath('myconfig')+"""'
+            os.environ['VVTEST_CONFIGDIR'] = '"""+abspath('myconfig')+"""'
             """ )
 
         util.writefile( 'hello.py.vvt', """
@@ -115,7 +135,7 @@ class Testing_boostrap_file( vtu.vvtestTestCase ):
         os.symlink( vtu.vvtest_file, 'vvtest' )
         util.writefile( 'vvtest_bootstrap.py', """
             import os
-            os.environ['VVTEST_CONFIGDIR'] = '"""+os.path.abspath('myconfig')+"""'
+            os.environ['VVTEST_CONFIGDIR'] = '"""+abspath('myconfig')+"""'
             """ )
 
         util.writefile( 'hello.py.vvt', """
@@ -126,13 +146,18 @@ class Testing_boostrap_file( vtu.vvtestTestCase ):
 
         time.sleep(1)
 
-        optcfg = '--config ' + os.path.abspath('cmdconfig')
-        self.run_soft_linked_vvtest_and_expect_one_test_pass( optcfg )
+        for batch in [False,True]:
 
-        assert len( util.grepfiles( 'my special function called',
-                    'TestResults*/hello.py*/execute.log' ) ) == 0
-        assert len( util.grepfiles( 'command config function called',
-                    'TestResults*/hello.py*/execute.log' ) ) == 1
+            vtu.remove_results()
+
+            optcfg = '--config ' + abspath('cmdconfig')
+            self.run_soft_linked_vvtest_and_expect_one_test_pass( optcfg,
+                                                                  batch=batch )
+
+            assert len( util.grepfiles( 'my special function called',
+                        'TestResults*/hello.py*/execute.log' ) ) == 0
+            assert len( util.grepfiles( 'command config function called',
+                        'TestResults*/hello.py*/execute.log' ) ) == 1
 
 
 ############################################################################

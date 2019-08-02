@@ -317,11 +317,12 @@ def vvtest_command_line( *cmd_args, **options ):
     Options:  batch=True (default=False)
               addplatform=True
               addverbose=True
+              vvtestpath=/path/vvtest (default is 'vvtest_file' from this file)
     """
     argstr = ' '.join( cmd_args )
     argL = shlex.split( argstr )
 
-    cmdL = [ sys.executable, vvtest_file ]
+    cmdL = [ sys.executable, options.get( 'vvtestpath', vvtest_file ) ]
 
     if need_to_add_verbose_flag( argL, options ):
         # add -v when running in order to extract the full test list

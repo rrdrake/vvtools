@@ -14,19 +14,72 @@ from . import testlistio
 from . import pathutil
 
 
+class Batcher:
+
+    def __init__(self, vvtestcmd, testlist_name,
+                       plat, tlist, xlist, perms,
+                       test_dir, qsublimit,
+                       batch_length, max_timeout):
+        ""
+        clean_exit_marker = "queue job finished cleanly"
+
+        self.accountant = BatchAccountant()
+
+        self.namer = BatchFileNamer( test_dir, testlist_name )
+
+        self.scheduler = BatchScheduler(
+                            tlist, xlist,
+                            self.accountant, self.namer,
+                            perms, plat, qsublimit,
+                            clean_exit_marker )
+
+        self.batscriptor = BatchScriptWriter(
+                                self.namer,
+                                self.accountant, perms,
+                                xlist, plat,
+                                vvtestcmd,
+                                batch_length,
+                                max_timeout,
+                                clean_exit_marker )
+
+        self.batscriptor.createTestGroups()
+
+    def getScheduler(self):
+        return self.scheduler
+
+    def getNumNotRun(self):
+        ""
+        return self.accountant.numToDo()
+
+    def getNumStarted(self):
+        ""
+        return self.accountant.numStarted()
+
+    def getStarted(self):
+        ""
+        return self.accountant.getStarted()
+
+    def writeQsubScripts(self, rundate):
+        ""
+        self.batscriptor.writeQsubScripts( rundate )
+
+    def getIncludeFiles(self):
+        ""
+        return self.batscriptor.getIncludeFiles()
+
+
 class BatchScriptWriter:
 
-    def __init__(self, rtdata, namer, accountant, perms, xlist, plat,
-                       vvtest_cmd_option_string,
+    def __init__(self, namer, accountant, perms, xlist, plat,
+                       vvtestcmd,
                        batch_length, max_timeout, clean_exit_marker):
         ""
-        self.rtdata = rtdata
         self.namer = namer
         self.accountant = accountant
         self.perms = perms
         self.xlist = xlist
         self.plat = plat
-        self.cmd_opts_string = vvtest_cmd_option_string
+        self.vvtestcmd = vvtestcmd
         self.batch_length = batch_length
         self.max_timeout = max_timeout
         self.clean_exit_marker = clean_exit_marker
@@ -49,8 +102,7 @@ class BatchScriptWriter:
         return self.qsub_testfilenames
 
     def createTestGroups(self):
-        """
-        """
+        ""
         qlen = self.batch_length
         if qlen == None:
             qlen = 30*60
@@ -78,32 +130,26 @@ class BatchScriptWriter:
               tsum += rt
           if len(grpL) > 0:
             qL.append( [ tsum, len(qL), grpL ] )
-        
+
         qL.sort()
         qL.reverse()
         self.qsublists = map( lambda L: L[2], qL )
 
     def removeBatchDirectories(self):
-        """
-        """
+        ""
         for d in self.namer.globBatchDirectories():
             print3( 'rm -rf '+d )
             pathutil.fault_tolerant_remove( d )
 
     def writeQsubScripts(self, rundate):
-        """
-        """
-        config = self.rtdata.getConfiguration()
-
+        ""
         self.removeBatchDirectories()
 
-        commonopts = self.cmd_opts_string
-
         qsubids = {}  # maps batch id to max num processors for that batch
-        
+
         qid = 0
         for qL in self.qsublists:
-          self.make_queue_batch( qid, qL, qsubids, commonopts, rundate )
+          self.make_queue_batch( qid, qL, qsubids, rundate )
           qid += 1
 
         qidL = list( qsubids.keys() )
@@ -116,9 +162,8 @@ class BatchScriptWriter:
             d = self.namer.getSubdir( i )
             self.perms.recurse( d )
 
-    def make_queue_batch(self, qnumber, qlist, npD, comopts, rundate):
-        """
-        """
+    def make_queue_batch(self, qnumber, qlist, npD, rundate):
+        ""
         qidstr = str(qnumber)
 
         testlistfname = self.namer.getTestListName( qidstr )
@@ -137,7 +182,7 @@ class BatchScriptWriter:
             tl.addTest( tcase )
             tL.append( tcase )
             qtime += int( tspec.getAttr('timeout') )
-        
+
         if qtime == 0:
             qtime = self.Tzero  # give it the "no timeout" length of time
         else:
@@ -163,9 +208,9 @@ class BatchScriptWriter:
         jb = BatchJob( maxnp, pout, tout, tL,
                        self.read_interval, self.read_timeout )
         self.accountant.addJob( qnumber, jb )
-        
+
         tl.stringFileWrite( extended=True )
-        
+
         fn = self.namer.getBatchScriptName( qidstr )
         fp = open( fn, "w" )
 
@@ -175,25 +220,24 @@ class BatchScriptWriter:
                          'cd ' + tdir + ' || exit 1\n',
                          'echo "job start time = `date`"\n' + \
                          'echo "job time limit = ' + str(qtime) + '"\n' ] )
-        
+
         # set the environment variables from the platform into the script
         for k,v in self.plat.getEnvironment().items():
           fp.write( 'setenv ' + k + ' "' + v  + '"\n' )
-        
-        # collect relevant options to pass to the qsub vvtest invocation
-        taopts = '--qsub-id=' + qidstr + ' '
-        taopts += comopts
+
+        cmd = self.vvtestcmd + ' --qsub-id=' + qidstr
+
         if len(qlist) == 1:
           # force a timeout for batches with only one test
-          if qtime < 600: taopts += ' -T ' + str(qtime*0.90)
-          else:           taopts += ' -T ' + str(qtime-120)
-        
-        cmd = self.rtdata.getVvtestDir()+'/vvtest ' + taopts + ' || exit 1'
+          if qtime < 600: cmd += ' -T ' + str(qtime*0.90)
+          else:           cmd += ' -T ' + str(qtime-120)
+
+        cmd += ' || exit 1'
         fp.writelines( [ cmd+'\n\n' ] )
-        
+
         # echo a marker to determine when a clean batch job exit has occurred
         fp.writelines( [ 'echo "'+self.clean_exit_marker+'"\n' ] )
-        
+
         fp.close()
 
 
