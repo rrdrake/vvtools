@@ -8,6 +8,8 @@ import os, sys
 import stat
 import itertools
 
+import perms
+
 
 class PermissionSetter:
     

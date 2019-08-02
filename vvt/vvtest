@@ -1157,11 +1157,32 @@ def get_vvtest_directory():
     return d
 
 
-def adjust_sys_path_for_dependencies( vvtestdir ):
+def adjust_sys_path_for_shared_modules( vvtestdir ):
     ""
-    trigdir = os.path.normpath( pjoin( vvtestdir, '..', 'trig' ) )
-    if trigdir not in sys.path:
-        sys.path.insert( 1, trigdir )
+    trigdir = get_trig_directory( vvtestdir )
+
+    if trigdir:
+        if trigdir not in sys.path:
+            sys.path.insert( 1, trigdir )
+    else:
+        raise FatalError( '*** vvtest error: '
+                          'failed to find "trig" directory for imports' )
+
+
+def get_trig_directory( vvtestdir ):
+    """
+    the trig directory is a sibling directory in the scidev repository, but
+    a subdirectory when vvtest is installed with the 'install_vvtest' script
+    """
+    trigdir = os.path.normpath( pjoin( vvtestdir, 'trig' ) )
+
+    if not os.path.isdir( trigdir ):
+        trigdir = os.path.normpath( pjoin( vvtestdir, '..', 'trig' ) )
+
+        if not os.path.isdir( trigdir ):
+            trigdir = None
+
+    return trigdir
 
 
 if __name__ == '__main__':
@@ -1169,7 +1190,7 @@ if __name__ == '__main__':
     exepath = os.path.normpath( os.path.abspath( sys.argv[0] ) )
     vvtestdir = get_vvtest_directory()
 
-    adjust_sys_path_for_dependencies( vvtestdir )
+    adjust_sys_path_for_shared_modules( vvtestdir )
 
     try:
         main = MainEntry( sys.argv, vvtestdir, exepath )

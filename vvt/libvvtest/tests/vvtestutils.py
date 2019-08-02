@@ -12,6 +12,7 @@ import fnmatch
 import signal
 import subprocess
 import unittest
+import shutil
 
 from os.path import dirname, abspath
 from os.path import join as pjoin
@@ -21,10 +22,15 @@ from testutils import print3
 
 
 testsrcdir = dirname( abspath( sys.argv[0] ) )
-
-# all imports for vvtest should be done relative to the "vvt" directory
 vvtdir = dirname( dirname( testsrcdir ) )
+scidevdir = dirname( vvtdir )
+trigdir = pjoin( scidevdir, 'trig' )
+
+# imports for core vvtest modules are relative to the "vvt" directory
 sys.path.insert( 0, vvtdir )
+
+# import paths for shared modules
+sys.path.insert( 1, trigdir )
 
 cfgdir = os.path.join( vvtdir, 'config' )
 
@@ -36,7 +42,7 @@ import libvvtest.testcase as testcase
 import libvvtest.teststatus as teststatus
 from libvvtest.RuntimeConfig import RuntimeConfig
 from libvvtest.userplugin import UserPluginBridge, import_module_by_name
-import libvvtest.paramset as ParameterSet
+import libvvtest.paramset as paramset
 
 
 ##########################################################################
@@ -59,6 +65,19 @@ class vvtestTestCase( unittest.TestCase ):
     def tearDown(self):
         ""
         pass
+
+
+def copy_vvtest_into_directory( dest_dir ):
+    """
+    copies vvtest and makes symlinks to required source code directories
+    """
+    shutil.copy( vvtest_file, dest_dir+'/vvtest' )
+
+    for fn in os.listdir( vvtdir ):
+        if fn != 'vvtest':
+            os.symlink( vvtdir+'/'+fn, dest_dir+'/'+fn )
+
+    os.symlink( trigdir, dest_dir+'/trig' )
 
 
 nonqueued_platform_names = [ 'ceelan', 'Linux', 'iDarwin', 'Darwin' ]
@@ -635,7 +654,7 @@ def make_fake_staged_TestCase( stage_index=0 ):
     tcase = make_fake_TestCase()
     tspec = tcase.getSpec()
 
-    pset = ParameterSet.ParameterSet()
+    pset = paramset.ParameterSet()
     pset.addParameterGroup( ('stage','np'), [ ('1','1'), ('2','4'), ('3','1') ] )
 
     if stage_index == 0:

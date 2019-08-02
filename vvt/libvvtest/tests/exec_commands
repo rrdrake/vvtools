@@ -482,7 +482,7 @@ class the_core_make_execute_command_function( vtu.vvtestTestCase ):
         ""
         os.mkdir( 'install:dir' )
 
-        copy_vvtest_into_directory( 'install:dir' )
+        vtu.copy_vvtest_into_directory( 'install:dir' )
         vvtest = abspath( 'install:dir/vvtest' )
 
         util.writefile( 'rundir/atest.vvt', """
@@ -570,15 +570,6 @@ class the_core_make_execute_command_function( vtu.vvtestTestCase ):
 
         assert len( util.grepfiles( 'coolname=atest', '*/atest/execute.log' ) ) == 1
         assert len( util.greplines( 'atest *diff', out ) ) > 0
-
-
-def copy_vvtest_into_directory( dest_dir ):
-    ""
-    shutil.copy( vtu.vvtest_file, dest_dir+'/vvtest' )
-    vvtest = abspath( dest_dir+'/vvtest' )
-    for fn in os.listdir( vtu.vvtdir ):
-        if fn != 'vvtest':
-            os.symlink( vtu.vvtdir+'/'+fn, dest_dir+'/'+fn )
 
 
 ########################################################################

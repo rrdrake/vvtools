@@ -222,7 +222,7 @@ and the test directory will not be cleaned out.
 
 The --perms option will apply permission settings to files and directories in
 the test execution area.  Multiple --perms options can be used and/or the
-specifications can be comma separated.  If the specifcation starts
+specifications can be comma separated.  If the specification starts
 with "g=" then the group permissions are set.  If it starts with
 "o=" then the world permissions are set.  If not one of these,
 then it must be the name of a UNIX group, and the files and
