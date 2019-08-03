@@ -9,15 +9,17 @@ import stat
 import itertools
 
 import perms
+from .errors import FatalError
 
 
 class PermissionSetter:
     
     def __init__(self, topdir, spec):
         """
-        The 'spec' can be a list or a comma separate string.  If a spec
-        starts with "g=" or "o=" then set permissions.  Otherwise, set the
-        group name to that string.
+        The 'spec' can be a list or a comma separate string, which is sent
+        into the perms.py module for processing.  The only difference here
+        is that (for backward compatibility), g= o= g+ and o+ specifications
+        will have little x replaced with capital X.
 
         Examples of 'spec': "wg-alegra,g=r-x,o=---"
                             ['wg-alegra','g=rx','o=']
@@ -27,13 +29,7 @@ class PermissionSetter:
         self.spec = spec
         self.cache = {}
 
-        self.grpid = None
-        self.gperm = None
-        self.operm = None
-        try:
-            self._parse_spec( spec )
-        except:
-            raise Exception( "invalid permissions specification: "+str(spec) )
+        self.speclist = parse_permission_specifications( spec )
 
     def set(self, path):
         """
@@ -50,11 +46,11 @@ class PermissionSetter:
         if os.path.isabs( path ):
             assert os.path.exists( path )
             self._setperms( path )
-            
+
         else:
             path = os.path.normpath( path )
             assert not path.startswith( '..' )
-            
+
             fp = os.path.join( self.topdir, path )
             assert os.path.exists( fp )
 
@@ -103,111 +99,56 @@ class PermissionSetter:
         elif not os.path.islink( path ):
             self._setperms( path )
 
-    GRP_MASK = (stat.S_ISGID|stat.S_IRWXG)
-    GRP_PERMS = { ''    : 0,
-                  '---' : 0,
-                  '-'   : 0,
-                  'r'   : stat.S_IRGRP,
-                  'w'   : stat.S_IWGRP,
-                  'x'   : stat.S_IXGRP,
-                  's'   : stat.S_IXGRP|stat.S_ISGID,
-                  'r--' : stat.S_IRGRP,
-                  '-w-' : stat.S_IWGRP,
-                  '--x' : stat.S_IXGRP,
-                  '--s' : stat.S_IXGRP|stat.S_ISGID,
-                  'rw'  : stat.S_IRGRP|stat.S_IWGRP,
-                  'rx'  : stat.S_IRGRP|stat.S_IXGRP,
-                  'rs'  : stat.S_IRGRP|stat.S_IXGRP|stat.S_ISGID,
-                  'wx'  : stat.S_IWGRP|stat.S_IXGRP,
-                  'rw-' : stat.S_IRGRP|stat.S_IWGRP,
-                  'r-x' : stat.S_IRGRP|stat.S_IXGRP,
-                  'r-s' : stat.S_IRGRP|stat.S_IXGRP|stat.S_ISGID,
-                  '-wx' : stat.S_IWGRP|stat.S_IXGRP,
-                  '-ws' : stat.S_IWGRP|stat.S_IXGRP|stat.S_ISGID,
-                  'rwx' : stat.S_IRWXG,
-                  'rws' : stat.S_IRWXG|stat.S_ISGID }
-    
-    OTH_MASK = stat.S_IRWXO
-    OTH_PERMS = { ''    : 0,
-                  '---' : 0,
-                  '-'   : 0,
-                  'r'   : stat.S_IROTH,
-                  'w'   : stat.S_IWOTH,
-                  'x'   : stat.S_IXOTH,
-                  'r--' : stat.S_IROTH,
-                  '-w-' : stat.S_IWOTH,
-                  '--x' : stat.S_IXOTH,
-                  'rw'  : stat.S_IROTH|stat.S_IWOTH,
-                  'rx'  : stat.S_IROTH|stat.S_IXOTH,
-                  'wx'  : stat.S_IWOTH|stat.S_IXOTH,
-                  'rw-' : stat.S_IROTH|stat.S_IWOTH,
-                  'r-x' : stat.S_IROTH|stat.S_IXOTH,
-                  '-wx' : stat.S_IWOTH|stat.S_IXOTH,
-                  'rwx' : stat.S_IRWXO }
-    
-    def _parse_spec(self, spec):
-        """
-        Sets self.grpid, self.gperm, and self.operm based on the command
-        line specification.
-        """
-        if type(spec) == type(''):
-            spec = [ spec ]
-        for item in spec:
-            for s in item.split(','):
-                s = s.strip()
-                if s:
-                    if s.startswith( 'g=' ):
-                        self.gperm = PermissionSetter.GRP_PERMS[ s[2:] ]
-                    elif s.startswith( 'o=' ):
-                        self.operm = PermissionSetter.OTH_PERMS[ s[2:] ]
-                    else:
-                        import grp
-                        self.grpid = grp.getgrnam( s ).gr_gid
-    
     def _setperms(self, path):
         """
         Applies the permissions stored in this class to the give path.
         """
-        if self.grpid != None:
-            uid = os.stat( path ).st_uid
-            os.chown( path, uid, self.grpid )
-        
-        if self.gperm != None or self.operm != None:
-            
-            fm = stat.S_IMODE( os.stat(path)[stat.ST_MODE] )
-            
-            if os.path.isdir( path ):
-                # for directories, just set the permissions to the values
-                # given at construction
-                if self.gperm != None:
-                    fm &= ( ~(PermissionSetter.GRP_MASK) )
-                    fm |= self.gperm
-                if self.operm != None:
-                    fm &= ( ~(PermissionSetter.OTH_MASK) )
-                    fm |= self.operm
-            
+        perms.apply_chmod( path, *self.speclist )
+
+
+def parse_permission_specifications( string_or_list ):
+    ""
+    if type(string_or_list) == type(''):
+        speclist = [ string_or_list ]
+    else:
+        speclist = string_or_list
+
+    specL = []
+    for spec_string in speclist:
+        for spec in split_by_space_and_comma( spec_string ):
+            if len(spec) >= 2 and spec[0] in 'ugo' and spec[1] in '=+-':
+                try:
+                    perms.change_filemode( 0, spec )
+                    spec = change_x_perms_to_capital_X( spec )
+                    specL.append( spec )
+                except perms.PermissionSpecificationError as e:
+                    raise FatalError( 'invalid permission specification "' + \
+                                      spec+'" '+str(e) )
             else:
-                # for regular files, give execute permission if read is
-                # allowed AND the owner has execute permission
-                
-                if self.gperm != None:
-                    fm &= ( ~(PermissionSetter.GRP_MASK) )
-                    if int( self.gperm & stat.S_IRGRP ):
-                        fm |= stat.S_IRGRP
-                        if int( fm & stat.S_IXUSR ):
-                            fm |= stat.S_IXGRP
-                    if int( self.gperm & stat.S_IWGRP ):
-                        fm |= stat.S_IWGRP
-                
-                if self.operm != None:
-                    fm &= ( ~(PermissionSetter.OTH_MASK) )
-                    if int( self.operm & stat.S_IROTH ):
-                        fm |= stat.S_IROTH
-                        if int( fm & stat.S_IXUSR ):
-                            fm |= stat.S_IXOTH
-                    if int( self.operm & stat.S_IWOTH ):
-                        fm |= stat.S_IWOTH
-            
-            os.chmod( path, fm )
+                if not perms.can_map_group_name_to_group_id( spec ):
+                    raise FatalError( 'invalid permission specification "' + \
+                                      spec+'"' )
+                specL.append( spec )
+
+    return specL
 
 
+def change_x_perms_to_capital_X( spec ):
+    ""
+    if len(spec) >= 3 and spec[0] in 'go' and spec[1] in '=+':
+        spec = spec.replace( 'x', 'X' )
+
+    return spec
+
+
+def split_by_space_and_comma( spec_string ):
+    ""
+    sL = []
+
+    for s1 in spec_string.strip().split():
+        for s2 in s1.split( ',' ):
+            s2 = s2.strip()
+            if s2:
+                sL.append( s2 )
+
+    return sL

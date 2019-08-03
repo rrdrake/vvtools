@@ -803,8 +803,13 @@ def has_world_execute( path ):
 
 def probe_for_two_different_groups():
     ""
-    x,out = runcmd( 'groups', raise_on_error=False )
-    grp1,grp2 = out.strip().split()[:2]
+    import grp
+
+    grpidL = os.getgroups()
+    grpid1,grpid2 = grpidL[-2],grpidL[-1]
+    grp1 = grp.getgrgid( grpid1 ).gr_name
+    grp2 = grp.getgrgid( grpid2 ).gr_name
+
     assert grp1 and grp2 and grp1 != grp2
     return grp1,grp2
 

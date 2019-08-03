@@ -17,21 +17,36 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
-import libvvtest.permsetter as PS
+from libvvtest.permsetter import PermissionSetter, parse_permission_specifications
+from libvvtest.errors import FatalError
 
 
 ########################################################################
 
 class unit_tests( vtu.vvtestTestCase ):
 
-    def test_specification_error(self):
+    def test_parsing_permission_specifications(self):
         ""
-        self.assertRaises( Exception, PS.PermissionSetter, '.', 'g=rq' )
+        parse_permission_specifications( '' )
+        parse_permission_specifications( 'g=rx' )
+        parse_permission_specifications( 'o=rx' )
+        parse_permission_specifications( 'g=rwx,o=rx' )
+        parse_permission_specifications( 'g=rwx o=rx' )
+        parse_permission_specifications( [ 'g=rwx','o=rx' ] )
+
+        self.assertRaises( FatalError, parse_permission_specifications, 'g=foo' )
+        self.assertRaises( FatalError, parse_permission_specifications, 'o=foo' )
+        self.assertRaises( FatalError, parse_permission_specifications,
+                                                'a-non-existnt-group-name' )
+
+    def test_specification_error_on_construction(self):
+        ""
+        self.assertRaises( FatalError, PermissionSetter, '.', 'g=rq' )
 
 
 class integration_tests( vtu.vvtestTestCase ):
 
-    def test_turning_off_group_and_world_permissions(self):
+    def test_turn_off_group_and_world_permissions(self):
         ""
         util.writefile( "one/cat.xml", """
             <rtest name="cat">
@@ -98,6 +113,49 @@ class integration_tests( vtu.vvtestTestCase ):
                 assert util.has_group_read(p) and util.has_group_write(p)
                 if util.has_owner_execute(p):
                     assert util.has_group_execute(p) and util.has_world_execute(p)
+
+    def test_change_file_group(self):
+        ""
+        grp1,grp2 = util.probe_for_two_different_groups()
+
+        util.writefile( 'atest.vvt', """
+            pass
+            """ )
+        time.sleep(1)
+
+        for grp in [ grp1,grp2 ]:
+            for batch in [False,True]:
+
+                vtu.remove_results()
+
+                vrun = vtu.runvvtest( '--perms '+grp, batch=batch )
+                vrun.assertCounts( total=1, npass=1 )
+
+                adir = vrun.resultsDir()+'/atest'
+                assert util.get_file_group( adir ) == grp
+                assert util.get_file_group( adir+'/execute.log' ) == grp
+
+    def test_perm_x_is_changed_to_X_for_backward_compatibility(self):
+        """
+        a perm like g=rx has always been treated like g=rX
+        """
+        util.writefile( 'atest.vvt', """
+            pass
+            """ )
+        time.sleep(1)
+
+        for batch in [False,True]:
+
+            vtu.remove_results()
+
+            vrun = vtu.runvvtest( '--perms g=rx,o=rx', batch=batch )
+            vrun.assertCounts( total=1, npass=1 )
+
+            adir = vrun.resultsDir()+'/atest'
+            assert util.has_group_execute( adir )
+            assert not util.has_group_execute( adir+'/execute.log' )
+            assert util.has_world_execute( adir )
+            assert not util.has_world_execute( adir+'/execute.log' )
 
 
 ############################################################################
