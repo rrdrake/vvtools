@@ -591,7 +591,7 @@ def findfiles( pattern, topdir, *topdirs ):
 
     for top in dL:
         for dirpath,dirnames,filenames in os.walk( top ):
-            for f in filenames:
+            for f in filenames+dirnames:
                 if fnmatch.fnmatch( f, pattern ):
                     fS.add( os.path.join( dirpath, f ) )
 
@@ -647,6 +647,53 @@ def list_all_directories( rootpath ):
     return pL
 
 
+def read_xml_file( filename ):
+    ""
+    import xml
+    import xml.dom.minidom as minidom
+    doc = minidom.parse( filename )
+    return doc
+
+
+def print_xml( domnode, indent='' ):
+    ""
+    if domnode.localName:
+        print3( indent, domnode.localName )
+    if domnode.hasChildNodes():
+        for nd in domnode.childNodes:
+            print_xml( nd, indent+'  ' )
+
+
+def find_child_xml_node( node, childname ):
+    ""
+    child = None
+
+    if node.hasChildNodes():
+        for subnd in node.childNodes:
+            if subnd.nodeName and subnd.nodeName.strip() == childname:
+                child = subnd
+                break
+
+    return child
+
+
+def get_subtext_from_xml_node( node ):
+    """
+    Concatenates XML element content from all children and their children.
+    """
+    txt = ''
+
+    if node.hasChildNodes():
+        for subnd in node.childNodes:
+            if subnd.nodeValue and subnd.nodeValue.strip():
+                txt += subnd.nodeValue
+            for subsubnd in subnd.childNodes:
+                if subsubnd.nodeValue and subsubnd.nodeValue.strip():
+                    txt += subsubnd.nodeValue
+
+    return txt
+
+
 class change_directory:
     """
     with change_directory( 'subdir' ):
@@ -667,6 +714,38 @@ class change_directory:
     def __exit__(self, type, value, traceback):
         ""
         os.chdir( self.cwd )
+
+
+class set_environ:
+    """
+    with set_environ( name=value, name=value, ... ):
+        pass
+    """
+
+    def __init__(self, **kwargs):
+        ""
+        self.kwargs = dict( kwargs )
+        self.save_environ = None
+
+    def __enter__(self):
+        ""
+        self.save_environ = dict( os.environ )
+        for n,v in self.kwargs.items():
+            if v == None:
+                if n in os.environ:
+                    del os.environ[n]
+            else:
+                os.environ[n] = v
+
+    def __exit__(self, type, value, traceback):
+        ""
+        if self.save_environ != None:
+            for n,v in list( os.environ.items() ):
+                if n not in self.save_environ:
+                    del os.environ[n]
+            for n,v in self.save_environ.items():
+                if n not in os.environ or os.environ[n] != v:
+                    os.environ[n] = v
 
 
 def has_owner_execute( path ):
@@ -724,8 +803,13 @@ def has_world_execute( path ):
 
 def probe_for_two_different_groups():
     ""
-    x,out = runcmd( 'groups', raise_on_error=False )
-    grp1,grp2 = out.strip().split()[:2]
+    import grp
+
+    grpidL = os.getgroups()
+    grpid1,grpid2 = grpidL[-2],grpidL[-1]
+    grp1 = grp.getgrgid( grpid1 ).gr_name
+    grp2 = grp.getgrgid( grpid2 ).gr_name
+
     assert grp1 and grp2 and grp1 != grp2
     return grp1,grp2
 

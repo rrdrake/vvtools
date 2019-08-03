@@ -81,6 +81,9 @@ def main():
 
 ####################################################################
 
+class PermissionSpecificationError( Exception ):
+    pass
+
 
 def filemode( path ):
     """
@@ -112,18 +115,21 @@ def permission( path_or_fmode, which ):
     must be true for this function to return True.
     """
     if which == 'read':
-        assert type(path_or_fmode) == type(''), \
-            'arg1 must be a filename when \'which\' == "read"'
+        if type(path_or_fmode) != type(''):
+            raise PermissionSpecificationError(
+                    'arg1 must be a filename when \'which\' == "read"' )
         return os.access( path_or_fmode, os.R_OK )
     
     elif which == 'write':
-        assert type(path_or_fmode) == type(''), \
-            'arg1 must be a filename when \'which\' == "write"'
+        if type(path_or_fmode) != type(''):
+            raise PermissionSpecificationError(
+                    'arg1 must be a filename when \'which\' == "write"' )
         return os.access( path_or_fmode, os.W_OK )
     
     elif which == 'execute':
-        assert type(path_or_fmode) == type(''), \
-            'arg1 must be a filename when \'which\' == "execute"'
+        if type(path_or_fmode) != type(''):
+            raise PermissionSpecificationError(
+                    'arg1 must be a filename when \'which\' == "execute"' )
         return os.access( path_or_fmode, os.X_OK )
 
     else:
@@ -159,7 +165,7 @@ def permission( path_or_fmode, which ):
                 return (fmode & world_mask) == world_bits[s]
             return (fmode & world_bits[s]) == world_bits[s]
 
-        raise Exception( "unknown 'which' value: "+str(which) )
+        raise PermissionSpecificationError( "unknown 'which' value: "+str(which) )
 
 
 def change_filemode( fmode, spec, *more_specs ):
@@ -179,22 +185,36 @@ def change_filemode( fmode, spec, *more_specs ):
     set the group permissions to exactly read, no write, execute.
     """
     for s in (spec,)+more_specs:
-        assert len(s) >= 3
-        who = s[0] ; assert who in 'ugo'
-        op = s[1] ; assert op in '=+-'
-        what = s[2:]
+        if len(s) < 2:
+            raise PermissionSpecificationError( 'invalid specification: '+s )
+        who = s[0]
+        if who not in 'ugo':
+            raise PermissionSpecificationError( 'invalid specification: '+s )
+        op = s[1]
+        if op not in '=+-':
+            raise PermissionSpecificationError( 'invalid specification: '+s )
+        if len(s) == 2:
+            what = '-'
+        else:
+            what = s[2:]
         if who == 'u':
             mask = owner_mask
+            if what not in owner_bits:
+                raise PermissionSpecificationError( 'invalid specification: '+s )
             bits = owner_bits[what]
         elif who == 'g':
             if 'X' in what:
                 what = replace_conditional_execute( what, fmode )
             mask = group_mask
+            if what not in group_bits:
+                raise PermissionSpecificationError( 'invalid specification: '+s )
             bits = group_bits[what]
         else:
             if 'X' in what:
                 what = replace_conditional_execute( what, fmode )
             mask = world_mask
+            if what not in world_bits:
+                raise PermissionSpecificationError( 'invalid specification: '+s )
             bits = world_bits[what]
 
         if op == '=':   fmode = ( fmode & (~mask) ) | bits
@@ -272,6 +292,16 @@ def my_user_name():
     return pwd.getpwuid( uid )[0]
 
 
+def can_map_group_name_to_group_id( group_name ):
+    ""
+    try:
+        gid = grp.getgrnam( group_name )
+    except KeyError:
+        return False
+
+    return True
+
+
 def apply_chmod( path, *spec ):
     """
     Change the group and/or the file mode permissions of the given file 'path'.
@@ -290,7 +320,7 @@ def apply_chmod( path, *spec ):
 
         mL = []
         for s in spec:
-            if len(s)>=3 and s[0] in 'ugo' and s[1] in '=+-':
+            if len(s)>=2 and s[0] in 'ugo' and s[1] in '=+-':
                 mL.append(s)
             else:
                 change_group( path, s )
@@ -422,11 +452,8 @@ world_bits['-wx'] = world_bits['wx']
 ######################################################################
 
 def print3( *args ):
-    """
-    A print function compatible for Python 2 and 3.
-    """
-    s = ' '.join( [ str(x) for x in args ] )
-    sys.stdout.write( s + os.linesep )
+    ""
+    sys.stdout.write( ' '.join( [ str(x) for x in args ] ) + os.linesep )
     sys.stdout.flush()
 
 

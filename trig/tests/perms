@@ -403,7 +403,6 @@ class catchall( unittest.TestCase ):
             """ )
 
         x,out = util.runcmd( sys.executable+' lcl.py' )
-        #os.system( sys.executable+' lcl.py' )
 
         assert len( util.greplines( 'success', out ) ) == 1
 
@@ -537,6 +536,37 @@ class catchall( unittest.TestCase ):
         assert perms.permission( 'subdir', 'group r-x' ) == True
         assert perms.permission( 'subdir/afile', 'group r--' ) == True
         assert perms.permission( 'subdir/bfile', 'group r--' ) == True
+
+    def test_remove_permissions(self):
+        ""
+        util.writefile( 'afile', 'contents' )
+        time.sleep(1)
+
+        perms.apply_chmod( 'afile', 'g=r' )
+        assert perms.permission( 'afile', 'group r' ) == True
+        perms.apply_chmod( 'afile', 'g=-' )
+        assert perms.permission( 'afile', 'group r' ) == False
+        perms.apply_chmod( 'afile', 'g=r' )
+        assert perms.permission( 'afile', 'group r' ) == True
+        perms.apply_chmod( 'afile', 'g=' )
+        assert perms.permission( 'afile', 'group r' ) == False
+
+        perms.apply_chmod( 'afile', 'o=r' )
+        assert perms.permission( 'afile', 'world r' ) == True
+        perms.apply_chmod( 'afile', 'o=-' )
+        assert perms.permission( 'afile', 'world r' ) == False
+        perms.apply_chmod( 'afile', 'o=r' )
+        assert perms.permission( 'afile', 'world r' ) == True
+        perms.apply_chmod( 'afile', 'o=' )
+        assert perms.permission( 'afile', 'world r' ) == False
+
+    def test_mapping_a_group_name_to_its_id(self):
+        ""
+        grp1,grp2 = util.probe_for_two_different_groups()
+
+        assert perms.can_map_group_name_to_group_id( grp1 )
+        assert perms.can_map_group_name_to_group_id( grp2 )
+        assert not perms.can_map_group_name_to_group_id( 'adssidiodfuskldigkls' )
 
 
 #######################################################################
