@@ -822,6 +822,105 @@ def get_file_group( path ):
     return ent[0]
 
 
+def create_bare_repo_with_topic_branch( reponame, subdir=None, tag=None ):
+    ""
+    url = create_local_bare_repository( reponame, subdir )
+    push_file_to_repo( url, 'file.txt', 'file contents' )
+    push_new_branch_with_file( url, 'topic', 'file.txt', 'new contents' )
+
+    if tag:
+        push_tag_to_repo( url, tag )
+
+    return url
+
+
+def create_local_bare_repository( reponame, subdir=None ):
+    ""
+    if not subdir:
+        subdir = 'bare_repo_'+random_string()
+
+    if not os.path.exists( subdir ):
+        os.makedirs( subdir )
+
+    with change_directory( subdir ):
+
+        if not reponame.endswith( '.git' ):
+            reponame += '.git'
+
+        runcmd( 'git init --bare '+reponame, print_output=False )
+
+        url = 'file://'+os.getcwd()+'/'+reponame
+
+    return url
+
+
+def push_file_to_repo( url, filename, filecontents ):
+    ""
+    workdir = 'wrkdir_'+random_string()
+    os.mkdir( workdir )
+
+    with change_directory( workdir ):
+
+        runcmd( 'git clone '+url, print_output=False )
+
+        os.chdir( globfile( '*' ) )
+
+        writefile( filename, filecontents )
+
+        runcmd( 'git add '+filename, print_output=False )
+        runcmd( 'git commit -m "push_file_to_repo '+time.ctime()+'"',
+                print_output=False )
+        runcmd( 'git push origin master', print_output=False )
+
+
+def push_tag_to_repo( url, tagname ):
+    ""
+    workdir = 'wrkdir_'+random_string()
+    os.mkdir( workdir )
+
+    with change_directory( workdir ):
+
+        runcmd( 'git clone '+url, print_output=False )
+
+        os.chdir( globfile( '*' ) )
+
+        runcmd( 'git tag '+tagname, print_output=False )
+        runcmd( 'git push origin '+tagname, print_output=False )
+
+
+def push_new_branch_with_file( url, branchname, filename, filecontents ):
+    ""
+    workdir = 'wrkdir_'+random_string()
+    os.mkdir( workdir )
+
+    with change_directory( workdir ):
+
+        runcmd( 'git clone '+url, print_output=False )
+
+        os.chdir( globfile( '*' ) )
+
+        runcmd( 'git checkout -b '+branchname, print_output=False )
+
+        writefile( filename, filecontents )
+
+        runcmd( 'git add '+filename, print_output=False )
+        runcmd( 'git commit -m "push_new_branch_with_file ' + time.ctime()+'"',
+                print_output=False )
+        runcmd( 'git push -u origin '+branchname, print_output=False )
+
+
+def create_local_branch( local_directory, branchname ):
+    ""
+    with change_directory( local_directory ):
+        runcmd( 'git checkout -b '+branchname, print_output=False )
+
+
+def checkout_to_previous_sha1( directory ):
+    ""
+    with change_directory( directory ):
+        runcmd( 'git checkout HEAD^1', print_output=False )
+
+
 module_uniq_id = 0
 filename_to_module_map = {}
 
