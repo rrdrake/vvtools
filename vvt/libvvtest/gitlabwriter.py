@@ -16,10 +16,8 @@ import gitinterface
 
 class GitLabWriter:
 
-    def __init__(self, permsetter, destination, results_test_dir):
+    def __init__(self, destination, results_test_dir, permsetter):
         ""
-        self.permsetter = permsetter
-
         if is_gitlab_url( destination ):
             self.outurl = destination
             self.outdir = None
@@ -28,6 +26,7 @@ class GitLabWriter:
             self.outdir = os.path.normpath( os.path.abspath( destination ) )
 
         self.testdir = results_test_dir
+        self.permsetter = permsetter
 
         self.sortspec = None
         self.period = 60*60
@@ -85,11 +84,11 @@ class GitLabWriter:
         pass
 
 
-def is_gitlab_url( location ):
+def is_gitlab_url( destination ):
     ""
-    if os.path.exists( location ):
+    if os.path.exists( destination ):
         return False
-    elif gitinterface.repository_url_match( location ):
+    elif gitinterface.repository_url_match( destination ):
         return True
     else:
         return False

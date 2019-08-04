@@ -359,7 +359,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
             def _dispatch_submission(self, atestlist, runinfo):
                 recorder.append( 'submit' )
 
-        wr = RecordingGitLabWriter( None, location, None )
+        wr = RecordingGitLabWriter( location, None, None )
 
         return wr,recorder
 
@@ -401,7 +401,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         util.push_file_to_repo( url, 'file.txt', 'file contents' )
 
         permset = vtu.make_fake_PermissionSetter()
-        gitlabwriter.GitLabWriter( permset, url, 'junk' )
+        gitlabwriter.GitLabWriter( url, 'junk', permset )
 
         # create a fake testlist
         # call prerun(), midrun(), postrun()
