@@ -14,10 +14,10 @@ print3 = outpututils.print3
 
 class GitLabWriter:
 
-    def __init__(self, permsetter, output_dir, results_test_dir):
+    def __init__(self, permsetter, destination, results_test_dir):
         ""
         self.permsetter = permsetter
-        self.outdir = os.path.normpath( os.path.abspath( output_dir ) )
+        self.outdir = os.path.normpath( os.path.abspath( destination ) )
         self.testdir = results_test_dir
 
         self.sortspec = None
@@ -26,15 +26,15 @@ class GitLabWriter:
         ""
         pass
 
-    def info(self, atestlist, runinfo):
-        ""
-        self.writeFiles( atestlist, runinfo )
-
-    def postrun(self, atestlist, runinfo):
+    def midrun(self, atestlist, runinfo):
         ""
         pass
 
-    def final(self, atestlist, runinfo):
+    def postrun(self, atestlist, runinfo):
+        ""
+        self.writeFiles( atestlist, runinfo )
+
+    def info(self, atestlist, runinfo):
         ""
         self.writeFiles( atestlist, runinfo )
 

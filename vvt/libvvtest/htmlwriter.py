@@ -23,15 +23,15 @@ class HTMLWriter:
         ""
         pass
 
-    def info(self, atestlist, runinfo):
-        ""
-        self.writeDocument( atestlist )
-
-    def postrun(self, atestlist, runinfo):
+    def midrun(self, atestlist, runinfo):
         ""
         pass
 
-    def final(self, atestlist, runinfo):
+    def postrun(self, atestlist, runinfo):
+        ""
+        self.writeDocument( atestlist )
+
+    def info(self, atestlist, runinfo):
         ""
         self.writeDocument( atestlist )
 

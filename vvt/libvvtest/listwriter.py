@@ -55,17 +55,18 @@ class ListWriter:
         ""
         self.writeList( atestlist, runinfo, inprogress=True )
 
-    def info(self, atestlist, runinfo):
+    def midrun(self, atestlist, runinfo):
         ""
-        self.writeList( atestlist, runinfo )
+        pass
 
     def postrun(self, atestlist, runinfo):
         ""
-        self.writeList( atestlist, runinfo )
+        if atestlist.numActive() > 0:
+            self.writeList( atestlist, runinfo )
 
-    def final(self, atestlist, runinfo):
+    def info(self, atestlist, runinfo):
         ""
-        pass
+        self.writeList( atestlist, runinfo )
 
     def writeList(self, atestlist, runattrs, inprogress=False):
         ""

@@ -620,7 +620,7 @@ def create_parser( argvlist, vvtest_version ):
     grp.add_argument( '--gitlab', metavar='LOCATION',
         help='Write test summary as a set of files in the GitLab '
              'Flavored Markdown format.  If LOCATION is a Git repository '
-             'URL, then push files to results branches.' )
+             'URL, then push results files to branches there.' )
 
     grp = psr.add_argument_group( 'Other operating modes' )
     grp.add_argument( '-b', dest='dash_b', action='store_true',

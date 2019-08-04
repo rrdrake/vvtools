@@ -98,12 +98,6 @@ def run_batch( batch, tlist, xlist, perms, results_writer,
         print3( '*** Warning: test "'+xdir0+'"',
                 'notrun due to dependency "' + xdir1 + '"' )
 
-    print3()
-    results_writer.postrun( tlist )
-    
-    elapsed = pretty_time( time.time() - starttime )
-    print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
-
 
 def sleep_with_info_check( info, qsleep ):
     ""
@@ -185,12 +179,6 @@ def run_test_list( qsub_id, tlist, xlist, test_dir, plat,
         print3( '*** Warning: test "'+xdir+'"',
                 'notrun due to dependency "' + depxdir + '"' )
 
-    print3()
-    results_writer.postrun( tlist )
-
-    elapsed = pretty_time( time.time() - starttime )
-    print3( "\nFinish date:", time.ctime() + " (elapsed time "+elapsed+")" )
-
 
 def exec_path( testspec, test_dir ):
     ""
@@ -231,11 +219,10 @@ def run_baseline( xlist, plat ):
             print3( "TIMED OUT" )
 
     if failures:
-      print3( "\n\n !!!!!!!!!!!  THERE WERE FAILURES  !!!!!!!!!! \n\n" )
+        print3( "\n\n !!!!!!!!!!!  THERE WERE FAILURES  !!!!!!!!!! \n\n" )
 
 
 def print3( *args ):
     ""
-    s = ' '.join( [ str(arg) for arg in args ] )
-    sys.stdout.write( s + '\n' )
+    sys.stdout.write( ' '.join( [ str(arg) for arg in args ] ) + '\n' )
     sys.stdout.flush()

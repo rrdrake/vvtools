@@ -42,20 +42,29 @@ class ConsoleWriter:
         self.writeActiveList( atestlist, abbreviate )
         self.writeListSummary( atestlist, 'Test list:' )
 
+    def midrun(self, atestlist, runinfo):
+        ""
+        pass
+
+    def postrun(self, atestlist, runinfo):
+        ""
+        if atestlist.numActive() > 0:
+            self.writeResultsList( atestlist )
+            self.writeListSummary( atestlist, 'Summary:' )
+
+        fin = runinfo['finishepoch']
+        fdate = time.ctime( fin )
+
+        dt = fin - runinfo['startepoch']
+        elapsed = outpututils.pretty_time( dt )
+
+        self.write( "\nFinish date:", fdate, "(elapsed time "+elapsed+")" )
+
     def info(self, atestlist, runinfo):
         ""
         if not self.suppress_info:
             self.writeActiveList( atestlist, abbreviate=False )
             self.writeListSummary( atestlist, 'Summary:' )
-
-    def postrun(self, atestlist, runinfo):
-        ""
-        self.writeResultsList( atestlist )
-        self.writeListSummary( atestlist, 'Summary:' )
-
-    def final(self, atestlist, runinfo):
-        ""
-        pass
 
     def writeListSummary(self, atestlist, label):
         ""

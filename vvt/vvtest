@@ -19,6 +19,7 @@ import libvvtest.pathutil as pathutil
 from libvvtest.errors import FatalError
 import libvvtest.location as location
 import libvvtest.execute as execute
+from libvvtest.outpututils import pretty_time
 
 
 version = '1.2'
@@ -40,7 +41,7 @@ class MainEntry:
 
     def constructObjects(self):
         ""
-        start_time = time.time()
+        start_epoch = time.time()
 
         check_for_bootstrap_file()
 
@@ -64,7 +65,7 @@ class MainEntry:
 
         self.rtdata.setPermissionsObject( self.opts, self.optD )
 
-        self.constructResultsWriter( start_time )
+        self.constructResultsWriter( start_epoch )
 
         self.rtdata.setFilterPath()
 
@@ -149,9 +150,9 @@ class MainEntry:
                             self.rtdata.getPlatformObject().getName() )
         self.rtdata.setTestSubdir( sd )
 
-    def constructResultsWriter(self, start_time):
+    def constructResultsWriter(self, start_epoch):
         ""
-        resw = construct_results_writers( self.opts, self.optD, start_time,
+        resw = construct_results_writers( self.opts, self.optD, start_epoch,
                                           self.rtdata.getVvtestDir(),
                                           self.rtdata.getTestResultsDir(),
                                           self.rtdata.getPermissionsObject(),
@@ -564,7 +565,7 @@ def generateTestList( opts, optD, dirs, rtdata ):
     xlist = TestExecList( plugin, tlist )
     xlist.createTestExecs( test_dir, plat, config, perms )
 
-    print3( "Test directory:", testsubdir )
+    print3( "\nTest directory:", testsubdir )
 
 
 def extractTestFiles( param_dict, dirs, target_dir, rtdata ):
@@ -757,22 +758,14 @@ def runTests( opts, optD, rtdata, dirs ):
     print3()
 
     if tlist.numActive() > 0:
+        run_test_exec_list( opts, optD, rtdata,
+                            tlist, test_dir, perms,
+                            results_writer )
 
-        xlist = TestExecList( plugin, tlist )
-        xlist.createTestExecs( test_dir, plat, config, perms )
+    print3()
+    results_writer.postrun( tlist )
 
-        if not opts.batch:
-            execute.run_test_list( opts.qsub_id, tlist, xlist, test_dir, plat,
-                                   perms, results_writer )
-
-        else:
-            batchTestList( opts, optD, rtdata,
-                           tlist, xlist, test_dir, plat, perms,
-                           results_writer )
-
-        print3( "Test directory:", testsubdir )
-
-    results_writer.final( tlist )
+    print3( "Test directory:", testsubdir )
 
     return tlist.encodeIntegerWarning()
 
@@ -808,7 +801,7 @@ def determine_verbose_integer( dash_v ):
 
 
 def construct_results_writers( opts, optD,
-                               start_time, vvtestdir,
+                               start_epoch, vvtestdir,
                                test_dir, perms,
                                platobj, cmdL ):
     ""
@@ -837,7 +830,8 @@ def construct_results_writers( opts, optD,
             wr = construct_testlist_writer( test_dir, opts, optD, perms, platobj )
             writers.addWriter( wr )
 
-    writers.setRunAttr( startdate=str(start_time)+' / '+time.ctime(start_time) )
+    writers.setRunAttr( startepoch=start_epoch )
+    writers.setRunAttr( startdate=time.ctime(start_epoch) )
     writers.setRunAttr( platform=platobj.getName() )
     writers.setRunAttr( compiler=platobj.getCompiler() )
     writers.setRunAttr( commandline=' '.join( cmdL ) )
@@ -917,6 +911,28 @@ def construct_testlist_writer( test_dir, opts, optD, perms, platobj ):
     return wlistobj
 
 
+def run_test_exec_list( opts, optD, rtdata,
+                        tlist, test_dir, perms,
+                        results_writer ):
+    ""
+    config = rtdata.getConfiguration()
+    plat = rtdata.getPlatformObject()
+    testsubdir = rtdata.getTestSubdir()
+    plugin = rtdata.getUserPlugin()
+
+    xlist = TestExecList( plugin, tlist )
+    xlist.createTestExecs( test_dir, plat, config, perms )
+
+    if not opts.batch:
+        execute.run_test_list( opts.qsub_id, tlist, xlist, test_dir, plat,
+                               perms, results_writer )
+
+    else:
+        batchTestList( opts, optD, rtdata,
+                       tlist, xlist, test_dir, plat, perms,
+                       results_writer )
+
+
 def batchTestList( opts, optD, rtdata,
                    tlist, xlist, test_dir, plat, perms,
                    results_writer ):
@@ -948,9 +964,8 @@ def batchTestList( opts, optD, rtdata,
     # write testlist files for each qsub
     batch.writeQsubScripts( rundate )
 
-    if not opts.dash_g:
-        execute.run_batch( batch, tlist, xlist, perms, results_writer,
-                           test_dir, qsublimit )
+    execute.run_batch( batch, tlist, xlist, perms, results_writer,
+                       test_dir, qsublimit )
 
 
 def vvtest_command_line_for_batch( opts, optD, vvtestpath, config ):
@@ -1028,20 +1043,12 @@ def restartTests( opts, optD, rtdata ):
     print3()
 
     if tlist.numActive() > 0:
+        run_test_exec_list( opts, optD, rtdata,
+                            tlist, test_dir, perms,
+                            results_writer )
 
-        xlist = TestExecList( plugin, tlist )
-        xlist.createTestExecs( test_dir, plat, config, perms )
-
-        if not opts.batch:
-            execute.run_test_list( opts.qsub_id, tlist, xlist, test_dir, plat,
-                                   perms, results_writer )
-
-        else:
-            batchTestList( opts, optD, rtdata,
-                           tlist, xlist, test_dir, plat, perms,
-                           results_writer )
-
-    results_writer.final( tlist )
+    print3()
+    results_writer.postrun( tlist )
 
     return tlist.encodeIntegerWarning()
 

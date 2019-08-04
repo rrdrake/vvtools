@@ -30,15 +30,15 @@ class JUnitWriter:
         ""
         pass
 
-    def info(self, atestlist, runinfo):
-        ""
-        self.writeFile( atestlist )
-
-    def postrun(self, atestlist, runinfo):
+    def midrun(self, atestlist, runinfo):
         ""
         pass
 
-    def final(self, atestlist, runinfo):
+    def postrun(self, atestlist, runinfo):
+        ""
+        self.writeFile( atestlist )
+
+    def info(self, atestlist, runinfo):
         ""
         self.writeFile( atestlist )
 

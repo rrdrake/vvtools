@@ -30,32 +30,33 @@ class ResultsWriters:
         for wr in self.writers:
             wr.prerun( atestlist, self.runattrs, abbreviate )
 
+    def midrun(self, atestlist):
+        ""
+        for wr in self.writers:
+            wr.midrun( atestlist, self.runattrs )
+
+    def postrun(self, atestlist):
+        ""
+        self._mark_finished()
+
+        for wr in self.writers:
+            wr.postrun( atestlist, self.runattrs )
+
     def info(self, atestlist):
         ""
         for wr in self.writers:
             wr.info( atestlist, self.runattrs )
 
-    def postrun(self, atestlist):
-        ""
-        for wr in self.writers:
-            wr.postrun( atestlist, self.runattrs )
-
-    def final(self, atestlist):
-        ""
-        self._mark_finished()
-
-        for wr in self.writers:
-            wr.final( atestlist, self.runattrs )
-
     def _mark_finished(self):
         ""
         tm = time.time()
-        self.runattrs['finishdate'] = str(tm) + ' / ' + time.ctime(tm)
+        self.runattrs['finishepoch'] = tm
+        self.runattrs['finishdate'] = time.ctime(tm)
         self._set_elapsed_time( tm )
 
     def _set_elapsed_time(self, finishtime):
         ""
-        start = self.runattrs.get( 'startdate', None )
+        start = self.runattrs.get( 'startepoch', None )
         if start:
-            nsecs = finishtime - float( start.split()[0] )
+            nsecs = finishtime - float( start )
             self.runattrs['elapsed'] = outpututils.pretty_time( nsecs )
