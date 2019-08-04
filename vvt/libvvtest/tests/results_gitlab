@@ -13,6 +13,7 @@ import os
 import time
 import glob
 from os.path import getsize as getfsize
+from os.path import abspath
 
 try:
     from StringIO import StringIO
@@ -32,6 +33,19 @@ from libvvtest.testcase import TestCase
 
 
 class gitlab_output_format_tests( vtu.vvtestTestCase ):
+
+    def test_logic_between_a_directory_or_gitlab_url(self):
+        ""
+        os.mkdir( 'subdir' )
+        time.sleep(1)
+
+        assert not gitlabwriter.is_gitlab_url( 'subdir' )
+        assert not gitlabwriter.is_gitlab_url( abspath('subdir') )
+        assert not gitlabwriter.is_gitlab_url( 'foobarbaz' )
+        assert not gitlabwriter.is_gitlab_url( abspath('foobarbaz') )
+
+        assert gitlabwriter.is_gitlab_url( 'file:///dir/to/repo' )
+        assert gitlabwriter.is_gitlab_url( 'mach:/dir/to/repo' )
 
     def makeTest(self, result=None, runtime=None, name='atest'):
         ""
@@ -334,6 +348,66 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         val = fval.split( '## Tests that', 1 )[0]
         assert len( util.greplines( 'startdate', val ) ) == 1
         assert len( util.greplines( 'finishdate', val ) ) == 1
+
+    def make_recording_GitLabWriter(self, location):
+        ""
+        recorder = []
+
+        class RecordingGitLabWriter( gitlabwriter.GitLabWriter ):
+            def _write_files(self, atestlist, runinfo):
+                recorder.append( 'files' )
+            def _dispatch_submission(self, atestlist, runinfo):
+                recorder.append( 'submit' )
+
+        wr = RecordingGitLabWriter( None, location, None )
+
+        return wr,recorder
+
+    def test_trigger_file_write_only_on_postrun_and_info(self):
+        ""
+        wr,recorder = self.make_recording_GitLabWriter( 'destdir' )
+
+        wr.prerun( None, None )
+        assert recorder == []
+
+        wr.midrun( None, None )
+        assert recorder == []
+
+        wr.postrun( None, None )
+        assert recorder == [ 'files' ]
+
+        wr.info( None, None )
+        assert recorder == [ 'files', 'files' ]
+
+    def test_trigger_url_submission_on_prerun_and_postrun_and_info(self):
+        ""
+        wr,recorder = self.make_recording_GitLabWriter( 'file:///some/dir' )
+
+        wr.prerun( None, None )
+        assert recorder == [ 'submit' ]
+
+        wr.midrun( None, None )
+        assert recorder == [ 'submit' ]
+
+        wr.postrun( None, None )
+        assert recorder == [ 'submit', 'submit' ]
+
+        wr.info( None, None )
+        assert recorder == [ 'submit', 'submit', 'submit' ]
+
+    def test_submit_to_git_repository(self):
+        ""
+        url = util.create_local_bare_repository( 'arepo' )
+        util.push_file_to_repo( url, 'file.txt', 'file contents' )
+
+        permset = vtu.make_fake_PermissionSetter()
+        gitlabwriter.GitLabWriter( permset, url, 'junk' )
+
+        # create a fake testlist
+        # call prerun(), midrun(), postrun()
+
+    # magic: add test where the period is set small enough causing midrun()
+    #        to submit
 
     def test_create_markdown_file_for_a_test(self):
         ""

@@ -712,3 +712,13 @@ def make_RuntimeConfig( platname, options ):
         rtconfig.setAttr( 'option_list', options )
 
     return rtconfig
+
+
+def make_fake_PermissionSetter():
+    ""
+    class DummyPermissionSetter:
+        def __init__(self): pass
+        def set(self, path): pass
+        def recurse(self, path): pass
+
+    return DummyPermissionSetter()

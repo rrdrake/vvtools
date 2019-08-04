@@ -59,6 +59,8 @@ def run_batch( batch, tlist, xlist, perms, results_writer,
 
             uthook.check( schedule.numInFlight(), schedule.numPastQueue() )
 
+            results_writer.midrun( tlist )
+
             if len(doneL) > 0:
                 jpct = 100 * float(schedule.numDone()) / float(numjobs)
                 jdiv = 'jobs '+str(schedule.numDone())+'/'+str(numjobs)
@@ -155,6 +157,8 @@ def run_test_list( qsub_id, tlist, xlist, test_dir, plat,
                     showprogress = True
 
             uthook.check( xlist.numRunning(), xlist.numDone() )
+
+            results_writer.midrun( tlist )
 
             if showprogress:
                 ndone = xlist.numDone()

@@ -11,38 +11,58 @@ from os.path import join as pjoin
 from . import outpututils
 print3 = outpututils.print3
 
+import gitinterface
+
 
 class GitLabWriter:
 
     def __init__(self, permsetter, destination, results_test_dir):
         ""
         self.permsetter = permsetter
-        self.outdir = os.path.normpath( os.path.abspath( destination ) )
+
+        if is_gitlab_url( destination ):
+            self.outurl = destination
+            self.outdir = None
+        else:
+            self.outurl = None
+            self.outdir = os.path.normpath( os.path.abspath( destination ) )
+
         self.testdir = results_test_dir
 
         self.sortspec = None
-
-    def prerun(self, atestlist, runinfo, abbreviate=True):
-        ""
-        pass
-
-    def midrun(self, atestlist, runinfo):
-        ""
-        pass
-
-    def postrun(self, atestlist, runinfo):
-        ""
-        self.writeFiles( atestlist, runinfo )
-
-    def info(self, atestlist, runinfo):
-        ""
-        self.writeFiles( atestlist, runinfo )
+        self.period = 60*60
 
     def setSortingSpecification(self, sortspec):
         ""
         self.sortspec = sortspec
 
-    def writeFiles(self, atestlist, runattrs):
+    def prerun(self, atestlist, runinfo, abbreviate=True):
+        ""
+        if self.outurl:
+            self._dispatch_submission( atestlist, runinfo )
+            self.tlast = time.time()
+
+    def midrun(self, atestlist, runinfo):
+        ""
+        if self.outurl and time.time()-self.tlast > self.period:
+            self._dispatch_submission( atestlist, runinfo )
+            self.tlast = time.time()
+
+    def postrun(self, atestlist, runinfo):
+        ""
+        if self.outurl:
+            self._dispatch_submission( atestlist, runinfo )
+        else:
+            self._write_files( atestlist, runinfo )
+
+    def info(self, atestlist, runinfo):
+        ""
+        if self.outurl:
+            self._dispatch_submission( atestlist, runinfo )
+        else:
+            self._write_files( atestlist, runinfo )
+
+    def _write_files(self, atestlist, runinfo):
         ""
         if not os.path.isdir( self.outdir ):
             os.mkdir( self.outdir )
@@ -54,11 +74,25 @@ class GitLabWriter:
                     "tests in GitLab format to", self.outdir )
 
             conv = GitLabMarkDownConverter( self.testdir, self.outdir )
-            conv.setRunAttr( **runattrs )
+            conv.setRunAttr( **runinfo )
             conv.saveResults( tcaseL )
 
         finally:
             self.permsetter.recurse( self.outdir )
+
+    def _dispatch_submission(self, atestlist, runinfo):
+        ""
+        pass
+
+
+def is_gitlab_url( location ):
+    ""
+    if os.path.exists( location ):
+        return False
+    elif gitinterface.repository_url_match( location ):
+        return True
+    else:
+        return False
 
 
 class GitLabFileSelector:
