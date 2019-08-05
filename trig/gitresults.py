@@ -35,7 +35,7 @@ class GitResults:
                                 epochdate,
                                 granularity )
 
-        print3( 'Using directory', branch, 'on branch', self.subdir )
+        print3( 'Using directory', self.subdir, 'on branch', branch )
 
         rdir = get_results_orphan_branch( self.git, branch, self.subdir )
         assert os.path.isdir( rdir )
