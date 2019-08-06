@@ -25,11 +25,13 @@ import testutils as util
 from testutils import print3
 
 import libvvtest.gitlabwriter as gitlabwriter
+from libvvtest.gitlabwriter import make_submit_info
 
 from libvvtest.RuntimeConfig import RuntimeConfig
 from libvvtest.TestSpecCreator import TestCreator
 from libvvtest.teststatus import TestStatus, DIFF_EXIT_STATUS
 from libvvtest.testcase import TestCase
+from gitinterface import GitInterface
 
 
 class gitlab_output_format_tests( vtu.vvtestTestCase ):
@@ -333,9 +335,9 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         conv.saveResults( [] )
         time.sleep(1)
 
-        fval = util.readfile( 'TestResults.md' ).strip()
+        fval = util.readfile( 'README.md' ).strip()
         val = fval.split( '## Tests that', 1 )[0]
-        assert val.strip() == ''
+        assert 'currentepoch' in val.strip()
 
         conv = gitlabwriter.GitLabMarkDownConverter( '.', '.' )
         tm = time.time()
@@ -344,7 +346,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         conv.saveResults( [] )
         time.sleep(1)
 
-        fval = util.readfile( 'TestResults.md' ).strip()
+        fval = util.readfile( 'README.md' ).strip()
         val = fval.split( '## Tests that', 1 )[0]
         assert len( util.greplines( 'startdate', val ) ) == 1
         assert len( util.greplines( 'finishdate', val ) ) == 1
@@ -395,19 +397,112 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         wr.info( None, None )
         assert recorder == [ 'submit', 'submit', 'submit' ]
 
-    def test_submit_to_git_repository(self):
+    def test_trigger_url_submission_on_midrun(self):
+        ""
+        wr,recorder = self.make_recording_GitLabWriter( 'file:///some/dir' )
+        wr.setOutputPeriod( 2 )
+
+        wr.prerun( None, None )
+        assert recorder == [ 'submit' ]
+        wr.midrun( None, None )
+        assert recorder == ['submit']
+        time.sleep(3)
+        wr.midrun( None, None )
+        assert recorder == [ 'submit', 'submit' ]
+        wr.midrun( None, None )
+        assert recorder == [ 'submit', 'submit' ]
+        wr.postrun( None, None )
+        assert recorder == [ 'submit', 'submit', 'submit' ]
+
+    def test_making_submit_info(self):
+        ""
+        tm = time.time()
+
+        runinfo = { 'startepoch':tm, 'platform':'xbox' }
+        start,sfx,msg = make_submit_info( runinfo, ['dbg'], None )
+        assert abs( tm - start ) < 2
+        print3( 'sfx', sfx )
+        assert 'xbox' in sfx and 'dbg' in sfx
+        assert 'vvtest' in msg
+
+        runinfo = { 'startepoch':tm, 'platform':'xbox' }
+        start,sfx,msg = make_submit_info( runinfo, ['dbg'], 'blue' )
+        assert 'xbox' in sfx and 'dbg' in sfx and 'blue' in sfx
+
+        runinfo = { 'startepoch':tm }
+        start,sfx,msg = make_submit_info( runinfo, [], None )
+        assert abs( tm - start ) < 2
+        assert not sfx
+
+    def make_git_repo(self):
         ""
         url = util.create_local_bare_repository( 'arepo' )
         util.push_file_to_repo( url, 'file.txt', 'file contents' )
 
-        permset = vtu.make_fake_PermissionSetter()
-        gitlabwriter.GitLabWriter( url, 'junk', permset )
+        return url
 
-        # create a fake testlist
-        # call prerun(), midrun(), postrun()
+    def make_git_repo_and_overridden_GitLabWriter(self):
+        ""
+        url = self.make_git_repo()
 
-    # magic: add test where the period is set small enough causing midrun()
-    #        to submit
+        util.writefile( 'faketestresults/mark.txt', 'nothing' )
+
+        class OverrideGitLabWriter( gitlabwriter.GitLabWriter ):
+            def _convert_files(self, destdir, atestlist, runinfo):
+                ""
+                fp = open( destdir+'/info.txt', 'wt' )
+                gitlabwriter.write_run_attributes( fp, runinfo )
+                fp.close()
+
+        wr = OverrideGitLabWriter( url, 'faketestresults', None )
+
+        return wr,url
+
+    def test_submit_to_git_repository(self):
+        ""
+        wr,url = self.make_git_repo_and_overridden_GitLabWriter()
+
+        runinfo = { 'startepoch':1559822821.99,  # Thu Jun  6 06:07:01 2019
+                    'myname':'my value' }
+        wr._dispatch_submission( None, runinfo )
+
+        git = GitInterface( url, 'checkrepo' )
+        branch = get_results_branch( git )
+        assert branch == 'results_2019_06'
+        git.checkoutBranch( branch )
+        rdir = util.globfile( 'checkrepo/*' )
+        assert os.path.basename( rdir ) == '2019_06_06_06'
+
+        val = util.readfile( rdir+'/info.txt' )
+        assert 'myname' in val and 'my value' in val
+
+    def test_submit_to_a_faulty_gitlab_url(self):
+        ""
+        class OverrideGitLabWriter( gitlabwriter.GitLabWriter ):
+            def _convert_files(self, destdir, atestlist, runinfo):
+                util.writefile( destdir+'/ok.txt', "file contents" )
+
+        badurl = 'file:///some/path/ladofgidskjslasdf'
+        wr = OverrideGitLabWriter( badurl, 'faketestresults', None )
+        rtn,out,err = util.call_capture_output(
+            wr._dispatch_submission,
+            None, { 'startepoch':1559822821.99 } )
+
+        assert 'WARNING' in out and 'error submitting' in out
+
+    def test_submit_a_second_time_when_no_files_are_different(self):
+        ""
+        wr,url = self.make_git_repo_and_overridden_GitLabWriter()
+
+        runinfo = { 'startepoch':1559822821.99 }  # Thu Jun  6 06:07:01 2019
+        wr._dispatch_submission( None, runinfo )
+
+        time.sleep(1)
+
+        rtn,out,err = util.call_capture_output(
+            wr._dispatch_submission, None, runinfo )
+
+        assert 'WARNING' not in out
 
     def test_create_markdown_file_for_a_test(self):
         ""
@@ -447,7 +542,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         vrun = vtu.runvvtest( '-i --gitlab=../gfm', chdir=vrun.resultsDir() )
         time.sleep(1)
 
-        assert getfsize( 'gfm/TestResults.md' ) > 800
+        assert getfsize( 'gfm/README.md' ) > 800
         assert getfsize( 'gfm/FailTest.md' ) > 3000
         assert getfsize( 'gfm/DiffTest.np=1.md' ) > 1000
         assert getfsize( 'gfm/DiffTest.np=2.md' ) > 1000
@@ -462,13 +557,13 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
         time.sleep(1)
 
-        assert getfsize( 'gfm/TestResults.md' ) > 800
+        assert getfsize( 'gfm/README.md' ) > 800
         assert getfsize( 'gfm/FailTest.md' ) > 3000
         assert getfsize( 'gfm/DiffTest.np=1.md' ) > 1000
         assert getfsize( 'gfm/DiffTest.np=2.md' ) > 1000
         assert len( glob.glob( 'gfm/*param*' ) ) == 0
 
-        fval = util.readfile( 'gfm/TestResults.md' ).strip()
+        fval = util.readfile( 'gfm/README.md' ).strip()
         val = fval.split( '## Tests that', 1 )[0]
         assert len( util.greplines( 'startdate', val ) ) == 1
         assert len( util.greplines( 'finishdate', val ) ) == 1
@@ -477,6 +572,28 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         assert len( util.greplines( ' PATH =', val ) ) == 1
         elap = util.greplines( 'elapsed', val )[0].split('=')[1].strip()
         assert int( elap[:-1] ) > 1
+
+    def test_submitting_gitlab_markdown_during_execution(self):
+        ""
+        write_three_test_files()
+        url = self.make_git_repo()
+        time.sleep(1)
+
+        vrun = vtu.runvvtest( '-o dbg --results-tag digit --gitlab '+url )
+        vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
+        time.sleep(1)
+
+        git = GitInterface( url, 'checkrepo' )
+        branch = get_results_branch( git )
+        git.checkoutBranch( branch )
+        rdir = util.globfile( 'checkrepo/*' )
+        assert 'dbg' in rdir and 'digit' in rdir
+
+        readme = rdir+'/README.md'
+        assert 'finishepoch' in util.readfile( readme )
+        x,out = util.runcmd( 'git log README.md', chdir=rdir )
+        lines = util.greplines( 'vvtest results auto commit', out )
+        assert len( lines ) == 2
 
 
 def write_three_test_files():
@@ -508,6 +625,19 @@ def grepforline( pattern, multi_line_string ):
     lineL = util.greplines( pattern, multi_line_string )
     assert len( lineL ) == 1
     return lineL[0]
+
+
+def get_results_branch( git ):
+    ""
+    brL = []
+
+    for br in git.listRemoteBranches():
+        if br.startswith( 'results_' ):
+            brL.append( br )
+
+    assert len( brL ) == 1
+
+    return brL[0]
 
 
 ############################################################################

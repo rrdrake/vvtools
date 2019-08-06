@@ -12,6 +12,7 @@ from . import outpututils
 print3 = outpututils.print3
 
 import gitinterface
+import gitresults
 
 
 class GitLabWriter:
@@ -29,11 +30,23 @@ class GitLabWriter:
         self.permsetter = permsetter
 
         self.sortspec = None
+        self.onopts = []
+        self.nametag = None
+
         self.period = 60*60
 
     def setSortingSpecification(self, sortspec):
         ""
         self.sortspec = sortspec
+
+    def setNamingTags(self, option_list, name_tag):
+        ""
+        self.onopts = option_list
+        self.nametag = name_tag
+
+    def setOutputPeriod(self, period_in_seconds):
+        ""
+        self.period = period_in_seconds
 
     def prerun(self, atestlist, runinfo, abbreviate=True):
         ""
@@ -67,21 +80,59 @@ class GitLabWriter:
             os.mkdir( self.outdir )
 
         try:
-            tcaseL = atestlist.getActiveTests( self.sortspec )
-
-            print3( "Writing", len(tcaseL),
-                    "tests in GitLab format to", self.outdir )
-
-            conv = GitLabMarkDownConverter( self.testdir, self.outdir )
-            conv.setRunAttr( **runinfo )
-            conv.saveResults( tcaseL )
-
+            self._convert_files( self.outdir, atestlist, runinfo )
         finally:
             self.permsetter.recurse( self.outdir )
 
+    def _convert_files(self, destdir, atestlist, runinfo):
+        ""
+        tcaseL = atestlist.getActiveTests( self.sortspec )
+
+        print3( "Writing", len(tcaseL),
+                "tests in GitLab format to", destdir )
+
+        conv = GitLabMarkDownConverter( self.testdir, destdir )
+        conv.setRunAttr( **runinfo )
+        conv.saveResults( tcaseL )
+
     def _dispatch_submission(self, atestlist, runinfo):
         ""
-        pass
+        try:
+            start,sfx,msg = make_submit_info( runinfo, self.onopts, self.nametag )
+
+            gr = gitresults.GitResults( self.outurl, self.testdir )
+            try:
+                rdir = gr.createBranchLocation( directory_suffix=sfx,
+                                                epochdate=start )
+                self._convert_files( rdir, atestlist, runinfo )
+                gr.pushResults( msg )
+            finally:
+                gr.cleanup()
+
+        except Exception as e:
+            print3( '\n*** WARNING: error submitting GitLab results:',
+                    str(e), '\n' )
+
+
+def make_submit_info( runinfo, onopts, nametag ):
+    ""
+    start = runinfo['startepoch']
+
+    sfxL = []
+
+    if 'platform' in runinfo:
+        sfxL.append( runinfo['platform'] )
+
+    sfxL.extend( onopts )
+
+    if nametag:
+        sfxL.append( nametag )
+
+    sfx = '.'.join( sfxL )
+
+    msg = 'vvtest results auto commit '+time.ctime()
+
+    return start,sfx,msg
 
 
 def is_gitlab_url( destination ):
@@ -126,8 +177,7 @@ class GitLabMarkDownConverter:
         ""
         parts = outpututils.partition_tests_by_result( tcaseL )
 
-        basepath = pjoin( self.destdir, 'TestResults' )
-        fname = basepath + '.md'
+        fname = pjoin( self.destdir, 'README.md' )
 
         with open( fname, 'w' ) as fp:
 
@@ -135,7 +185,7 @@ class GitLabMarkDownConverter:
 
             for result in [ 'fail', 'diff', 'timeout',
                             'pass', 'notrun', 'notdone' ]:
-                altname = basepath + '_' + result + '.md'
+                altname = pjoin( self.destdir, result+'_table.md' )
                 write_gitlab_results( fp, result, parts[result], altname,
                                       self.big_table, self.max_links )
 
@@ -181,6 +231,8 @@ def write_run_attributes( fp, attrs ):
     nvL.sort()
     for name,value in nvL:
         fp.write( '* '+name+' = '+str(value)+'\n' )
+    tm = time.time()
+    fp.write( '* currentepoch = '+str(tm)+'\n' )
     fp.write( '\n' )
 
 
