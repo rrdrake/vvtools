@@ -30,6 +30,7 @@ class GitLabWriter:
         self.permsetter = permsetter
 
         self.sortspec = None
+        self.datestamp = None
         self.onopts = []
         self.nametag = None
 
@@ -38,6 +39,10 @@ class GitLabWriter:
     def setSortingSpecification(self, sortspec):
         ""
         self.sortspec = sortspec
+
+    def setOutputDate(self, datestamp):
+        ""
+        self.datestamp = datestamp
 
     def setNamingTags(self, option_list, name_tag):
         ""
@@ -99,11 +104,12 @@ class GitLabWriter:
         ""
         try:
             start,sfx,msg = make_submit_info( runinfo, self.onopts, self.nametag )
+            epoch = self._submission_epoch( start )
 
             gr = gitresults.GitResults( self.outurl, self.testdir )
             try:
                 rdir = gr.createBranchLocation( directory_suffix=sfx,
-                                                epochdate=start )
+                                                epochdate=epoch )
                 self._convert_files( rdir, atestlist, runinfo )
                 gr.pushResults( msg )
             finally:
@@ -112,6 +118,15 @@ class GitLabWriter:
         except Exception as e:
             print3( '\n*** WARNING: error submitting GitLab results:',
                     str(e), '\n' )
+
+    def _submission_epoch(self, start):
+        ""
+        if self.datestamp:
+            epoch = self.datestamp
+        else:
+            epoch = start
+
+        return epoch
 
 
 def make_submit_info( runinfo, onopts, nametag ):

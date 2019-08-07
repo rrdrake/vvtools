@@ -10,6 +10,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
+from os.path import basename
 import time
 import glob
 from os.path import getsize as getfsize
@@ -471,7 +472,7 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         assert branch == 'results_2019_06'
         git.checkoutBranch( branch )
         rdir = util.globfile( 'checkrepo/*' )
-        assert os.path.basename( rdir ) == '2019_06_06_06'
+        assert basename( rdir ) == '2019_06_06_06'
 
         val = util.readfile( rdir+'/info.txt' )
         assert 'myname' in val and 'my value' in val
@@ -579,15 +580,22 @@ class gitlab_output_format_tests( vtu.vvtestTestCase ):
         url = self.make_git_repo()
         time.sleep(1)
 
-        vrun = vtu.runvvtest( '-o dbg --results-tag digit --gitlab '+url )
+        epoch = str(1559822821.99)  # Thu Jun  6 06:07:01 2019
+
+        vrun = vtu.runvvtest( '-o dbg',
+                              '--results-tag digit',
+                              '--gitlab', url,
+                              '--results-date', epoch )
         vrun.assertCounts( total=5, npass=2, diff=2, fail=1 )
         time.sleep(1)
 
         git = GitInterface( url, 'checkrepo' )
         branch = get_results_branch( git )
+        assert branch == 'results_2019_06'
         git.checkoutBranch( branch )
         rdir = util.globfile( 'checkrepo/*' )
         assert 'dbg' in rdir and 'digit' in rdir
+        assert basename(rdir).startswith( '2019_06_06' )
 
         readme = rdir+'/README.md'
         assert 'finishepoch' in util.readfile( readme )
