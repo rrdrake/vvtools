@@ -28,6 +28,7 @@ import unittest
 working_directory = None
 use_this_ssh = 'fake'
 remotepy = sys.executable
+runoptions = {}
 
 
 def initialize( argv ):
@@ -39,7 +40,7 @@ def initialize( argv ):
     test_filename = os.path.abspath( argv[0] )
     working_directory = make_working_directory( test_filename )
 
-    optL,argL = getopt.getopt( argv[1:], 'p:sSr:' )
+    optL,argL = getopt.getopt( argv[1:], 'p:sSr:i' )
 
     optD = {}
     for n,v in optL:
@@ -53,6 +54,7 @@ def initialize( argv ):
             remotepy = v
         optD[n] = v
 
+    runoptions.update( optD )
 
     return optD, argL
 
