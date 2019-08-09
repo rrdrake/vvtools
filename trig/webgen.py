@@ -97,7 +97,7 @@ class Body( DocumentElement ):
     def addParagraph(self, text=None):
         ""
         self._check_close_current()
-        self.writeln( '<p>'+text+'</p>' )
+        self.writeln( '<p>'+str(text)+'</p>' )
 
     def addTable(self, **attrs):
         """

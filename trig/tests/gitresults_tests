@@ -10,7 +10,8 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
-from os.path import abspath, dirname
+from os.path import abspath, dirname, basename
+from os.path import join as pjoin
 import time
 import unittest
 
@@ -18,7 +19,7 @@ import trigtestutils as trigutil
 import testutils as util
 from testutils import print3
 
-from gitresults import GitResults
+from gitresults import GitResults, GitResultsReader, ResultsSummary
 from gitresults import create_orphan_branch, branch_name_and_directory
 from gitinterface import GitInterface
 
@@ -184,6 +185,108 @@ class naming_schemes( unittest.TestCase ):
         bn,sb = branch_name_and_directory( subdir_suffix='.whatever' )
         assert 'whatever' not in bn
         assert sb.endswith( '.whatever' )
+
+
+class results_reader_tests( trigutil.trigTestCase ):
+
+    def test_iterating_results_directories(self):
+        ""
+        url = create_fake_results_repo( 'resrepo' )
+
+        rdr = GitResultsReader( url )
+
+        bdmap = {}
+        for branch,dirname in rdr.iterateDirectories():
+            bdmap[ basename(dirname) ] = branch
+
+        assert len( bdmap ) == 2
+        assert basename( bdmap['2019_05_10_20.foo'] ) == 'results_2019_05'
+        assert basename( bdmap['2019_06_09_20.foo'] ) == 'results_2019_06'
+
+    def run_pass_fail_diff_tests(self, giturl):
+        ""
+        util.writefile( 'passfaildiff.vvt', """
+            #VVT: parameterize : res = pass fail diff
+            import vvtest_util as vvt
+            import script_util as util
+            if vvt.res == 'fail':
+                raise Exception( 'fake exception' )
+            elif vvt.res == 'diff':
+                util.exit_diff()
+            """ )
+        time.sleep(1)
+        x,out = util.runcmd( trigutil.vvtest_file + \
+                             ' -vv -n 4 --plat '+core_platform_name() + \
+                             ' --gitlab '+giturl )
+
+    def test_parsing_a_test_results_file_into_a_results_data_object(self):
+        ""
+        url = util.create_bare_repo_with_topic_branch( 'resrepo' )
+        self.run_pass_fail_diff_tests( url )
+
+        rdr = GitResultsReader( url )
+
+        bdL = list( rdr.iterateDirectories() )
+        assert len( bdL ) == 1
+        branch,dirname = bdL[0]
+
+        rsum = ResultsSummary( url, branch, dirname )
+
+        assert abs( time.time() - rsum.getDateStamp() ) < 60*60+10
+        assert rsum.getLabel() == core_platform_name()
+
+        cntD = rsum.getCounts()
+        assert cntD == { 'pass':1, 'fail':1, 'diff':1,
+                         'timeout':0, 'notdone':0, 'notrun':0 }
+
+        end = pjoin( 'blob', branch, basename(dirname), 'README.md' )
+
+        link = rsum.getResultsLink()
+        assert link.startswith( url[:-4] )
+        assert link.endswith( end )
+
+        link = rsum.getResultsLink( 'pass' )
+        assert link.endswith( end+'#tests-that-pass-1' )
+
+        link = rsum.getResultsLink( 'fail' )
+        assert link.endswith( end+'#tests-that-fail-1' )
+
+        link = rsum.getResultsLink( 'diff' )
+        assert link.endswith( end+'#tests-that-diff-1' )
+
+        link = rsum.getResultsLink( 'timeout' )
+        assert link.endswith( end+'#tests-that-timeout-0' )
+
+        link = rsum.getResultsLink( 'notrun' )
+        assert link.endswith( end+'#tests-that-notrun-0' )
+
+        link = rsum.getResultsLink( 'notdone' )
+        assert link.endswith( end+'#tests-that-notdone-0' )
+
+
+def core_platform_name():
+    ""
+    if os.uname()[0].lower().startswith( 'darwin' ):
+        return 'Darwin'
+    else:
+        return 'Linux'
+
+
+def create_fake_results_repo( reponame ):
+    ""
+    url = util.create_bare_repo_with_topic_branch( 'resrepo' )
+
+    gr = GitResults( url )
+
+    epoch = 1557542115.59  # Fri May 10 20:35:15 2019
+    rdir = gr.createBranchLocation( directory_suffix='foo', epochdate=epoch )
+    util.writefile( pjoin( rdir, 'somefile.txt' ), 'content one' )
+
+    epoch = 1560134273.99  # Sun Jun  9 20:37:53 2019
+    rdir = gr.createBranchLocation( directory_suffix='foo', epochdate=epoch )
+    util.writefile( pjoin( rdir, 'somefile.txt' ), 'content two' )
+
+    return url
 
 
 #######################################################################

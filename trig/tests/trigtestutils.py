@@ -8,6 +8,8 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
+from os.path import dirname, abspath
+from os.path import join as pjoin
 import time
 import subprocess
 import shutil
@@ -15,8 +17,14 @@ import unittest
 
 import testutils as util
 
-testsrcdir = os.path.dirname( os.path.abspath( sys.argv[0] ) )
-sys.path.insert( 0, os.path.dirname( testsrcdir ) )
+testsrcdir = dirname( abspath( sys.argv[0] ) )
+trigdir = dirname( testsrcdir )
+topdir = dirname( trigdir )
+vvtdir = pjoin( topdir, 'vvt' )
+
+sys.path.insert( 0, trigdir )
+
+vvtest_file = pjoin( vvtdir, 'vvtest' )
 
 
 class trigTestCase( unittest.TestCase ):
