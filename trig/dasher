@@ -1,0 +1,65 @@
+#!/usr/bin/python
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+import getopt
+
+import dasherlib
+
+
+help_dasher = \
+"""
+SYNOPSIS
+    Create web page from GitLab vvtest results.
+
+COMMANDS:
+    dasher --gitlab <project URL> <filename>
+
+"""
+
+
+def main():
+    ""
+    optL,argL = getopt.getopt( sys.argv[1:], 'h', ['help','gitlab='] )
+
+    optD = {}
+    for n,v in optL:
+        if n == '-h' or n == '--help':
+            print3( help_dasher.strip() )
+            return
+        optD[n] = v
+
+    if len(argL) == 0:
+        errorexit( 'no output filename given' )
+
+    if '--gitlab' not in optD:
+        errorexit( 'the --gitlab option must be given' )
+
+    giturl = optD['--gitlab']
+    fname = argL[0]
+    print
+
+    dash = dasherlib.DashboardCreator( giturl )
+    dash.readResults()
+    dash.writeHistoryPage( fname )
+
+
+def print3( *args ):
+    ""
+    sys.stdout.write( ' '.join( [ str(arg) for arg in args ] ) + '\n' )
+    sys.stdout.flush()
+
+
+def errorexit( *args ):
+    ""
+    err = '*** dasher error: '+' '.join( [ str(arg) for arg in args ] )
+    sys.stderr.write( err + '\n' )
+    sys.stderr.flush()
+    sys.exit(1)
+
+
+####################################################################
+
+main()

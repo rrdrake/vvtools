@@ -21,6 +21,7 @@ from testutils import print3
 
 from gitresults import GitResults, GitResultsReader, ResultsSummary
 from gitresults import create_orphan_branch, branch_name_and_directory
+from gitresults import map_git_url_to_web_url
 from gitinterface import GitInterface
 
 
@@ -189,6 +190,24 @@ class naming_schemes( unittest.TestCase ):
 
 class results_reader_tests( trigutil.trigTestCase ):
 
+    def test_mapping_git_url_to_web_url(self):
+        ""
+        giturl = 'git@gitlab.cool.com:My-Space/MyProj.git'
+        weburl = map_git_url_to_web_url( giturl )
+        assert weburl == 'https://gitlab.cool.com/My-Space/MyProj'
+
+        giturl = 'git@gitlab.cool.com:My-Space/MyProj'
+        weburl = map_git_url_to_web_url( giturl )
+        assert weburl == 'https://gitlab.cool.com/My-Space/MyProj'
+
+        giturl = 'https://gitlab.cool.com/My-Space/MyProj.git'
+        weburl = map_git_url_to_web_url( giturl )
+        assert weburl == 'https://gitlab.cool.com/My-Space/MyProj'
+
+        giturl = 'https://gitlab.cool.com/My-Space/MyProj'
+        weburl = map_git_url_to_web_url( giturl )
+        assert weburl == 'https://gitlab.cool.com/My-Space/MyProj'
+
     def test_iterating_results_directories(self):
         ""
         url = create_fake_results_repo( 'resrepo' )
@@ -198,6 +217,7 @@ class results_reader_tests( trigutil.trigTestCase ):
         bdmap = {}
         for branch,dirname in rdr.iterateDirectories():
             bdmap[ basename(dirname) ] = branch
+            rsum = ResultsSummary( url, branch, dirname )
 
         assert len( bdmap ) == 2
         assert basename( bdmap['2019_05_10_20.foo'] ) == 'results_2019_05'
@@ -282,11 +302,18 @@ def create_fake_results_repo( reponame ):
 
     epoch = 1557542115.59  # Fri May 10 20:35:15 2019
     rdir = gr.createBranchLocation( directory_suffix='foo', epochdate=epoch )
-    util.writefile( pjoin( rdir, 'somefile.txt' ), 'content one' )
+    util.writefile( pjoin( rdir, 'TestResults.md' ), 'fake content' )
+    gr.pushResults( 'epoch 1' )
 
     epoch = 1560134273.99  # Sun Jun  9 20:37:53 2019
     rdir = gr.createBranchLocation( directory_suffix='foo', epochdate=epoch )
-    util.writefile( pjoin( rdir, 'somefile.txt' ), 'content two' )
+    util.writefile( pjoin( rdir, 'README.md' ), 'fake content' )
+    gr.pushResults( 'epoch 2' )
+
+    epoch = 1554345473.99  # Wed Apr  3 20:37:53 2019
+    rdir = gr.createBranchLocation( directory_suffix='foo', epochdate=epoch )
+    util.writefile( pjoin( rdir, 'nonsense.txt' ), 'foo bar' )
+    gr.pushResults( 'epoch 3' )
 
     return url
 

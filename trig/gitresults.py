@@ -88,8 +88,19 @@ class GitResultsReader:
         for pn in os.listdir( topdir ):
             if GitResultsReader.dirpat.match( pn ):
                 dn = pjoin( topdir, pn )
-                if os.path.isdir( dn ):
+                if self._summary_file_exists( dn ):
                     yield dn
+
+    def _summary_file_exists(self, dirname):
+        """
+        a README.md has been used since Aug 2019, before it was TestResults.md
+        """
+        fn1 = pjoin( dirname, 'README.md' )
+        fn2 = pjoin( dirname, 'TestResults.md' )
+        if os.path.isfile( fn1 ) or os.path.isfile( fn2 ):
+            return True
+        else:
+            return False
 
 
 class ResultsSummary:
@@ -125,12 +136,10 @@ class ResultsSummary:
         https://gitlab.cool.com/space/proj/blob/branch/resultsdir/README.md
             #tests-that-pass-34
         """
-        loc = self.url
-        if self.url.endswith( '.git' ):
-            loc = self.url[:-4]
+        loc = map_git_url_to_web_url( self.url )
 
         bdir = basename( self.rdir )
-        lnk = pjoin( loc, 'blob', self.branch, bdir, 'README.md' )
+        lnk = pjoin( loc, 'blob', self.branch, bdir, self.readme )
 
         if result:
             lnk += '#tests-that-'+result.lower()+'-'+str( self.cnts[result] )
@@ -139,9 +148,10 @@ class ResultsSummary:
 
     def _parse_readme(self):
         ""
-        with open( pjoin( self.rdir, 'README.md' ), 'rt' ) as fp:
+        self.readme,fn = self._probe_readme_name()
+
+        with open( fn, 'rt' ) as fp:
             for line in fp:
-                # print3( 'magic:', line.rstrip() )
                 if line.startswith( ResultsSummary.cntmark ):
                     try:
                         res,cnt = self._header_line_result_and_count( line )
@@ -150,6 +160,19 @@ class ResultsSummary:
                     else:
                         self.cnts[res] = cnt
                         self.anchors[res] = self._header_line_to_anchor( line )
+
+    def _probe_readme_name(self):
+        ""
+        readme = 'README.md'
+        fn = pjoin( self.rdir, readme )
+
+        if not os.path.exists( fn ):
+            readme = 'TestResults.md'
+            fn = pjoin( self.rdir, readme )
+            assert os.path.exists( fn ), \
+                'A README.md or TestResults.md must exist in '+self.rdir
+
+        return readme,fn
 
     cntmark = '## Tests that '
     mlen = len( cntmark )
@@ -172,6 +195,22 @@ class ResultsSummary:
         s3 = s2.lower()
 
         return s3
+
+
+def map_git_url_to_web_url( giturl ):
+    ""
+    loc = giturl
+    if giturl.endswith( '.git' ):
+        loc = giturl[:-4]
+
+    if loc.startswith( 'git@' ):
+        loc = loc[4:]
+        apL = loc.split( ':', 1 )
+        if len(apL) == 2:
+            loc = '/'.join( apL )
+        loc = 'https://'+loc
+
+    return loc
 
 
 def get_results_orphan_branch( git, branch, subdir ):
@@ -240,6 +279,8 @@ def create_orphan_branch( git, branchname, resultsdir ):
 
 def clone_results_repo( giturl, working_directory, branch=None ):
     ""
+    assert giturl and giturl == giturl.strip()
+
     if not working_directory:
         working_directory = os.getcwd()
 

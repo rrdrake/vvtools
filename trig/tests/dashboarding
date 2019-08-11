@@ -20,9 +20,7 @@ import trigtestutils as trigutil
 import testutils as util
 from testutils import print3
 
-# from gitresults import GitResults, GitResultsReader, ResultsSummary
-# import webgen
-import dasher
+import dasherlib
 
 
 class the_tests( trigutil.trigTestCase ):
@@ -80,7 +78,7 @@ class the_tests( trigutil.trigTestCase ):
         ""
         url = self.make_dual_test_results()
 
-        dash = dasher.DashboardCreator( url )
+        dash = dasherlib.DashboardCreator( url )
         dash.readResults()
 
         dsL = dash.getDateStamps()
@@ -93,72 +91,36 @@ class the_tests( trigutil.trigTestCase ):
         ""
         url = self.make_dual_test_results()
 
-        dash = dasher.DashboardCreator( url )
+        dash = dasherlib.DashboardCreator( url )
         dash.readResults()
         dash.writeHistoryPage( 'testpage.htm' )
 
-    def test_foo(self):
+    def test_dasher_command_line_errors(self):
         ""
+        x,out = util.runcmd( trigutil.dasher_file+' -h' )
+        assert 'SYNOPSIS' in out
+
+        x,out = util.runcmd( trigutil.dasher_file+' --help' )
+        assert 'SYNOPSIS' in out
+
+        x,out = util.runcmd( trigutil.dasher_file, raise_on_error=False )
+        x != 0
+
+        x,out = util.runcmd( trigutil.dasher_file+' foobar.htm',
+                             raise_on_error=False )
+        x != 0
+
+    def test_running_dasher_application(self):
+        ""
+        os.mkdir( 'webpage' )
+
         url = self.make_dual_test_results()
 
-        rdr = GitResultsReader( url )
+        cmd = trigutil.dasher_file + ' --gitlab '+url + ' webpage/index.htm'
+        x,out = util.runcmd( cmd )
 
-        doc = webgen.HTMLDocument( 'testpage.htm' )
-        doc.addHead()
-        body = doc.addBody( background='cadetblue' )
-
-        body.addHeading( 'Results History', align='center' )
-
-        tab = body.addTable( borders='internal', align='center',
-                             background='white', radius=5, padding=2 )
-        row = tab.addRow( 'Job Date', 'Label',
-                          'pass', 'fail', 'diff', 'timeout', 'notdone', 'notrun',
-                          'Details',
-                          header=True )
-
-        summaries = []
-        for branch,rdir in rdr.iterateDirectories():
-            rsum = ResultsSummary( url, branch, rdir )
-            summaries.append( [ rsum.getDateStamp(), rdir, rsum ] )
-
-        summaries.sort( reverse=True )
-
-        for ds,rdir,rsum in summaries:
-            row = tab.addRow()
-            row.addEntry( make_job_date( ds ), align='right' )
-            row.addEntry( rsum.getLabel() )
-            cnts = rsum.getCounts()
-            for res in ['pass','fail','diff','timeout','notdone','notrun']:
-                if res in cnts:
-                    n = cnts[res]
-                    if res == 'pass' or n == 0:
-                        clr = 'lightgreen'
-                    elif res == 'fail':
-                        clr = 'tomato'
-                    else:
-                        clr = 'yellow'
-                    if n == 0:
-                        ent = n
-                    else:
-                        ent = webgen.make_hyperlink( rsum.getResultsLink(res), n )
-                    row.addEntry( ent, align='center', background=clr )
-                else:
-                    row.addEntry( '?', align='center' )
-            lnk = webgen.make_hyperlink( rsum.getResultsLink(),
-                                         basename( rdir ) )
-            row.addEntry( lnk )
-
-        shutil.copy( '/home/rrdrake/temp/scidev_logo.png', 'scidev_logo.png' )
-        body.addParagraph( '<img style="width:100px;position: fixed; bottom: 5px; right: 5px;" src="scidev_logo.png" alt="SCIDEV"/>' )
-
-        doc.close()
-        rdr.cleanup()
-
-
-def make_job_date( epoch ):
-    ""
-    stm = time.strftime( "%a %b %d %Hh", time.localtime( epoch ) )
-    return stm
+        assert os.path.exists( 'webpage/index.htm' )
+        self.setWebFile( 'webpage/index.htm' )
 
 
 def core_platform_name():

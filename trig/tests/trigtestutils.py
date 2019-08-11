@@ -26,6 +26,8 @@ sys.path.insert( 0, trigdir )
 
 vvtest_file = pjoin( vvtdir, 'vvtest' )
 
+dasher_file = pjoin( trigdir, 'dasher' )
+
 
 class trigTestCase( unittest.TestCase ):
 
