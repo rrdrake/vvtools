@@ -47,10 +47,12 @@ class HTMLDocument( DocumentElement ):
         self.cur = Head( self.writer )
         return self.cur
 
-    def addBody(self):
-        ""
+    def addBody(self, **attrs):
+        """
+            background = <color>
+        """
         self._check_close_current()
-        self.cur = Body( self.writer )
+        self.cur = Body( self.writer, attrs )
         return self.cur
 
     def close(self):
@@ -80,11 +82,13 @@ class Head( DocumentElement ):
 
 class Body( DocumentElement ):
 
-    def __init__(self, writer):
+    def __init__(self, writer, attrs):
         ""
         DocumentElement.__init__( self, writer )
 
-        self.writeln( '<body>' )
+        sty = self._make_style( attrs )
+
+        self.writeln( '<body'+sty+'>' )
 
     def addHeading(self, text, **attrs):
         """
@@ -94,16 +98,24 @@ class Body( DocumentElement ):
         self.cur = Heading( self.writer, text, **attrs )
         return self.cur
 
-    def addParagraph(self, text=None):
+    def addParagraph(self, *text):
         ""
         self._check_close_current()
-        self.writeln( '<p>'+str(text)+'</p>' )
+        self.writeln( '<p>' )
+        for item in text:
+            self.writeln( str(item) )
+        self.writeln( '</p>' )
 
     def addTable(self, **attrs):
         """
-            collapse = [True] False : True means no gap between cells
+            align = left center right
+            spacing = [0] 1 2 ... : border spacing (between cells)
             borders  = all      : border around the table and internal cells
                        internal : borders on internal cells
+                       surround : border around the table
+            radius = <integer> : make rounded border corners
+            background = <color> : background color
+            padding = <integer> : set padding between cell content and border
         """
         self._check_close_current()
         self.cur = Table( self.writer, **attrs )
@@ -113,6 +125,56 @@ class Body( DocumentElement ):
         ""
         self._check_close_current()
         self.writeln( '</body>' )
+
+    def _make_style(self, attrs):
+        ""
+        buf = ''
+
+        bg = attrs.get( 'background', '' )
+        if bg:
+            buf += 'background-color:'+bg+';'
+
+        if buf:
+            return ' style="'+buf+'"'
+        else:
+            return ''
+
+
+def make_hyperlink( address, display_text ):
+    ""
+    return '<a href="'+address+'">'+str(display_text)+'</a>'
+
+
+def make_image( location, failtext='<broken image>',
+                width=None, height=None,
+                position=None, top=None, bottom=None, left=None, right=None ):
+    """
+        width, height in pixels (px)
+        position = absolute  : relative to the containing element
+                   fixed     : relative to the browser window
+                   relative  : relative to its default position
+        top, bottom, left, right : spacing from the side in pixels (px)
+    """
+    buf = '<img src="'+location+'" alt="'+failtext+'"'
+
+    sty = ''
+
+    if width != None: sty += 'width:'+str(width)+'px;'
+    if height != None: sty += 'height:'+str(height)+'px;'
+
+    if position != None: sty += 'position:'+position+';'
+
+    if top != None: sty += 'top:'+str(top)+'px;'
+    if bottom != None: sty += 'bottom:'+str(bottom)+'px;'
+    if left != None: sty += 'left:'+str(left)+'px;'
+    if right != None: sty += 'right:'+str(right)+'px;'
+
+    if sty:
+        buf += ' style="'+sty+'"'
+
+    buf += '/>'
+
+    return buf
 
 
 class Heading( DocumentElement ):
@@ -163,11 +225,11 @@ class Table( DocumentElement ):
         """
         self._check_close_current()
 
-        topsty = ''
-        if self.rowcnt > 0 and self.bdrtop:
-            topsty += self.bdrtop
+        sty = self.sty
+        if self.rowcnt > 0:
+            sty += self.bdrtop
 
-        self.cur = TableRow( self.writer, topsty, self.bdrleft, attrs )
+        self.cur = TableRow( self.writer, sty, self.bdrleft, attrs )
 
         for ent in entries:
             self.cur.addEntry( ent )
@@ -185,19 +247,45 @@ class Table( DocumentElement ):
         ""
         self.bdrtop = ''
         self.bdrleft = ''
+        self.sty = ''
 
         buf = ''
 
-        if attrs.get( 'collapse', True ):
-            buf += 'border-collapse: collapse;'
+        align = attrs.get( 'align', '' )
+        if align == 'left':
+            buf += 'margin-right:auto;'
+        elif align == 'right':
+            buf += 'margin-left:auto;'
+        elif align == 'center':
+            buf += 'margin-left:auto;margin-right:auto;'
 
-        for n,v in attrs.items():
-            if n == 'borders':
-                if v == 'all':
-                    buf += 'border: 1px solid black;'
-                if v == 'all' or v == 'internal':
-                    self.bdrtop += 'border-top: 1px solid black;'
-                    self.bdrleft += 'border-left: 1px solid black;'
+        sp = attrs.get( 'spacing', 0 )
+        buf += 'border-spacing: '+str(sp)+'px;'
+
+        bdr = attrs.get( 'borders', '' )
+        if bdr == 'all' or bdr == 'surround':
+            buf += 'border: 1px solid black;'
+        if bdr == 'all':
+            if sp == 0:
+                self.bdrtop += 'border-top: 1px solid black;'
+                self.bdrleft += 'border-left: 1px solid black;'
+            else:
+                self.sty += 'border: 1px solid black;'
+        elif bdr == 'internal':
+            self.bdrtop += 'border-top: 1px solid black;'
+            self.bdrleft += 'border-left: 1px solid black;'
+
+        rad = attrs.get( 'radius', '' )
+        if rad:
+            buf += 'border-radius: '+str(rad)+'px;'
+
+        bg = attrs.get( 'background', None )
+        if bg != None:
+            buf += 'background-color:'+bg+';'
+
+        pad = attrs.get( 'padding', None )
+        if pad != None:
+            self.sty += 'padding: '+str(pad)+'px;'
 
         if buf:
             buf = ' style="'+buf+'"'
@@ -207,12 +295,12 @@ class Table( DocumentElement ):
 
 class TableRow( DocumentElement ):
 
-    def __init__(self, writer, topsty, lftsty, attrs):
+    def __init__(self, writer, sty, lftsty, attrs):
         ""
         DocumentElement.__init__( self, writer )
 
         self.elmt = 'th' if attrs.get( 'header', False ) else 'td'
-        self.topsty = topsty
+        self.sty = sty
         self.lftsty = lftsty
 
         self.writeln( '<tr>' )
@@ -233,7 +321,7 @@ class TableRow( DocumentElement ):
 
     def _make_style(self, attrs):
         ""
-        sty = self.topsty
+        sty = self.sty
 
         if self.colidx > 0 and self.lftsty:
             sty += self.lftsty

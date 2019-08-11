@@ -10,6 +10,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
+import shutil
 import unittest
 
 import trigtestutils as trigutil
@@ -58,6 +59,15 @@ class hello_world_tests( WebFileTestCase ):
         body.addParagraph( 'Hello World.' )
         doc.close()
 
+    def test_body_background_color(self):
+        ""
+        doc = webgen.HTMLDocument( 'testpage.htm' )
+        head = doc.addHead()
+        head.addTitle( 'Hello Title' )
+        body = doc.addBody( background='bisque' )
+        body.addParagraph( 'background=bisque' )
+        doc.close()
+
 
 class DocumentTestCase( WebFileTestCase ):
 
@@ -76,49 +86,98 @@ class DocumentTestCase( WebFileTestCase ):
 
     def test_heading_element(self):
         ""
-        self.body.addHeading( 'Centered heading.', align='center' )
-        self.body.addHeading( 'Left alignment heading.', align='left' )
-        self.body.addHeading( 'Right alignment heading.', align='right' )
-        self.body.addHeading( 'Default alignment heading.' )
-
-    def test_create_a_plain_table(self):
-        ""
-        tab = self.body.addTable()
-        tab.addRow( 'one', 'two' )
-        tab.addRow( 1, 2 )
+        self.body.addHeading( 'Centered heading', align='center' )
+        self.body.addHeading( 'Left alignment heading', align='left' )
+        self.body.addHeading( 'Right alignment heading', align='right' )
+        self.body.addHeading( 'Default alignment heading' )
 
     def test_create_table_with_borders(self):
         ""
+        self.body.addParagraph( 'default' )
+
+        tab = self.body.addTable()
+        tab.addRow( 'one', 'two' )
+        tab.addRow( 1, 2 )
+        tab = self.body.addTable()
+        tab.addRow( 'uno' )
+
+        self.body.addParagraph( 'borders=surround' )
+
+        tab = self.body.addTable( borders='surround' )
+        tab.addRow( 'one', 'two' )
+        tab.addRow( 1, 2 )
+        tab = self.body.addTable( borders='surround' )
+        tab.addRow( 'uno' )
+
+        self.body.addParagraph( 'borders=surround and spacing=5' )
+
+        tab = self.body.addTable( borders='surround', spacing=5 )
+        tab.addRow( 'one', 'two' )
+        tab.addRow( 1, 2 )
+        tab = self.body.addTable( borders='surround', spacing=5 )
+        tab.addRow( 'uno' )
+
+        self.body.addParagraph( 'borders=internal' )
+
+        tab = self.body.addTable( borders='internal' )
+        tab.addRow( 'one', 'two' )
+        tab.addRow( 1, 2 )
+        tab = self.body.addTable( borders='internal' )
+        tab.addRow( 'uno' )
+
+        self.body.addParagraph( 'borders=internal and spacing=5' )
+
+        tab = self.body.addTable( borders='internal', spacing=5 )
+        tab.addRow( 'one', 'two' )
+        tab.addRow( 1, 2 )
+        tab = self.body.addTable( borders='internal', spacing=5 )
+        tab.addRow( 'uno' )
+
+        self.body.addParagraph( 'borders=all' )
+
         tab = self.body.addTable( borders='all' )
         tab.addRow( 'one', 'two' )
         tab.addRow( 1, 2 )
-
-        self.body.addParagraph( 'make some room' )
-
         tab = self.body.addTable( borders='all' )
         tab.addRow( 'uno' )
 
-    def test_create_table_with_internal_borders(self):
+        self.body.addParagraph( 'borders=all and spacing=5' )
+
+        tab = self.body.addTable( borders='all', spacing=5 )
+        tab.addRow( 'one', 'two' )
+        tab.addRow( 1, 2 )
+        tab = self.body.addTable( borders='all', spacing=5 )
+        tab.addRow( 'uno' )
+
+    def test_create_table_with_cell_padding(self):
         ""
-        tab = self.body.addTable( borders='internal' )
-        tab.addRow( 'one', 'two' )
-        tab.addRow( 1, 2 )
+        self.body.addParagraph( 'default padding' )
 
-        self.body.addParagraph( 'make some room' )
+        tab = self.body.addTable( borders='all' )
+        tab.addRow( 'one', 'two', 'thr' )
+        tab.addRow( 1, 2, 3 )
+        tab.addRow( 'a', 'b', 'c' )
 
-        tab = self.body.addTable( borders='internal' )
-        tab.addRow( 'uno' )
+        self.body.addParagraph( 'padding=0' )
 
-        self.body.addParagraph( 'make some room' )
+        tab = self.body.addTable( borders='all', padding=0 )
+        tab.addRow( 'one', 'two', 'thr' )
+        tab.addRow( 1, 2, 3 )
+        tab.addRow( 'a', 'b', 'c' )
 
-        tab = self.body.addTable( borders='internal' )
-        tab.addRow( 'one', 'two', 'thr', 'for' )
-        tab.addRow( 1, 2, 3, 4 )
-        tab.addRow( 'a', 'b', 'c', 'd' )
-        tab.addRow( 'aa', 'bb', 'cc', 'dd' )
+        self.body.addParagraph( 'padding=5, 2nd row w/ color, last row right aligned' )
+
+        tab = self.body.addTable( borders='all', padding=5 )
+        tab.addRow( 'one', 'two', 'thr' )
+        row = tab.addRow()
+        row.addEntry( 1, 2, 3, background='tomato' )
+        row = tab.addRow()
+        row.addEntry( 'a', 'b', 'c', align='right' )
 
     def test_create_table_with_background_color_by_entry(self):
         ""
+        self.body.addParagraph( 'some cells have color' )
+
         tab = self.body.addTable()
         row = tab.addRow( 'a' )
         row.addEntry( 'b', background='lightblue' )
@@ -126,9 +185,9 @@ class DocumentTestCase( WebFileTestCase ):
         row.addEntry( 10, background='tomato' )
         row.addEntry( 0 )
 
-        self.body.addParagraph( 'make some room' )
+        self.body.addParagraph( 'some cell colors, borders=all spacing=2' )
 
-        tab = self.body.addTable( borders='all' )
+        tab = self.body.addTable( borders='all', spacing=2 )
         row = tab.addRow()
         row.addEntry( 10, background='tomato' )
         row.addEntry( 0, background='lightgreen' )
@@ -136,12 +195,14 @@ class DocumentTestCase( WebFileTestCase ):
 
     def test_create_table_with_header(self):
         ""
+        self.body.addParagraph( 'first row is headers, second row has color' )
+
         tab = self.body.addTable()
         row = tab.addRow( 'these', 'are', 'header', 'entries', header=True )
         row = tab.addRow()
         row.addEntry( 10, 'foo', 1.4, None, background='tomato' )
 
-        self.body.addParagraph( 'make some room' )
+        self.body.addParagraph( 'first row is headers with color, borders=all' )
 
         tab = self.body.addTable( borders='all' )
         row = tab.addRow( header=True )
@@ -151,6 +212,8 @@ class DocumentTestCase( WebFileTestCase ):
 
     def test_create_table_with_text_alignment(self):
         ""
+        self.body.addParagraph( 'alignment within cells' )
+
         tab = self.body.addTable( borders='all' )
         row = tab.addRow( 'aaaaaaa', 'bbbbbbb', 'ccccccc', 'ddddddd' )
         row = tab.addRow()
@@ -158,6 +221,107 @@ class DocumentTestCase( WebFileTestCase ):
         row.addEntry( 'ctr', align='center', background='lavender' )
         row.addEntry( 'rgt', align='right' )
         row.addEntry( 'none' )
+
+    def test_create_table_with_page_alignment(self):
+        ""
+        self.body.addParagraph( 'align=left' )
+
+        tab = self.body.addTable( borders='surround', align='left' )
+        tab.addRow( 'left', 'left' )
+        tab.addRow( 'left', 'left' )
+
+        self.body.addParagraph( 'align=right' )
+
+        tab = self.body.addTable( borders='surround', align='right' )
+        tab.addRow( 'right', 'right' )
+        tab.addRow( 'right', 'right' )
+
+        self.body.addParagraph( 'align=center' )
+
+        tab = self.body.addTable( borders='surround', align='center' )
+        tab.addRow( 'center', 'center' )
+        tab.addRow( 'center', 'center' )
+
+        self.body.addParagraph( 'no align' )
+
+        tab = self.body.addTable( borders='surround' )
+        tab.addRow( 'default', 'default' )
+        tab.addRow( 'default', 'default' )
+
+    def test_create_table_with_rounded_border(self):
+        ""
+        self.body.addParagraph( 'radius=10' )
+
+        tab = self.body.addTable( background='lightblue',
+                                  radius=10 )
+        tab.addRow( 'earth', 'moon' )
+        tab.addRow( 'saturn', 'titan' )
+
+        self.body.addParagraph( 'radius=10 and borders=internal' )
+
+        tab = self.body.addTable( borders='internal',
+                                  background='lightblue',
+                                  radius=10 )
+        tab.addRow( 'earth', 'moon' )
+        tab.addRow( 'saturn', 'titan' )
+
+        self.body.addParagraph( 'radius=10 and borders=surround' )
+
+        tab = self.body.addTable( borders='surround',
+                                  background='lightblue',
+                                  radius=10 )
+        tab.addRow( 'earth', 'moon' )
+        tab.addRow( 'saturn', 'titan' )
+
+        self.body.addParagraph( 'radius=5 borders=all spacing=10' )
+
+        tab = self.body.addTable( borders='all', spacing=10,
+                                  background='lightblue',
+                                  radius=5 )
+        tab.addRow( 'earth', 'moon' )
+        tab.addRow( 'saturn', 'titan' )
+
+    def test_make_hyperlink(self):
+        ""
+        lnk = webgen.make_hyperlink( 'https://foo.bar.com/', 'Go to foobar!' )
+        self.body.addParagraph( 'Link is ' + lnk )
+        self.body.addParagraph( 'Separate paragraph', lnk, 'argument.' )
+
+    def test_make_image(self):
+        ""
+        shutil.copy( trigutil.testsrcdir+'/hello.png', 'hello.png' )
+
+        img = webgen.make_image( 'hello.png' )
+        self.body.addParagraph( 'single argument' )
+        self.body.addParagraph( img )
+        self.body.addParagraph( 'Inline image '+img+' followed by more text.' )
+
+        img = webgen.make_image( 'failure_adfauskldhjdf.png' )
+        self.body.addParagraph( 'failure: ', img )
+
+        img = webgen.make_image( 'hello.png', width=200, height=50 )
+        self.body.addParagraph( 'width=200 height=50 ', img )
+
+        img = webgen.make_image( 'hello.png', position='relative', left=-50 )
+        self.body.addParagraph( img, 'position=relative left=-50' )
+
+    def test_make_image_positioned_relative_to_browser_window(self):
+        ""
+        shutil.copy( trigutil.testsrcdir+'/hello.png', 'hello.png' )
+
+        self.body.addParagraph( 'four images, one near each browser window corner' )
+
+        img = webgen.make_image( 'hello.png', position='fixed', left=50, top=100 )
+        self.body.addParagraph( img )
+
+        img = webgen.make_image( 'hello.png', position='fixed', right=50, top=100 )
+        self.body.addParagraph( img )
+
+        img = webgen.make_image( 'hello.png', position='fixed', left=50, bottom=100 )
+        self.body.addParagraph( img )
+
+        img = webgen.make_image( 'hello.png', position='fixed', right=50, bottom=100 )
+        self.body.addParagraph( img )
 
 
 #######################################################################
