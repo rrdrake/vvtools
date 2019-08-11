@@ -1,0 +1,173 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+from os.path import join as pjoin
+from os.path import basename
+import shutil
+import time
+import unittest
+
+import trigtestutils as trigutil
+import testutils as util
+from testutils import print3
+
+# from gitresults import GitResults, GitResultsReader, ResultsSummary
+# import webgen
+import dasher
+
+
+class the_tests( trigutil.trigTestCase ):
+
+    def setUp(self):
+        ""
+        trigutil.trigTestCase.setUp( self )
+        self.webfile = None
+
+    def setWebFile(self, filename):
+        ""
+        assert os.path.exists( filename )
+        self.webfile = filename
+
+    def tearDown(self):
+        ""
+        if '-i' in util.runoptions:
+            import webbrowser
+            if self.webfile:
+                assert os.path.exists( self.webfile )
+                webbrowser.open( self.webfile )
+            elif os.path.exists( 'testpage.htm' ):
+                webbrowser.open( 'testpage.htm' )
+
+    def run_pass_fail_diff_tests(self, giturl, epoch):
+        ""
+        util.writefile( 'passfaildiff.vvt', """
+            #VVT: parameterize : res = pass fail diff
+            import vvtest_util as vvt
+            import script_util as util
+            if vvt.res == 'fail':
+                raise Exception( 'fake exception' )
+            elif vvt.res == 'diff':
+                util.exit_diff()
+            """ )
+        time.sleep(1)
+        x,out = util.runcmd( trigutil.vvtest_file + \
+                             ' -w -vv -n 4 --plat '+core_platform_name() + \
+                             ' --gitlab '+giturl + \
+                             ' --results-date '+str(epoch) )
+
+    def make_dual_test_results(self):
+        ""
+        url = util.create_bare_repo_with_topic_branch( 'resrepo' )
+
+        self.epoch1 = 1561499669.31  # Tue Jun 25 15:54:29 2019
+        self.run_pass_fail_diff_tests( url, self.epoch1 )
+
+        self.epoch2 = 1564480574.74  # Tue Jul 30 03:56:14 2019
+        self.run_pass_fail_diff_tests( url, self.epoch2 )
+
+        return url
+
+    def test_reading_results(self):
+        ""
+        url = self.make_dual_test_results()
+
+        dash = dasher.DashboardCreator( url )
+        dash.readResults()
+
+        dsL = dash.getDateStamps()
+        dsL.sort()
+        assert len( dsL ) == 2
+        assert abs( dsL[0] - self.epoch1 ) < 70*60
+        assert abs( dsL[1] - self.epoch2 ) < 70*60
+
+    def test_writing_history_page(self):
+        ""
+        url = self.make_dual_test_results()
+
+        dash = dasher.DashboardCreator( url )
+        dash.readResults()
+        dash.writeHistoryPage( 'testpage.htm' )
+
+    def test_foo(self):
+        ""
+        url = self.make_dual_test_results()
+
+        rdr = GitResultsReader( url )
+
+        doc = webgen.HTMLDocument( 'testpage.htm' )
+        doc.addHead()
+        body = doc.addBody( background='cadetblue' )
+
+        body.addHeading( 'Results History', align='center' )
+
+        tab = body.addTable( borders='internal', align='center',
+                             background='white', radius=5, padding=2 )
+        row = tab.addRow( 'Job Date', 'Label',
+                          'pass', 'fail', 'diff', 'timeout', 'notdone', 'notrun',
+                          'Details',
+                          header=True )
+
+        summaries = []
+        for branch,rdir in rdr.iterateDirectories():
+            rsum = ResultsSummary( url, branch, rdir )
+            summaries.append( [ rsum.getDateStamp(), rdir, rsum ] )
+
+        summaries.sort( reverse=True )
+
+        for ds,rdir,rsum in summaries:
+            row = tab.addRow()
+            row.addEntry( make_job_date( ds ), align='right' )
+            row.addEntry( rsum.getLabel() )
+            cnts = rsum.getCounts()
+            for res in ['pass','fail','diff','timeout','notdone','notrun']:
+                if res in cnts:
+                    n = cnts[res]
+                    if res == 'pass' or n == 0:
+                        clr = 'lightgreen'
+                    elif res == 'fail':
+                        clr = 'tomato'
+                    else:
+                        clr = 'yellow'
+                    if n == 0:
+                        ent = n
+                    else:
+                        ent = webgen.make_hyperlink( rsum.getResultsLink(res), n )
+                    row.addEntry( ent, align='center', background=clr )
+                else:
+                    row.addEntry( '?', align='center' )
+            lnk = webgen.make_hyperlink( rsum.getResultsLink(),
+                                         basename( rdir ) )
+            row.addEntry( lnk )
+
+        shutil.copy( '/home/rrdrake/temp/scidev_logo.png', 'scidev_logo.png' )
+        body.addParagraph( '<img style="width:100px;position: fixed; bottom: 5px; right: 5px;" src="scidev_logo.png" alt="SCIDEV"/>' )
+
+        doc.close()
+        rdr.cleanup()
+
+
+def make_job_date( epoch ):
+    ""
+    stm = time.strftime( "%a %b %d %Hh", time.localtime( epoch ) )
+    return stm
+
+
+def core_platform_name():
+    ""
+    if os.uname()[0].lower().startswith( 'darwin' ):
+        return 'Darwin'
+    else:
+        return 'Linux'
+
+#######################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
