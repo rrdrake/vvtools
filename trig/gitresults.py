@@ -76,6 +76,10 @@ class GitResultsReader:
             if GitResultsReader.branchpat.match( branch ):
                 yield branch
 
+    def cleanup(self):
+        ""
+        check_remove_directory( self.git.getRootDir() )
+
     branchpat = re.compile( 'results_2[01][0-9][0-9]_[0123][0-9]' )
     dirpat = re.compile( '2[01][0-9][0-9]_[0123][0-9].*' )
 
