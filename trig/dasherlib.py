@@ -39,7 +39,7 @@ class DashboardCreator:
     def writeHistoryPage(self, filename, page_title='Results History'):
         ""
         self._write_page_structure( filename, page_title )
-        self.body.addHeading( 'Results History', align='center' )
+        self.body.add( webgen.Heading( 'Results History', align='center' ) )
         self._write_history_table()
         self._add_scidev_logo( dirname( abspath(filename) ) )
         self.doc.close()
@@ -48,23 +48,23 @@ class DashboardCreator:
         ""
         self.doc = webgen.HTMLDocument( filename )
 
-        head = self.doc.addHead()
-        head.addTitle( page_title )
+        self.doc.add( webgen.Head( page_title ) )
 
-        self.body = self.doc.addBody( background='cadetblue' )
+        self.body = self.doc.add( webgen.Body( background='cadetblue' ) )
 
     def _write_history_table(self):
         ""
-        tab = self.body.addTable( borders='internal', align='center',
-                                  background='white', radius=5, padding=2 )
+        tab = webgen.Table( border='internal', align='center',
+                            background='white', radius=5, padding=2 )
+        self.body.add( tab )
 
-        tab.addRow( 'Job Date', 'Label',
-                    'pass', 'fail', 'diff', 'timeout', 'notdone', 'notrun',
-                    'Details',
-                    header=True )
+        tab.add( 'Job Date', 'Label',
+                 'pass', 'fail', 'diff', 'timeout', 'notdone', 'notrun',
+                 'Details',
+                 header=True )
 
         for ds,rdir,rsum in self.summaries:
-            row = tab.addRow()
+            row = tab.add()
             fill_history_row( row, ds, rdir, rsum )
 
     def _add_scidev_logo(self, page_directory):
@@ -74,15 +74,14 @@ class DashboardCreator:
         shutil.copy( pjoin( mydir, fn ), pjoin( page_directory, fn ) )
 
         img = webgen.make_image( fn, width=100,
-                                 position='fixed', bottom=5, right=5,
-                                      )
-        self.body.addParagraph( img )
+                                 position='fixed', bottom=5, right=5 )
+        self.body.add( img )
 
 
 def fill_history_row( row, datestamp, resultsdir, summary ):
     ""
-    row.addEntry( make_job_date( datestamp ), align='right' )
-    row.addEntry( summary.getLabel() )
+    row.add( make_job_date( datestamp ), align='right' )
+    row.add( summary.getLabel() )
 
     cnts = summary.getCounts()
     for res in ['pass','fail','diff','timeout','notdone','notrun']:
@@ -91,17 +90,17 @@ def fill_history_row( row, datestamp, resultsdir, summary ):
 
     lnk = webgen.make_hyperlink( summary.getResultsLink(),
                                  basename( resultsdir ) )
-    row.addEntry( lnk )
+    row.add( lnk )
 
 
 def add_history_result_entry( row, result, cnt, summary ):
     ""
     if cnt == None:
-        row.addEntry( '?', align='center' )
+        row.add( '?', align='center' )
     else:
         clr = map_result_to_color( result, cnt )
         ent = map_result_to_entry( result, cnt, summary )
-        row.addEntry( ent, align='center', background=clr )
+        row.add( ent, align='center', background=clr )
 
 
 def map_result_to_color( result, cnt ):

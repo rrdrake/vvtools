@@ -10,134 +10,152 @@ import sys
 import os
 
 
+class WebGenError( Exception ):
+    pass
+
+
 class DocumentElement:
     """
-    Base class for most of the document element classes.
+    Internal base class for most of the HTML document element classes.
     """
 
-    def __init__(self, writer):
+    def __init__(self):
         ""
-        self.writer = writer
-        self.cur = None
+        self.writer = None
+        self.child = None
 
-    def _check_close_current(self):
+    def add(self, child_element):
         ""
-        if self.cur != None:
-            self.cur.close()
-            self.cur = None
+        self._check_close_child()
+        self._check_add_child( child_element )
+
+        return child_element
+
+    def _check_add_child(self, child):
+        ""
+        if isinstance( child, DocumentElement ):
+            child.writer = self.writer
+            self.child = child
+            child.begin()
+        else:
+            self.writer.writeln( str(child) )
 
     def writeln(self, *lines):
         ""
         self.writer.writeln( *lines )
 
+    def createWriter(self, filename):
+        ""
+        self.writer = Writer( filename )
+
     def closeWriter(self):
         ""
         self.writer.close()
-        self.writer = None
+
+    def _check_close_child(self):
+        ""
+        if self.child != None:
+            self.child._check_close_child()
+            self.child.close()
+            self.child = None
 
 
 class HTMLDocument( DocumentElement ):
 
     def __init__(self, filename=None):
         ""
-        DocumentElement.__init__( self, Writer( filename ) )
+        DocumentElement.__init__( self )
 
-    def addHead(self):
-        ""
-        self.cur = Head( self.writer )
-        return self.cur
+        self.createWriter( filename )
 
-    def addBody(self, **attrs):
-        """
-            background = <color>
-        """
-        self._check_close_current()
-        self.cur = Body( self.writer, attrs )
-        return self.cur
+        self.writeln( '<!DOCTYPE html>', '<html>' )
 
     def close(self):
         ""
-        self._check_close_current()
+        self._check_close_child()
+        self.writeln( '</html>' )
         self.closeWriter()
 
 
 class Head( DocumentElement ):
 
-    def __init__(self, writer):
+    def __init__(self, title=None):
         ""
-        DocumentElement.__init__( self, writer )
+        DocumentElement.__init__( self )
 
-        self.writeln( '<!DOCTYPE html>', '<html>', '<head>' )
+        self.title = title
+        self.title_written = False
 
-    def addTitle(self, title):
+    def begin(self):
         ""
-        self._check_close_current()
-        self.writeln( '<title>'+title+'</title>' )
+        self.writeln( '<head>' )
+        self._write_title( self.title )
+
+    def setTitle(self, title):
+        ""
+        self._write_title( title )
+
+    def _write_title(self, title):
+        ""
+        if title:
+            if self.title_written:
+                raise WebGenError( 'title already written' )
+
+            self.writeln( '<title>'+title+'</title>' )
+            self.title_written = True
 
     def close(self):
         ""
-        self._check_close_current()
         self.writeln( '</head>' )
 
 
 class Body( DocumentElement ):
 
-    def __init__(self, writer, attrs):
+    def __init__(self, **attrs):
+        """
+            background = <color>
+        """
+        DocumentElement.__init__( self )
+
+        self.attrs = attrs
+
+    def begin(self):
         ""
-        DocumentElement.__init__( self, writer )
-
-        sty = self._make_style( attrs )
-
-        self.writeln( '<body'+sty+'>' )
-
-    def addHeading(self, text, **attrs):
-        """
-            align = left, center, right
-        """
-        self._check_close_current()
-        self.cur = Heading( self.writer, text, **attrs )
-        return self.cur
-
-    def addParagraph(self, *text):
-        ""
-        self._check_close_current()
-        self.writeln( '<p>' )
-        for item in text:
-            self.writeln( str(item) )
-        self.writeln( '</p>' )
-
-    def addTable(self, **attrs):
-        """
-            align = left center right
-            spacing = [0] 1 2 ... : border spacing (between cells)
-            borders  = all      : border around the table and internal cells
-                       internal : borders on internal cells
-                       surround : border around the table
-            radius = <integer> : make rounded border corners
-            background = <color> : background color
-            padding = <integer> : set padding between cell content and border
-        """
-        self._check_close_current()
-        self.cur = Table( self.writer, **attrs )
-        return self.cur
+        self.writeln( '<body'+self._make_style()+'>' )
 
     def close(self):
         ""
-        self._check_close_current()
         self.writeln( '</body>' )
 
-    def _make_style(self, attrs):
+    def _make_style(self):
         ""
         buf = ''
 
-        bg = attrs.get( 'background', '' )
-        if bg:
-            buf += 'background-color:'+bg+';'
+        buf += pop_background_style( self.attrs )
 
-        if buf:
-            return ' style="'+buf+'"'
-        else:
-            return ''
+        if len(self.attrs) > 0:
+            raise WebGenError( 'unknown Body attribute(s): '+str(self.attrs) )
+
+        return decorate_style_buffer( buf )
+
+
+class Paragraph( DocumentElement ):
+
+    def __init__(self, *content):
+        ""
+        DocumentElement.__init__( self )
+
+        self.content = content
+
+    def begin(self):
+        ""
+        self.writeln( '<p>' )
+        for item in self.content:
+            self.writeln( item )
+
+    def close(self):
+        ""
+        self.writeln( '</p>' )
 
 
 def make_hyperlink( address, display_text ):
@@ -179,163 +197,363 @@ def make_image( location, failtext='<broken image>',
 
 class Heading( DocumentElement ):
 
-    def __init__(self, writer, text=None, **attrs):
-        ""
-        DocumentElement.__init__( self, writer )
+    def __init__(self, text=None, **attrs):
+        """
+            align = left, center, right
+        """
+        DocumentElement.__init__( self )
 
-        self.writeln( '<h1'+self._make_style( attrs )+'>' )
-        if text:
-            self.writeln( text )
+        self.text = text
+        self.attrs = attrs
+
+    def begin(self):
+        ""
+        self.writeln( '<h1'+self._make_style()+'>' )
+
+        if self.text:
+            self.writeln( self.text )
 
     def close(self):
         ""
-        self._check_close_current()
         self.writeln( '</h1>' )
 
-    def _make_style(self, attrs):
+    def _make_style(self):
         ""
-        buf = ''
+        buf = pop_text_align_style( self.attrs )
 
-        for n,v in attrs.items():
-            if n == 'align':
-                assert v in [ 'left', 'center', 'right' ]
-                buf += 'text-align:'+v+';'
+        if len(self.attrs) > 0:
+            raise WebGenError( 'unknown Heading attribute(s): '+str(self.attrs) )
 
-        if buf:
-            buf = ' style="'+buf+'"'
-
-        return buf
+        return decorate_style_buffer( buf )
 
 
 class Table( DocumentElement ):
 
-    def __init__(self, writer, **attrs):
-        ""
-        DocumentElement.__init__( self, writer )
+    def __init__(self, **attrs):
+        """
+            align = left center right
+            spacing = [0] 1 2 ... : border spacing (between cells)
+            border  = all      : border around the table and internal cells
+                      internal : borders on internal cells
+                      surround : border around the table
+            radius = <integer> : make rounded border corners
+            background = <color> : background color
+            padding = <integer> : set padding between cell content and border
+        """
+        DocumentElement.__init__( self )
 
-        sty = self._compute_styles( attrs )
+        self.attrs = attrs
+        self.rowattrs = {}
+
+    def begin(self):
+        ""
+        sty = self._make_style()
         self.writeln( '<table'+sty+'>' )
 
         self.rowcnt = 0
 
-    def addRow(self, *entries, **attrs):
+    def add(self, *entries, **rowattrs):
         """
-            header = True [False] : mark row entries as header row entries
-            background = <color> : set the background color of the cell
+        Adds a row to the table, and returns a TableRow instance.
+        The 'entries' are the (perhaps initial) entries in the row.
+        The 'rowattrs' are given to TableRow.
         """
-        self._check_close_current()
-
-        sty = self.sty
-        if self.rowcnt > 0:
-            sty += self.bdrtop
-
-        self.cur = TableRow( self.writer, sty, self.bdrleft, attrs )
-
-        for ent in entries:
-            self.cur.addEntry( ent )
+        attrs = dict( self.rowattrs, **rowattrs )
+        row = TableRow( **attrs )
+        row.setRowIndex( self.rowcnt )
+        DocumentElement.add( self, row )
 
         self.rowcnt += 1
 
-        return self.cur
+        for ent in entries:
+            row.add( ent )
+
+        return row
 
     def close(self):
         ""
-        self._check_close_current()
         self.writeln( '</table>' )
 
-    def _compute_styles(self, attrs):
+    def _make_style(self):
         ""
-        self.bdrtop = ''
-        self.bdrleft = ''
-        self.sty = ''
-
         buf = ''
 
-        align = attrs.get( 'align', '' )
-        if align == 'left':
-            buf += 'margin-right:auto;'
-        elif align == 'right':
-            buf += 'margin-left:auto;'
-        elif align == 'center':
-            buf += 'margin-left:auto;margin-right:auto;'
+        buf += pop_page_align_style( self.attrs )
 
-        sp = attrs.get( 'spacing', 0 )
+        buf += pop_radius_style( self.attrs )
+        buf += pop_background_style( self.attrs )
+        pop_padding_style( self.attrs, self.rowattrs )
+
+        sp = self.attrs.pop( 'spacing', 0 )
         buf += 'border-spacing: '+str(sp)+'px;'
 
-        bdr = attrs.get( 'borders', '' )
+        buf += self._pop_border_style( sp )
+
+        if len(self.attrs) > 0:
+            raise WebGenError( 'unknown Table attribute(s): '+str(self.attrs) )
+
+        return decorate_style_buffer( buf )
+
+    def _pop_border_style(self, spacing):
+        ""
+        sty = ''
+
+        bdr = self.attrs.pop( 'border', '' )
+
         if bdr == 'all' or bdr == 'surround':
-            buf += 'border: 1px solid black;'
+            sty = 'border: 1px solid black;'
+
         if bdr == 'all':
-            if sp == 0:
-                self.bdrtop += 'border-top: 1px solid black;'
-                self.bdrleft += 'border-left: 1px solid black;'
+            if spacing == 0:
+                self.rowattrs['border'] = 'internal'
             else:
-                self.sty += 'border: 1px solid black;'
+                self.rowattrs['border'] = 'all'
+
         elif bdr == 'internal':
-            self.bdrtop += 'border-top: 1px solid black;'
-            self.bdrleft += 'border-left: 1px solid black;'
+            self.rowattrs['border'] = 'internal'
 
-        rad = attrs.get( 'radius', '' )
-        if rad:
-            buf += 'border-radius: '+str(rad)+'px;'
-
-        bg = attrs.get( 'background', None )
-        if bg != None:
-            buf += 'background-color:'+bg+';'
-
-        pad = attrs.get( 'padding', None )
-        if pad != None:
-            self.sty += 'padding: '+str(pad)+'px;'
-
-        if buf:
-            buf = ' style="'+buf+'"'
-
-        return buf
+        return sty
 
 
 class TableRow( DocumentElement ):
 
-    def __init__(self, writer, sty, lftsty, attrs):
+    def __init__(self, **attrs):
+        """
+            header = True [False] : mark row entries as header row entries
+        """
+        DocumentElement.__init__( self )
+
+        self.attrs = attrs
+        self.entattrs = {}
+
+    def setRowIndex(self, rowindex):
         ""
-        DocumentElement.__init__( self, writer )
+        self.rowidx = rowindex
 
-        self.elmt = 'th' if attrs.get( 'header', False ) else 'td'
-        self.sty = sty
-        self.lftsty = lftsty
+    def begin(self):
+        ""
+        sty = self._make_style()
 
-        self.writeln( '<tr>' )
+        self.writeln( '<tr'+sty+'>' )
 
         self.colidx = 0
 
-    def addEntry(self, *entries, **attrs):
-        ""
+    def add(self, *entries, **entryattrs):
+        """
+        If no 'entries', an empty TableEntry is returned.
+        If an entry is a DocumentElement instance, it is returned.
+        Otherwise a TableEntry containing the entry is returned.
+        If more than one entry is given, the last entry is returned.
+        An entry value of None creates an empty cell.
+        The 'entryattrs' are given to TableEntry.
+        """
+        if len(entries) == 0:
+            entries = (None,)
+
         for ent in entries:
-            sty = self._make_style( attrs )
-            self.writeln( '<'+self.elmt+sty+'>'+str(ent)+'</'+self.elmt+'>' )
+
+            attrs = dict( self.entattrs, **entryattrs )
+            tabent = TableEntry( ent, **attrs )
+            tabent.setRowAndColumn( self.rowidx, self.colidx )
+
+            DocumentElement.add( self, tabent )
+
+            if isinstance( ent, DocumentElement ):
+                obj = ent
+            else:
+                obj = tabent
+
             self.colidx += 1
+
+        return obj
 
     def close(self):
         ""
-        self._check_close_current()
         self.writeln( '</tr>' )
 
-    def _make_style(self, attrs):
+    def _make_style(self):
         ""
-        sty = self.sty
+        buf = ''
 
-        if self.colidx > 0 and self.lftsty:
-            sty += self.lftsty
+        pop_table_header_element_name( self.attrs, self.entattrs )
+        pop_table_entry_border( self.attrs, self.entattrs )
+        pop_padding_style( self.attrs, self.entattrs )
+        pop_background_style( self.attrs, self.entattrs )
 
-        for n,v in attrs.items():
-            if n == 'background':
-                sty += 'background-color:'+v+';'
-            elif n == 'align':
-                sty += 'text-align:'+v+';'
+        if len(self.attrs) > 0:
+            raise WebGenError( 'unknown TableRow attribute(s): '+str(self.attrs) )
 
-        if sty:
-            sty = ' style="'+sty+'"'
+        return decorate_style_buffer( buf )
 
-        return sty
+
+class TableEntry( DocumentElement ):
+
+    def __init__(self, content=None, **attrs):
+        """
+            align = left center right
+            background = <color> : set the background color of the cell
+            border = all internal
+            padding = <integer> : between cell content and border
+            header = [False] True : use table header properties
+        """
+        DocumentElement.__init__( self )
+
+        self.content = content
+        self.attrs = attrs
+
+        self.elmt = 'td'
+        self.rowidx = 0
+        self.colidx = 0
+
+    def setRowAndColumn(self, rowindex, colindex):
+        ""
+        self.rowidx = rowindex
+        self.colidx = colindex
+
+    def begin(self):
+        ""
+        sty = self._make_style()
+        self.writeln( '<'+self.elmt+sty+'>' )
+
+        if self.content != None:
+            if isinstance( self.content, DocumentElement ):
+                DocumentElement.add( self, self.content )
+            else:
+                self.writeln( str(self.content) )
+
+    def close(self):
+        ""
+        self.writeln( '</'+self.elmt+'>' )
+
+    def _make_style(self):
+        ""
+        buf = ''
+
+        buf += pop_background_style( self.attrs )
+        buf += pop_text_align_style( self.attrs )
+        buf += pop_padding_style( self.attrs )
+
+        buf += pop_table_entry_border( self.attrs,
+                                       rowidx=self.rowidx,
+                                       colidx=self.colidx )
+
+        self.elmt = pop_table_header_element_name( self.attrs )
+
+        if len(self.attrs) > 0:
+            raise WebGenError( 'unknown TableEntry attribute(s): '+str(self.attrs) )
+
+        return decorate_style_buffer( buf )
+
+
+def pop_text_align_style( attrs ):
+    ""
+    sty = ''
+
+    align = attrs.pop( 'align', None )
+    if align != None:
+        assert align in [ 'left', 'center', 'right' ]
+        sty = 'text-align:'+align+';'
+
+    return sty
+
+
+def pop_background_style( attrs, copy_attrs=None ):
+    ""
+    sty = ''
+
+    bg = attrs.pop( 'background', None )
+    if bg != None:
+        sty = 'background-color:'+bg+';'
+
+        if copy_attrs != None:
+            copy_attrs['background'] = bg
+
+    return sty
+
+
+def pop_padding_style( attrs, copy_attrs=None ):
+    ""
+    sty = ''
+
+    pad = attrs.pop( 'padding', None )
+    if pad != None:
+        sty = 'padding: '+str(pad)+'px;'
+
+        if copy_attrs != None:
+            copy_attrs['padding'] = pad
+
+    return sty
+
+
+def pop_radius_style( attrs ):
+    ""
+    sty = ''
+
+    rad = attrs.pop( 'radius', None )
+    if rad != None:
+        sty = 'border-radius: '+str(rad)+'px;'
+
+    return sty
+
+
+def pop_page_align_style( attrs ):
+    ""
+    sty = ''
+
+    align = attrs.pop( 'align', '' )
+    if align == 'left':
+        sty = 'margin-right:auto;'
+    elif align == 'right':
+        sty = 'margin-left:auto;'
+    elif align == 'center':
+        sty = 'margin-left:auto;margin-right:auto;'
+
+    return sty
+
+
+def pop_table_header_element_name( attrs, copy_attrs=None ):
+    ""
+    name = 'td'
+
+    ishdr = attrs.pop( 'header', False )
+    if ishdr:
+        name = 'th'
+
+        if copy_attrs != None:
+            copy_attrs['header'] = True
+
+    return name
+
+
+def pop_table_entry_border( attrs, copy_attrs=None, rowidx=0, colidx=0 ):
+    ""
+    sty = ''
+
+    bdr = attrs.pop( 'border', None )
+
+    if bdr != None:
+
+        if bdr == 'all':
+            sty += 'border: 1px solid black;'
+
+        elif bdr == 'internal':
+            if rowidx > 0:
+                sty += 'border-top: 1px solid black;'
+            if colidx > 0:
+                sty += 'border-left: 1px solid black;'
+
+        if copy_attrs != None:
+            copy_attrs['border'] = bdr
+
+    return sty
+
+
+def decorate_style_buffer( buf ):
+    ""
+    if buf:
+        return ' style="'+buf+'"'
+    else:
+        return ''
 
 
 class Writer:

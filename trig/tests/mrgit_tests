@@ -51,7 +51,7 @@ class cloning( trigutil.trigTestCase ):
 
     def test_clone_a_single_repository(self):
         ""
-        src_url = trigutil.create_bare_repo_with_topic_branch( 'cool' )
+        src_url = util.create_bare_repo_with_topic_branch( 'cool' )
 
         mrlib.clone( [ src_url ] )
 
@@ -61,7 +61,7 @@ class cloning( trigutil.trigTestCase ):
 
     def test_cloning_a_repository_specified_on_the_command_line(self):
         ""
-        src_url = trigutil.create_bare_repo_with_topic_branch( 'cool' )
+        src_url = util.create_bare_repo_with_topic_branch( 'cool' )
 
         x,out = util.runcmd( mrgit_file+' clone '+src_url+' myclone' )
 
@@ -84,8 +84,8 @@ class cloning( trigutil.trigTestCase ):
 
     def make_coolness_repositories(self):
         ""
-        cool_url = trigutil.create_bare_repo_with_topic_branch( 'cool' )
-        ness_url = trigutil.create_bare_repo_with_topic_branch( 'ness',
+        cool_url = util.create_bare_repo_with_topic_branch( 'cool' )
+        ness_url = util.create_bare_repo_with_topic_branch( 'ness',
                                                                 tag='nessie' )
         return cool_url, ness_url
 
@@ -204,15 +204,14 @@ class google_repo_manifests( trigutil.trigTestCase ):
 
     def create_google_repo_set(self):
         ""
-        self.man_url = trigutil.create_local_bare_repository( 'manifests',
-                                                              'central' )
+        self.man_url = util.create_local_bare_repository( 'manifests', 'central' )
 
         contents = defaults_xml.replace( 'CENTRALPATH', abspath('central') )
-        trigutil.push_file_to_repo( self.man_url, 'default.xml', contents )
+        util.push_file_to_repo( self.man_url, 'default.xml', contents )
 
         for repo in ['service','navy','army','airforce','afrl','marines']:
-            url = trigutil.create_local_bare_repository( repo+'.git', 'central' )
-            trigutil.push_file_to_repo( url, 'file.txt', """
+            url = util.create_local_bare_repository( repo+'.git', 'central' )
+            util.push_file_to_repo( url, 'file.txt', """
                 file in """+repo+""" repository
                 """ )
 
@@ -520,7 +519,7 @@ class updating( trigutil.trigTestCase ):
 
     def test_foo(self):
         ""
-        src_url = trigutil.create_bare_repo_with_topic_branch( 'cool' )
+        src_url = util.create_bare_repo_with_topic_branch( 'cool' )
 
 
 #######################################################################
