@@ -114,15 +114,22 @@ class the_tests( trigutil.trigTestCase ):
 
     def test_running_dasher_application(self):
         ""
-        os.mkdir( 'webpage' )
+        os.mkdir( 'webpage1' )
+        os.mkdir( 'webpage2' )
 
         url = self.make_dual_test_results()
 
-        cmd = trigutil.dasher_file + ' --gitlab '+url + ' webpage/index.htm'
+        cmd = trigutil.dasher_file + ' --gitlab '+url + ' webpage1/page.htm'
         x,out = util.runcmd( cmd )
 
-        assert os.path.exists( 'webpage/index.htm' )
-        self.setWebFile( 'webpage/index.htm' )
+        assert os.path.exists( 'webpage1/page.htm' )
+        self.setWebFile( 'webpage1/page.htm' )
+
+        cmd = trigutil.dasher_file + ' --gitlab '+url + ' webpage2'
+        x,out = util.runcmd( cmd )
+
+        assert os.path.exists( 'webpage2/index.htm' )
+        self.setWebFile( 'webpage2/index.htm' )
 
 
 def core_platform_name():

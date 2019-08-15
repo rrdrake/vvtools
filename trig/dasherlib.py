@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import os, sys
-from os.path import abspath, dirname, basename
+from os.path import abspath, dirname, basename, normpath
 from os.path import join as pjoin
 import shutil
 import time
@@ -36,21 +36,25 @@ class DashboardCreator:
         dsL = [ L[0] for L in self.summaries ]
         return dsL
 
-    def writeHistoryPage(self, filename, page_title='Results History'):
+    def writeHistoryPage(self, pathname, page_title='Results History'):
         ""
-        self._write_page_structure( filename, page_title )
+        pathdir = self._write_page_structure( pathname, page_title )
         self.body.add( webgen.Heading( 'Results History', align='center' ) )
         self._write_history_table()
-        self._add_scidev_logo( dirname( abspath(filename) ) )
+        self._add_scidev_logo( pathdir )
         self.doc.close()
 
-    def _write_page_structure(self, filename, page_title):
+    def _write_page_structure(self, pathname, page_title):
         ""
+        filename = determine_filename( pathname )
+
         self.doc = webgen.HTMLDocument( filename )
 
         self.doc.add( webgen.Head( page_title ) )
 
         self.body = self.doc.add( webgen.Body( background='cadetblue' ) )
+
+        return dirname( filename )
 
     def _write_history_table(self):
         ""
@@ -132,3 +136,13 @@ def make_job_date( epoch ):
     ""
     stm = time.strftime( "%a %b %d %Hh", time.localtime( epoch ) )
     return stm
+
+
+def determine_filename( pathname ):
+    ""
+    if os.path.isdir( pathname ):
+        fn = pjoin( abspath( pathname ), 'index.htm' )
+    else:
+        fn = abspath( pathname )
+
+    return normpath( fn )
