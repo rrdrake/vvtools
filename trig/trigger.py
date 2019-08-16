@@ -16,6 +16,7 @@ import subprocess
 import getopt
 import signal
 import perms
+import shutil
 
 import timeutils
 
@@ -145,6 +146,9 @@ class TimeoutException(Exception): pass
 def timeout_handler( signum, frame ):
     raise TimeoutException( "timeout" )
 
+class TriggerError( Exception ):
+    pass
+
 
 def mainloop( optD, argL ):
     """
@@ -203,8 +207,6 @@ class FileJobs:
         self.jobsrcs = jobsrcs
         self.erreset = error_reset
         self.group = log_group
-
-        self.trigpat = re.compile( ' *# *JOB TRIGGER *[=:]' )
 
         self.recent = {}  # maps job filename to launch time
         self.jobs = {}  # maps log directory to subprocess.Popen instance
@@ -272,30 +274,14 @@ class FileJobs:
 
         try:
             if jfile not in self.recent:
-                for errL in self.errD.get( jfile, [] ):
-                    pass
-                trigL = []
-                fp = open( jfile, 'r' )
-                try:
-                    line = fp.readline()
-                    while line:
-                        line = line.strip()
-                        m = self.trigpat.match( line )
-                        if m:
-                            trigL.append( line[m.end():].split('#')[0].strip() )
-                        elif line and not line.startswith('#'):
-                            break
-                        elif line.startswith( '#TRIGGER_TEST_HANG_READ=' ):
-                            time.sleep( int( line.split( '=' )[1] ) )
-                        line = fp.readline()
-                finally:
-                    fp.close()
+
+                trigL,loghandling = parse_trigger_specifications( jfile )
 
                 for trig in trigL:
                     trigtm = next_trigger_time( trig, curtm )
 
                     if trigtm and trigtm < curtm + 2*granularity:
-                        self.launchFile( jfile, trig )
+                        self.launchFile( jfile, trig, loghandling )
                         self.recent[jfile] = time.time()
                         break
 
@@ -309,10 +295,12 @@ class FileJobs:
                                        'exc='+err )
                 joberrD[ err ] = time.time()
 
-    def launchFile(self, jobfile, trigspec ):
+    def launchFile(self, jobfile, trigspec, loghandling):
         """
         Executes the given root job file as a subprocess.
         """
+        remove_old_job_logs( self.logdir, jobfile, loghandling )
+
         jdir,logfp = open_log_file_for_write( self.logdir, jobfile, self.group )
 
         try:
@@ -361,11 +349,158 @@ class FileJobs:
         self.jobs = {}
 
 
-def open_log_file_for_write( logpath, jobfile, group ):
+trigger_pattern = re.compile( ' *# *JOB TRIGGER *[=:]' )
+jobhandle_pattern = re.compile( ' *# *JOB LOG HANDLING *[=:]' )
+
+
+def parse_trigger_specifications( filename ):
+    ""
+    trigL = []
+    loghandling = {}
+
+    with open( filename, 'rt' ) as fp:
+
+        line = fp.readline()
+        while line:
+            line = line.strip()
+
+            trigmatch = trigger_pattern.match( line )
+            logmatch = jobhandle_pattern.match( line )
+
+            if trigmatch:
+                specstr = line[trigmatch.end():].split('#')[0].strip()
+                trigL.append( specstr )
+
+            elif logmatch:
+                specstr = line[logmatch.end():].split('#')[0].strip()
+                specD = parse_job_handling_specification( specstr )
+                loghandling.update( specD )
+
+            elif line and not line.startswith('#'):
+                break
+
+            elif line.startswith( '#TRIGGER_TEST_HANG_READ=' ):
+                time.sleep( int( line.split( '=' )[1] ) )
+
+            line = fp.readline()
+
+    return trigL, loghandling
+
+
+def parse_job_handling_specification( specstr ):
+    ""
+    specD = {}
+
+    for spec in specstr.split(','):
+
+        name,val = parse_name_equal_value_specifiction( spec )
+
+        if name == 'count':
+            try:
+                specD[name] = int( val )
+            except Exception as e:
+                raise TriggerError( 'invalid "count" value: '+str(e) )
+
+        elif name == 'age':
+            age = parse_age_specification( val )
+            specD[name] = time.time() - age
+
+        else:
+            raise TriggerError( 'unknown specification name: "'+name+'"' )
+
+    return specD
+
+
+def parse_name_equal_value_specifiction( spec ):
+    ""
+    nvL = spec.strip().split('=',1)
+    if len(nvL) != 2:
+        raise TriggerError( 'invalid specification: '+str(spec) )
+
+    name = nvL[0].strip()
+    val = nvL[1].strip()
+    if not name or not val:
+        raise TriggerError( 'invalid specification: '+str(spec) )
+
+    return name,val
+
+
+def parse_age_specification( agestr ):
+    ""
+    if agestr.endswith( 'day' ) or agestr.endswith( 'days' ):
+        age = float( agestr.split('day')[0] ) * 24*60*60
+
+    elif agestr.endswith( 'month' ) or agestr.endswith( 'months' ):
+        age = float( agestr.split('month')[0] ) * 30*24*60*60
+
+    elif agestr.endswith( 'year' ) or agestr.endswith( 'years' ):
+        age = float( agestr.split('year')[0] ) * 365*24*60*60
+
+    else:
+        raise TriggerError( 'unknown age unit: "'+agestr+'"' )
+
+    return age
+
+
+def make_root_log_name( logpath, jobfile ):
     ""
     name = os.path.basename( jobfile )
+    logroot = os.path.join( logpath, name+'_' )
+    return logroot
+
+
+def remove_old_job_logs( logpath, jobfile, specD ):
+    ""
+    rootdir = make_root_log_name( logpath, jobfile )
+
+    fL = []
+    for dn in glob.glob( rootdir+'*' ):
+        fL.append( ( os.path.getmtime( dn ), dn ) )
+
+    fL.sort()
+
+    remove_old_job_logs_by_count( fL, specD.get( 'count', None ) )
+    remove_old_job_logs_by_age( fL, specD.get( 'age', None ) )
+
+
+def remove_old_job_logs_by_count( fL, cnt ):
+    ""
+    if cnt and cnt > 0:
+        while len( fL ) > cnt:
+            tm,dn = fL.pop( 0 )
+            remove_path( dn )
+
+
+def remove_old_job_logs_by_age( fL, age ):
+    ""
+    if age:
+        while len( fL ) > 0:
+            tm,dn = fL[ 0 ]
+            if tm < age:
+                fL.pop( 0 )
+                remove_path( dn )
+            else:
+                break
+
+
+def remove_path( pathname ):
+    ""
+    try:
+        if os.path.islink( pathname ):
+            os.remove( pathname )
+        elif os.path.isdir( pathname ):
+            shutil.rmtree( pathname )
+        else:
+            os.remove( pathname )
+
+    except Exception as e:
+        raise TriggerError( 'unable to remove path: "'+pathname+'", '+str(e) )
+
+
+def open_log_file_for_write( logpath, jobfile, group ):
+    ""
     date = time.strftime( "%a_%b_%d_%Y_%H:%M:%S_%Z" )
-    joblogdir = os.path.join( logpath, name+'_'+date )
+    joblogdir = make_root_log_name( logpath, jobfile ) + date
 
     if group:
         # do not mask out rx for group

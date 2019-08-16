@@ -10,6 +10,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
+from os.path import abspath, basename
 import time
 import subprocess
 import glob
@@ -220,29 +221,6 @@ class date_and_time_utilities( unittest.TestCase ):
         assert tm != None and tm >= (m2+6*hr)
 
 
-def assert_recurse_dow( spec, dow_answer, remainder_answer ):
-    ""
-    sL = [ s.strip() for s in spec.split(',') ]
-
-    dowL = []
-    R = trigger.recurse_dow( sL, dowL )
-
-    assert dowL == dow_answer
-    assert R == remainder_answer
-
-
-def bad_next_trigger_time( spec, curtime ):
-    ""
-    try:
-        tm = trigger.next_trigger_time( spec, curtime )
-    except Exception:
-        err = str( sys.exc_info()[1] )
-        print3( err )
-        assert err.find('bad time syntax') >= 0
-    else:
-        raise Exception( "expected an exception" )
-
-
 class logging_tests( unittest.TestCase ):
 
     def setUp(self):
@@ -297,26 +275,252 @@ class logging_tests( unittest.TestCase ):
                           [ 10, 'foobar', 'so that happened' ] )
 
 
-def assert_log_lines( logfile, *line_answers ):
-    ""
-    lines = readlog( logfile )
+class parsing_job_files( trigutil.trigTestCase ):
 
-    assert len( lines ) == len( line_answers ), \
-            'num lines differs: '+str(lines)+' != '+str(line_answers)
+    def test_parse_job_trigger(self):
+        ""
+        util.writefile( 'job_foo.py', """
 
-    for i,line in enumerate( lines ):
+            # JOB TRIGGER: """+string_time( time.time() )+"""
 
-        ans_line = line_answers[i]
+            import os, sys
+            """ )
+        time.sleep(1)
 
-        assert len( line ) == len( ans_line ), \
-            'line length differs: '+str(line)+' != '+str(ans_line)
+        trigL,loghandling = trigger.parse_trigger_specifications( 'job_foo.py' )
 
-        for j,val in enumerate( line ):
+        assert len( trigL ) == 1
+        assert len( loghandling ) == 0
 
-            if type( ans_line[j] ) == type(2):
-                assert abs( time.time() - val ) < ans_line[j]
-            else:
-                assert val == ans_line[j]
+    def test_parse_job_log_expiration_by_count(self):
+        ""
+        util.writefile( 'job_foo.py', """
+
+            # JOB TRIGGER: """+string_time( time.time() )+"""
+            # JOB LOG HANDLING: count=10
+
+            import os, sys
+            """ )
+        time.sleep(1)
+
+        trigL,loghandling = trigger.parse_trigger_specifications( 'job_foo.py' )
+
+        assert len( trigL ) == 1
+        assert loghandling == { 'count':10 }
+
+    def test_parse_job_log_expiration_by_age(self):
+        ""
+        util.writefile( 'job_foo.py', """
+
+            # JOB TRIGGER: """+string_time( time.time() )+"""
+            # JOB LOG HANDLING: age=10days
+
+            import os, sys
+            """ )
+        util.writefile( 'job_bar.py', """
+
+            # JOB TRIGGER: """+string_time( time.time() )+"""
+            # JOB LOG HANDLING: age=10 months
+
+            import os, sys
+            """ )
+        util.writefile( 'job_baz.py', """
+
+            # JOB TRIGGER: """+string_time( time.time() )+"""
+            # JOB LOG HANDLING: age = 1year
+
+            import os, sys
+            """ )
+        time.sleep(1)
+
+        trigL,loghandling = trigger.parse_trigger_specifications( 'job_foo.py' )
+        age = loghandling['age']
+        assert abs( time.time() - 10*24*60*60 - age ) < 60*60
+
+        trigL,loghandling = trigger.parse_trigger_specifications( 'job_bar.py' )
+        age = loghandling['age']
+        assert abs( time.time() - 10*30*24*60*60 - age ) < 60*60
+
+        trigL,loghandling = trigger.parse_trigger_specifications( 'job_baz.py' )
+        age = loghandling['age']
+        assert abs( time.time() - 365*24*60*60 - age ) < 60*60
+
+    def test_remove_job_logs_by_count(self):
+        ""
+        logs = abspath('logs')
+        util.writefile( 'logs/job_foo.py_1/log.txt', 'foo1' )
+        util.writefile( 'logs/job_foo.py_2', 'foo2' )
+        util.writefile( 'logs/job_foo.py_3/log.txt', 'foo3' )
+        util.writefile( 'logs/job_bar.py_3/log.txt', 'bar3' )
+        time.sleep(1)
+
+        trigger.remove_old_job_logs( logs, 'job_foo.py', { 'count':5 } )
+        assert len( glob.glob( 'logs/*' ) ) == 4
+
+        trigger.remove_old_job_logs( logs, 'job_foo.py', { 'count':3 } )
+        assert len( glob.glob( 'logs/*' ) ) == 4
+
+        trigger.remove_old_job_logs( logs, 'job_foo.py', { 'count':2 } )
+        assert len( glob.glob( 'logs/*' ) ) == 3
+        assert len( glob.glob( 'logs/job_foo*' ) ) == 2
+
+        trigger.remove_old_job_logs( logs, 'job_foo.py', { 'count':1 } )
+        assert len( glob.glob( 'logs/*' ) ) == 2
+        assert len( glob.glob( 'logs/job_foo*' ) ) == 1
+
+        trigger.remove_old_job_logs( logs, 'job_foo.py', { 'count':0 } )
+        assert len( glob.glob( 'logs/*' ) ) == 2
+        assert len( glob.glob( 'logs/job_foo*' ) ) == 1
+
+        trigger.remove_old_job_logs( logs, 'job_foo.py', { 'count':-5 } )
+        fL = glob.glob( 'logs/*' )
+        fL.sort()
+        assert basename( fL[0] ) == 'job_bar.py_3'
+        assert basename( fL[1] ) == 'job_foo.py_3'
+
+    def test_remove_job_logs_by_age(self):
+        ""
+        tm = time.time()
+        logs = abspath('logs')
+
+        util.writefile( 'logs/job_foo.py_1/log.txt', 'foo1' )
+        os.utime( 'logs/job_foo.py_1', (tm-24*60*60,tm-24*60*60) )
+
+        util.writefile( 'logs/job_foo.py_2', 'foo2' )
+        os.utime( 'logs/job_foo.py_2', (tm-12*60*60,tm-12*60*60) )
+
+        util.writefile( 'logs/job_foo.py_3/log.txt', 'foo3' )
+        os.utime( 'logs/job_foo.py_3', (tm-6*60*60,tm-6*60*60) )
+
+        util.writefile( 'logs/job_bar.py_3/log.txt', 'bar3' )
+        os.utime( 'logs/job_bar.py_3', (tm,tm) )
+
+        time.sleep(1)
+
+        trigger.remove_old_job_logs( logs, 'job_foo.py', { 'age':tm-48*60*60 } )
+        assert len( glob.glob( 'logs/*' ) ) == 4
+
+        trigger.remove_old_job_logs( logs, 'job_foo.py', { 'age':tm-18*60*60 } )
+        assert len( glob.glob( 'logs/*' ) ) == 3
+
+        trigger.remove_old_job_logs( logs, 'job_foo.py', { 'age':tm-8*60*60 } )
+        assert len( glob.glob( 'logs/*' ) ) == 2
+        assert os.path.exists( 'logs/job_foo.py_3' )
+        assert os.path.exists( 'logs/job_bar.py_3' )
+
+        trigger.remove_old_job_logs( logs, 'job_foo.py', { 'age':tm+60 } )
+        assert len( glob.glob( 'logs/*' ) ) == 1
+        assert os.path.exists( 'logs/job_bar.py_3' )
+
+    def test_remove_path_function(self):
+        ""
+        util.writefile( 'sumpin', 'else' )
+        os.symlink( 'sumpin', 'something' )
+        time.sleep(1)
+
+        assert os.path.isfile( 'sumpin' )
+        assert os.path.isfile( 'something' )
+
+        trigger.remove_path( 'something' )
+        assert not os.path.exists( 'something' )
+        assert os.path.isfile( 'sumpin' )
+
+        self.assertRaises( trigger.TriggerError, trigger.remove_path, 'asdfssjdk' )
+
+    def create_fake_log_file(self, loc, jobfile, age):
+        ""
+        ftm = time.time()-age
+        date = time.strftime( "%a_%b_%d_%Y_%H:%M:%S_%Z", time.localtime(ftm) )
+        fn = trigger.make_root_log_name( loc, jobfile )+date
+        util.writefile( fn+'/log.txt', "my fake log content" )
+        os.utime( fn, (ftm,ftm) )
+
+    def test_remove_old_logs_integration(self):
+        ""
+        curtm = time.time()
+
+        loc = abspath( 'logs' )
+
+        jfile = abspath( 'job_foo.py' )
+        self.create_fake_log_file( loc, jfile, 73 )
+        self.create_fake_log_file( loc, jfile, 2*73 )
+        util.writefile( jfile, """
+
+            # JOB TRIGGER: """+string_time( curtm+3 )+"""
+            # JOB LOG HANDLING: count=1
+
+            import os, sys
+            """ )
+
+        jfile = abspath( 'job_bar.py' )
+        self.create_fake_log_file( loc, jfile, 36*60*60 )
+        util.writefile( jfile, """
+
+            # JOB TRIGGER: """+string_time( curtm+3 )+"""
+            # JOB LOG HANDLING: age=1 day
+
+            import os, sys
+            """ )
+        time.sleep(1)
+
+        cmd = localpy+' '+trigfile + ' -g 2 -Q 7 -r '+loc
+        x,out = util.runcmd( cmd )
+        assert not out.strip()
+
+        fL = glob.glob( loc+'/job_foo*' )
+        assert len(fL) == 2
+
+        fL = glob.glob( loc+'/job_bar*' )
+        assert len(fL) == 1
+
+    def test_job_handling_parse_specification_errors(self):
+        ""
+        util.writefile( 'job_foo.py', """
+
+            # JOB TRIGGER: """+string_time( time.time() )+"""
+            # JOB LOG HANDLING: count=abc
+            import os, sys
+            """ )
+        util.writefile( 'job_bar.py', """
+
+            # JOB TRIGGER: """+string_time( time.time() )+"""
+            # JOB LOG HANDLING: age
+            import os, sys
+            """ )
+        util.writefile( 'job_baz.py', """
+
+            # JOB TRIGGER: """+string_time( time.time() )+"""
+            # JOB LOG HANDLING: = 1 day
+            import os, sys
+            """ )
+        util.writefile( 'job_flop.py', """
+
+            # JOB TRIGGER: """+string_time( time.time() )+"""
+            # JOB LOG HANDLING: age=5
+            import os, sys
+            """ )
+        util.writefile( 'job_dip.py', """
+
+            # JOB TRIGGER: """+string_time( time.time() )+"""
+            # JOB LOG HANDLING: age=5yr
+            import os, sys
+            """ )
+        time.sleep(1)
+
+        self.assertRaises( trigger.TriggerError,
+                trigger.parse_trigger_specifications, 'job_foo.py' )
+
+        self.assertRaises( trigger.TriggerError,
+                trigger.parse_trigger_specifications, 'job_bar.py' )
+
+        self.assertRaises( trigger.TriggerError,
+                trigger.parse_trigger_specifications, 'job_baz.py' )
+
+        self.assertRaises( trigger.TriggerError,
+                trigger.parse_trigger_specifications, 'job_flop.py' )
+
+        self.assertRaises( trigger.TriggerError,
+                trigger.parse_trigger_specifications, 'job_dip.py' )
 
 
 class running_jobs( unittest.TestCase ):
@@ -574,60 +778,6 @@ class running_jobs( unittest.TestCase ):
 
         assert time.time() - curtm < 5
         assert len( util.greplines( 'Traceback', out ) ) > 0
-
-
-def write_job_file( filename, jobname, trigger_time,
-                    trigger_time2=None,
-                    extra_line=None ):
-    ""
-    content = """
-        # JOB TRIGGER: """+string_time( trigger_time )+"""
-        """
-    if trigger_time2:
-        content += """# JOB TRIGGER: """+string_time( trigger_time2 )+"""
-        """
-    content += """import os, sys, time
-        sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
-        sys.stdout.write( 'hello """+jobname+"""' + os.linesep )
-        """
-    if extra_line:
-        content += extra_line + """
-        """
-    content += """sys.stdout.flush()
-        """
-
-    util.writefile( filename, content )
-
-
-def job_log_path( log_dir, job_filename ):
-    ""
-    pat = os.path.join( log_dir, job_filename+'_*', 'log.txt' )
-    fL = glob.glob( pat )
-
-    assert len(fL) == 1
-    logfile = fL[0]
-
-    assert os.path.isfile( logfile )
-
-    logdir = os.path.dirname( logfile )
-
-    return logdir,logfile
-
-
-def assert_job_log_content( logname, pwd=None, line_value=None ):
-    ""
-    content = util.readfile( logname )
-
-    if pwd != None:
-        lines = util.greplines( 'PWD:', content )
-        assert len( lines ) == 1
-        file_pwd = lines[0].split(':',1)[1].strip()
-        assert os.path.samefile( pwd, file_pwd )
-
-    if line_value != None:
-        lines = util.greplines( line_value, content )
-        assert len( lines ) == 1
-        assert lines[0].strip() == line_value
 
 
 class trigger_startup( unittest.TestCase ):
@@ -905,6 +1055,86 @@ class permissions_tests( unittest.TestCase ):
 
 #######################################################################
 
+def write_job_file( filename, jobname, trigger_time,
+                    trigger_time2=None,
+                    extra_line=None,
+                    trigger_log_lifetime=None ):
+    ""
+    content = """
+        # JOB TRIGGER: """+string_time( trigger_time )+"""
+        """
+    if trigger_time2:
+        content += """# JOB TRIGGER: """+string_time( trigger_time2 )+"""
+        """
+    if trigger_log_lifetime:
+        content += """# JOB LOG LIFETIME: """+trigger_log_lifetime +"""
+        """
+    content += """import os, sys, time
+        sys.stdout.write( 'PWD: ' + os.getcwd() + os.linesep )
+        sys.stdout.write( 'hello """+jobname+"""' + os.linesep )
+        """
+    if extra_line:
+        content += extra_line + """
+        """
+    content += """sys.stdout.flush()
+        """
+
+    util.writefile( filename, content )
+
+
+def assert_log_lines( logfile, *line_answers ):
+    ""
+    lines = readlog( logfile )
+
+    assert len( lines ) == len( line_answers ), \
+            'num lines differs: '+str(lines)+' != '+str(line_answers)
+
+    for i,line in enumerate( lines ):
+
+        ans_line = line_answers[i]
+
+        assert len( line ) == len( ans_line ), \
+            'line length differs: '+str(line)+' != '+str(ans_line)
+
+        for j,val in enumerate( line ):
+
+            if type( ans_line[j] ) == type(2):
+                assert abs( time.time() - val ) < ans_line[j]
+            else:
+                assert val == ans_line[j]
+
+
+def job_log_path( log_dir, job_filename ):
+    ""
+    pat = os.path.join( log_dir, job_filename+'_*', 'log.txt' )
+    fL = glob.glob( pat )
+
+    assert len(fL) == 1
+    logfile = fL[0]
+
+    assert os.path.isfile( logfile )
+
+    logdir = os.path.dirname( logfile )
+
+    return logdir,logfile
+
+
+def assert_job_log_content( logname, pwd=None, line_value=None ):
+    ""
+    content = util.readfile( logname )
+
+    if pwd != None:
+        lines = util.greplines( 'PWD:', content )
+        assert len( lines ) == 1
+        file_pwd = lines[0].split(':',1)[1].strip()
+        assert os.path.samefile( pwd, file_pwd )
+
+    if line_value != None:
+        lines = util.greplines( line_value, content )
+        assert len( lines ) == 1
+        assert lines[0].strip() == line_value
+
+
 def readlog( logname ):
     """
     """
@@ -990,6 +1220,29 @@ def logfinish( loglist, index=0 ):
     assert L[4].startswith( 'logdir=' )
     logdir = L[4].split( 'logdir=', 1 )[1].strip()
     return tm, x, jobfile, logdir
+
+
+def assert_recurse_dow( spec, dow_answer, remainder_answer ):
+    ""
+    sL = [ s.strip() for s in spec.split(',') ]
+
+    dowL = []
+    R = trigger.recurse_dow( sL, dowL )
+
+    assert dowL == dow_answer
+    assert R == remainder_answer
+
+
+def bad_next_trigger_time( spec, curtime ):
+    ""
+    try:
+        tm = trigger.next_trigger_time( spec, curtime )
+    except Exception:
+        err = str( sys.exc_info()[1] )
+        print3( err )
+        assert err.find('bad time syntax') >= 0
+    else:
+        raise Exception( "expected an exception" )
 
 
 def string_time( seconds ):
