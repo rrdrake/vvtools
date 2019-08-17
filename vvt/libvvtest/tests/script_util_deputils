@@ -1,0 +1,241 @@
+#!/usr/bin/env python
+
+# Copyright 2018 National Technology & Engineering Solutions of Sandia, LLC
+# (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+# Government retains certain rights in this software.
+
+#RUNTEST:
+
+import sys
+sys.dont_write_bytecode = True
+sys.excepthook = sys.__excepthook__
+import os
+from os.path import join as pjoin
+from os.path import abspath
+import time
+import shutil
+import glob
+
+import vvtestutils as vtu
+import testutils as util
+from testutils import print3
+
+# for unit testing the code in the config dir, such as script_utils
+sys.path.insert( 1, vtu.cfgdir )
+
+
+class deputils_tests( vtu.vvtestTestCase ):
+
+    def test_data_file_path_name_depends_on_existence_of_vvtest_util_file(self):
+        ""
+        import script_util.deputils as DU
+
+        assert os.path.dirname( DU.get_data_file_pathname() ) == os.getcwd()
+
+        write_fake_vvtest_util_file( 'subdir' )
+        time.sleep(1)
+
+        check_add_directory_to_sys_path( abspath('subdir') )
+
+        d = os.path.dirname( DU.get_data_file_pathname() )
+        assert os.path.samefile( d, abspath( 'subdir' ) )
+
+    def test_find_dependency_testid(self):
+        ""
+        import script_util.deputils as DU
+
+        write_fake_vvtest_util_file( xdir='testW',
+                                     DEPDIRS=[abspath('testX')] )
+        write_fake_vvtest_util_file( xdir='testX',
+                                     DEPDIRS=[abspath('testY')] )
+        write_fake_vvtest_util_file( xdir='testY' )
+        time.sleep(1)
+
+        cwd = os.getcwd()
+
+        self.assertRaises( Exception, DU.find_depdir, 'testX' )
+
+        os.chdir( 'testY' )
+        self.assertRaises( Exception, DU.find_depdir, 'testX' )
+
+        os.chdir( pjoin( cwd, 'testX' ) )
+        d = DU.find_depdir( 'testY' )
+        assert os.path.samefile( d, pjoin(cwd,'testY') )
+
+        os.chdir( pjoin( cwd, 'testW' ) )
+        d = DU.find_depdir( 'testY' )
+        assert os.path.samefile( d, pjoin(cwd,'testY') )
+
+    def test_find_depdir_looks_for_full_testid_then_partial_then_test_name(self):
+        ""
+        import script_util.deputils as DU
+
+        # mimic the depdirs data created from recursively_accumulate_depdirs()
+        depdirs = {
+            'dir0/testA': { 'NAME':'testA', 'TESTID':'testA' },
+            'dir1/testA': { 'NAME':'testA', 'TESTID':'dir1/testA' },
+            'dir2/testA.np=1': { 'NAME':'testA', 'TESTID':'dir2/testA.np=1' }
+            }
+
+        d = DU.search_depdirs_for_testid( depdirs, 'dir1/testA' )
+        assert d == 'dir1/testA'
+
+        d = DU.search_depdirs_for_testid( depdirs, 'testA' )
+        assert d == 'dir0/testA'
+
+        d = DU.search_depdirs_for_testid( depdirs, 'testA.np=1' )
+        assert d == 'dir2/testA.np=1'
+
+        depdirs = {
+            'dir2/testA.np=1': { 'NAME':'testA', 'TESTID':'dir2/testA.np=1' }
+            }
+
+        d = DU.search_depdirs_for_testid( depdirs, 'testA' )
+        assert d == 'dir2/testA.np=1'
+
+        depdirs = {
+            'whatever': { 'NAME':'testA', 'TESTID':'subd/dir2/testA.np=1' }
+            }
+
+        d = DU.search_depdirs_for_testid( depdirs, 'dir2/testA.np=1' )
+        assert d == 'whatever'
+
+    def test_save_test_data_and_read_it_back_in(self):
+        ""
+        import script_util.deputils as DU
+
+        DU.save_test_data( hello='world', anint=256 )
+        time.sleep(1)
+
+        fn = util.globfile( '*' )
+
+        data = DU.read_test_data_file( fn )
+        assert data == { 'hello':'world', 'anint':256 }
+
+    def test_append_test_data(self):
+        ""
+        import script_util.deputils as DU
+
+        DU.save_test_data( hello='world' )
+        time.sleep(1)
+
+        DU.save_test_data( anint=256 )
+        time.sleep(1)
+
+        fn = util.globfile( '*' )
+
+        data = DU.read_test_data_file( fn )
+        assert data == { 'hello':'world', 'anint':256 }
+
+    def test_write_then_read_test_data_in_CWD(self):
+        ""
+        import script_util.deputils as DU
+
+        DU.save_test_data( foo='bar' )
+        data = DU.read_test_data()
+        assert data['foo'] == 'bar'
+
+    def test_read_data_from_a_dependency_test(self):
+        ""
+        import script_util.deputils as DU
+
+        write_fake_vvtest_util_file( xdir='testX',
+                                     DEPDIRS=[abspath('testY')] )
+        write_fake_vvtest_util_file( xdir='testY' )
+        time.sleep(1)
+
+        cwd = os.getcwd()
+
+        os.chdir( 'testY' )
+        DU.save_test_data( ykey='yvalue' )
+
+        os.chdir( pjoin( cwd, 'testX' ) )
+        data = DU.read_test_data( 'testY' )
+
+        assert data == { 'ykey':'yvalue' }
+
+    def test_integration_test_data_save_and_read(self):
+        ""
+        util.writefile( 'testX.vvt', """
+            #VVT: depends on : testY testZ
+            import script_util.deputils as deputil
+
+            ydat = deputil.read_test_data( 'testY' )
+            assert ydat == { 'qdata':'exc' }
+
+            zdat = deputil.read_test_data( 'testZ' )
+            assert zdat == { 'hello':'world', 'lucky':7 }
+
+            vdat = deputil.read_test_data( 'testV' )
+            assert vdat == { 'foo':'bar' }
+            """ )
+        util.writefile( 'testY.vvt', """
+            #VVT: depends on : testQ
+            import os, sys, time
+            import script_util.standard_utilities as stdutil
+
+            os.mkdir( 'sub1' )
+            time.sleep(1)
+            os.chdir( 'sub1' )
+
+            try:
+                data = stdutil.read_test_data( 'testQ' )
+            except Exception:
+                data = 'exc'
+            stdutil.save_test_data( qdata=data )
+            """ )
+        util.writefile( 'testZ.vvt', """
+            #VVT: depends on : testV
+            import os, sys, time
+            import script_util as util
+
+            os.mkdir( 'sub2' )
+            time.sleep(1)
+            os.chdir( 'sub2' )
+
+            util.save_test_data( hello='world', lucky=7 )
+            """ )
+        util.writefile( 'testQ.vvt', """
+            pass
+            """ )
+        util.writefile( 'testV.vvt', """
+            import script_util as util
+            util.save_test_data( foo='bar' )
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest()
+        vrun.assertCounts( total=5, npass=5 )
+
+
+def check_add_directory_to_sys_path( dirpath ):
+    ""
+    if dirpath not in sys.path:
+        sys.path.insert( 1, dirpath )
+
+
+def write_fake_vvtest_util_file( xdir='.', DEPDIRS=[] ):
+    ""
+    if xdir and xdir != '.':
+
+        if not os.path.exists( xdir ):
+            os.makedirs( xdir )
+
+        name = os.path.basename( xdir )
+
+    else:
+        name = 'fakename'
+
+    fn = pjoin( xdir,'vvtest_util.py' )
+
+    with open( fn, 'w' ) as fp:
+
+        fp.write( 'NAME = '+repr(name)+'\n' )
+        fp.write( 'TESTROOT = '+repr(os.getcwd())+'\n' )
+        fp.write( 'TESTID = '+repr(name)+'\n' )
+        fp.write( 'DEPDIRS = '+repr(DEPDIRS)+'\n' )
+
+
+########################################################################
+
+util.run_test_cases( sys.argv, sys.modules[__name__] )
