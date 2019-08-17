@@ -23,13 +23,13 @@ from testutils import print3
 # for unit testing the code in the config dir, such as script_utils
 sys.path.insert( 1, vtu.cfgdir )
 
+import script_util.deputils as DU
+
 
 class deputils_tests( vtu.vvtestTestCase ):
 
     def test_data_file_path_name_depends_on_existence_of_vvtest_util_file(self):
         ""
-        import script_util.deputils as DU
-
         assert os.path.dirname( DU.get_data_file_pathname() ) == os.getcwd()
 
         write_fake_vvtest_util_file( 'subdir' )
@@ -42,8 +42,6 @@ class deputils_tests( vtu.vvtestTestCase ):
 
     def test_find_dependency_testid(self):
         ""
-        import script_util.deputils as DU
-
         write_fake_vvtest_util_file( xdir='testW',
                                      DEPDIRS=[abspath('testX')] )
         write_fake_vvtest_util_file( xdir='testX',
@@ -68,8 +66,6 @@ class deputils_tests( vtu.vvtestTestCase ):
 
     def test_find_depdir_looks_for_full_testid_then_partial_then_test_name(self):
         ""
-        import script_util.deputils as DU
-
         # mimic the depdirs data created from recursively_accumulate_depdirs()
         depdirs = {
             'dir0/testA': { 'NAME':'testA', 'TESTID':'testA' },
@@ -102,8 +98,6 @@ class deputils_tests( vtu.vvtestTestCase ):
 
     def test_save_test_data_and_read_it_back_in(self):
         ""
-        import script_util.deputils as DU
-
         DU.save_test_data( hello='world', anint=256 )
         time.sleep(1)
 
@@ -114,8 +108,6 @@ class deputils_tests( vtu.vvtestTestCase ):
 
     def test_append_test_data(self):
         ""
-        import script_util.deputils as DU
-
         DU.save_test_data( hello='world' )
         time.sleep(1)
 
@@ -129,16 +121,12 @@ class deputils_tests( vtu.vvtestTestCase ):
 
     def test_write_then_read_test_data_in_CWD(self):
         ""
-        import script_util.deputils as DU
-
         DU.save_test_data( foo='bar' )
         data = DU.read_test_data()
         assert data['foo'] == 'bar'
 
     def test_read_data_from_a_dependency_test(self):
         ""
-        import script_util.deputils as DU
-
         write_fake_vvtest_util_file( xdir='testX',
                                      DEPDIRS=[abspath('testY')] )
         write_fake_vvtest_util_file( xdir='testY' )
