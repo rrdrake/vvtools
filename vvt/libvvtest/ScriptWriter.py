@@ -5,6 +5,8 @@
 # Government retains certain rights in this software.
 
 import os, sys
+from os.path import join as pjoin
+from os.path import dirname, normpath
 
 
 def writeScript( testcase, filename, lang, config, plat, test_dir ):
@@ -17,14 +19,16 @@ def writeScript( testcase, filename, lang, config, plat, test_dir ):
 
     troot = testobj.getRootpath()
     assert os.path.isabs( troot )
-    trel = os.path.dirname( testobj.getFilepath() )
-    srcdir = os.path.normpath( os.path.join( troot, trel ) )
+    trel = dirname( testobj.getFilepath() )
+    srcdir = normpath( pjoin( troot, trel ) )
     
     configdir = config.get('configdir')
 
     tdir = config.get('vvtestdir')
     assert tdir
-    vvtlib = os.path.join( tdir, 'libvvtest' )
+    vvtlib = pjoin( tdir, 'libvvtest' )
+
+    trigdir = normpath( pjoin( tdir, '..', 'trig' ) )
 
     projdir = config.get('exepath')
     if not projdir: projdir = ''
@@ -61,9 +65,10 @@ def writeScript( testcase, filename, lang, config, plat, test_dir ):
 
         # order matters; configdir should be the first entry in sys.path
         w.add( '',
+               'sys.path.insert( 0, "'+trigdir+'" )',
                'sys.path.insert( 0, "'+tdir+'" )',
                'sys.path.insert( 0, "'+tdir+'/config" )' )
-        if configdir:
+        if configdir and configdir != tdir+'/config':
             w.add( 'sys.path.insert( 0, "'+configdir+'" )' )
 
         w.add( '',
@@ -98,7 +103,7 @@ def writeScript( testcase, filename, lang, config, plat, test_dir ):
                         n2 = '_'.join( n )
                         w.add( 'PARAM_'+n2+' = ' + repr(L) )
 
-        L = [ os.path.join( test_dir, T[1] ) for T in dep_list ]
+        L = [ pjoin( test_dir, T[1] ) for T in dep_list ]
         w.add( '', 'DEPDIRS = '+repr(L) )
 
         # generate a multi-valued map of the dependencies
@@ -108,7 +113,7 @@ def writeScript( testcase, filename, lang, config, plat, test_dir ):
             if S == None:
                 S = set()
                 D[ T[0] ] = S
-            S.add( os.path.join( test_dir, T[1] ) )
+            S.add( pjoin( test_dir, T[1] ) )
         for k,S in D.items():
             D[ k ] = list( S )
             D[ k ].sort()
@@ -201,7 +206,7 @@ def writeScript( testcase, filename, lang, config, plat, test_dir ):
                     L2 = [ '/'.join( v ) for v in L ]
                     w.add( 'PARAM_'+n2+'="' + ' '.join(L2) + '"' )
 
-        L = [ os.path.join( test_dir, T[1] ) for T in dep_list ]
+        L = [ pjoin( test_dir, T[1] ) for T in dep_list ]
         w.add( '', 'DEPDIRS="'+' '.join(L)+'"' )
 
         # for sh/bash, all variables go into a global namespace; therefore,
