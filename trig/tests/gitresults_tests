@@ -107,6 +107,8 @@ class the_GitResults_class( unittest.TestCase ):
         dat = util.readfile( 'check/'+subdir+'/data2.txt' )
         assert dat.strip() == 'data file two'
 
+        return branch
+
     def test_add_first_set_of_results(self):
         ""
         self.add_first_set_of_results()
@@ -159,6 +161,36 @@ class the_GitResults_class( unittest.TestCase ):
         assert dat.strip() == 'data file two dot one'
         dat = util.readfile( 'check2nd/'+subdir+'/data3.txt' )
         assert dat.strip() == 'data file three dot zero'
+
+    def test_resiliency_when_a_rebase_is_needed_for_push(self):
+        ""
+        branch = self.add_first_set_of_results()
+
+        # checkout and modify files on the branch, but don't push yet
+        res = GitResults( self.url )
+        rdir = res.createBranchLocation()
+        subdir = os.path.basename( rdir )
+
+        util.writefile( rdir+'/data3.txt', 'data file three' )
+
+        # modify the branch in the "central" repository
+        util.push_new_file_to_branch( self.url, branch, 'sneak.txt', 'gotcha' )
+
+        # this push must include a pull, otherwise the push will fail
+        res.pushResults( 'my second results' )
+
+        git2 = GitInterface( self.url, 'check2nd' )
+        assert os.path.exists( 'check2nd/file.txt' )
+        git2.checkoutBranch( branch )
+
+        dat = util.readfile( 'check2nd/'+subdir+'/data1.txt' )
+        assert dat.strip() == 'data file one'
+        dat = util.readfile( 'check2nd/'+subdir+'/data2.txt' )
+        assert dat.strip() == 'data file two'
+        dat = util.readfile( 'check2nd/'+subdir+'/data3.txt' )
+        assert dat.strip() == 'data file three'
+        dat = util.readfile( 'check2nd/sneak.txt' )
+        assert dat.strip() == 'gotcha'
 
 
 class naming_schemes( unittest.TestCase ):

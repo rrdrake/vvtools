@@ -8,7 +8,8 @@ import tempfile
 import shutil
 import re
 
-from gitinterface import GitInterface, change_directory, print3
+from gitinterface import GitInterface, GitInterfaceError
+from gitinterface import change_directory, print3
 
 
 class GitResults:
@@ -46,7 +47,7 @@ class GitResults:
         print3( 'Pushing results...' )
         self.git.add( self.subdir )
         self.git.commit( message )
-        self.git.push()
+        resilient_commit_push( self.git )
 
         return branch
 
@@ -292,3 +293,22 @@ def clone_results_repo( giturl, working_directory, branch=None ):
     git.clone( giturl, tmpdir, branch='master' )
 
     return git
+
+
+def resilient_commit_push( git ):
+    ""
+    err = ''
+
+    for i in range(3):
+        try:
+            git.push()
+        except GitInterfaceError as e:
+            err = str(e)
+        else:
+            err = ''
+            break
+
+        git.pull()
+
+    if err:
+        raise GitInterfaceError( 'could not push results: '+err )

@@ -911,6 +911,27 @@ def push_new_branch_with_file( url, branchname, filename, filecontents ):
         runcmd( 'git push -u origin '+branchname, print_output=False )
 
 
+def push_new_file_to_branch( url, branchname, filename, filecontents ):
+    ""
+    workdir = 'wrkdir_'+random_string()
+    os.mkdir( workdir )
+
+    with change_directory( workdir ):
+
+        runcmd( 'git clone '+url, print_output=False )
+
+        os.chdir( globfile( '*' ) )
+
+        runcmd( 'git checkout '+branchname, print_output=False )
+
+        writefile( filename, filecontents )
+
+        runcmd( 'git add '+filename, print_output=False )
+        runcmd( 'git commit -m "push_new_file_to_branch ' + time.ctime()+'"',
+                print_output=False )
+        runcmd( 'git push', print_output=False )
+
+
 def create_local_branch( local_directory, branchname ):
     ""
     with change_directory( local_directory ):
