@@ -62,7 +62,7 @@ class DashboardCreator:
                             background='white', radius=5, padding=2 )
         self.body.add( tab )
 
-        tab.add( 'Job Date', 'Label',
+        tab.add( 'Job Date', 'Label', 'Elapsed',
                  'pass', 'fail', 'diff', 'timeout', 'notdone', 'notrun',
                  'Details',
                  header=True )
@@ -86,6 +86,10 @@ def fill_history_row( row, datestamp, resultsdir, summary ):
     ""
     row.add( make_job_date( datestamp ), align='right' )
     row.add( summary.getLabel() )
+
+    elap = format_elapsed_time( summary.getElapsedTime() )
+    clr = None if summary.isFinished() else 'lightblue'
+    row.add( elap, align='right', background=clr )
 
     cnts = summary.getCounts()
     for res in ['pass','fail','diff','timeout','notdone','notrun']:
@@ -146,3 +150,19 @@ def determine_filename( pathname ):
         fn = abspath( pathname )
 
     return normpath( fn )
+
+
+def format_elapsed_time( seconds ):
+    ""
+    n = int( float(seconds) + 0.5 )
+    if n < 60:
+        return str(n)+'s'
+
+    if n < 60*60:
+        m = int(n/60)
+        s = n%60
+        return str(m)+'m ' + str(s)+'s'
+
+    h = int(n/(60*60))
+    m = int( float( n%(60*60) ) / 60.0 + 0.5 )
+    return str(h)+'h '+str(m)+'m'

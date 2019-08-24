@@ -21,7 +21,7 @@ from testutils import print3
 
 from gitresults import GitResults, GitResultsReader, ResultsSummary
 from gitresults import create_orphan_branch, branch_name_and_directory
-from gitresults import map_git_url_to_web_url
+from gitresults import map_git_url_to_web_url, get_elapsed_time
 from gitinterface import GitInterface
 
 
@@ -263,15 +263,29 @@ class results_reader_tests( trigutil.trigTestCase ):
             #VVT: parameterize : res = pass fail diff
             import vvtest_util as vvt
             import script_util as util
+            import time
             if vvt.res == 'fail':
                 raise Exception( 'fake exception' )
             elif vvt.res == 'diff':
                 util.exit_diff()
+            else:
+                time.sleep(1)
             """ )
         time.sleep(1)
         x,out = util.runcmd( trigutil.vvtest_file + \
                              ' -vv -n 4 --plat '+core_platform_name() + \
                              ' --gitlab '+giturl )
+
+    def test_get_elapsed_time_function(self):
+        ""
+        assert get_elapsed_time( {} ) == 0
+        assert get_elapsed_time( {'elapsed':'3'} ) == 3
+        assert get_elapsed_time( {'startepoch':'101'} ) == 0
+        assert get_elapsed_time( {'startepoch':'101.2'} ) == 0
+        assert get_elapsed_time( {'startepoch':'101.2',
+                                  'finishepoch':'105.2'} ) == 4
+        assert get_elapsed_time( {'startepoch':'101.2',
+                                  'currentepoch':'106.2'} ) == 5
 
     def test_parsing_a_test_results_file_into_a_results_data_object(self):
         ""
@@ -288,6 +302,8 @@ class results_reader_tests( trigutil.trigTestCase ):
 
         assert abs( time.time() - rsum.getDateStamp() ) < 60*60+10
         assert rsum.getLabel() == core_platform_name()
+        assert rsum.getElapsedTime() > 0 and rsum.getElapsedTime() < 10
+        assert rsum.isFinished()
 
         cntD = rsum.getCounts()
         assert cntD == { 'pass':1, 'fail':1, 'diff':1,

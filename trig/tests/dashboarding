@@ -89,6 +89,20 @@ class the_tests( trigutil.trigTestCase ):
         assert abs( dsL[0] - self.epoch1 ) < 70*60
         assert abs( dsL[1] - self.epoch2 ) < 70*60
 
+    def test_formatting_elapsed_time(self):
+        ""
+        assert dasherlib.format_elapsed_time( 0 ) == '0s'
+        assert dasherlib.format_elapsed_time( 5 ) == '5s'
+        assert dasherlib.format_elapsed_time( 65 ) == '1m 5s'
+        assert dasherlib.format_elapsed_time( 60 ) == '1m 0s'
+        assert dasherlib.format_elapsed_time( 60*60 ) == '1h 0m'
+        assert dasherlib.format_elapsed_time( 60*60+5 ) == '1h 0m'
+        assert dasherlib.format_elapsed_time( 60*60+35 ) == '1h 1m'
+        assert dasherlib.format_elapsed_time( 60*60+65 ) == '1h 1m'
+        assert dasherlib.format_elapsed_time( 60*60+60*25 ) == '1h 25m'
+        assert dasherlib.format_elapsed_time( 13*60*60+60*25 ) == '13h 25m'
+        assert dasherlib.format_elapsed_time( 26*60*60+60*25 ) == '26h 25m'
+
     def test_writing_history_page(self):
         ""
         url = self.make_dual_test_results()

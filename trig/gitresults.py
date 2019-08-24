@@ -115,6 +115,7 @@ class ResultsSummary:
         self.cnts = {}
         self.anchors = {}
 
+        self.attrs = {}
         self._parse_readme()
 
     def getDateStamp(self):
@@ -127,6 +128,19 @@ class ResultsSummary:
         ""
         ls = basename( self.rdir ).split('.',1)[1]
         return ls
+
+    def getElapsedTime(self):
+        ""
+        try:
+            elap = get_elapsed_time( self.attrs )
+        except Exception:
+            elap = 0
+
+        return elap
+
+    def isFinished(self):
+        ""
+        return 'finishepoch' in self.attrs or 'finishdate' in self.attrs
 
     def getCounts(self):
         ""
@@ -149,53 +163,22 @@ class ResultsSummary:
 
     def _parse_readme(self):
         ""
-        self.readme,fn = self._probe_readme_name()
+        self.readme,fn = probe_readme_name( self.rdir )
 
         with open( fn, 'rt' ) as fp:
             for line in fp:
-                if line.startswith( ResultsSummary.cntmark ):
-                    try:
-                        res,cnt = self._header_line_result_and_count( line )
-                    except Exception:
-                        pass
-                    else:
+                try:
+                    if line.startswith( ResultsSummary.cntmark ):
+                        res,cnt = header_line_result_and_count( line )
                         self.cnts[res] = cnt
-                        self.anchors[res] = self._header_line_to_anchor( line )
-
-    def _probe_readme_name(self):
-        ""
-        readme = 'README.md'
-        fn = pjoin( self.rdir, readme )
-
-        if not os.path.exists( fn ):
-            readme = 'TestResults.md'
-            fn = pjoin( self.rdir, readme )
-            assert os.path.exists( fn ), \
-                'A README.md or TestResults.md must exist in '+self.rdir
-
-        return readme,fn
+                        self.anchors[res] = header_line_to_anchor( line )
+                    elif line.startswith( '* ' ):
+                        parse_key_value( line, self.attrs )
+                except Exception:
+                    pass
 
     cntmark = '## Tests that '
     mlen = len( cntmark )
-
-    def _header_line_result_and_count(self, line):
-        ""
-        res,cnt = line[ ResultsSummary.mlen : ].split('=',1)
-        res = res.strip()
-        assert res
-        cnt = int( cnt )
-
-        return res,cnt
-
-    def _header_line_to_anchor(self, line):
-        """
-        try to duplicate GitLab algorithm (good enough) to make a header anchor
-        """
-        s1 = line[3:].strip().replace( '=', '' )
-        s2 = ' '.join( s1.split() )
-        s3 = s2.lower()
-
-        return s3
 
 
 def map_git_url_to_web_url( giturl ):
@@ -312,3 +295,81 @@ def resilient_commit_push( git ):
 
     if err:
         raise GitInterfaceError( 'could not push results: '+err )
+
+
+def probe_readme_name( resultsdir ):
+    ""
+    readme = 'README.md'
+    fn = pjoin( resultsdir, readme )
+
+    if not os.path.exists( fn ):
+        readme = 'TestResults.md'
+        fn = pjoin( resultsdir, readme )
+        assert os.path.exists( fn ), \
+            'A README.md or TestResults.md must exist in '+resultsdir
+
+    return readme,fn
+
+
+def header_line_result_and_count( line ):
+    ""
+    res,cnt = line[ ResultsSummary.mlen : ].split('=',1)
+    res = res.strip()
+    assert res
+    cnt = int( cnt )
+
+    return res,cnt
+
+
+def header_line_to_anchor( line ):
+    """
+    duplicate (approximately) the GitLab algorithm to make a header anchor
+    """
+    s1 = line[3:].strip().replace( '=', '' )
+    s2 = ' '.join( s1.split() )
+    s3 = s2.lower()
+
+    return s3
+
+def parse_key_value( line, attrs ):
+    """
+    * finishdate = Fri Aug 23 17:21:16 2019
+    * finishepoch = 1566602476.19
+    * hostname = ceerws1803
+    * platform = Linux
+    * python = /usr/local/epd/epd-7.3-2/bin/python
+    * rundir = /scratch/rrdrake/temp/tmpdir_gitresults_tests/TestResults.Linux
+    * startdate = Fri Aug 23 17:21:14 2019
+    * startepoch = 1566602474.74
+    * vvtest = /home/rrdrake/Projects/scidev/scidev_utils/vvt
+    * currentepoch = 1566602476.46
+    """
+    assert line[:2] == '* '
+
+    kvL = line[2:].split( '=', 1 )
+    if len( kvL ) == 2:
+        k = kvL[0].strip()
+        v = kvL[1].strip()
+        if k:
+            attrs[k] = v
+
+
+def get_elapsed_time( attrs ):
+    ""
+    tstart = attrs.get( 'startepoch', None )
+    if tstart:
+        tstart = float( attrs['startepoch'] )
+
+        tfin = attrs.get( 'finishepoch', None )
+        if tfin:
+            return int( float(tfin) - tstart + 0.5 )
+
+        tcur = attrs.get( 'currentepoch', None )
+        if tcur and tcur >= tstart:
+            return int( float(tcur) - tstart + 0.5 )
+
+    elap = attrs.get( 'elapsed', None )
+    if elap != None:
+        return int( float(elap) + 0.5 )
+
+    return 0
