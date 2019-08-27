@@ -88,7 +88,7 @@ def fill_history_row( row, datestamp, resultsdir, summary ):
     row.add( summary.getLabel() )
 
     elap = format_elapsed_time( summary.getElapsedTime() )
-    clr = None if summary.isFinished() else 'lightblue'
+    clr = None if summary.isFinished() else 'yellow'
     row.add( elap, align='right', background=clr )
 
     cnts = summary.getCounts()
@@ -155,14 +155,13 @@ def determine_filename( pathname ):
 def format_elapsed_time( seconds ):
     ""
     n = int( float(seconds) + 0.5 )
-    if n < 60:
-        return str(n)+'s'
 
     if n < 60*60:
-        m = int(n/60)
+        m = int( n/60 )
         s = n%60
-        return str(m)+'m ' + str(s)+'s'
+        return str(m)+':'+"%02d"%(s,)
 
-    h = int(n/(60*60))
-    m = int( float( n%(60*60) ) / 60.0 + 0.5 )
-    return str(h)+'h '+str(m)+'m'
+    h = int( n/(60*60) )
+    m = int( (n-h*60*60)/60 )
+    s = n-h*60*60-m*60
+    return str(h)+':'+"%02d"%(m,)+':'+"%02d"%(s,)

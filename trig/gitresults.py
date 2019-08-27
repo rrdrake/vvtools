@@ -365,7 +365,7 @@ def get_elapsed_time( attrs ):
             return int( float(tfin) - tstart + 0.5 )
 
         tcur = attrs.get( 'currentepoch', None )
-        if tcur and tcur >= tstart:
+        if tcur and float(tcur) >= tstart:
             return int( float(tcur) - tstart + 0.5 )
 
     elap = attrs.get( 'elapsed', None )
