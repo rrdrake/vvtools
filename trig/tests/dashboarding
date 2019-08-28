@@ -47,7 +47,7 @@ class the_tests( trigutil.trigTestCase ):
                 webbrowser.open( 'testpage.htm' )
                 raw_input( 'Press <Enter> to continue...' )
 
-    def run_pass_fail_diff_tests(self, giturl, epoch):
+    def run_pass_fail_diff_tests(self, giturl, epoch, joblabel=None):
         ""
         util.writefile( 'passfaildiff.vvt', """
             #VVT: parameterize : res = pass fail diff
@@ -59,20 +59,23 @@ class the_tests( trigutil.trigTestCase ):
                 util.exit_diff()
             """ )
         time.sleep(1)
-        x,out = util.runcmd( trigutil.vvtest_file + \
-                             ' -w -vv -n 4 --plat '+core_platform_name() + \
-                             ' --gitlab '+giturl + \
-                             ' --results-date '+str(epoch) )
+        cmd = trigutil.vvtest_file + \
+                    ' -w -vv -n 4 --plat '+core_platform_name() + \
+                    ' --gitlab '+giturl + \
+                    ' --results-date '+str(epoch)
+        if joblabel:
+            cmd += ' --results-tag '+str(joblabel)
+        x,out = util.runcmd( cmd )
 
-    def make_dual_test_results(self):
+    def make_dual_test_results(self, joblabel1=None, joblabel2=None):
         ""
         url = util.create_bare_repo_with_topic_branch( 'resrepo' )
 
         self.epoch1 = 1561499669.31  # Tue Jun 25 15:54:29 2019
-        self.run_pass_fail_diff_tests( url, self.epoch1 )
+        self.run_pass_fail_diff_tests( url, self.epoch1, joblabel=joblabel1 )
 
         self.epoch2 = 1564480574.74  # Tue Jul 30 03:56:14 2019
-        self.run_pass_fail_diff_tests( url, self.epoch2 )
+        self.run_pass_fail_diff_tests( url, self.epoch2, joblabel=joblabel2 )
 
         return url
 
@@ -110,7 +113,114 @@ class the_tests( trigutil.trigTestCase ):
 
         dash = dasherlib.DashboardCreator( url )
         dash.readResults()
-        dash.writeHistoryPage( 'testpage.htm' )
+        dash.writeHistoryPage( 'testpage.htm', title='Nice Results' )
+
+        lines = util.greplines( 'Nice Results', util.readfile( 'testpage.htm' ) )
+        assert len( lines ) == 2  # the page title and the heading
+
+    def test_job_label_pattern_matching(self):
+        ""
+        assert     dasherlib.results_label_match( 'foo bar', None )
+        assert     dasherlib.results_label_match( 'foo bar', 'foo' )
+        assert not dasherlib.results_label_match( 'foo bar', 'baz' )
+        assert not dasherlib.results_label_match( 'foo bar', '^bar' )
+        assert     dasherlib.results_label_match( 'foo bar', 'bar$' )
+        assert     dasherlib.results_label_match( 'foo bar', 'o+[ ].*' )
+        assert not dasherlib.results_label_match( 'foo bar', 'f+[ ].*' )
+
+    def test_history_page_of_a_single_job_label(self):
+        ""
+        url = self.make_dual_test_results( joblabel1='small', joblabel2='medium' )
+
+        dash = dasherlib.DashboardCreator( url )
+        dash.readResults()
+        dash.writeHistoryPage( 'small.htm', label_pattern='small' )
+        dash.writeHistoryPage( 'medium.htm', label_pattern='med.*m' )
+
+        lines = util.greplines( 'small', util.readfile( 'small.htm' ) )
+        assert len( lines ) > 0
+        lines = util.greplines( 'medium', util.readfile( 'small.htm' ) )
+        assert len( lines ) == 0
+
+        lines = util.greplines( 'small', util.readfile( 'medium.htm' ) )
+        assert len( lines ) == 0
+        lines = util.greplines( 'medium', util.readfile( 'medium.htm' ) )
+        assert len( lines ) > 0
+
+        self.setWebFile( 'medium.htm' )
+
+    def test_getting_latest_results_summaries(self):
+        ""
+        tm3 = time.time()
+        tm2 = tm3 - 60*60
+        tm1 = tm2 - 3*60*60
+
+        D = dasherlib.get_latest_results_for_each_label( [] )
+        assert len(D) == 0
+
+        sumL = [ [ tm2, 'a', MockResultsSummary( 'Linux.foo' ) ],
+                 [ tm1, 'a', MockResultsSummary( 'Linux.foo' ) ] ]
+        D = dasherlib.get_latest_results_for_each_label( sumL )
+        assert len(D) == 1 and D['Linux.foo'][0] == tm2
+
+        sumL = [ [ tm3, 'a', MockResultsSummary( 'Linux.foo' ) ],
+                 [ tm2, 'a', MockResultsSummary( 'Linux.bar' ) ],
+                 [ tm2, 'a', MockResultsSummary( 'Linux.foo' ) ],
+                 [ tm1, 'a', MockResultsSummary( 'Linux.bar' ) ] ]
+        D = dasherlib.get_latest_results_for_each_label( sumL )
+        assert len(D) == 2
+        assert D['Linux.foo'][0] == tm3
+        assert D['Linux.bar'][0] == tm2
+
+        sumL = [ [ tm3, 'a', MockResultsSummary( 'Linux.foo', finished=False ) ],
+                 [ tm2, 'a', MockResultsSummary( 'Linux.bar', finished=False ) ],
+                 [ tm2, 'a', MockResultsSummary( 'Linux.foo' ) ],
+                 [ tm1, 'a', MockResultsSummary( 'Linux.bar' ) ] ]
+        D = dasherlib.get_latest_results_for_each_label( sumL )
+        assert len(D) == 2
+        assert D['Linux.foo'][0] == tm2
+        assert D['Linux.bar'][0] == tm1
+
+        sumL = [ [ tm3, 'a', MockResultsSummary( 'Linux.foo', finished=False ) ],
+                 [ tm2, 'a', MockResultsSummary( 'Linux.foo', finished=False ) ] ]
+        D = dasherlib.get_latest_results_for_each_label( sumL )
+        assert len(D) == 1
+        assert D['Linux.foo'][0] == tm3
+
+    def test_count_other_results(self):
+        ""
+        cnts = { 'pass':1, 'fail':2, 'diff':3 }
+        res,cnt = dasherlib.distill_other_results( cnts )
+        assert res == 'diff' and cnt == 3
+
+        cnts = { 'pass':0, 'fail':0, 'notdone':3, 'timeout':2 }
+        res,cnt = dasherlib.distill_other_results( cnts )
+        assert res in [ 'notdone', 'timeout' ] and cnt == 5
+
+        cnts = { 'pass':0, 'fail':0, 'diff':0, 'notdone':0, 'timeout':0, 'notrun':2 }
+        res,cnt = dasherlib.distill_other_results( cnts )
+        assert res == 'notrun' and cnt == 2
+
+        cnts = { 'pass':0, 'fail':0, 'diff':0, 'notdone':0, 'timeout':0, 'notrun':0 }
+        res,cnt = dasherlib.distill_other_results( cnts )
+        assert res and cnt == 0
+
+    def test_writing_summary_page(self):
+        ""
+        url = self.make_dual_test_results( joblabel1='small', joblabel2='medium' )
+
+        dash = dasherlib.DashboardCreator( url )
+        dash.readResults()
+
+        dash.writeSummaryPage( 'testpage.htm', title='Nice Summary' )
+
+        page = util.readfile( 'testpage.htm' )
+        lines = util.greplines( 'Nice Summary', page )
+        assert len( lines ) == 2  # the page title and the heading
+
+        assert len( util.greplines( '.small', page ) ) > 0
+        assert len( util.greplines( '.medium', page ) ) > 0
+        assert len( util.greplines( 'Elapsed', page ) ) > 0
 
     def test_dasher_command_line_errors(self):
         ""
@@ -152,6 +262,24 @@ def core_platform_name():
         return 'Darwin'
     else:
         return 'Linux'
+
+
+class MockResultsSummary:
+
+    def __init__(self, label, finished=True, counts={}):
+        ""
+        self.label = label
+        self.fin = finished
+        self.cnts = counts
+
+    def getLabel(self):
+        return self.label
+
+    def isFinished(self):
+        return self.fin
+
+    def getCounts(self):
+        return self.cnts
 
 
 if sys.version_info[0] > 2:

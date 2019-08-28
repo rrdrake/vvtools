@@ -5,6 +5,7 @@ from os.path import abspath, dirname, basename, normpath
 from os.path import join as pjoin
 import shutil
 import time
+import re
 
 import webgen
 import gitresults
@@ -36,11 +37,20 @@ class DashboardCreator:
         dsL = [ L[0] for L in self.summaries ]
         return dsL
 
-    def writeHistoryPage(self, pathname, page_title='Results History'):
+    def writeHistoryPage(self, pathname, title='Results History',
+                                         label_pattern=None):
         ""
-        pathdir = self._write_page_structure( pathname, page_title )
-        self.body.add( webgen.Heading( 'Results History', align='center' ) )
-        self._write_history_table()
+        pathdir = self._write_page_structure( pathname, title )
+        self.body.add( webgen.Heading( title, align='center' ) )
+        self._write_history_table( label_pattern=label_pattern )
+        self._add_scidev_logo( pathdir )
+        self.doc.close()
+
+    def writeSummaryPage(self, pathname, title='Results Summary'):
+        ""
+        pathdir = self._write_page_structure( pathname, title )
+        self.body.add( webgen.Heading( title, align='center' ) )
+        self._write_summary_table( )
         self._add_scidev_logo( pathdir )
         self.doc.close()
 
@@ -56,7 +66,7 @@ class DashboardCreator:
 
         return dirname( filename )
 
-    def _write_history_table(self):
+    def _write_history_table(self, label_pattern=None):
         ""
         tab = webgen.Table( border='internal', align='center',
                             background='white', radius=5, padding=2 )
@@ -68,8 +78,28 @@ class DashboardCreator:
                  header=True )
 
         for ds,rdir,rsum in self.summaries:
+            if results_label_match( rsum.getLabel(), label_pattern ):
+                row = tab.add()
+                fill_history_row( row, ds, rdir, rsum )
+
+    def _write_summary_table(self):
+        ""
+        latest = get_latest_results_for_each_label( self.summaries )
+
+        labels = list( latest.keys() )
+        labels.sort()
+
+        tab = webgen.Table( border='internal', align='center',
+                            background='white', radius=5, padding=2 )
+        self.body.add( tab )
+
+        tab.add( 'Label', 'Elapsed', 'pass', 'fail', 'other', 'Information',
+                 header=True )
+
+        for lab in labels:
+            ds,rdir,rsum = latest[lab]
             row = tab.add()
-            fill_history_row( row, ds, rdir, rsum )
+            fill_summary_row( row, ds, rdir, rsum )
 
     def _add_scidev_logo(self, page_directory):
         ""
@@ -82,26 +112,98 @@ class DashboardCreator:
         self.body.add( img )
 
 
+def results_label_match( label, pattern ):
+    ""
+    if pattern == None:
+        return True
+
+    if re.search( pattern, label, re.MULTILINE ) != None:
+        return True
+
+    return False
+
+
+def get_latest_results_for_each_label( summaries ):
+    """
+    - gets the most recent results that finished for each label
+    - if none of the results for a label finished, get the most recent
+    - the 'summaries' argument must be sorted most recent first
+    """
+    resmap = {}
+
+    for dstamp,rdir,rsum in summaries:
+        lab = rsum.getLabel()
+
+        if lab in resmap:
+            prev_is_finished = resmap[lab][2].isFinished()
+            if rsum.isFinished() and not prev_is_finished:
+                resmap[ lab ] = [ dstamp,rdir,rsum ]
+        else:
+            resmap[ lab ] = [ dstamp,rdir,rsum ]
+
+    return resmap
+
+
 def fill_history_row( row, datestamp, resultsdir, summary ):
     ""
     row.add( make_job_date( datestamp ), align='right' )
     row.add( summary.getLabel() )
 
-    elap = format_elapsed_time( summary.getElapsedTime() )
-    clr = None if summary.isFinished() else 'yellow'
-    row.add( elap, align='right', background=clr )
+    add_elapsed_time_entry( summary, row )
 
     cnts = summary.getCounts()
     for res in ['pass','fail','diff','timeout','notdone','notrun']:
         cnt = cnts.get( res, None )
-        add_history_result_entry( row, res, cnt, summary )
+        add_result_entry( row, res, cnt, summary )
 
     lnk = webgen.make_hyperlink( summary.getResultsLink(),
                                  basename( resultsdir ) )
     row.add( lnk )
 
 
-def add_history_result_entry( row, result, cnt, summary ):
+def fill_summary_row( row, datestamp, resultsdir, summary ):
+    ""
+    row.add( summary.getLabel() )
+
+    add_elapsed_time_entry( summary, row )
+
+    cnts = summary.getCounts()
+    for res in ['pass','fail']:
+        cnt = cnts.get( res, None )
+        add_result_entry( row, res, cnt, summary )
+
+    res,cnt = distill_other_results( cnts )
+    add_result_entry( row, res, cnt, summary )
+
+    row.add( '' )
+
+
+def add_elapsed_time_entry( summary, row ):
+    ""
+    elap = format_elapsed_time( summary.getElapsedTime() )
+    clr = None if summary.isFinished() else 'yellow'
+    row.add( elap, align='right', background=clr )
+
+
+def distill_other_results( counts ):
+    ""
+    sumcnt = 0
+    sample = None
+
+    for res in ['diff','timeout','notdone','notrun']:
+        n = int( counts.get( res, 0 ) )
+        sumcnt += n
+
+        if sample == None and n > 0:
+            sample = res
+
+    if not sample:
+        sample = 'diff'
+
+    return sample,sumcnt
+
+
+def add_result_entry( row, result, cnt, summary ):
     ""
     if cnt == None:
         row.add( '?', align='center' )
