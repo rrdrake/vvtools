@@ -14,6 +14,7 @@ from os.path import join as pjoin
 from os.path import basename
 import shutil
 import time
+import glob
 import unittest
 
 import trigtestutils as trigutil
@@ -151,46 +152,42 @@ class the_tests( trigutil.trigTestCase ):
 
     def test_getting_latest_results_summaries(self):
         ""
-        tm3 = time.time()
-        tm2 = tm3 - 60*60
-        tm1 = tm2 - 3*60*60
-
         cache = dasherlib.ResultsCache()
-        D = cache.getLatestResults()
-        assert len(D) == 0
+        grL = cache.getLatestResults()
+        assert len(grL) == 0
 
         resL = [ MockResultsSummary( 'Linux.foo' ),
                  MockResultsSummary( 'Linux.foo' ) ]
         cache = dasherlib.ResultsCache( resL )
-        D = cache.getLatestResults()
-        assert len(D) == 1 and id( D['Linux.foo'] ) == id( resL[0] )
+        grL = cache.getLatestResults()
+        assert len(grL) == 1 and id( grL[0] ) == id( resL[0] )
 
         resL = [ MockResultsSummary( 'Linux.foo' ),
                  MockResultsSummary( 'Linux.bar' ),
                  MockResultsSummary( 'Linux.foo' ),
                  MockResultsSummary( 'Linux.bar' ) ]
         cache = dasherlib.ResultsCache( resL )
-        D = cache.getLatestResults()
-        assert len(D) == 2
-        assert id( D['Linux.foo'] ) == id( resL[0] )
-        assert id( D['Linux.bar'] ) == id( resL[1] )
+        grL = cache.getLatestResults()
+        assert len(grL) == 2
+        assert id( grL[0] ) == id( resL[1] )
+        assert id( grL[1] ) == id( resL[0] )
 
         resL = [ MockResultsSummary( 'Linux.foo', finished=False ),
                  MockResultsSummary( 'Linux.bar', finished=False ),
                  MockResultsSummary( 'Linux.foo' ),
                  MockResultsSummary( 'Linux.bar' ) ]
         cache = dasherlib.ResultsCache( resL )
-        D = cache.getLatestResults()
-        assert len(D) == 2
-        assert id( D['Linux.foo'] ) == id( resL[2] )
-        assert id( D['Linux.bar'] ) == id( resL[3] )
+        grL = cache.getLatestResults()
+        assert len(grL) == 2
+        assert id( grL[0] ) == id( resL[3] )
+        assert id( grL[1] ) == id( resL[2] )
 
         resL = [ MockResultsSummary( 'Linux.foo', finished=False ),
                  MockResultsSummary( 'Linux.foo', finished=False ) ]
         cache = dasherlib.ResultsCache( resL )
-        D = cache.getLatestResults()
-        assert len(D) == 1
-        assert id( D['Linux.foo'] ) == id( resL[0] )
+        grL = cache.getLatestResults()
+        assert len(grL) == 1
+        assert id( grL[0] ) == id( resL[0] )
 
     def test_count_other_results(self):
         ""
@@ -242,7 +239,89 @@ class the_tests( trigutil.trigTestCase ):
 
         dash = dasherlib.DashboardCreator( url )
         dash.readResults()
-        dash.writePages( 'index.htm', summary_title='Rollup' )
+        dash.writePages( 'index.htm', title='Rollup' )
+
+        self.setWebFile( 'index.htm' )
+
+    def test_label_info_server(self):
+        ""
+        inf = dasherlib.LabelInfo()
+        inf.add( 'foo', 'bar' )
+        assert inf.get( 'foo' ) == 'bar'
+        assert inf.get( 'blah' ) == ''
+        assert inf.get( 'blah', 'oops' ) == 'oops'
+
+        inf.add( 'windows.small', 'windows tests' )
+        assert inf.get( 'windows.small' ) == 'windows tests'
+
+        inf.add( '(mac|darwin).big', 'MacOS big tests' )
+        assert inf.get( 'mac.big' ) == 'MacOS big tests'
+        assert inf.get( 'darwin.big' ) == 'MacOS big tests'
+        assert inf.get( 'windows.big' ) == ''
+
+    def test_adding_label_info(self):
+        ""
+        url = self.make_dual_test_results( joblabel1='small', joblabel2='medium' )
+
+        dash = dasherlib.DashboardCreator( url )
+        dash.readResults()
+        dash.setLabelInfo( '[.]small$', 'small tests' )
+        dash.setLabelInfo( 'medium', 'medium tests' )
+        dash.writePages( 'index.htm', title='Rollup' )
+
+        sumpage = util.readfile( 'index.htm' )
+        assert 'small tests' in sumpage
+        assert 'medium tests' in sumpage
+
+        self.setWebFile( 'index.htm' )
+
+    def test_getting_results_summaries_for_certain_labels(self):
+        ""
+        resL = [ MockResultsSummary( 'Linux.foo', finished=False ),
+                 MockResultsSummary( 'Linux.bar', finished=False ),
+                 MockResultsSummary( 'Linux.foo' ),
+                 MockResultsSummary( 'Linux.bar' ) ]
+        cache = dasherlib.ResultsCache( resL )
+
+        rL = [ gr for gr in cache.iterate() ]
+        assert len(rL) == 4
+        assert id(rL[0]) == id(resL[0]) and id(rL[3]) == id(resL[3])
+
+        cache.setLabels( [ 'Linux.bar' ] )
+
+        rL = [ gr for gr in cache.iterate() ]
+        assert len(rL) == 2
+        assert id(rL[0]) == id(resL[1]) and id(rL[1]) == id(resL[3])
+
+        # order should follow the label list
+
+        cache.setLabels( [ 'Linux.foo', 'Linux.bar' ] )
+        grL = cache.getLatestResults()
+        assert len( grL ) == 2
+        assert id( grL[0] ) == id( resL[2] )
+        assert id( grL[1] ) == id( resL[3] )
+
+        cache.setLabels( [ 'Linux.bar', 'Linux.foo' ] )
+        grL = cache.getLatestResults()
+        assert len( grL ) == 2
+        assert id( grL[0] ) == id( resL[3] )
+        assert id( grL[1] ) == id( resL[2] )
+
+    def test_setting_visible_labels(self):
+        ""
+        url = self.make_dual_test_results( joblabel1='dogish', joblabel2='catish' )
+
+        dash = dasherlib.DashboardCreator( url )
+        dash.readResults()
+        dash.setVisibleLabels( [ 'dogish' ] )
+        dash.setLabelInfo( 'dogish', 'tests that are a bit slow' )
+        dash.writePages( 'index.htm', title='Rollup' )
+
+        sumpage = util.readfile( 'index.htm' )
+        assert 'dogish' in sumpage
+        assert 'catish' not in sumpage
+        assert len( glob.glob( '*dogish*' ) ) == 1
+        assert len( glob.glob( '*catish*' ) ) == 0
 
         self.setWebFile( 'index.htm' )
 

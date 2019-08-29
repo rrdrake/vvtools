@@ -19,6 +19,7 @@ class DashboardCreator:
         self.workdir = working_directory
 
         self.results = ResultsCache()
+        self.info = LabelInfo()
 
     def readResults(self):
         ""
@@ -29,15 +30,25 @@ class DashboardCreator:
         dsL = [ gr.getDateStamp() for gr in self.results.iterate() ]
         return dsL
 
-    def writePages(self, filepath, summary_title=None):
+    def setVisibleLabels(self, labelnames):
+        """
+        such as labelnames=[ 'Linux.foo', '.*[.]bar$' ]
+        """
+        self.results.setLabels( labelnames )
+
+    def setLabelInfo(self, labelname, labelinfo):
         ""
-        if not summary_title:
-            summary_title = 'Results Summary'
+        self.info.add( labelname, labelinfo )
+
+    def writePages(self, filepath, title=None):
+        ""
+        if not title:
+            title = 'Results Summary'
 
         idxfile = determine_page_filename( filepath )
         pathdir = dirname( idxfile )
 
-        self.writeSummaryPage( idxfile, title=summary_title )
+        self.writeSummaryPage( idxfile, title=title )
 
         for gr in self.results.iterate():
             lab = gr.getLabel()
@@ -50,7 +61,7 @@ class DashboardCreator:
         ""
         page = create_web_page( filepath, title )
         page.getBody().add( webgen.Heading( title, align='center' ) )
-        write_summary_table( page.getBody(), self.results )
+        write_summary_table( page.getBody(), self.results, self.info )
         add_scidev_logo( page )
         page.close()
 
@@ -73,6 +84,8 @@ class ResultsCache:
         ""
         self.gitres = gitresults_list
 
+        self.labels = None
+
     def read(self, git_url):
         ""
         rdr = gitresults.GitResultsReader( git_url )
@@ -89,11 +102,23 @@ class ResultsCache:
 
         self.gitres = [ L[2] for L in sortlist ]
 
+    def setLabels(self, labelnames):
+        ""
+        self.labels = labelnames
+
     def iterate(self, label_pattern=None):
         ""
-        for gr in self.gitres:
-            if results_label_match( gr.getLabel(), label_pattern ):
-                yield gr
+        if self.labels != None:
+            for gr in self.gitres:
+                for lab in self.labels:
+                    if results_label_match( gr.getLabel(), lab ):
+                        yield gr
+                        break
+
+        else:
+            for gr in self.gitres:
+                if results_label_match( gr.getLabel(), label_pattern ):
+                    yield gr
 
     def getLatestResults(self):
         """
@@ -112,7 +137,34 @@ class ResultsCache:
             else:
                 resmap[ lab ] = gr
 
-        return resmap
+        if self.labels != None:
+            reslist = self._order_by_label_list( resmap )
+
+        else:
+            items = list( resmap.items() )
+            items.sort()
+            reslist = [ gr for lab,gr in items ]
+
+        return reslist
+
+    def _find_label(self, labelname):
+        ""
+        for gr in self.gitres:
+            if gr.getLabel() == labelname:
+                return gr
+
+        return None
+
+    def _order_by_label_list(self, resmap):
+        ""
+        reslist = []
+
+        for lab in self.labels:
+            for gr in resmap.values():
+                if results_label_match( gr.getLabel(), lab ):
+                    reslist.append( gr )
+
+        return reslist
 
 
 def results_label_match( label, pattern ):
@@ -165,7 +217,7 @@ def create_web_page( filename, page_title ):
     return page
 
 
-def write_summary_table( body, results ):
+def write_summary_table( body, results, info ):
     ""
     tab = webgen.Table( border='internal', align='center',
                         background='white', radius=5, padding=2 )
@@ -174,14 +226,34 @@ def write_summary_table( body, results ):
     tab.add( 'Label', 'Elapsed', 'pass', 'fail', 'other', 'Information',
              header=True )
 
-    latest = results.getLatestResults()
-
-    labels = list( latest.keys() )
-    labels.sort()
-
-    for lab in labels:
+    for gr in results.getLatestResults():
         row = tab.add()
-        fill_summary_row( row, latest[lab] )
+        lab = gr.getLabel()
+        fill_summary_row( row, gr, info.get( gr.getLabel() ) )
+
+
+class LabelInfo:
+
+    def __init__(self):
+        ""
+        self.info = []
+
+    def add(self, label, info):
+        ""
+        self.info.append( ( label, info ) )
+
+    def get(self, label, *default):
+        ""
+        for lab,inf in self.info:
+            if lab == label:
+                return inf
+            elif re.search( lab, label, re.MULTILINE ) != None:
+                return inf
+
+        if len( default ) > 0:
+            return default[0]
+
+        return ''
 
 
 def write_history_table( body, results,
@@ -231,7 +303,7 @@ def fill_history_row( row, gitres, show_label ):
     row.add( lnk )
 
 
-def fill_summary_row( row, gitres ):
+def fill_summary_row( row, gitres, labelinfo ):
     ""
     fn = filename_for_history_results( gitres.getLabel() )
     lablnk = webgen.make_hyperlink( fn, gitres.getLabel() )
@@ -247,7 +319,7 @@ def fill_summary_row( row, gitres ):
     res,cnt = distill_other_results( cnts )
     add_result_entry( row, res, cnt, gitres )
 
-    row.add( '' )
+    row.add( labelinfo )
 
 
 def filename_for_history_results( label ):
