@@ -18,119 +18,98 @@ class DashboardCreator:
         self.url = results_repo_url
         self.workdir = working_directory
 
-        self.summaries = []
+        self.results = ResultsCache()
 
     def readResults(self):
         ""
-        rdr = gitresults.GitResultsReader( self.url )
-
-        for branch,rdir in rdr.iterateDirectories():
-            rsum = gitresults.ResultsSummary( self.url, branch, rdir )
-            self.summaries.append( [ rsum.getDateStamp(), rdir, rsum ] )
-
-        self.summaries.sort( reverse=True )
-
-        rdr.cleanup()
+        self.results.read( self.url )
 
     def getDateStamps(self):
         ""
-        dsL = [ L[0] for L in self.summaries ]
+        dsL = [ gr.getDateStamp() for gr in self.results.iterate() ]
         return dsL
 
-    def writePages(self, pathname, summary_title='Results Summary'):
+    def writePages(self, filepath, summary_title='Results Summary'):
         ""
-        idxfile = determine_index_filename( pathname )
+        idxfile = determine_page_filename( filepath )
         pathdir = dirname( idxfile )
 
         self.writeSummaryPage( idxfile, title=summary_title )
 
-        for dstamp,rdir,rsum in self.summaries:
-            lab = rsum.getLabel()
+        for gr in self.results.iterate():
+            lab = gr.getLabel()
             fn = pjoin( pathdir, filename_for_history_results( lab ) )
             self.writeHistoryPage( fn, title=lab,
                                        label_pattern='^'+lab+'$',
                                        show_label=False )
 
-    def writeSummaryPage(self, pathname, title='Results Summary'):
+    def writeSummaryPage(self, filepath, title='Results Summary'):
         ""
-        pathdir = self._write_page_structure( pathname, title )
-        self.body.add( webgen.Heading( title, align='center' ) )
-        self._write_summary_table( )
-        self._add_scidev_logo( pathdir )
-        self.doc.close()
+        page = create_web_page( filepath, title )
+        page.getBody().add( webgen.Heading( title, align='center' ) )
+        write_summary_table( page.getBody(), self.results )
+        add_scidev_logo( page )
+        page.close()
 
-    def writeHistoryPage(self, pathname, title='Results History',
+    def writeHistoryPage(self, filepath, title='Results History',
                                          label_pattern=None,
                                          show_label=True):
         ""
-        pathdir = self._write_page_structure( pathname, title )
-        self.body.add( webgen.Heading( title, align='center' ) )
-        self._write_history_table( label_pattern=label_pattern,
-                                   show_label=show_label )
-        self._add_scidev_logo( pathdir )
-        self.doc.close()
+        page = create_web_page( filepath, title )
+        page.getBody().add( webgen.Heading( title, align='center' ) )
+        write_history_table( page.getBody(), self.results,
+                             label_pattern=label_pattern,
+                             show_label=show_label )
+        add_scidev_logo( page )
+        page.close()
 
-    def _write_page_structure(self, pathname, page_title):
+
+class ResultsCache:
+
+    def __init__(self, gitresults_list=[]):
         ""
-        filename = determine_index_filename( pathname )
+        self.gitres = gitresults_list
 
-        self.doc = webgen.HTMLDocument( filename )
-
-        self.doc.add( webgen.Head( page_title ) )
-
-        self.body = self.doc.add( webgen.Body( background='cadetblue' ) )
-
-        return dirname( filename )
-
-    def _write_history_table(self, label_pattern=None, show_label=True):
+    def read(self, git_url):
         ""
-        tab = webgen.Table( border='internal', align='center',
-                            background='white', radius=5, padding=2 )
-        self.body.add( tab )
+        rdr = gitresults.GitResultsReader( git_url )
 
-        add_history_table_header( tab, show_label )
+        sortlist = []
 
-        for ds,rdir,rsum in self._results_summary_loop( label_pattern ):
-            row = tab.add()
-            fill_history_row( row, ds, rdir, rsum, show_label )
+        for branch,rdir in rdr.iterateDirectories():
+            gr = gitresults.ResultsSummary( git_url, branch, rdir )
+            sortlist.append( [ gr.getDateStamp(), rdir, gr ] )
 
-    def _results_summary_loop(self, label_pattern):
+        rdr.cleanup()
+
+        sortlist.sort( reverse=True )
+
+        self.gitres = [ L[2] for L in sortlist ]
+
+    def iterate(self, label_pattern=None):
         ""
-        for ds,rdir,rsum in self.summaries:
-            if results_label_match( rsum.getLabel(), label_pattern ):
-                yield ds,rdir,rsum
+        for gr in self.gitres:
+            if results_label_match( gr.getLabel(), label_pattern ):
+                yield gr
 
-    def _write_summary_table(self):
-        ""
-        latest = get_latest_results_for_each_label( self.summaries )
+    def getLatestResults(self):
+        """
+        - gets the most recent results that finished for each label
+        - if none of the results for a label finished, get the most recent
+        """
+        resmap = {}
 
-        labels = list( latest.keys() )
-        labels.sort()
+        for gr in self.iterate():
+            lab = gr.getLabel()
 
-        tab = webgen.Table( border='internal', align='center',
-                            background='white', radius=5, padding=2 )
-        self.body.add( tab )
+            if lab in resmap:
+                prev_is_finished = resmap[lab].isFinished()
+                if gr.isFinished() and not prev_is_finished:
+                    resmap[ lab ] = gr
+            else:
+                resmap[ lab ] = gr
 
-        tab.add( 'Label', 'Elapsed', 'pass', 'fail', 'other', 'Information',
-                 header=True )
-
-        for lab in labels:
-            ds,rdir,rsum = latest[lab]
-            row = tab.add()
-            fill_summary_row( row, ds, rsum )
-
-    def _add_scidev_logo(self, page_directory):
-        ""
-        fn = 'scidev_logo.png'
-        mydir = dirname( abspath( __file__ ) )
-
-        dest = pjoin( page_directory, fn )
-        if not os.path.exists( dest ):
-            shutil.copy( pjoin( mydir, fn ), dest )
-
-        img = webgen.make_image( fn, width=100,
-                                 position='fixed', bottom=5, right=5 )
-        self.body.add( img )
+        return resmap
 
 
 def results_label_match( label, pattern ):
@@ -144,25 +123,77 @@ def results_label_match( label, pattern ):
     return False
 
 
-def get_latest_results_for_each_label( summaries ):
-    """
-    - gets the most recent results that finished for each label
-    - if none of the results for a label finished, get the most recent
-    - the 'summaries' argument must be sorted most recent first
-    """
-    resmap = {}
+class WebPage:
 
-    for dstamp,rdir,rsum in summaries:
-        lab = rsum.getLabel()
+    def __init__(self, filepath):
+        ""
+        self.filename = determine_page_filename( filepath )
 
-        if lab in resmap:
-            prev_is_finished = resmap[lab][2].isFinished()
-            if rsum.isFinished() and not prev_is_finished:
-                resmap[ lab ] = [ dstamp,rdir,rsum ]
-        else:
-            resmap[ lab ] = [ dstamp,rdir,rsum ]
+        self.doc = webgen.HTMLDocument( self.filename )
 
-    return resmap
+    def addHead(self, title):
+        ""
+        self.doc.add( webgen.Head( title ) )
+
+    def addBody(self):
+        ""
+        self.body = self.doc.add( webgen.Body( background='cadetblue' ) )
+
+    def getDirname(self):
+        ""
+        return dirname( self.filename )
+
+    def getBody(self):
+        ""
+        return self.body
+
+    def close(self):
+        ""
+        self.doc.close()
+
+
+def create_web_page( filename, page_title ):
+    ""
+    page = WebPage( filename )
+
+    page.addHead( page_title )
+    page.addBody()
+
+    return page
+
+
+def write_summary_table( body, results ):
+    ""
+    tab = webgen.Table( border='internal', align='center',
+                        background='white', radius=5, padding=2 )
+    body.add( tab )
+
+    tab.add( 'Label', 'Elapsed', 'pass', 'fail', 'other', 'Information',
+             header=True )
+
+    latest = results.getLatestResults()
+
+    labels = list( latest.keys() )
+    labels.sort()
+
+    for lab in labels:
+        row = tab.add()
+        fill_summary_row( row, latest[lab] )
+
+
+def write_history_table( body, results,
+                         label_pattern=None,
+                         show_label=True ):
+    ""
+    tab = webgen.Table( border='internal', align='center',
+                        background='white', radius=5, padding=2 )
+    body.add( tab )
+
+    add_history_table_header( tab, show_label )
+
+    for gr in results.iterate( label_pattern ):
+        row = tab.add()
+        fill_history_row( row, gr, show_label )
 
 
 def add_history_table_header( tab, show_label ):
@@ -178,40 +209,40 @@ def add_history_table_header( tab, show_label ):
              header=True )
 
 
-def fill_history_row( row, datestamp, resultsdir, summary, show_label ):
+def fill_history_row( row, gitres, show_label ):
     ""
-    row.add( make_job_date( datestamp ), align='right' )
+    row.add( make_job_date( gitres.getDateStamp() ), align='right' )
 
     if show_label:
-        row.add( summary.getLabel() )
+        row.add( gitres.getLabel() )
 
-    add_elapsed_time_entry( summary, row )
+    add_elapsed_time_entry( gitres, row )
 
-    cnts = summary.getCounts()
+    cnts = gitres.getCounts()
     for res in ['pass','fail','diff','timeout','notdone','notrun']:
         cnt = cnts.get( res, None )
-        add_result_entry( row, res, cnt, summary )
+        add_result_entry( row, res, cnt, gitres )
 
-    lnk = webgen.make_hyperlink( summary.getResultsLink(),
-                                 basename( resultsdir ) )
+    lnk = webgen.make_hyperlink( gitres.getResultsLink(),
+                                 gitres.getResultsSubdirectory() )
     row.add( lnk )
 
 
-def fill_summary_row( row, datestamp, summary ):
+def fill_summary_row( row, gitres ):
     ""
-    fn = filename_for_history_results( summary.getLabel() )
-    lablnk = webgen.make_hyperlink( fn, summary.getLabel() )
+    fn = filename_for_history_results( gitres.getLabel() )
+    lablnk = webgen.make_hyperlink( fn, gitres.getLabel() )
     row.add( lablnk )
 
-    add_elapsed_time_entry( summary, row )
+    add_elapsed_time_entry( gitres, row )
 
-    cnts = summary.getCounts()
+    cnts = gitres.getCounts()
     for res in ['pass','fail']:
         cnt = cnts.get( res, None )
-        add_result_entry( row, res, cnt, summary )
+        add_result_entry( row, res, cnt, gitres )
 
     res,cnt = distill_other_results( cnts )
-    add_result_entry( row, res, cnt, summary )
+    add_result_entry( row, res, cnt, gitres )
 
     row.add( '' )
 
@@ -257,6 +288,23 @@ def add_result_entry( row, result, cnt, summary ):
         row.add( ent, align='center', background=clr )
 
 
+def add_scidev_logo( page ):
+    ""
+    body = page.getBody()
+    page_directory = page.getDirname()
+
+    fn = 'scidev_logo.png'
+    mydir = dirname( abspath( __file__ ) )
+
+    dest = pjoin( page_directory, fn )
+    if not os.path.exists( dest ):
+        shutil.copy( pjoin( mydir, fn ), dest )
+
+    img = webgen.make_image( fn, width=100,
+                             position='fixed', bottom=5, right=5 )
+    body.add( img )
+
+
 def map_result_to_color( result, cnt ):
     ""
     if result == 'pass' or cnt == 0:
@@ -288,12 +336,12 @@ def make_job_date( epoch ):
     return stm
 
 
-def determine_index_filename( pathname ):
+def determine_page_filename( filepath ):
     ""
-    if os.path.isdir( pathname ):
-        fn = pjoin( abspath( pathname ), 'index.htm' )
+    if os.path.isdir( filepath ):
+        fn = pjoin( abspath( filepath ), 'index.htm' )
     else:
-        fn = abspath( pathname )
+        fn = abspath( filepath )
 
     return normpath( fn )
 

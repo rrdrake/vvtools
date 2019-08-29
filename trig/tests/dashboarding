@@ -155,37 +155,42 @@ class the_tests( trigutil.trigTestCase ):
         tm2 = tm3 - 60*60
         tm1 = tm2 - 3*60*60
 
-        D = dasherlib.get_latest_results_for_each_label( [] )
+        cache = dasherlib.ResultsCache()
+        D = cache.getLatestResults()
         assert len(D) == 0
 
-        sumL = [ [ tm2, 'a', MockResultsSummary( 'Linux.foo' ) ],
-                 [ tm1, 'a', MockResultsSummary( 'Linux.foo' ) ] ]
-        D = dasherlib.get_latest_results_for_each_label( sumL )
-        assert len(D) == 1 and D['Linux.foo'][0] == tm2
+        resL = [ MockResultsSummary( 'Linux.foo' ),
+                 MockResultsSummary( 'Linux.foo' ) ]
+        cache = dasherlib.ResultsCache( resL )
+        D = cache.getLatestResults()
+        assert len(D) == 1 and id( D['Linux.foo'] ) == id( resL[0] )
 
-        sumL = [ [ tm3, 'a', MockResultsSummary( 'Linux.foo' ) ],
-                 [ tm2, 'a', MockResultsSummary( 'Linux.bar' ) ],
-                 [ tm2, 'a', MockResultsSummary( 'Linux.foo' ) ],
-                 [ tm1, 'a', MockResultsSummary( 'Linux.bar' ) ] ]
-        D = dasherlib.get_latest_results_for_each_label( sumL )
+        resL = [ MockResultsSummary( 'Linux.foo' ),
+                 MockResultsSummary( 'Linux.bar' ),
+                 MockResultsSummary( 'Linux.foo' ),
+                 MockResultsSummary( 'Linux.bar' ) ]
+        cache = dasherlib.ResultsCache( resL )
+        D = cache.getLatestResults()
         assert len(D) == 2
-        assert D['Linux.foo'][0] == tm3
-        assert D['Linux.bar'][0] == tm2
+        assert id( D['Linux.foo'] ) == id( resL[0] )
+        assert id( D['Linux.bar'] ) == id( resL[1] )
 
-        sumL = [ [ tm3, 'a', MockResultsSummary( 'Linux.foo', finished=False ) ],
-                 [ tm2, 'a', MockResultsSummary( 'Linux.bar', finished=False ) ],
-                 [ tm2, 'a', MockResultsSummary( 'Linux.foo' ) ],
-                 [ tm1, 'a', MockResultsSummary( 'Linux.bar' ) ] ]
-        D = dasherlib.get_latest_results_for_each_label( sumL )
+        resL = [ MockResultsSummary( 'Linux.foo', finished=False ),
+                 MockResultsSummary( 'Linux.bar', finished=False ),
+                 MockResultsSummary( 'Linux.foo' ),
+                 MockResultsSummary( 'Linux.bar' ) ]
+        cache = dasherlib.ResultsCache( resL )
+        D = cache.getLatestResults()
         assert len(D) == 2
-        assert D['Linux.foo'][0] == tm2
-        assert D['Linux.bar'][0] == tm1
+        assert id( D['Linux.foo'] ) == id( resL[2] )
+        assert id( D['Linux.bar'] ) == id( resL[3] )
 
-        sumL = [ [ tm3, 'a', MockResultsSummary( 'Linux.foo', finished=False ) ],
-                 [ tm2, 'a', MockResultsSummary( 'Linux.foo', finished=False ) ] ]
-        D = dasherlib.get_latest_results_for_each_label( sumL )
+        resL = [ MockResultsSummary( 'Linux.foo', finished=False ),
+                 MockResultsSummary( 'Linux.foo', finished=False ) ]
+        cache = dasherlib.ResultsCache( resL )
+        D = cache.getLatestResults()
         assert len(D) == 1
-        assert D['Linux.foo'][0] == tm3
+        assert id( D['Linux.foo'] ) == id( resL[0] )
 
     def test_count_other_results(self):
         ""
