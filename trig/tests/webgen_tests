@@ -50,6 +50,42 @@ class WebFileTestCase( trigutil.trigTestCase ):
                 raw_input( 'Press <Enter> to continue...' )
 
 
+class free_function_tests( trigutil.trigTestCase ):
+
+    def test_making_a_string_URL_safe(self):
+        """
+        https://stackoverflow.com/questions/695438/safe-characters-for-friendly-url
+
+        The reserved characters are:
+
+        ampersand ("&")
+        dollar ("$")
+        plus sign ("+")
+        comma (",")
+        forward slash ("/")
+        colon (":")
+        semi-colon (";")
+        equals ("=")
+        question mark ("?")
+        'At' symbol ("@")
+        pound ("#")
+
+        The characters generally considered unsafe are:
+
+        space (" ")
+        less than and greater than ("<>")
+        open and close brackets ("[]")
+        open and close braces ("{}")
+        pipe ("|")
+        backslash ("\\")
+        caret ("^")
+        percent ("%")
+        """
+        assert webgen.url_safe_string( 'foobar' ) == 'foobar'
+        assert webgen.url_safe_string( '&$+,/:;=?@#' ) == 'adpcsoieqth'
+        assert webgen.url_safe_string( ' <>[]{}|\\^%' ) == '_lgbBrRvkun'
+
+
 class head_and_body_tests( WebFileTestCase ):
 
     def test_create_hello_world_html_document(self):

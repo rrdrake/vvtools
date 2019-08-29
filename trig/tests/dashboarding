@@ -205,6 +205,11 @@ class the_tests( trigutil.trigTestCase ):
         res,cnt = dasherlib.distill_other_results( cnts )
         assert res and cnt == 0
 
+    def test_make_history_filenames(self):
+        ""
+        fn = dasherlib.filename_for_history_results( 'foo bar' )
+        assert fn == 'his_foo_bar.htm'
+
     def test_writing_summary_page(self):
         ""
         url = self.make_dual_test_results( joblabel1='small', joblabel2='medium' )
@@ -221,6 +226,20 @@ class the_tests( trigutil.trigTestCase ):
         assert len( util.greplines( '.small', page ) ) > 0
         assert len( util.greplines( '.medium', page ) ) > 0
         assert len( util.greplines( 'Elapsed', page ) ) > 0
+
+        # bad way to look for the label hyperlink
+        assert len( util.greplines( 'href*.small', page ) ) > 0
+        assert len( util.greplines( 'href*.medium', page ) ) > 0
+
+    def test_writing_summary_and_history_pages(self):
+        ""
+        url = self.make_dual_test_results( joblabel1='small', joblabel2='medium' )
+
+        dash = dasherlib.DashboardCreator( url )
+        dash.readResults()
+        dash.writePages( 'index.htm', summary_title='Rollup' )
+
+        self.setWebFile( 'index.htm' )
 
     def test_dasher_command_line_errors(self):
         ""

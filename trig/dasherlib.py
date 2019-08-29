@@ -37,14 +37,19 @@ class DashboardCreator:
         dsL = [ L[0] for L in self.summaries ]
         return dsL
 
-    def writeHistoryPage(self, pathname, title='Results History',
-                                         label_pattern=None):
+    def writePages(self, pathname, summary_title='Results Summary'):
         ""
-        pathdir = self._write_page_structure( pathname, title )
-        self.body.add( webgen.Heading( title, align='center' ) )
-        self._write_history_table( label_pattern=label_pattern )
-        self._add_scidev_logo( pathdir )
-        self.doc.close()
+        idxfile = determine_index_filename( pathname )
+        pathdir = dirname( idxfile )
+
+        self.writeSummaryPage( idxfile, title=summary_title )
+
+        for dstamp,rdir,rsum in self.summaries:
+            lab = rsum.getLabel()
+            fn = pjoin( pathdir, filename_for_history_results( lab ) )
+            self.writeHistoryPage( fn, title=lab,
+                                       label_pattern='^'+lab+'$',
+                                       show_label=False )
 
     def writeSummaryPage(self, pathname, title='Results Summary'):
         ""
@@ -54,9 +59,20 @@ class DashboardCreator:
         self._add_scidev_logo( pathdir )
         self.doc.close()
 
+    def writeHistoryPage(self, pathname, title='Results History',
+                                         label_pattern=None,
+                                         show_label=True):
+        ""
+        pathdir = self._write_page_structure( pathname, title )
+        self.body.add( webgen.Heading( title, align='center' ) )
+        self._write_history_table( label_pattern=label_pattern,
+                                   show_label=show_label )
+        self._add_scidev_logo( pathdir )
+        self.doc.close()
+
     def _write_page_structure(self, pathname, page_title):
         ""
-        filename = determine_filename( pathname )
+        filename = determine_index_filename( pathname )
 
         self.doc = webgen.HTMLDocument( filename )
 
@@ -66,21 +82,23 @@ class DashboardCreator:
 
         return dirname( filename )
 
-    def _write_history_table(self, label_pattern=None):
+    def _write_history_table(self, label_pattern=None, show_label=True):
         ""
         tab = webgen.Table( border='internal', align='center',
                             background='white', radius=5, padding=2 )
         self.body.add( tab )
 
-        tab.add( 'Job Date', 'Label', 'Elapsed',
-                 'pass', 'fail', 'diff', 'timeout', 'notdone', 'notrun',
-                 'Details',
-                 header=True )
+        add_history_table_header( tab, show_label )
 
+        for ds,rdir,rsum in self._results_summary_loop( label_pattern ):
+            row = tab.add()
+            fill_history_row( row, ds, rdir, rsum, show_label )
+
+    def _results_summary_loop(self, label_pattern):
+        ""
         for ds,rdir,rsum in self.summaries:
             if results_label_match( rsum.getLabel(), label_pattern ):
-                row = tab.add()
-                fill_history_row( row, ds, rdir, rsum )
+                yield ds,rdir,rsum
 
     def _write_summary_table(self):
         ""
@@ -99,13 +117,16 @@ class DashboardCreator:
         for lab in labels:
             ds,rdir,rsum = latest[lab]
             row = tab.add()
-            fill_summary_row( row, ds, rdir, rsum )
+            fill_summary_row( row, ds, rsum )
 
     def _add_scidev_logo(self, page_directory):
         ""
         fn = 'scidev_logo.png'
         mydir = dirname( abspath( __file__ ) )
-        shutil.copy( pjoin( mydir, fn ), pjoin( page_directory, fn ) )
+
+        dest = pjoin( page_directory, fn )
+        if not os.path.exists( dest ):
+            shutil.copy( pjoin( mydir, fn ), dest )
 
         img = webgen.make_image( fn, width=100,
                                  position='fixed', bottom=5, right=5 )
@@ -144,10 +165,25 @@ def get_latest_results_for_each_label( summaries ):
     return resmap
 
 
-def fill_history_row( row, datestamp, resultsdir, summary ):
+def add_history_table_header( tab, show_label ):
+    ""
+    row = tab.add( 'Job Date', header=True )
+
+    if show_label:
+        row.add( 'Label' )
+
+    row.add( 'Elapsed',
+             'pass', 'fail', 'diff', 'timeout', 'notdone', 'notrun',
+             'Details',
+             header=True )
+
+
+def fill_history_row( row, datestamp, resultsdir, summary, show_label ):
     ""
     row.add( make_job_date( datestamp ), align='right' )
-    row.add( summary.getLabel() )
+
+    if show_label:
+        row.add( summary.getLabel() )
 
     add_elapsed_time_entry( summary, row )
 
@@ -161,9 +197,11 @@ def fill_history_row( row, datestamp, resultsdir, summary ):
     row.add( lnk )
 
 
-def fill_summary_row( row, datestamp, resultsdir, summary ):
+def fill_summary_row( row, datestamp, summary ):
     ""
-    row.add( summary.getLabel() )
+    fn = filename_for_history_results( summary.getLabel() )
+    lablnk = webgen.make_hyperlink( fn, summary.getLabel() )
+    row.add( lablnk )
 
     add_elapsed_time_entry( summary, row )
 
@@ -176,6 +214,12 @@ def fill_summary_row( row, datestamp, resultsdir, summary ):
     add_result_entry( row, res, cnt, summary )
 
     row.add( '' )
+
+
+def filename_for_history_results( label ):
+    ""
+    fn = 'his_' + webgen.url_safe_string( label ) + '.htm'
+    return fn
 
 
 def add_elapsed_time_entry( summary, row ):
@@ -244,7 +288,7 @@ def make_job_date( epoch ):
     return stm
 
 
-def determine_filename( pathname ):
+def determine_index_filename( pathname ):
     ""
     if os.path.isdir( pathname ):
         fn = pjoin( abspath( pathname ), 'index.htm' )

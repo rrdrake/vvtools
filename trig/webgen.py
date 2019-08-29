@@ -571,3 +571,61 @@ class Writer:
         ""
         self.fp.close()
         self.fp = None
+
+
+def url_safe_string( segment ):
+    """
+    replaces reserved and unsafe characters for use in web url segments
+
+        https://stackoverflow.com/questions/695438/safe-characters-for-friendly-url
+
+        The reserved characters are:
+
+        ampersand ("&")
+        dollar ("$")
+        plus sign ("+")
+        comma (",")
+        forward slash ("/")
+        colon (":")
+        semi-colon (";")
+        equals ("=")
+        question mark ("?")
+        'At' symbol ("@")
+        pound ("#")
+
+        The characters generally considered unsafe are:
+
+        space (" ")
+        less than and greater than ("<>")
+        open and close brackets ("[]")
+        open and close braces ("{}")
+        pipe ("|")
+        backslash ("\\")
+        caret ("^")
+        percent ("%")
+    """
+    seg = segment.replace( '&', 'a' )
+    seg = seg.replace( '$', 'd' )
+    seg = seg.replace( '+', 'p' )
+    seg = seg.replace( ',', 'c' )
+    seg = seg.replace( '/', 's' )
+    seg = seg.replace( ':', 'o' )
+    seg = seg.replace( ';', 'i' )
+    seg = seg.replace( '=', 'e' )
+    seg = seg.replace( '?', 'q' )
+    seg = seg.replace( '@', 't' )
+    seg = seg.replace( '#', 'h' )
+
+    seg = seg.replace( ' ', '_' )
+    seg = seg.replace( '<', 'l' )
+    seg = seg.replace( '>', 'g' )
+    seg = seg.replace( '[', 'b' )
+    seg = seg.replace( ']', 'B' )
+    seg = seg.replace( '{', 'r' )
+    seg = seg.replace( '}', 'R' )
+    seg = seg.replace( '|', 'v' )
+    seg = seg.replace( '\\', 'k' )
+    seg = seg.replace( '^', 'u' )
+    seg = seg.replace( '%', 'n' )
+
+    return seg
