@@ -12,17 +12,20 @@ import dasherlib
 help_dasher = \
 """
 SYNOPSIS
-    Create web page from GitLab vvtest results.
+    Create static web pages from vvtest results sent to a Git repository.
 
-COMMANDS:
+USAGE:
     dasher --gitlab <project URL> <filename>
 
+OPTIONS:
+    --title <string> : sets the title on the landing page (the summary page)
 """
 
 
 def main():
     ""
-    optL,argL = getopt.getopt( sys.argv[1:], 'h', ['help','gitlab='] )
+    optL,argL = getopt.getopt( sys.argv[1:], 'h',
+                               ['help','gitlab=','title='] )
 
     optD = {}
     for n,v in optL:
@@ -42,7 +45,7 @@ def main():
 
     dash = dasherlib.DashboardCreator( giturl )
     dash.readResults()
-    dash.writeHistoryPage( pathname )
+    dash.writePages( pathname, optD.get( '--title', None ) )
 
 
 def print3( *args ):

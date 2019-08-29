@@ -29,8 +29,11 @@ class DashboardCreator:
         dsL = [ gr.getDateStamp() for gr in self.results.iterate() ]
         return dsL
 
-    def writePages(self, filepath, summary_title='Results Summary'):
+    def writePages(self, filepath, summary_title=None):
         ""
+        if not summary_title:
+            summary_title = 'Results Summary'
+
         idxfile = determine_page_filename( filepath )
         pathdir = dirname( idxfile )
 
