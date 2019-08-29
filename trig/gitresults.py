@@ -124,6 +124,14 @@ class ResultsSummary:
         tm = time.mktime( time.strptime( ts, "%Y_%m_%d_%H" ) )
         return tm
 
+    def getResultsSubdirectory(self):
+        ""
+        return basename( self.rdir )
+
+    def getResultsBranch(self):
+        ""
+        return self.branch
+
     def getLabel(self):
         ""
         ls = basename( self.rdir ).split('.',1)[1]
