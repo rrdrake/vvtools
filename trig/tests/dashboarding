@@ -15,6 +15,7 @@ from os.path import basename
 import shutil
 import time
 import glob
+import subprocess
 import unittest
 
 import trigtestutils as trigutil
@@ -352,10 +353,14 @@ class the_tests( trigutil.trigTestCase ):
 
         assert os.path.isfile( 'webpage1/page.htm' )
 
-        cmd = trigutil.dasher_file + \
+        cmd = sys.executable + ' ' + trigutil.dasher_file + \
                 ' --title "Super duper results"' + \
+                " --label '(Linux|[dD]arwin)'" + \
+                " --info 'Linux->these are the Linux tests'" + \
+                " --info '.*->not sure what these tests are'" + \
                 ' --gitlab '+url + ' webpage2'
-        x,out = util.runcmd( cmd )
+        print3( cmd )
+        subprocess.check_call( cmd, shell=True )
 
         assert os.path.isfile( 'webpage2/index.htm' )
         self.setWebFile( 'webpage2/index.htm' )
