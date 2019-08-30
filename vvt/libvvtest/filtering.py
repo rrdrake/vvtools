@@ -26,6 +26,14 @@ class TestFilter:
 
         return ok
 
+    def checkEnabled(self, tcase):
+        ""
+        tspec = tcase.getSpec()
+        ok = tspec.isEnabled()
+        if not ok:
+            tcase.getStat().markSkipByEnabled()
+        return ok
+
     def checkPlatform(self, tcase):
         ""
         tspec = tcase.getSpec()
@@ -150,6 +158,7 @@ class TestFilter:
 
             self.checkParameters( tcase, permanent=True ) and \
                 self.checkKeywords( tcase, results_keywords=False ) and \
+                self.checkEnabled( tcase ) and \
                 self.checkPlatform( tcase ) and \
                 self.checkOptions( tcase ) and \
                 self.checkTDD( tcase ) and \
@@ -183,6 +192,7 @@ class TestFilter:
 
                     # these don't work in restart mode
                     #   self.checkFileSearch( tcase )
+                    #   self.checkEnabled( tcase )
                     #   self.checkPlatform( tcase )
                     #   self.checkOptions( tcase )
                     #   self.userValidation( tcase )

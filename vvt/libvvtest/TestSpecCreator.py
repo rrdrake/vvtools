@@ -214,7 +214,7 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
 
     for t in testL:
         parseKeywords_scr     ( t, vspecs, tname )
-        parse_enable_platform ( t, vspecs )
+        parse_enable          ( t, vspecs )
         parseFiles_scr        ( t, vspecs, evaluator )
         parseTimeouts_scr     ( t, vspecs, evaluator )
         parseBaseline_scr     ( t, vspecs, evaluator )
@@ -386,7 +386,7 @@ def reparse_test_object( evaluator, testobj ):
 
         tname = testobj.getName()
 
-        parse_enable_platform( testobj, vspecs )
+        parse_enable( testobj, vspecs )
 
         if testobj.isAnalyze():
             analyze_spec = parseAnalyze_scr( testobj, vspecs, evaluator )
@@ -1283,7 +1283,7 @@ def parse_include_platform( testobj, xmldoc ):
                 testobj.addEnableOptionExpression( wx )
 
 
-def parse_enable_platform( testobj, vspecs ):
+def parse_enable( testobj, vspecs ):
     """
     Parse syntax that will filter out this test by platform or build option.
     
@@ -1292,7 +1292,9 @@ def parse_enable_platform( testobj, vspecs ):
         #VVT: enable (platforms="not SunOS and not Linux")
         #VVT: enable (options="not dbg and ( tridev or tri8 )")
         #VVT: enable (platforms="...", options="...")
-    
+        #VVT: enable = True
+        #VVT: enable = False
+
     If both platform and option expressions are given, their results are
     ANDed together.  If more than one "enable" block is given, each must
     result in True for the test to be included.
@@ -1300,6 +1302,9 @@ def parse_enable_platform( testobj, vspecs ):
     tname = testobj.getName()
 
     for spec in vspecs.getSpecList( 'enable' ):
+
+        platexpr = None
+        opexpr = None
 
         if spec.attrs:
 
@@ -1331,6 +1336,17 @@ def parse_enable_platform( testobj, vspecs ):
                 if opexpr:
                     wx = FilterExpressions.WordExpression( opexpr )
                     testobj.addEnableOptionExpression( wx )
+
+        if spec.value:
+            val = spec.value.lower().strip()
+            if val != 'true' and val != 'false':
+                raise TestSpecError( 'invalid "enable" value, line ' + \
+                                     str(spec.lineno) )
+            if val == 'false' and ( platexpr != None or opexpr != None ):
+                raise TestSpecError( 'an "enable" with platforms or ' + \
+                    'options attributes cannot specify "false", line ' + \
+                    str(spec.lineno) )
+            testobj.setEnabled( val == 'true' )
 
 
 def parseAnalyze( t, filedoc, evaluator ):

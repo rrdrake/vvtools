@@ -17,6 +17,11 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
+from libvvtest.ScriptReader import ScriptReader
+from libvvtest.TestSpec import TestSpec
+import libvvtest.TestSpecCreator as TSC
+from libvvtest.filtering import TestFilter
+
 
 class exclude_tests( vtu.vvtestTestCase ):
 
@@ -338,6 +343,124 @@ class exclude_tests( vtu.vvtestTestCase ):
 
         vrun = vtu.runvvtest( '-w -o 2D+tridev -X '+platname )
         vrun.assertCounts( total=0 )
+
+    def test_parse_enable_directive(self):
+        ""
+        util.writefile( 'blue.vvt', """
+            #VVT: enable (platforms=)
+            """ )
+        util.writefile( 'red.vvt', """
+            #VVT: enable (platforms=XBox)
+            """ )
+        util.writefile( 'green1.vvt', """
+            #VVT: enable
+            """ )
+        util.writefile( 'green2.vvt', """
+            #VVT: enable = True
+            """ )
+        util.writefile( 'green3.vvt', """
+            #VVT: enable = False
+            """ )
+        util.writefile( 'green4.vvt', """
+            #VVT: enable : false
+            """ )
+        util.writefile( 'pink1.vvt', """
+            #VVT: enable (platforms=) : false
+            # this is an error
+            """ )
+        util.writefile( 'pink2.vvt', """
+            #VVT: enable (options=) = false
+            # this is an error
+            """ )
+        util.writefile( 'pink3.vvt', """
+            #VVT: enable (options=foo) = true
+            # this is ok but redundent/unnecessary
+            """ )
+        util.writefile( 'pink4.vvt', """
+            #VVT: enable = foobar
+            """ )
+        time.sleep(1)
+
+        vspecs = ScriptReader( 'blue.vvt' )
+        tspec = TestSpec( 'blue', os.getcwd(), 'blue.vvt' )
+        TSC.parse_enable( tspec, vspecs )
+
+        exprL = tspec.getPlatformEnableExpressions()
+        assert len( exprL ) == 1
+        assert not exprL[0].evaluate( lambda word: True )
+
+        vspecs = ScriptReader( 'red.vvt' )
+        tspec = TestSpec( 'red', os.getcwd(), 'red.vvt' )
+        TSC.parse_enable( tspec, vspecs )
+
+        exprL = tspec.getPlatformEnableExpressions()
+        assert len( exprL ) == 1
+        assert     exprL[0].evaluate( lambda word: word == 'XBox' )
+        assert not exprL[0].evaluate( lambda word: word == 'PS2' )
+
+        vspecs = ScriptReader( 'green1.vvt' )
+        tspec = TestSpec( 'green1', os.getcwd(), 'green1.vvt' )
+        TSC.parse_enable( tspec, vspecs )
+        assert tspec.isEnabled()
+
+        vspecs = ScriptReader( 'green2.vvt' )
+        tspec = TestSpec( 'green2', os.getcwd(), 'green2.vvt' )
+        TSC.parse_enable( tspec, vspecs )
+        assert tspec.isEnabled()
+
+        vspecs = ScriptReader( 'green3.vvt' )
+        tspec = TestSpec( 'green3', os.getcwd(), 'green3.vvt' )
+        TSC.parse_enable( tspec, vspecs )
+        assert not tspec.isEnabled()
+
+        vspecs = ScriptReader( 'green4.vvt' )
+        tspec = TestSpec( 'green4', os.getcwd(), 'green4.vvt' )
+        TSC.parse_enable( tspec, vspecs )
+        assert not tspec.isEnabled()
+
+        vspecs = ScriptReader( 'pink1.vvt' )
+        tspec = TestSpec( 'pink1', os.getcwd(), 'pink1.vvt' )
+        self.assertRaises( TSC.TestSpecError, TSC.parse_enable, tspec, vspecs )
+
+        vspecs = ScriptReader( 'pink2.vvt' )
+        tspec = TestSpec( 'pink2', os.getcwd(), 'pink2.vvt' )
+        self.assertRaises( TSC.TestSpecError, TSC.parse_enable, tspec, vspecs )
+
+        vspecs = ScriptReader( 'pink3.vvt' )
+        tspec = TestSpec( 'pink3', os.getcwd(), 'pink3.vvt' )
+        TSC.parse_enable( tspec, vspecs )
+        assert tspec.isEnabled()
+        assert len( tspec.getOptionEnableExpressions() ) == 1
+
+        vspecs = ScriptReader( 'pink4.vvt' )
+        tspec = TestSpec( 'pink4', os.getcwd(), 'pink4.vvt' )
+        self.assertRaises( TSC.TestSpecError, TSC.parse_enable, tspec, vspecs )
+
+    def test_filtering_out_tests_by_enable(self):
+        ""
+        tcase = vtu.make_fake_TestCase()
+        tf = TestFilter( None, None )
+        assert tf.checkEnabled( tcase )
+
+        tcase.getSpec().setEnabled( False )
+        assert not tf.checkEnabled( tcase )
+
+    def test_parse_enable_integration_test(self):
+        ""
+        util.writefile( 'blue.vvt', """
+            #VVT: enable : True
+            import vvtest_util
+            """ )
+        util.writefile( 'red.vvt', """
+            #VVT: enable : False
+            import vvtest_util
+            """ )
+        time.sleep(1)
+
+        vrun = vtu.runvvtest( '-vv' )
+        vrun.assertCounts( total=2, npass=1, skip=1 )
+        assert vrun.countTestLines( 'blue*pass' ) == 1
+        assert vrun.countTestLines( 'red*skip' ) == 1
 
 
 ########################################################################

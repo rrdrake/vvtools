@@ -116,6 +116,10 @@ class TestSpec:
         else:
             return 'script'
 
+    def isEnabled(self):
+        ""
+        return self.enabled
+
     def getKeywords(self, include_implicit=True):
         """
         Returns the list of keyword strings.  If 'include_implicit' is True,
@@ -342,13 +346,15 @@ class TestSpec:
         """
         assert not os.path.isabs(filepath)
 
-        self.data = {}
-
         self.ctor_done = False
 
         self.name = name
         self.rootpath = rootpath
         self.filepath = filepath
+
+        self.enabled = True
+        self.plat_enable = []      # list of WordExpression
+        self.option_enable = []    # list of WordExpression
 
         self.keywords = set()      # set of strings
         self.params = {}           # name string to value string
@@ -392,33 +398,32 @@ class TestSpec:
         ""
         return self.ctor_done
 
-    def addDataNameIfNeededAndReturnValue(self, name, data_type):
-        ""
-        if name not in self.data:
-            self.data[name] = data_type()
-        return self.data[name]
-
     ##########################################################
     
     # construction methods
 
+    def setEnabled(self, is_enabled):
+        ""
+        if is_enabled:
+            self.enabled = True
+        else:
+            self.enabled = False
+
     def addEnablePlatformExpression(self, word_expression):
         ""
-        L = self.addDataNameIfNeededAndReturnValue( 'platform enable', list )
-        L.append( word_expression )
+        self.plat_enable.append( word_expression )
 
     def addEnableOptionExpression(self, word_expression):
         ""
-        L = self.addDataNameIfNeededAndReturnValue( 'option enable', list )
-        L.append( word_expression )
+        self.option_enable.append( word_expression )
 
     def getPlatformEnableExpressions(self):
         ""
-        return self.data.get( 'platform enable', [] )
+        return self.plat_enable
 
     def getOptionEnableExpressions(self):
         ""
-        return self.data.get( 'option enable', [] )
+        return self.option_enable
 
     def setKeywords(self, keyword_list):
         """
@@ -601,6 +606,9 @@ class TestSpec:
         """
         ts = TestSpec( self.name, self.rootpath, self.filepath )
         ts.ctor_done = self.ctor_done
+        ts.enabled = self.enabled
+        ts.plat_enable = list( self.plat_enable )
+        ts.option_enable = list( self.option_enable )
         ts.keywords = set( self.keywords )
         ts.setParameters({})  # skip ts.params
         ts.analyze_spec = self.analyze_spec

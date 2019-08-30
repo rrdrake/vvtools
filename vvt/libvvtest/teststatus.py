@@ -28,6 +28,7 @@ SKIP_REASON = {
         KEYWORD_SKIP         : 'excluded by keyword expression',
         RESULTS_KEYWORD_SKIP : 'previous result keyword expression',
         SUBDIR_SKIP          : 'current working directory',
+        'enabled'            : 'disabled',
         'platform'           : 'excluded by platform expression',
         'option'             : 'excluded by option expression',
         'tdd'                : 'TDD test',
@@ -98,6 +99,10 @@ class TestStatus:
     def markSkipBySubdirectoryFilter(self):
         ""
         self.tspec.setAttr( 'skip', SUBDIR_SKIP )
+
+    def markSkipByEnabled(self):
+        ""
+        self.tspec.setAttr( 'skip', 'enabled' )
 
     def markSkipByPlatform(self):
         ""
