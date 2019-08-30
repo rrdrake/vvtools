@@ -106,7 +106,7 @@ class ResultsCache:
         ""
         self.labels = labelnames
 
-    def iterate(self, label_pattern=None):
+    def iterate(self):
         ""
         if self.labels != None:
             for gr in self.gitres:
@@ -114,11 +114,15 @@ class ResultsCache:
                     if results_label_match( gr.getLabel(), lab ):
                         yield gr
                         break
-
         else:
             for gr in self.gitres:
-                if results_label_match( gr.getLabel(), label_pattern ):
-                    yield gr
+                yield gr
+
+    def iterateLabel(self, label_pattern):
+        ""
+        for gr in self.gitres:
+            if results_label_match( gr.getLabel(), label_pattern ):
+                yield gr
 
     def getLatestResults(self):
         """
@@ -266,7 +270,7 @@ def write_history_table( body, results,
 
     add_history_table_header( tab, show_label )
 
-    for gr in results.iterate( label_pattern ):
+    for gr in results.iterateLabel( label_pattern ):
         row = tab.add()
         fill_history_row( row, gr, show_label )
 
