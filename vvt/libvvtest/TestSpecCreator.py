@@ -205,10 +205,7 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
 
     testL = generate_test_objects( tname, rootpath, relpath, paramset )
 
-    if paramset.getStagedGroup():
-        stager = TestStager( paramset.getStagedGroup(), testL )
-        stager.markTestList()
-        stager.addDependencies()
+    adjust_test_list_if_staged( paramset, testL )
 
     check_add_analyze_test( paramset, testL, vspecs, evaluator )
 
@@ -242,6 +239,14 @@ def generate_test_objects( tname, rootpath, relpath, paramset ):
             testL.append(t)
 
     return testL
+
+
+def adjust_test_list_if_staged( paramset, testL ):
+    ""
+    if paramset.getStagedGroup():
+        stager = TestStager( paramset.getStagedGroup(), testL )
+        stager.markTestList()
+        stager.addDependencies()
 
 
 class TestStager:
@@ -554,7 +559,6 @@ def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
         { (pA,pB) : [ (value1,val1), (value2,val2) ] }
     """
     paramset = ParameterSet()
-    staged = False
 
     for spec in vspecs.getSpecList( 'parameterize' ):
 
@@ -572,52 +576,60 @@ def parseTestParameters_scr( vspecs, tname, evaluator, force_params ):
         if len(L) < 2:
             raise TestSpecError( "invalid parameterize specification, " + \
                                  "line " + str(lnum) )
-        if not L[0].strip():
+
+        namestr,valuestr = L
+
+        if not namestr.strip():
             raise TestSpecError( "no parameter name given, " + \
                                  "line " + str(lnum) )
+        if not valuestr.strip():
+            raise TestSpecError( "no parameter value(s) given, " + \
+                                 "line " + str(lnum) )
 
-        nL = [ n.strip() for n in L[0].strip().split(',') ]
+        nameL = [ n.strip() for n in namestr.strip().split(',') ]
 
-        for n in nL:
-            if not allowableVariable(n):
-                raise TestSpecError( 'invalid parameter name: "'+n+'", ' + \
-                                     'line ' + str(lnum) )
+        check_parameter_names( nameL, lnum )
 
-        if len(nL) == 1:
-            valL = get_param_values( force_params, nL[0], L[1] )
+        if len(nameL) == 1:
+            valL = parse_param_values( nameL[0], valuestr, force_params )
             check_parameter_values( valL, lnum )
         else:
-            valL = get_param_group_values( nL, L[1], lnum )
-            check_forced_group_parameter( force_params, nL, lnum )
+            valL = parse_param_group_values( nameL, valuestr, lnum )
+            check_forced_group_parameter( force_params, nameL, lnum )
 
-        staged = check_for_staging( spec.attrs, staged, lnum )
-
-        if staged:
-            insert_staging( spec.attrs, nL, valL, paramset )
+        staged = check_for_staging( spec.attrs, paramset, nameL, valL, lnum )
 
         check_for_duplicate_parameter( valL, lnum )
 
-        if len(nL) == 1:
-            paramset.addParameter( nL[0], valL )
+        if len(nameL) == 1:
+            paramset.addParameter( nameL[0], valL )
         else:
-            paramset.addParameterGroup( nL, valL, staged )
+            paramset.addParameterGroup( nameL, valL, staged )
 
     return paramset
 
 
-def check_for_staging( spec_attrs, staged, lineno ):
-    ""
+def check_for_staging( spec_attrs, paramset, nameL, valL, lineno ):
+    """
+    for staged parameterize, the names & values are augmented. for example,
+
+        nameL = [ 'pname' ] would become [ 'stage', 'pname' ]
+        valL = [ 'val1', 'val2' ] would become [ ['1','val1'], ['2','val2'] ]
+    """
     if spec_attrs and 'staged' in spec_attrs:
-        if staged:
+
+        if paramset.getStagedGroup() != None:
             raise TestSpecError( 'only one parameterize can be staged' + \
                                  ', line ' + str(lineno) )
+
+        insert_staging_into_names_and_values( nameL, valL )
 
         return True
 
     return False
 
 
-def insert_staging( spec_attrs, names, values, paramset ):
+def insert_staging_into_names_and_values( names, values ):
     ""
     if len( names ) == 1:
         values[:] = [ [str(i),v] for i,v in enumerate(values, start=1) ]
@@ -625,6 +637,14 @@ def insert_staging( spec_attrs, names, values, paramset ):
         values[:] = [ [str(i)]+vL for i,vL in enumerate(values, start=1) ]
 
     names[:] = [ 'stage' ] + names
+
+
+def check_parameter_names( name_list, lineno ):
+    ""
+    for v in name_list:
+        if not allowableVariable(v):
+            raise TestSpecError( 'invalid parameter name: "' + \
+                                 v+'", line ' + str(lineno) )
 
 
 def check_parameter_values( value_list, lineno ):
@@ -635,7 +655,7 @@ def check_parameter_values( value_list, lineno ):
                                  v+'", line ' + str(lineno) )
 
 
-def get_param_values( force_params, param_name, value_string ):
+def parse_param_values( param_name, value_string, force_params ):
     ""
     if force_params != None and param_name in force_params:
         vals = force_params[ param_name ]
@@ -647,7 +667,7 @@ def get_param_values( force_params, param_name, value_string ):
 
 spaced_comma_pattern = re.compile( '[\t ]*,[\t ]*' )
 
-def get_param_group_values( name_list, value_string, lineno ):
+def parse_param_group_values( name_list, value_string, lineno ):
     ""
     compressed_string = spaced_comma_pattern.sub( ',', value_string.strip() )
 

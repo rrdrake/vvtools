@@ -85,23 +85,33 @@ class staged_parameters( vtu.vvtestTestCase ):
         # marking staging parameters when they are not parameters
         # changing the parameters when the markings have already been set
         # multiple parameters in a stage
-        # test post-clean with staging
+        # test pre-clean and post-clean with staging
 
     def test_parse_staged_parameters(self):
         ""
         util.writefile( 'blue.vvt', """
             #VVT: parameterize (staged) : np = 1 8 1
             """ )
+        util.writefile( 'err1.vvt', """
+            #VVT: parameterize (staged) : np = 1 8 1
+            #VVT: parameterize          : hsize = 1.1 2.2
+            #VVT: parameterize (staged) : run = one two
+            """ )
         time.sleep(1)
 
-        vspecs = ScriptReader( 'blue.vvt' )
         evaluator = TSC.ExpressionEvaluator( 'atari', [] )
+
+        vspecs = ScriptReader( 'blue.vvt' )
         pset = TSC.parseTestParameters_scr( vspecs, 'blue', evaluator, None )
 
         assert len( pset.getInstances() ) == 3
         nL,vL = pset.getStagedGroup()
         assert nL == [ 'stage', 'np' ]
         assert vL == [ ['1','1'], ['2','8'], ['3','1'] ]
+
+        vspecs = ScriptReader( 'err1.vvt' )
+        self.assertRaises( TSC.TestSpecError,
+                TSC.parseTestParameters_scr, vspecs, 'err1', evaluator, None )
 
     def test_parsing_script_with_staged_parameterize(self):
         ""
@@ -176,6 +186,7 @@ class staged_parameters( vtu.vvtestTestCase ):
 
 # magic:
 #   - a restart will also fail, bc the staging is not reparsed
+#       - true still?  the staging is saved to the testlist file
 
 
 def has_dependency( testcase, dep_testcase ):

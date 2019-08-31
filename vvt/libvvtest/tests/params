@@ -17,6 +17,9 @@ import vvtestutils as vtu
 import testutils as util
 from testutils import print3
 
+from libvvtest.ScriptReader import ScriptReader
+import libvvtest.TestSpecCreator as TSC
+
 
 class parameter_tests( vtu.vvtestTestCase ):
 
@@ -324,31 +327,69 @@ class parameter_tests( vtu.vvtestTestCase ):
             vtu.runvvtest( '-i -k dog' ).assertCounts( total=0 )
             vtu.runvvtest( '-i -k Z' ).assertCounts( total=4, npass=4 )
 
-    def test_duplicate_parameterize_values_is_an_error(self):
+    def test_parameterize_parse_errors(self):
         ""
-        util.writescript( 'params1.vvt', """
-            #!"""+sys.executable+"""
+        util.writefile( 'err1.vvt', """
+            #VVT: parameterize : np =
+            """ )
+        util.writefile( 'err2.vvt', """
+            #VVT: parameterize : = 2 4
+            """ )
+        util.writefile( 'err3.vvt', """
+            #VVT: parameterize : foo-bar = 2 4
+            """ )
+        util.writefile( 'err4.vvt', """
             #VVT: parameterize : animal = dog cat dog
-            pass
             """ )
-        time.sleep(1)
-
-        vrun = vtu.runvvtest()
-        vrun.assertCounts( total=0 )
-        assert len( util.greplines( 'skip*duplicate*dog', vrun.out ) ) == 1
-
-    def test_duplicate_parameterize_value_set_is_an_error(self):
-        ""
-        util.writescript( 'params1.vvt', """
-            #!"""+sys.executable+"""
+        util.writefile( 'err4b.vvt', """
             #VVT: parameterize : thing1,thing2 = dog,cat pig,cat dog,cat
-            pass
+            """ )
+        util.writefile( 'err5.vvt', """
+            #VVT: parameterize : np = 1 4
+            #VVT: parameterize : hsize,dt = 1.1, 0.1  2.2, 0.01
+            """ )
+        util.writefile( 'err6.vvt', """
+            #VVT: parameterize : pname = pval p*val
+            """ )
+        util.writefile( 'err7.vvt', """
+            #VVT: parameterize : hsize,dt = 1.1, 0.1  2|2, 0.01
             """ )
         time.sleep(1)
 
-        vrun = vtu.runvvtest()
-        vrun.assertCounts( total=0 )
-        assert len( util.greplines( 'skip*duplicate*dog,cat', vrun.out ) ) == 1
+        evaluator = TSC.ExpressionEvaluator( 'atari', [] )
+
+        vspecs = ScriptReader( 'err1.vvt' )
+        self.assertRaises( TSC.TestSpecError,
+                TSC.parseTestParameters_scr, vspecs, 'err1', evaluator, None )
+
+        vspecs = ScriptReader( 'err2.vvt' )
+        self.assertRaises( TSC.TestSpecError,
+                TSC.parseTestParameters_scr, vspecs, 'err2', evaluator, None )
+
+        vspecs = ScriptReader( 'err3.vvt' )
+        self.assertRaises( TSC.TestSpecError,
+                TSC.parseTestParameters_scr, vspecs, 'err3', evaluator, None )
+
+        vspecs = ScriptReader( 'err4.vvt' )
+        self.assertRaises( TSC.TestSpecError,
+                TSC.parseTestParameters_scr, vspecs, 'err4', evaluator, None )
+
+        vspecs = ScriptReader( 'err4b.vvt' )
+        self.assertRaises( TSC.TestSpecError,
+                TSC.parseTestParameters_scr, vspecs, 'err4b', evaluator, None )
+
+        vspecs = ScriptReader( 'err5.vvt' )
+        TSC.parseTestParameters_scr( vspecs, 'err5', evaluator, {'np':'3'} )
+        self.assertRaises( TSC.TestSpecError,
+                TSC.parseTestParameters_scr, vspecs, 'err5', evaluator, {'dt':'0.2'} )
+
+        vspecs = ScriptReader( 'err6.vvt' )
+        self.assertRaises( TSC.TestSpecError,
+                TSC.parseTestParameters_scr, vspecs, 'err6', evaluator, None )
+
+        vspecs = ScriptReader( 'err7.vvt' )
+        self.assertRaises( TSC.TestSpecError,
+                TSC.parseTestParameters_scr, vspecs, 'err7', evaluator, None )
 
 
 #####################################################################
