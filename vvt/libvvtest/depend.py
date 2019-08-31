@@ -100,10 +100,10 @@ def connect_dependency( from_tcase, to_tcase, pattrn=None, expr=None ):
         to_tcase.setHasDependent()
 
 
-def find_tests_by_pattern( xdir, pattern, xdir2tcase ):
+def find_tests_by_pattern( xdir, pattern, testcasemap ):
     """
     Given 'xdir' dependent execute directory, the shell glob 'pattern' is
-    matched against the execute directories in the 'xdir2tcase', in this order:
+    matched against the execute directories in the 'testcasemap', in this order:
 
         1. basename(xdir)/pat
         2. basename(xdir)/*/pat
@@ -122,7 +122,7 @@ def find_tests_by_pattern( xdir, pattern, xdir2tcase ):
 
     L1 = [] ; L2 = [] ; L3 = [] ; L4 = []
 
-    for tcase in xdir2tcase.values():
+    for tcase in testcasemap.values():
 
         xdir = tcase.getSpec().getDisplayString()
         tid = tcase.getSpec().getID()

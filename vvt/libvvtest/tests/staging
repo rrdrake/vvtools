@@ -10,6 +10,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
+from os.path import basename
 import time
 
 import vvtestutils as vtu
@@ -113,38 +114,313 @@ class staged_parameters( vtu.vvtestTestCase ):
         self.assertRaises( TSC.TestSpecError,
                 TSC.parseTestParameters_scr, vspecs, 'err1', evaluator, None )
 
-    def test_parsing_script_with_staged_parameterize(self):
+    def create_test_list(self, spec_file):
+        ""
+        tname = os.path.splitext( basename( spec_file ) )[0]
+
+        vspecs = ScriptReader( spec_file )
+        evaluator = TSC.ExpressionEvaluator( 'atari', [] )
+        pset = TSC.parseTestParameters_scr( vspecs, tname, evaluator, None )
+
+        testL = TSC.generate_test_objects( tname, os.getcwd(), spec_file, pset )
+
+        return pset, testL
+
+    def test_staged_parameter_names_are_stored_in_the_parameterset(self):
         ""
         util.writefile( 'blue.vvt', """
             #VVT: parameterize (staged) : np = 1 8 1
             """ )
+        util.writefile( 'red.vvt', """
+            #VVT: parameterize (staged) : np,sz = 1, 1.1  8, 10.0
+            """ )
         time.sleep(1)
 
-        creator = TSC.TestCreator( RuntimeConfig() )
-        tL = creator.fromFile( os.getcwd(), 'blue.vvt', None )
+        pset,testL = self.create_test_list( 'blue.vvt' )
 
-        assert len(tL) == 3
-        sortL = []
-        testid2testcase = {}
-        for ts in tL:
-            assert ts.getExecuteDirectory() == 'blue.np'
-            tcase = TestCase( ts, None )
-            sortL.append( (ts.getDisplayString(),tcase) )
-            testid2testcase[ ts.getID() ] = tcase
+        nameL,valL = pset.getStagedGroup()
+        assert nameL == [ 'stage', 'np' ]
+        assert valL == [ ['1','1'], ['2','8'], ['3','1'] ]
 
-        sortL.sort()
-        tc0,tc1,tc2 = [ T[1] for T in sortL ]
+        pset,testL = self.create_test_list( 'red.vvt' )
 
-        assert tc0.getSpec().isFirstStage()
-        assert not tc1.getSpec().isFirstStage()
-        assert not tc2.getSpec().isFirstStage()
+        nameL,valL = pset.getStagedGroup()
+        assert nameL == [ 'stage', 'np', 'sz' ]
+        assert valL == [ ['1','1','1.1'], ['2','8','10.0'] ]
 
-        assert not tc0.getSpec().isLastStage()
-        assert not tc1.getSpec().isLastStage()
-        assert tc2.getSpec().isLastStage()
+    def test_staging_oracle_knows_how_many_stages(self):
+        ""
+        util.writefile( 'blue.vvt', """
+            #VVT: parameterize (staged) : np = 1 8 1
+            """ )
+        util.writefile( 'red.vvt', """
+            #VVT: parameterize (staged) : np,sz = 1, 1.1  8, 10.0
+            """ )
+        time.sleep(1)
 
-        assert has_dependency( tc1, tc0 )
-        assert has_dependency( tc2, tc1 )
+        pset,testL = self.create_test_list( 'blue.vvt' )
+        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        assert oracle.numStages() == 3
+
+        pset,testL = self.create_test_list( 'red.vvt' )
+        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        assert oracle.numStages() == 2
+
+    def test_staging_oracle_can_determine_the_stage_index_of_a_test(self):
+        ""
+        util.writefile( 'blue.vvt', """
+            #VVT: parameterize (staged) : np = 2 8 1
+            """ )
+        util.writefile( 'red.vvt', """
+            #VVT: parameterize (staged) : np,sz = 1, 1.1  8, 10.0
+            """ )
+        util.writefile( 'pink.vvt', """
+            #VVT: parameterize (staged) : np = 1 8
+            #VVT: parameterize          : sz = 1.1 2.2
+            """ )
+        time.sleep(1)
+
+        pset,testL = self.create_test_list( 'blue.vvt' )
+        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        assert len( testL ) == 3
+        for ts in testL:
+            if ts.getParameterValue( 'np' ) == '2':
+                assert oracle.getStageIndex( ts ) == 0
+            elif ts.getParameterValue( 'np' ) == '8':
+                assert oracle.getStageIndex( ts ) == 1
+            elif ts.getParameterValue( 'np' ) == '1':
+                assert oracle.getStageIndex( ts ) == 2
+
+        pset,testL = self.create_test_list( 'red.vvt' )
+        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        assert len( testL ) == 2
+        for ts in testL:
+            if ts.getParameterValue( 'np' ) == '1':
+                assert oracle.getStageIndex( ts ) == 0
+            elif ts.getParameterValue( 'np' ) == '8':
+                assert oracle.getStageIndex( ts ) == 1
+
+        pset,testL = self.create_test_list( 'pink.vvt' )
+        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        assert len( testL ) == 4
+        num_idx_0 = num_idx_1 = 0
+        for ts in testL:
+            if ts.getParameterValue( 'np' ) == '1':
+                assert oracle.getStageIndex( ts ) == 0
+                num_idx_0 += 1
+            elif ts.getParameterValue( 'np' ) == '8':
+                assert oracle.getStageIndex( ts ) == 1
+                num_idx_1 += 1
+        assert num_idx_0 == 2
+        assert num_idx_1 == 2
+
+    def test_staging_oracle_can_find_previous_stage_test(self):
+        ""
+        util.writefile( 'blue.vvt', """
+            #VVT: parameterize (staged) : np = 2 8 1
+            """ )
+        util.writefile( 'red.vvt', """
+            #VVT: parameterize (staged) : np,sz = 1, 1.1  8, 10.0
+            """ )
+        util.writefile( 'pink.vvt', """
+            #VVT: parameterize (staged) : np = 1 8
+            #VVT: parameterize          : sz = 1.1 2.2
+            """ )
+        time.sleep(1)
+
+        pset,testL = self.create_test_list( 'blue.vvt' )
+        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        for ts in testL:
+            prev = oracle.findPreviousStageTest( ts )
+            np = ts.getParameterValue( 'np' )
+            if np == '2':
+                assert prev == None
+            elif np == '8':
+                assert prev.getParameterValue( 'np' ) == '2'
+            elif np == '1':
+                assert prev.getParameterValue( 'np' ) == '8'
+            else:
+                raise Exception( 'unexpected np value: '+str(np) )
+
+        pset,testL = self.create_test_list( 'red.vvt' )
+        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        for ts in testL:
+            prev = oracle.findPreviousStageTest( ts )
+            np = ts.getParameterValue( 'np' )
+            if np == '1':
+                assert prev == None
+            elif np == '8':
+                assert prev.getParameterValue( 'np' ) == '1'
+                assert prev.getParameterValue( 'sz' ) == '1.1'
+            else:
+                raise Exception( 'unexpected np value: '+str(np) )
+
+        pset,testL = self.create_test_list( 'pink.vvt' )
+        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        for ts in testL:
+            prev = oracle.findPreviousStageTest( ts )
+            np = ts.getParameterValue( 'np' )
+            if np == '1':
+                assert prev == None
+            elif np == '8':
+                assert prev.getParameterValue( 'np' ) == '1'
+                assert prev.getParameterValue( 'sz' ) == ts.getParameterValue( 'sz' )
+            else:
+                raise Exception( 'unexpected np value: '+str(np) )
+
+    def test_specifications_with_staging(self):
+        ""
+        util.writefile( 'blue.vvt', """
+            #VVT: parameterize (staged) : np = 2 8 1
+            """ )
+        util.writefile( 'red.vvt', """
+            #VVT: parameterize (staged) : np,sz = 1, 1.1  8, 10.0
+            """ )
+        util.writefile( 'pink.vvt', """
+            #VVT: parameterize (staged) : np = 1 8
+            #VVT: parameterize          : sz = 1.1 2.2
+            """ )
+        time.sleep(1)
+
+        pset,testL = self.create_test_list( 'blue.vvt' )
+        TSC.mark_staged_tests( pset, testL )
+
+        for tspec in testL:
+            np = tspec.getParameterValue( 'np' )
+            if np == '2':
+                displ = basename( tspec.getDisplayString() )
+                assert displ == 'blue.np stage=1(np=2)'
+                assert tspec.getStageID() == 'stage=1'
+                assert     tspec.isFirstStage()
+                assert not tspec.isLastStage()
+                assert tspec.getExecuteDirectory() == 'blue.np'
+            elif np == '8':
+                displ = basename( tspec.getDisplayString() )
+                assert displ == 'blue.np stage=2(np=8)'
+                assert tspec.getStageID() == 'stage=2'
+                assert not tspec.isFirstStage()
+                assert not tspec.isLastStage()
+                assert tspec.getExecuteDirectory() == 'blue.np'
+            elif np == '1':
+                displ = basename( tspec.getDisplayString() )
+                assert displ == 'blue.np stage=3(np=1)'
+                assert tspec.getStageID() == 'stage=3'
+                assert not tspec.isFirstStage()
+                assert     tspec.isLastStage()
+                assert tspec.getExecuteDirectory() == 'blue.np'
+            else:
+                raise Exception( 'unexpected np value: '+str(np) )
+
+        pset,testL = self.create_test_list( 'red.vvt' )
+        TSC.mark_staged_tests( pset, testL )
+
+        for tspec in testL:
+            np = tspec.getParameterValue( 'np' )
+            if np == '1':
+                displ = basename( tspec.getDisplayString() )
+                assert displ == 'red.np.sz stage=1(np=1,sz=1.1)'
+                assert tspec.getStageID() == 'stage=1'
+                assert     tspec.isFirstStage()
+                assert not tspec.isLastStage()
+                assert tspec.getExecuteDirectory() == 'red.np.sz'
+            elif np == '8':
+                displ = basename( tspec.getDisplayString() )
+                assert displ == 'red.np.sz stage=2(np=8,sz=10.0)'
+                assert tspec.getStageID() == 'stage=2'
+                assert not tspec.isFirstStage()
+                assert     tspec.isLastStage()
+                assert tspec.getExecuteDirectory() == 'red.np.sz'
+            else:
+                raise Exception( 'unexpected np value: '+str(np) )
+
+        pset,testL = self.create_test_list( 'pink.vvt' )
+        TSC.mark_staged_tests( pset, testL )
+
+        for tspec in testL:
+            np = tspec.getParameterValue( 'np' )
+            sz = tspec.getParameterValue( 'sz' )
+            if np == '1' and sz == '1.1':
+                displ = basename( tspec.getDisplayString() )
+                assert displ == 'pink.np.sz=1.1 stage=1(np=1)'
+                assert tspec.getStageID() == 'stage=1'
+                assert     tspec.isFirstStage()
+                assert not tspec.isLastStage()
+                assert tspec.getExecuteDirectory() == 'pink.np.sz=1.1'
+            elif np == '1' and sz == '2.2':
+                displ = basename( tspec.getDisplayString() )
+                assert displ == 'pink.np.sz=2.2 stage=1(np=1)'
+                assert tspec.getStageID() == 'stage=1'
+                assert     tspec.isFirstStage()
+                assert not tspec.isLastStage()
+                assert tspec.getExecuteDirectory() == 'pink.np.sz=2.2'
+            elif np == '8' and sz == '1.1':
+                displ = basename( tspec.getDisplayString() )
+                assert displ == 'pink.np.sz=1.1 stage=2(np=8)'
+                assert tspec.getStageID() == 'stage=2'
+                assert not tspec.isFirstStage()
+                assert     tspec.isLastStage()
+                assert tspec.getExecuteDirectory() == 'pink.np.sz=1.1'
+            elif np == '8' and sz == '2.2':
+                displ = basename( tspec.getDisplayString() )
+                assert displ == 'pink.np.sz=2.2 stage=2(np=8)'
+                assert tspec.getStageID() == 'stage=2'
+                assert not tspec.isFirstStage()
+                assert     tspec.isLastStage()
+                assert tspec.getExecuteDirectory() == 'pink.np.sz=2.2'
+            else:
+                raise Exception( 'unexpected np,sz value: '+str(np)+','+str(sz) )
+
+    def test_stages_and_their_dependencies(self):
+        ""
+        util.writefile( 'blue.vvt', """
+            #VVT: parameterize (staged) : np = 2 8 1
+            """ )
+        util.writefile( 'pink.vvt', """
+            #VVT: parameterize (staged) : np = 1 8
+            #VVT: parameterize          : sz = 1.1 2.2
+            """ )
+        time.sleep(1)
+
+        pset,testL = self.create_test_list( 'blue.vvt' )
+        TSC.mark_staged_tests( pset, testL )
+
+        for tspec in testL:
+            depL = tspec.getDependencies()
+            np = tspec.getParameterValue( 'np' )
+            if np == '2':
+                assert len( depL ) == 0
+            elif np == '8':
+                assert len( depL ) == 1
+                dep = find_single_dependency( tspec, testL )
+                assert dep.getDisplayString() == 'blue.np stage=1(np=2)'
+            elif np == '1':
+                assert len( depL ) == 1
+                dep = find_single_dependency( tspec, testL )
+                assert dep.getDisplayString() == 'blue.np stage=2(np=8)'
+            else:
+                raise Exception( 'unexpected np value: '+str(np) )
+
+        pset,testL = self.create_test_list( 'pink.vvt' )
+        TSC.mark_staged_tests( pset, testL )
+
+        for tspec in testL:
+            depL = tspec.getDependencies()
+            np = tspec.getParameterValue( 'np' )
+            sz = tspec.getParameterValue( 'sz' )
+            if np == '1' and sz == '1.1':
+                assert len( depL ) == 0
+            elif np == '1' and sz == '2.2':
+                assert len( depL ) == 0
+            elif np == '8' and sz == '1.1':
+                assert len( depL ) == 1
+                dep = find_single_dependency( tspec, testL )
+                assert dep.getDisplayString() == 'pink.np.sz=1.1 stage=1(np=1)'
+            elif np == '8' and sz == '2.2':
+                assert len( depL ) == 1
+                dep = find_single_dependency( tspec, testL )
+                assert dep.getDisplayString() == 'pink.np.sz=2.2 stage=1(np=1)'
+            else:
+                raise Exception( 'unexpected np,sz value: '+str(np)+','+str(sz) )
 
     def test_full_integration_run_with_staging(self):
         ""
@@ -187,6 +463,7 @@ class staged_parameters( vtu.vvtestTestCase ):
 # magic:
 #   - a restart will also fail, bc the staging is not reparsed
 #       - true still?  the staging is saved to the testlist file
+#   - two parameterize with one of them staged
 
 
 def has_dependency( testcase, dep_testcase ):
@@ -207,6 +484,26 @@ def has_dependency( testcase, dep_testcase ):
         return True
 
     return False
+
+
+def find_single_dependency( tspec, testL ):
+    ""
+    testcasemap = {}
+    for ts in testL:
+        testcasemap[ ts.getID() ] = TestCase( ts, None )
+
+    depL = tspec.getDependencies()
+    assert len( depL ) == 1
+    pat,expr = depL[0]
+
+    xdir = tspec.getExecuteDirectory()
+
+    idset = depend.find_tests_by_pattern( xdir, pat, testcasemap )
+    assert len( idset ) == 1
+
+    tcase = testcasemap[ idset.pop() ]
+
+    return tcase.getSpec()
 
 
 ############################################################################

@@ -205,7 +205,7 @@ def createScriptTest( tname, vspecs, rootpath, relpath,
 
     testL = generate_test_objects( tname, rootpath, relpath, paramset )
 
-    adjust_test_list_if_staged( paramset, testL )
+    mark_staged_tests( paramset, testL )
 
     check_add_analyze_test( paramset, testL, vspecs, evaluator )
 
@@ -241,90 +241,93 @@ def generate_test_objects( tname, rootpath, relpath, paramset ):
     return testL
 
 
-def adjust_test_list_if_staged( paramset, testL ):
-    ""
+def mark_staged_tests( paramset, testL ):
+    """
+    1. each test must be told which parameter names form the staged set
+    2. the first and last tests in a staged set must be marked as such
+    3. each staged test "depends on" the previous staged test
+    """
     if paramset.getStagedGroup():
-        stager = TestStager( paramset.getStagedGroup(), testL )
-        stager.markTestList()
-        stager.addDependencies()
+
+        oracle = StagingOracle( paramset.getStagedGroup(), testL )
+
+        for tspec in testL:
+
+            set_stage_params( tspec, oracle )
+
+            prev = oracle.findPreviousStageTest( tspec )
+            if prev:
+                add_staged_dependency( tspec, prev )
 
 
-class TestStager:
+def set_stage_params( tspec, oracle ):
+    ""
+    idx = oracle.getStageIndex( tspec )
+    is_first = ( idx == 0 )
+    is_last = ( idx == oracle.numStages() - 1 )
+
+    names = oracle.getStagedParameterNames()
+
+    tspec.setStagedParameters( is_first, is_last, *names )
+
+
+def add_staged_dependency( from_tspec, to_tspec ):
+    ""
+    wx = create_dependency_result_expression( None )
+    from_tspec.addDependency( to_tspec.getDisplayString(), wx )
+
+
+class StagingOracle:
 
     def __init__(self, stage_group, tspec_list):
         ""
-        self.nameL = stage_group[0]
-        self.valueL = stage_group[1]
-        self.testL = tspec_list
+        self.param_nameL = stage_group[0]
+        self.param_valueL = stage_group[1]
+        self.tspecs = tspec_list
 
-    def markTestList(self):
+        self.stage_values = [ vals[0] for vals in self.param_valueL ]
+
+    def getStagedParameterNames(self):
         ""
-        stage_name = self.nameL[0]
-        stage_values = [ vals[0] for vals in self.valueL ]
+        return self.param_nameL
 
-        for tspec in self.testL:
-            stage_value = tspec.getParameterValue( stage_name )
-            idx = stage_values.index( stage_value )
-            is_first = ( idx == 0 )
-            is_last = ( idx == len(stage_values)-1 )
-            tspec.setStagedParameters( is_first, is_last, *self.nameL )
-
-    def addDependencies(self):
+    def numStages(self):
         ""
-        stage_name = self.nameL[0]
-        stage_values = [ vals[0] for vals in self.valueL ]
+        return len( self.param_valueL )
 
-        for i,dep_stage_val in enumerate(stage_values):
-            if i < len(stage_values)-1:
-                stage_value = stage_values[i+1]
-                for tspec in self._get_tests_at_stage( stage_value ):
-                    self._add_dependency( tspec, dep_stage_val )
-
-    def _add_dependency(self, from_tspec, dep_stage_val):
+    def getStageIndex(self, tspec):
         ""
-        stage_name = self.nameL[0]
+        stage_name = self.param_nameL[0]
+        stage_val = tspec.getParameterValue( stage_name )
+        idx = self.stage_values.index( stage_val )
+        return idx
 
-        params = from_tspec.getParameters()
-        params[ stage_name ] = dep_stage_val
-        dep_test = self._find_stage_test( params )
-
-        wx = create_dependency_result_expression( None )
-        from_tspec.addDependency( dep_test.getDisplayString(), wx )
-
-    def _get_tests_at_stage(self, stage_value):
+    def findPreviousStageTest(self, tspec):
         ""
-        stage_name = self.nameL[0]
+        prev_tspec = None
 
-        matchL = []
-        for tspec in self.testL:
-            val = tspec.getParameterValue( stage_name )
-            if val == stage_value:
-                matchL.append( tspec )
+        idx = self.getStageIndex( tspec )
+        if idx > 0:
 
-        return matchL
+            paramD = tspec.getParameters()
+            self._overwrite_with_stage_params( paramD, idx-1 )
+            prev_tspec = self._find_test_with_parameters( paramD )
 
-    def _find_stage_test(self, params):
+            assert prev_tspec, 'unable to find test with params '+str(paramD)
+
+        return prev_tspec
+
+    def _overwrite_with_stage_params(self, paramD, stage_idx):
         ""
-        stage_param_names = self.nameL[1:]
+        for i,pname in enumerate( self.param_nameL ):
+            pval = self.param_valueL[ stage_idx ][i]
+            paramD[ pname ] = pval
 
-        for n in stage_param_names:
-            params.pop( n )
-
-        matchL = []
-
-        for tspec in self.testL:
-
-            tryparams = {}
-            for n,v in tspec.getParameters().items():
-                if n not in stage_param_names:
-                    tryparams[ n ] = v
-
-            if tryparams == params:
-                matchL.append( tspec )
-
-        assert len( matchL ) == 1
-
-        return matchL[0]
+    def _find_test_with_parameters(self, paramD):
+        ""
+        for tspec in self.tspecs:
+            if tspec.getParameters() == paramD:
+                return tspec
 
 
 def check_add_analyze_test( paramset, testL, vspecs, evaluator ):
