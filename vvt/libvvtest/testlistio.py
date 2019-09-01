@@ -339,8 +339,7 @@ def string_to_test( strid ):
 
     staged = testdict.get( 'staged', None )
     if staged:
-        tspec.setStagedParameters( staged[0], staged[1],
-                                   staged[2], *(staged[3:]) )
+        tspec.setStagedParameters( staged[0], staged[1], *(staged[2:]) )
 
     for k,v in testdict['attrs'].items():
         tspec.setAttr( k, v )

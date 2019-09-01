@@ -249,13 +249,13 @@ def mark_staged_tests( paramset, testL ):
     """
     if paramset.getStagedGroup():
 
-        oracle = StagingOracle( paramset.getStagedGroup(), testL )
+        oracle = StagingOracle( paramset.getStagedGroup() )
 
         for tspec in testL:
 
             set_stage_params( tspec, oracle )
 
-            prev = oracle.findPreviousStageTest( tspec )
+            prev = oracle.findPreviousStageDisplayID( tspec )
             if prev:
                 add_staged_dependency( tspec, prev )
 
@@ -271,19 +271,18 @@ def set_stage_params( tspec, oracle ):
     tspec.setStagedParameters( is_first, is_last, *names )
 
 
-def add_staged_dependency( from_tspec, to_tspec ):
+def add_staged_dependency( from_tspec, to_display_string ):
     ""
     wx = create_dependency_result_expression( None )
-    from_tspec.addDependency( to_tspec.getDisplayString(), wx )
+    from_tspec.addDependency( to_display_string, wx )
 
 
 class StagingOracle:
 
-    def __init__(self, stage_group, tspec_list):
+    def __init__(self, stage_group):
         ""
         self.param_nameL = stage_group[0]
         self.param_valueL = stage_group[1]
-        self.tspecs = tspec_list
 
         self.stage_values = [ vals[0] for vals in self.param_valueL ]
 
@@ -302,32 +301,29 @@ class StagingOracle:
         idx = self.stage_values.index( stage_val )
         return idx
 
-    def findPreviousStageTest(self, tspec):
+    def findPreviousStageDisplayID(self, tspec):
         ""
-        prev_tspec = None
-
         idx = self.getStageIndex( tspec )
         if idx > 0:
 
             paramD = tspec.getParameters()
             self._overwrite_with_stage_params( paramD, idx-1 )
-            prev_tspec = self._find_test_with_parameters( paramD )
 
-            assert prev_tspec, 'unable to find test with params '+str(paramD)
+            idgen = TestSpec.IDGenerator( tspec.getName(),
+                                          tspec.getFilepath(),
+                                          paramD,
+                                          self.param_nameL )
+            displ = idgen.computeDisplayString()
 
-        return prev_tspec
+            return displ
+
+        return None
 
     def _overwrite_with_stage_params(self, paramD, stage_idx):
         ""
         for i,pname in enumerate( self.param_nameL ):
             pval = self.param_valueL[ stage_idx ][i]
             paramD[ pname ] = pval
-
-    def _find_test_with_parameters(self, paramD):
-        ""
-        for tspec in self.tspecs:
-            if tspec.getParameters() == paramD:
-                return tspec
 
 
 def check_add_analyze_test( paramset, testL, vspecs, evaluator ):

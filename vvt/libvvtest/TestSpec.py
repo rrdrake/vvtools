@@ -59,23 +59,9 @@ class TestSpec:
 
     def getDisplayString(self):
         """
+        The execute directory plus staged information (if present).
         """
-        dis = self.getExecuteDirectory()
-
-        if self.staged:
-
-            stage_name,params = self.staged
-
-            paramL = list( params )
-            paramL.sort()
-            pL = []
-            for param in paramL:
-                pL.append( param+'='+self.params[param] )
-
-            dis += ' ' + stage_name+'='+self.params[stage_name]
-            dis += '('+','.join( pL )+')'
-
-        return dis
+        return self.displ
 
     def getID(self):
         """
@@ -376,19 +362,25 @@ class TestSpec:
                                    # allowed characters are restricted
         self.paramset = None       # for parent tests, this maps parameter
                                    # names to lists of values
-        self.staged = None         # ( stage param name, list of param names )
+        self.staged = None         # [ stage param name, param name, ... ]
         self.first_stage = True
         self.last_stage = True
 
-        # initial execute directory; recomputed by setParameters()
-        self.xdir = self._compute_execute_directory()
-        self.testid = self._compute_id()
+        # set initial values; recomputed by setParameters()
+        self._set_identifiers()
 
         # always add the test specification file to the linked file list
         self.lnfiles.append( (basename(self.filepath),None) )
     
     def __str__(self):
         return 'TestSpec(name=' + str(self.name) + ', xdir=' + self.xdir + ')'
+
+    def _set_identifiers(self):
+        ""
+        idgen = IDGenerator( self.name, self.filepath, self.params, self.staged )
+        self.xdir = idgen.computeExecuteDirectory()
+        self.testid = idgen.computeID()
+        self.displ = idgen.computeDisplayString()
 
     def setConstructionCompleted(self):
         ""
@@ -442,10 +434,7 @@ class TestSpec:
         """
         self.params.clear()
         self.params.update( param_dict )
-
-        self.xdir = self._compute_execute_directory()
-
-        self.testid = self._compute_id()
+        self._set_identifiers()
 
     def setStagedParameters(self, is_first_stage, is_last_stage,
                                   stage_name, *param_names):
@@ -453,63 +442,16 @@ class TestSpec:
         self.first_stage = is_first_stage
         self.last_stage = is_last_stage
 
-        self.staged = [ stage_name, list( param_names ) ]
+        self.staged = [ stage_name ] + list( param_names )
 
-        self.xdir = self._compute_execute_directory()
+        self._set_identifiers()
 
     def getStagedParameters(self):
         ""
         if self.staged:
-            return [ self.first_stage, self.last_stage ] + \
-                   [ self.staged[0] ] + self.staged[1]
+            return [ self.first_stage, self.last_stage ] + self.staged
 
         return None
-
-    def _compute_id(self):
-        ""
-        lst = [ self.filepath, self.name ]
-        lst.extend( self._get_parameters_as_list() )
-        return tuple( lst )
-
-    def _compute_execute_directory(self):
-        ""
-        bname = self.getName()
-
-        paramL = self._get_parameters_as_list( compress_stage=True )
-        if len( paramL ) > 0:
-            bname += '.' + '.'.join(paramL)
-
-        dname = os.path.dirname( self.getFilepath() )
-
-        return os.path.normpath( os.path.join( dname, bname ) )
-
-    def _get_parameters_as_list(self, compress_stage=False):
-        ""
-        L = []
-        if len(self.params) > 0:
-            for n,v in self.params.items():
-                if self._hide_parameter( n, compress_stage ):
-                    pass
-                elif self._compress_parameter( n, compress_stage ):
-                    L.append( n )
-                else:
-                    L.append( n + '=' + v )
-            L.sort()
-
-        return L
-
-    def _hide_parameter(self, param_name, compress_stage):
-        ""
-        if compress_stage and self.staged:
-            return param_name == self.staged[0]
-        return False
-
-    def _compress_parameter(self, param_name, compress_stage):
-        ""
-        if compress_stage and self.staged:
-            if param_name in self.staged[1]:
-                return True
-        return False
 
     def setParameterSet(self, param_set):
         """
@@ -624,3 +566,79 @@ class TestSpec:
 
 for c in varname_chars_list:
   TestSpec.varname_chars[c] = None
+
+
+class IDGenerator:
+
+    def __init__(self, testname, filepath, params, staged_names):
+        ""
+        self.name = testname
+        self.filepath = filepath
+        self.params = params
+        self.staged = staged_names
+
+    def computeExecuteDirectory(self):
+        ""
+        bname = self.name
+
+        paramL = self._get_parameters_as_list( compress_stage=True)
+        if len( paramL ) > 0:
+            bname += '.' + '.'.join(paramL)
+
+        dname = os.path.dirname( self.filepath )
+
+        return os.path.normpath( os.path.join( dname, bname ) )
+
+    def computeDisplayString(self):
+        ""
+        displ = self.computeExecuteDirectory()
+
+        if self.staged:
+
+            stage_name = self.staged[0]
+            param_names = self.staged[1:]
+
+            paramL = list( param_names )
+            paramL.sort()
+            pL = []
+            for param in paramL:
+                pL.append( param+'='+self.params[param] )
+
+            displ += ' ' + stage_name+'='+self.params[stage_name]
+            displ += '('+','.join( pL )+')'
+
+        return displ
+
+    def computeID(self):
+        ""
+        lst = [ self.filepath, self.name ]
+        lst.extend( self._get_parameters_as_list() )
+        return tuple( lst )
+
+    def _get_parameters_as_list(self, compress_stage=False):
+        ""
+        L = []
+        if len( self.params ) > 0:
+            for n,v in self.params.items():
+                if self._hide_parameter( n, compress_stage ):
+                    pass
+                elif self._compress_parameter( n, compress_stage ):
+                    L.append( n )
+                else:
+                    L.append( n + '=' + v )
+            L.sort()
+
+        return L
+
+    def _hide_parameter(self, param_name, compress_stage):
+        ""
+        if compress_stage and self.staged:
+            return param_name == self.staged[0]
+        return False
+
+    def _compress_parameter(self, param_name, compress_stage):
+        ""
+        if compress_stage and self.staged:
+            if param_name in self.staged[1:]:
+                return True
+        return False

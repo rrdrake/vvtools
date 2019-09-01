@@ -80,14 +80,6 @@ class staged_parameters( vtu.vvtestTestCase ):
         assert not tcase.getSpec().isFirstStage()
         assert tcase.getSpec().isLastStage()
 
-    def test_consistency(self):
-        ""
-        pass
-        # marking staging parameters when they are not parameters
-        # changing the parameters when the markings have already been set
-        # multiple parameters in a stage
-        # test pre-clean and post-clean with staging
-
     def test_parse_staged_parameters(self):
         ""
         util.writefile( 'blue.vvt', """
@@ -159,11 +151,11 @@ class staged_parameters( vtu.vvtestTestCase ):
         time.sleep(1)
 
         pset,testL = self.create_test_list( 'blue.vvt' )
-        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        oracle = TSC.StagingOracle( pset.getStagedGroup() )
         assert oracle.numStages() == 3
 
         pset,testL = self.create_test_list( 'red.vvt' )
-        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        oracle = TSC.StagingOracle( pset.getStagedGroup() )
         assert oracle.numStages() == 2
 
     def test_staging_oracle_can_determine_the_stage_index_of_a_test(self):
@@ -181,7 +173,7 @@ class staged_parameters( vtu.vvtestTestCase ):
         time.sleep(1)
 
         pset,testL = self.create_test_list( 'blue.vvt' )
-        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        oracle = TSC.StagingOracle( pset.getStagedGroup() )
         assert len( testL ) == 3
         for ts in testL:
             if ts.getParameterValue( 'np' ) == '2':
@@ -192,7 +184,7 @@ class staged_parameters( vtu.vvtestTestCase ):
                 assert oracle.getStageIndex( ts ) == 2
 
         pset,testL = self.create_test_list( 'red.vvt' )
-        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        oracle = TSC.StagingOracle( pset.getStagedGroup() )
         assert len( testL ) == 2
         for ts in testL:
             if ts.getParameterValue( 'np' ) == '1':
@@ -201,7 +193,7 @@ class staged_parameters( vtu.vvtestTestCase ):
                 assert oracle.getStageIndex( ts ) == 1
 
         pset,testL = self.create_test_list( 'pink.vvt' )
-        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        oracle = TSC.StagingOracle( pset.getStagedGroup() )
         assert len( testL ) == 4
         num_idx_0 = num_idx_1 = 0
         for ts in testL:
@@ -214,7 +206,7 @@ class staged_parameters( vtu.vvtestTestCase ):
         assert num_idx_0 == 2
         assert num_idx_1 == 2
 
-    def test_staging_oracle_can_find_previous_stage_test(self):
+    def test_staging_oracle_can_find_previous_stage_test_id(self):
         ""
         util.writefile( 'blue.vvt', """
             #VVT: parameterize (staged) : np = 2 8 1
@@ -229,42 +221,41 @@ class staged_parameters( vtu.vvtestTestCase ):
         time.sleep(1)
 
         pset,testL = self.create_test_list( 'blue.vvt' )
-        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        oracle = TSC.StagingOracle( pset.getStagedGroup() )
         for ts in testL:
-            prev = oracle.findPreviousStageTest( ts )
+            prev = oracle.findPreviousStageDisplayID( ts )
             np = ts.getParameterValue( 'np' )
             if np == '2':
                 assert prev == None
             elif np == '8':
-                assert prev.getParameterValue( 'np' ) == '2'
+                assert prev == 'blue.np stage=1(np=2)'
             elif np == '1':
-                assert prev.getParameterValue( 'np' ) == '8'
+                assert prev == 'blue.np stage=2(np=8)'
             else:
                 raise Exception( 'unexpected np value: '+str(np) )
 
         pset,testL = self.create_test_list( 'red.vvt' )
-        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        oracle = TSC.StagingOracle( pset.getStagedGroup() )
         for ts in testL:
-            prev = oracle.findPreviousStageTest( ts )
+            prev = oracle.findPreviousStageDisplayID( ts )
             np = ts.getParameterValue( 'np' )
             if np == '1':
                 assert prev == None
             elif np == '8':
-                assert prev.getParameterValue( 'np' ) == '1'
-                assert prev.getParameterValue( 'sz' ) == '1.1'
+                assert prev == 'red.np.sz stage=1(np=1,sz=1.1)'
             else:
                 raise Exception( 'unexpected np value: '+str(np) )
 
         pset,testL = self.create_test_list( 'pink.vvt' )
-        oracle = TSC.StagingOracle( pset.getStagedGroup(), testL )
+        oracle = TSC.StagingOracle( pset.getStagedGroup() )
         for ts in testL:
-            prev = oracle.findPreviousStageTest( ts )
+            prev = oracle.findPreviousStageDisplayID( ts )
             np = ts.getParameterValue( 'np' )
             if np == '1':
                 assert prev == None
             elif np == '8':
-                assert prev.getParameterValue( 'np' ) == '1'
-                assert prev.getParameterValue( 'sz' ) == ts.getParameterValue( 'sz' )
+                sz = ts.getParameterValue('sz')
+                assert prev == 'pink.np.sz='+str(sz)+' stage=1(np=1)'
             else:
                 raise Exception( 'unexpected np value: '+str(np) )
 
@@ -429,11 +420,11 @@ class staged_parameters( vtu.vvtestTestCase ):
             import vvtest_util as vvt
             print ( 'blue_stage='+vvt.stage + ' blue_np='+vvt.np  )
             """ )
-        util.writefile( 'green.vvt', """
+        util.writefile( 'red.vvt', """
             #VVT: parameterize (staged) : np = 2 3
             #VVT: parameterize : part = piston valve
             import vvtest_util as vvt
-            print ( 'green_stage='+vvt.stage + ' green_np='+vvt.np + ' green_part='+vvt.part )
+            print ( 'red_stage='+vvt.stage + ' red_np='+vvt.np + ' red_part='+vvt.part )
             """ )
         time.sleep(1)
 
@@ -443,47 +434,31 @@ class staged_parameters( vtu.vvtestTestCase ):
 
             vrun = vtu.runvvtest( '-n 10', batch=batch )
             vrun.assertCounts( total=7, npass=7 )
+            tdir = vrun.resultsDir()
 
-            assert len( util.grepfiles( 'blue_stage=1 blue_np=1',
-                                        '*/blue.np/exec*.log' ) ) == 1
-            assert len( util.grepfiles( 'blue_stage=2 blue_np=3',
-                                        '*/blue.np/exec*.log' ) ) == 1
-            assert len( util.grepfiles( 'blue_stage=3 blue_np=1',
-                                        '*/blue.np/exec*.log' ) ) == 1
+            self.check_blue_red_results()
 
-            assert len( util.grepfiles( 'green_stage=1 green_np=2 green_part=piston',
-                                        '*/green.np.part=piston/exec*.log' ) ) == 1
-            assert len( util.grepfiles( 'green_stage=1 green_np=2 green_part=valve',
-                                        '*/green.np.part=valve/exec*.log' ) ) == 1
-            assert len( util.grepfiles( 'green_stage=2 green_np=3 green_part=piston',
-                                        '*/green.np.part=piston/exec*.log' ) ) == 1
-            assert len( util.grepfiles( 'green_stage=2 green_np=3 green_part=valve',
-                                        '*/green.np.part=valve/exec*.log' ) ) == 1
+            # vrun = vtu.runvvtest( '-R -n 10', batch=batch, chdir=tdir )
 
-# magic:
-#   - a restart will also fail, bc the staging is not reparsed
-#       - true still?  the staging is saved to the testlist file
-#   - two parameterize with one of them staged
+            # self.check_blue_red_results()
 
+    def check_blue_red_results(self):
+        ""
+        assert len( util.grepfiles( 'blue_stage=1 blue_np=1',
+                                    '*/blue.np/exec*.log' ) ) == 1
+        assert len( util.grepfiles( 'blue_stage=2 blue_np=3',
+                                    '*/blue.np/exec*.log' ) ) == 1
+        assert len( util.grepfiles( 'blue_stage=3 blue_np=1',
+                                    '*/blue.np/exec*.log' ) ) == 1
 
-def has_dependency( testcase, dep_testcase ):
-    ""
-    tmap = { testcase.getSpec().getID() : testcase,
-             dep_testcase.getSpec().getID() : dep_testcase }
-
-    xdir = testcase.getSpec().getExecuteDirectory()
-    idset = set()
-    for pat,expr in testcase.getSpec().getDependencies():
-        idset.update( depend.find_tests_by_pattern( xdir, pat, tmap ) )
-
-    assert len(idset) <= 1
-
-    if len(idset) > 0:
-        tcase = tmap[ idset.pop() ]
-        assert id(tcase) == id(dep_testcase)
-        return True
-
-    return False
+        assert len( util.grepfiles( 'red_stage=1 red_np=2 red_part=piston',
+                                    '*/red.np.part=piston/exec*.log' ) ) == 1
+        assert len( util.grepfiles( 'red_stage=1 red_np=2 red_part=valve',
+                                    '*/red.np.part=valve/exec*.log' ) ) == 1
+        assert len( util.grepfiles( 'red_stage=2 red_np=3 red_part=piston',
+                                    '*/red.np.part=piston/exec*.log' ) ) == 1
+        assert len( util.grepfiles( 'red_stage=2 red_np=3 red_part=valve',
+                                    '*/red.np.part=valve/exec*.log' ) ) == 1
 
 
 def find_single_dependency( tspec, testL ):
