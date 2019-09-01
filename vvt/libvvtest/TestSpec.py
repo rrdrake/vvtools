@@ -446,13 +446,6 @@ class TestSpec:
 
         self._set_identifiers()
 
-    def getStagedParameters(self):
-        ""
-        if self.staged:
-            return [ self.first_stage, self.last_stage ] + self.staged
-
-        return None
-
     def setParameterSet(self, param_set):
         """
         Set the ParameterSet instance, which maps parameter names to a list of

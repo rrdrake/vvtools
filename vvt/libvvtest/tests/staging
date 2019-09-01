@@ -23,6 +23,7 @@ from libvvtest.testcase import TestCase
 from libvvtest.ScriptReader import ScriptReader
 from libvvtest.RuntimeConfig import RuntimeConfig
 import libvvtest.depend as depend
+import libvvtest.testlistio as tio
 
 import libvvtest.TestSpecCreator as TSC
 
@@ -413,18 +414,63 @@ class staged_parameters( vtu.vvtestTestCase ):
             else:
                 raise Exception( 'unexpected np,sz value: '+str(np)+','+str(sz) )
 
-    def test_full_integration_run_with_staging(self):
+    def test_to_string_and_back_preserves_stage_information(self):
+        ""
+        util.writefile( 'blue.vvt', """
+            #VVT: parameterize (staged) : np = 2 8 1
+            """ )
+        util.writefile( 'pink.vvt', """
+            #VVT: parameterize (staged) : np = 1 8
+            #VVT: parameterize          : sz = 1.1 2.2
+            """ )
+        time.sleep(1)
+
+        pset,testL = self.create_test_list( 'blue.vvt' )
+        TSC.mark_staged_tests( pset, testL )
+
+        for ts in testL:
+            sid = tio.test_to_string( TestCase( ts, None ) )
+            tcase = reparse_test_string( sid )
+            ts2 = tcase.getSpec()
+            assert ts.getParameters()    == ts2.getParameters()
+            assert ts.getID()            == ts2.getID()
+            assert ts.isFirstStage()     == ts2.isFirstStage()
+            assert ts.isLastStage()      == ts2.isLastStage()
+            assert ts.getDisplayString() == ts2.getDisplayString()
+
+    def test_staging_integration_test(self):
         ""
         util.writefile( 'blue.vvt', """
             #VVT: parameterize (staged) : np = 1 3 1
             import vvtest_util as vvt
-            print ( 'blue_stage='+vvt.stage + ' blue_np='+vvt.np  )
+            import os, glob
+            fn = 'blue'+vvt.stage+'.txt'
+            fp = open( fn, 'w' )
+            fp.write( 'np='+vvt.np+os.linesep )
+            fp.close()
+            if vvt.stage == '1':
+                assert not os.path.exists( 'blue2.txt' )
+                assert not os.path.exists( 'blue3.txt' )
+            elif vvt.stage == '2':
+                assert     os.path.exists( 'blue1.txt' )
+                assert not os.path.exists( 'blue3.txt' )
+            else:
+                assert     os.path.exists( 'blue1.txt' )
+                assert     os.path.exists( 'blue2.txt' )
             """ )
         util.writefile( 'red.vvt', """
             #VVT: parameterize (staged) : np = 2 3
-            #VVT: parameterize : part = piston valve
+            #VVT: parameterize : part = A B
             import vvtest_util as vvt
-            print ( 'red_stage='+vvt.stage + ' red_np='+vvt.np + ' red_part='+vvt.part )
+            import os, glob
+            fn = 'red'+vvt.stage+'.txt'
+            fp = open( fn, 'w' )
+            fp.write( 'np='+vvt.np+' part='+vvt.part+os.linesep )
+            fp.close()
+            if vvt.stage == '1':
+                assert not os.path.exists( 'red2.txt' )
+            elif vvt.stage == '2':
+                assert     os.path.exists( 'red1.txt' )
             """ )
         time.sleep(1)
 
@@ -438,27 +484,32 @@ class staged_parameters( vtu.vvtestTestCase ):
 
             self.check_blue_red_results()
 
-            # vrun = vtu.runvvtest( '-R -n 10', batch=batch, chdir=tdir )
+            vrun = vtu.runvvtest( '-R -n 10', batch=batch, chdir=tdir )
 
-            # self.check_blue_red_results()
+            self.check_blue_red_results()
 
     def check_blue_red_results(self):
         ""
-        assert len( util.grepfiles( 'blue_stage=1 blue_np=1',
-                                    '*/blue.np/exec*.log' ) ) == 1
-        assert len( util.grepfiles( 'blue_stage=2 blue_np=3',
-                                    '*/blue.np/exec*.log' ) ) == 1
-        assert len( util.grepfiles( 'blue_stage=3 blue_np=1',
-                                    '*/blue.np/exec*.log' ) ) == 1
+        fn = util.globfile( '*/*/blue1.txt' )
+        assert util.readfile( fn ).strip() == 'np=1'
 
-        assert len( util.grepfiles( 'red_stage=1 red_np=2 red_part=piston',
-                                    '*/red.np.part=piston/exec*.log' ) ) == 1
-        assert len( util.grepfiles( 'red_stage=1 red_np=2 red_part=valve',
-                                    '*/red.np.part=valve/exec*.log' ) ) == 1
-        assert len( util.grepfiles( 'red_stage=2 red_np=3 red_part=piston',
-                                    '*/red.np.part=piston/exec*.log' ) ) == 1
-        assert len( util.grepfiles( 'red_stage=2 red_np=3 red_part=valve',
-                                    '*/red.np.part=valve/exec*.log' ) ) == 1
+        fn = util.globfile( '*/*/blue2.txt' )
+        assert util.readfile( fn ).strip() == 'np=3'
+
+        fn = util.globfile( '*/*/blue3.txt' )
+        assert util.readfile( fn ).strip() == 'np=1'
+
+        fn = util.globfile( '*/*A/red1.txt' )
+        assert util.readfile( fn ).strip() == 'np=2 part=A'
+
+        fn = util.globfile( '*/*B/red1.txt' )
+        assert util.readfile( fn ).strip() == 'np=2 part=B'
+
+        fn = util.globfile( '*/*A/red2.txt' )
+        assert util.readfile( fn ).strip() == 'np=3 part=A'
+
+        fn = util.globfile( '*/*B/red2.txt' )
+        assert util.readfile( fn ).strip() == 'np=3 part=B'
 
 
 def find_single_dependency( tspec, testL ):
@@ -479,6 +530,16 @@ def find_single_dependency( tspec, testL ):
     tcase = testcasemap[ idset.pop() ]
 
     return tcase.getSpec()
+
+
+def reparse_test_string( stringid ):
+    ""
+    tcase = tio.string_to_test( stringid )
+
+    creator = TSC.TestCreator( RuntimeConfig() )
+    creator.reparse( tcase.getSpec() )
+
+    return tcase
 
 
 ############################################################################

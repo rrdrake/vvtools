@@ -392,6 +392,10 @@ def reparse_test_object( evaluator, testobj ):
 
         parse_enable( testobj, vspecs )
 
+        pset = parseTestParameters_scr( vspecs, tname, evaluator, None )
+        if pset.getStagedGroup():
+            mark_staged_tests( pset, [ testobj ] )
+
         if testobj.isAnalyze():
             analyze_spec = parseAnalyze_scr( testobj, vspecs, evaluator )
             testobj.setAnalyzeScript( analyze_spec )
