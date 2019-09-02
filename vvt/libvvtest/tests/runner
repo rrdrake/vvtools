@@ -10,6 +10,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
+from os.path import abspath
 import time
 
 import vvtestutils as vtu
@@ -19,7 +20,7 @@ from testutils import print3
 import libvvtest.testrunner as testrunner
 
 
-class ExecutionHandler_methods( vtu.vvtestTestCase ):
+class testrunner_free_functions( vtu.vvtestTestCase ):
 
     def test_execution_log_name(self):
         ""
@@ -40,6 +41,133 @@ class ExecutionHandler_methods( vtu.vvtestTestCase ):
         tcase = vtu.make_fake_staged_TestCase( stage_index=2 )
         fn = testrunner.get_execution_log_filename( tcase, False )
         assert fn == 'execute_stage=3.log'
+
+    def prepare_for_link_and_copy(self):
+        ""
+        src1 = util.writefile( 'srcdir/file1.txt', "file1 contents\n" )
+
+        util.writefile( 'srcdir/file2.txt', "file2 contents\n" )
+        src2 = abspath( 'srcdir/symfile' )
+        os.symlink( 'file2.txt', src2 )
+
+        src3 = abspath( 'srcdir/adir' )
+        util.writefile( 'srcdir/adir/file3.txt', "file3 contents\n" )
+
+        os.mkdir( 'destdir1' )
+        util.writefile( 'destdir2/file.txt', "wrong contents\n" )
+        os.symlink( 'file.txt', 'destdir2/symfile' )
+        util.writefile( 'destdir2/adir/wrongfile.txt', "wrongfile contents\n" )
+
+        os.mkdir( 'destdir3' )
+
+        return src1, src2, src3
+
+    def test_force_copy_path(self):
+        ""
+        src1,src2,src3 = self.prepare_for_link_and_copy()
+        time.sleep(1)
+
+        with util.change_directory( 'destdir1' ):
+            testrunner.force_copy_path_to_current_directory( src1, None )
+            testrunner.force_copy_path_to_current_directory( src2, None )
+            testrunner.force_copy_path_to_current_directory( src3, None )
+
+        with util.change_directory( 'destdir2' ):
+            testrunner.force_copy_path_to_current_directory( src1, None )
+            testrunner.force_copy_path_to_current_directory( src2, None )
+            testrunner.force_copy_path_to_current_directory( src3, None )
+
+        with util.change_directory( 'destdir3' ):
+            testrunner.force_copy_path_to_current_directory( src1, 'tryme' )
+
+        time.sleep(1)
+
+        for d in [ 'destdir1', 'destdir2' ]:
+            assert util.readfile( d+'/file1.txt' ).strip() == 'file1 contents'
+            assert not os.path.islink( d+'/symfile' )
+            assert util.readfile( d+'/symfile' ).strip() == 'file2 contents'
+            assert util.readfile( d+'/adir/file3.txt' ).strip() == 'file3 contents'
+
+        assert not os.path.islink( 'destdir3/tryme' )
+        assert util.readfile( 'destdir3/tryme' ).strip() == 'file1 contents'
+
+    def test_force_link_path(self):
+        ""
+        src1,src2,src3 = self.prepare_for_link_and_copy()
+        time.sleep(1)
+
+        with util.change_directory( 'destdir1' ):
+            testrunner.force_link_path_to_current_directory( src1, None )
+            testrunner.force_link_path_to_current_directory( src2, None )
+            testrunner.force_link_path_to_current_directory( src3, None )
+
+        with util.change_directory( 'destdir2' ):
+            testrunner.force_link_path_to_current_directory( src1, None )
+            testrunner.force_link_path_to_current_directory( src2, None )
+            testrunner.force_link_path_to_current_directory( src3, None )
+
+        with util.change_directory( 'destdir3' ):
+            testrunner.force_link_path_to_current_directory( src1, 'tryme' )
+
+        time.sleep(1)
+
+        for d in [ 'destdir1', 'destdir2' ]:
+            assert os.path.islink( d+'/file1.txt' )
+            assert util.readfile( d+'/file1.txt' ).strip() == 'file1 contents'
+            assert os.path.islink( d+'/symfile' )
+            assert util.readfile( d+'/symfile' ).strip() == 'file2 contents'
+            assert os.path.islink( d+'/adir' )
+            assert util.readfile( d+'/adir/file3.txt' ).strip() == 'file3 contents'
+
+        assert os.path.islink( 'destdir3/tryme' )
+        assert util.readfile( 'destdir3/tryme' ).strip() == 'file1 contents'
+
+    def test_link_and_copy_files(self):
+        ""
+        self.prepare_for_link_and_copy()
+        srcdir = abspath( 'srcdir' )
+        util.writefile( 'srcdir/file1.*', 'file w/ wildcard char\n' )
+        time.sleep(1)
+
+        fL = testrunner.get_source_file_names( 'srcdir/file*.txt' )
+        fL.sort()
+        assert fL == [ 'srcdir/file1.txt', 'srcdir/file2.txt' ]
+
+        fL = testrunner.get_source_file_names( 'srcdir/file1.*' )
+        assert fL == [ 'srcdir/file1.*' ]
+
+        fL = testrunner.get_source_file_names( 'srcdir/file2.*' )
+        assert fL == [ 'srcdir/file2.txt' ]
+
+        fL = testrunner.get_source_file_names( 'srcdir/file.*' )
+        assert len( fL ) == 0
+
+        with util.change_directory( 'destdir3' ):
+            testrunner.link_and_copy_files( srcdir,
+                                            [ ('file*.txt',None) ],
+                                            [ ('adir','bdir') ] )
+
+            ok,out,err = util.call_capture_output(
+                testrunner.link_and_copy_files, srcdir,
+                                            [ ('junk*',None) ],
+                                            [ ('file*.txt','dest.txt') ] )
+            assert not ok
+            print3( out.strip() )
+            assert not err.strip()
+            assert out.count( 'error: ' ) == 2
+            assert out.count( 'non-existent file' ) == 1
+            assert out.count( 'more than one file' ) == 1
+
+        time.sleep(1)
+
+        assert os.path.islink( 'destdir3/file1.txt' )
+        assert util.readfile( 'destdir3/file1.txt' ).strip() == 'file1 contents'
+
+        assert os.path.islink( 'destdir3/file2.txt' )
+        assert util.readfile( 'destdir3/file2.txt' ).strip() == 'file2 contents'
+
+        assert not os.path.islink( 'destdir3/bdir' )
+        assert util.readfile( 'destdir3/bdir/file3.txt' ).strip() == 'file3 contents'
 
 
 ############################################################################

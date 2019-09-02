@@ -8,6 +8,7 @@ import os, sys
 import shutil
 import glob
 import fnmatch
+from os.path import normpath, dirname
 from os.path import join as pjoin
 
 from . import CommonSpec
@@ -131,9 +132,8 @@ class ExecutionHandler:
 
         tspec = self.tcase.getSpec()
 
-        srcdir = os.path.normpath(
-                      pjoin( tspec.getRootpath(),
-                             os.path.dirname( tspec.getFilepath() ) ) )
+        srcdir = normpath( pjoin( tspec.getRootpath(),
+                                  dirname( tspec.getFilepath() ) ) )
 
         ok = link_and_copy_files( srcdir,
                                   tspec.getLinkFiles(),
@@ -234,7 +234,7 @@ class ExecutionHandler:
 
         troot = tspec.getRootpath()
         tdir = os.path.dirname( tspec.getFilepath() )
-        srcdir = os.path.normpath( pjoin( troot, tdir ) )
+        srcdir = normpath( pjoin( troot, tdir ) )
 
         # TODO: add file globbing for baseline files
         for fromfile,tofile in tspec.getBaselineFiles():
@@ -337,7 +337,7 @@ class ExecutionHandler:
             troot = tspec.getRootpath()
             assert os.path.isabs( troot )
             tdir = os.path.dirname( tspec.getFilepath() )
-            srcdir = os.path.normpath( pjoin( troot, tdir ) )
+            srcdir = normpath( pjoin( troot, tdir ) )
 
             # note that this writes a different sequence if the test is an
             # analyze test
@@ -450,65 +450,62 @@ def link_and_copy_files( srcdir, linkfiles, copyfiles ):
     ""
     ok = True
 
-    # first establish the soft linked files
-    for srcname,tstname in linkfiles:
+    for srcname,destname in linkfiles:
 
-        f = os.path.normpath( pjoin( srcdir, srcname ) )
+        srcf = normpath( pjoin( srcdir, srcname ) )
+        srcL = get_source_file_names( srcf )
 
-        srcL = []
-        if os.path.exists(f):
-            srcL.append( f )
-        else:
-            fL = glob.glob( f )
-            if len(fL) > 1 and tstname != None:
-                printerr( "*** error: the test requested to",
-                          "soft link a file that matched multiple sources",
-                          "AND a single linkname was given:", f )
-                ok = False
-                continue
-            else:
-                srcL.extend( fL )
-
-        if len(srcL) > 0:
+        if check_source_file_list( 'soft link', srcf, srcL, destname ):
             for srcf in srcL:
-                force_link_path_to_current_directory( tstname, srcf )
-
+                force_link_path_to_current_directory( srcf, destname )
         else:
-            printerr( "*** error: the test requested to",
-                      "soft link a non-existent file:", f )
             ok = False
 
-    for srcname,tstname in copyfiles:
+    for srcname,destname in copyfiles:
 
-        f = os.path.normpath( pjoin( srcdir, srcname ) )
+        srcf = normpath( pjoin( srcdir, srcname ) )
+        srcL = get_source_file_names( srcf )
 
-        srcL = []
-        if os.path.exists(f):
-            srcL.append( f )
-        else:
-            fL = glob.glob( f )
-            if len(fL) > 1 and tstname != None:
-                printerr( "*** error: the test requested to",
-                          "copy a file that matched multiple sources",
-                          "AND a single copyname was given:", f )
-                ok = False
-                continue
-            else:
-                srcL.extend( fL )
-
-        if len(srcL) > 0:
+        if check_source_file_list( 'copy', srcf, srcL, destname ):
             for srcf in srcL:
-                force_copy_path_to_current_directory( tstname, srcf )
-
+                force_copy_path_to_current_directory( srcf, destname )
         else:
-            printerr( "*** error: the test requested to",
-                      "copy a non-existent file:", f )
             ok = False
 
     return ok
 
 
-def force_link_path_to_current_directory( destname, srcf ):
+def check_source_file_list( operation_type, srcf, srcL, destname ):
+    ""
+    ok = True
+
+    if len( srcL ) == 0:
+        print3( "*** error: cannot", operation_type,
+                "a non-existent file:", srcf )
+        ok = False
+
+    elif len( srcL ) > 1 and destname != None:
+        print3( "*** error:", operation_type, "failed because the source",
+                "expanded to more than one file but a destination path",
+                "was given:", srcf, destname )
+        ok = False
+
+    return ok
+
+
+def get_source_file_names( srcname ):
+    ""
+    files = []
+
+    if os.path.exists( srcname ):
+        files.append( srcname )
+    else:
+        files.extend( glob.glob( srcname ) )
+
+    return files
+
+
+def force_link_path_to_current_directory( srcf, destname ):
     ""
     if destname == None:
         tstf = os.path.basename( srcf )
@@ -521,34 +518,20 @@ def force_link_path_to_current_directory( destname, srcf ):
             os.remove( tstf )
             print3( 'ln -s '+srcf+' '+tstf )
             os.symlink( srcf, tstf )
-
-    elif os.path.exists( tstf ):
-        if os.path.isdir( tstf ):
-            shutil.rmtree( tstf )
-        else:
-            os.remove( tstf )
-        print3( 'ln -s '+srcf+' '+tstf )
-        os.symlink( srcf, tstf )
-
     else:
+        remove_path( tstf )
         print3( 'ln -s '+srcf+' '+tstf )
         os.symlink( srcf, tstf )
 
 
-def force_copy_path_to_current_directory( destname, srcf ):
+def force_copy_path_to_current_directory( srcf, destname ):
     ""
     if destname == None:
         tstf = os.path.basename( srcf )
     else:
         tstf = destname
 
-    if os.path.islink( tstf ):
-        os.remove( tstf )
-    elif os.path.exists( tstf ):
-        if os.path.isdir( tstf ):
-            shutil.rmtree( tstf )
-        else:
-            os.remove( tstf )
+    remove_path( tstf )
 
     if os.path.isdir( srcf ):
         print3( 'cp -rp '+srcf+' '+tstf )
@@ -556,6 +539,18 @@ def force_copy_path_to_current_directory( destname, srcf ):
     else:
         print3( 'cp -p '+srcf+' '+tstf )
         shutil.copy2( srcf, tstf )
+
+
+def remove_path( path ):
+    ""
+    if os.path.islink( path ):
+        os.remove( path )
+
+    elif os.path.exists( path ):
+        if os.path.isdir( path ):
+            shutil.rmtree( path )
+        else:
+            os.remove( path )
 
 
 def redirect_stdout_stderr_to_filename( filename ):
