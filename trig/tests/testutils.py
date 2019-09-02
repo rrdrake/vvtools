@@ -8,6 +8,8 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
+from os.path import abspath, normpath, basename, dirname
+from os.path import join as pjoin
 import re
 import shutil
 import stat
@@ -37,7 +39,7 @@ def initialize( argv ):
     global use_this_ssh
     global remotepy
 
-    test_filename = os.path.abspath( argv[0] )
+    test_filename = abspath( argv[0] )
     working_directory = make_working_directory( test_filename )
 
     optL,argL = getopt.getopt( argv[1:], 'p:sSr:i' )
@@ -163,11 +165,11 @@ def make_working_directory( test_filename ):
     directly executing a test script can be done but rm -rf * is performed;
     to avoid accidental removal of files, cd into a working directory
     """
-    d = os.path.join( 'tmpdir_'+os.path.basename( test_filename ) )
+    d = pjoin( 'tmpdir_'+basename( test_filename ) )
     if not os.path.exists(d):
         os.mkdir(d)
         time.sleep(1)
-    return os.path.abspath(d)
+    return abspath(d)
 
 
 ##########################################################################
@@ -195,10 +197,11 @@ def writefile( fname, content, header=None ):
                     pad = i
                     break
     # make the directory to contain the file, if not already exist
-    d = os.path.dirname( fname )
-    if os.path.normpath(d) not in ['','.']:
+    d = dirname( fname )
+    if normpath(d) not in ['','.']:
         if not os.path.exists(d):
           os.makedirs(d)
+
     # open and write contents
     fp = open( fname, 'w' )
     if header != None:
@@ -207,6 +210,8 @@ def writefile( fname, content, header=None ):
         if pad != None: fp.write( line[pad:] + os.linesep )
         else:           fp.write( line + os.linesep )
     fp.close()
+
+    return abspath( fname )
 
 
 def writescript( fname, content ):
@@ -432,7 +437,7 @@ def get_ssh_pair( fake_ssh_pause=None, connect_failure=False, uptime=None ):
                 x = 1
             sys.exit( x )
             """ )
-        sshprog = os.path.abspath( 'fakessh' )
+        sshprog = abspath( 'fakessh' )
         sshmach = 'sparky'
 
     else:
@@ -450,7 +455,7 @@ def get_ssh_pair( fake_ssh_pause=None, connect_failure=False, uptime=None ):
                 sys.exit(1)
             os.execl( '/bin/bash', '/bin/bash', '-c', ' '.join( argL ) )
             """ )
-        sshprog = os.path.abspath( 'fakessh' )
+        sshprog = abspath( 'fakessh' )
         sshmach = 'sparky'
 
     return sshprog, sshmach
@@ -467,9 +472,9 @@ def which( program ):
     pth = os.environ.get( 'PATH', None )
     if pth:
         for d in pth.split(':'):
-            f = os.path.join( d, program )
+            f = pjoin( d, program )
             if not os.path.isdir(f) and os.access( f, os.X_OK ):
-                return os.path.abspath( f )
+                return abspath( f )
 
     return None
 
@@ -492,7 +497,7 @@ def fault_tolerant_remove( path, num_attempts=5 ):
     ""
     dn,fn = os.path.split( path )
 
-    rmpath = os.path.join( dn, 'remove_'+fn + '_'+ random_string() )
+    rmpath = pjoin( dn, 'remove_'+fn + '_'+ random_string() )
 
     os.rename( path, rmpath )
 
@@ -595,7 +600,7 @@ def findfiles( pattern, topdir, *topdirs ):
         for dirpath,dirnames,filenames in os.walk( top ):
             for f in filenames+dirnames:
                 if fnmatch.fnmatch( f, pattern ):
-                    fS.add( os.path.join( dirpath, f ) )
+                    fS.add( pjoin( dirpath, f ) )
 
     fL = list( fS )
     fL.sort()
@@ -626,7 +631,7 @@ def list_all_paths( rootpath ):
         pathset.add( dirpath )
 
         for f in filenames:
-            p = os.path.join( dirpath, f )
+            p = pjoin( dirpath, f )
             if not os.path.islink(p):
                 pathset.add(p)
 
@@ -951,7 +956,7 @@ def create_module_from_filename( fname ):
     ""
     global module_uniq_id
 
-    fname = os.path.normpath( os.path.abspath( fname ) )
+    fname = normpath( abspath( fname ) )
 
     if fname in filename_to_module_map:
 
@@ -959,7 +964,7 @@ def create_module_from_filename( fname ):
 
     else:
 
-        modname = os.path.splitext(os.path.basename(fname))[0]+str(module_uniq_id)
+        modname = os.path.splitext( basename(fname) )[0]+str(module_uniq_id)
         module_uniq_id += 1
 
         if sys.version_info[0] < 3 or sys.version_info[1] < 5:

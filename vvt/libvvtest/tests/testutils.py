@@ -30,6 +30,7 @@ import unittest
 working_directory = None
 use_this_ssh = 'fake'
 remotepy = sys.executable
+runoptions = {}
 
 
 def initialize( argv ):
@@ -41,7 +42,7 @@ def initialize( argv ):
     test_filename = abspath( argv[0] )
     working_directory = make_working_directory( test_filename )
 
-    optL,argL = getopt.getopt( argv[1:], 'p:sSr:' )
+    optL,argL = getopt.getopt( argv[1:], 'p:sSr:i' )
 
     optD = {}
     for n,v in optL:
@@ -55,6 +56,7 @@ def initialize( argv ):
             remotepy = v
         optD[n] = v
 
+    runoptions.update( optD )
 
     return optD, argL
 
@@ -914,6 +916,27 @@ def push_new_branch_with_file( url, branchname, filename, filecontents ):
         runcmd( 'git push -u origin '+branchname, print_output=False )
 
 
+def push_new_file_to_branch( url, branchname, filename, filecontents ):
+    ""
+    workdir = 'wrkdir_'+random_string()
+    os.mkdir( workdir )
+
+    with change_directory( workdir ):
+
+        runcmd( 'git clone '+url, print_output=False )
+
+        os.chdir( globfile( '*' ) )
+
+        runcmd( 'git checkout '+branchname, print_output=False )
+
+        writefile( filename, filecontents )
+
+        runcmd( 'git add '+filename, print_output=False )
+        runcmd( 'git commit -m "push_new_file_to_branch ' + time.ctime()+'"',
+                print_output=False )
+        runcmd( 'git push', print_output=False )
+
+
 def create_local_branch( local_directory, branchname ):
     ""
     with change_directory( local_directory ):
@@ -941,7 +964,7 @@ def create_module_from_filename( fname ):
 
     else:
 
-        modname = os.path.splitext(basename(fname))[0]+str(module_uniq_id)
+        modname = os.path.splitext( basename(fname) )[0]+str(module_uniq_id)
         module_uniq_id += 1
 
         if sys.version_info[0] < 3 or sys.version_info[1] < 5:
