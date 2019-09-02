@@ -107,25 +107,9 @@ class ExecutionHandler:
         removes all files in the execute directory except for a few vvtest
         files.
         """
-        sys.stdout.write( "Cleaning execute directory...\n" )
-        sys.stdout.flush()
-
-        xL = [ 'execute.log', 'baseline.log' ]
-
-        if self.tcase.getSpec().getSpecificationForm() == 'xml':
-            xL.append( 'runscript' )
-
-        for f in os.listdir('.'):
-            if f not in xL and not f.startswith( 'vvtest_util' ) and \
-               not fnmatch.fnmatch( f, 'execute_*.log' ):
-                if os.path.islink( f ):
-                    os.remove( f )
-                elif os.path.isdir(f):
-                    sys.stdout.write( "rm -r "+f+"\n" ) ; sys.stdout.flush()
-                    shutil.rmtree( f )
-                else:
-                    sys.stdout.write( "rm "+f+"\n" ) ; sys.stdout.flush()
-                    os.remove( f )
+        print3( "Cleaning execute directory..." )
+        specform = self.tcase.getSpec().getSpecificationForm()
+        pre_clean_execute_directory( specform )
 
     def check_set_working_files(self, baseline):
         """
@@ -143,8 +127,7 @@ class ExecutionHandler:
         copy files in the test execution directory.  Returns False if certain
         errors are encountered and written to stderr, otherwise True.
         """
-        sys.stdout.write( "Linking and copying working files...\n" )
-        sys.stdout.flush()
+        print3( "Linking and copying working files..." )
 
         tspec = self.tcase.getSpec()
 
@@ -152,107 +135,9 @@ class ExecutionHandler:
                       pjoin( tspec.getRootpath(),
                              os.path.dirname( tspec.getFilepath() ) ) )
 
-        ok = True
-
-        # first establish the soft linked files
-        for srcname,tstname in tspec.getLinkFiles():
-
-            f = os.path.normpath( pjoin( srcdir, srcname ) )
-
-            srcL = []
-            if os.path.exists(f):
-                srcL.append( f )
-            else:
-                fL = glob.glob( f )
-                if len(fL) > 1 and tstname != None:
-                    sys.stderr.write( "*** error: the test requested to " + \
-                          "soft link a file that matched multiple sources " + \
-                          "AND a single linkname was given: " + f + "\n" )
-                    ok = False
-                    continue
-                else:
-                    srcL.extend( fL )
-
-            if len(srcL) > 0:
-
-                for srcf in srcL:
-
-                    if tstname == None:
-                        tstf = os.path.basename( srcf )
-                    else:
-                        tstf = tstname
-
-                    if os.path.islink( tstf ):
-                        lf = os.readlink( tstf )
-                        if lf != srcf:
-                            os.remove( tstf )
-                            sys.stdout.write( 'ln -s '+srcf+' '+tstf+'\n' )
-                            os.symlink( srcf, tstf )
-
-                    elif os.path.exists( tstf ):
-                        if os.path.isdir( tstf ):
-                            shutil.rmtree( tstf )
-                        else:
-                            os.remove( tstf )
-                        sys.stdout.write( 'ln -s '+srcf+' '+tstf+'\n' )
-                        os.symlink( srcf, tstf )
-
-                    else:
-                        sys.stdout.write( 'ln -s '+srcf+' '+tstf+'\n' )
-                        os.symlink( srcf, tstf )
-
-            else:
-                sys.stderr.write( "*** error: the test requested to " + \
-                      "soft link a non-existent file: " + f + "\n" )
-                ok = False
-
-        # files to be copied
-        for srcname,tstname in tspec.getCopyFiles():
-
-            f = os.path.normpath( pjoin( srcdir, srcname ) )
-
-            srcL = []
-            if os.path.exists(f):
-                srcL.append( f )
-            else:
-                fL = glob.glob( f )
-                if len(fL) > 1 and tstname != None:
-                    sys.stderr.write( "*** error: the test requested to " + \
-                          "copy a file that matched multiple sources " + \
-                          "AND a single copyname was given: " + f + "\n" )
-                    ok = False
-                    continue
-                else:
-                    srcL.extend( fL )
-
-            if len(srcL) > 0:
-
-                for srcf in srcL:
-
-                    if tstname == None:
-                        tstf = os.path.basename( srcf )
-                    else:
-                        tstf = tstname
-
-                    if os.path.islink( tstf ):
-                        os.remove( tstf )
-                    elif os.path.exists( tstf ):
-                        if os.path.isdir( tstf ):
-                            shutil.rmtree( tstf )
-                        else:
-                            os.remove( tstf )
-
-                    if os.path.isdir( srcf ):
-                        sys.stdout.write( 'cp -rp '+srcf+' '+tstf+'\n' )
-                        shutil.copytree( srcf, tstf, symlinks=True )
-                    else:
-                        sys.stdout.write( 'cp -p '+srcf+' '+tstf+'\n' )
-                        shutil.copy2( srcf, tstf )
-
-            else:
-                sys.stderr.write( "*** error: the test requested to " + \
-                      "copy a non-existent file: " + f + "\n" )
-                ok = False
+        ok = link_and_copy_files( srcdir,
+                                  tspec.getLinkFiles(),
+                                  tspec.getCopyFiles() )
 
         return ok
 
@@ -335,36 +220,16 @@ class ExecutionHandler:
         Should only be run right after the test script finishes.  It removes
         all files in the execute directory except for a few vvtest files.
         """
-        xL = [ 'execute.log', 'baseline.log', 'machinefile' ]
-
         tspec = self.tcase.getSpec()
 
-        if tspec.getSpecificationForm() == 'xml':
-            xL.append( 'runscript' )
-
-        # might as well keep the linked files
-        for sf,tf in tspec.getLinkFiles():
-            if tf == None:
-                tf = os.path.basename( sf )
-            xL.append( tf )
-
+        specform = tspec.getSpecificationForm()
+        linkfiles = tspec.getLinkFiles()
         rundir = self.tcase.getExec().getRunDirectory()
 
-        # magic: this is ugly, and duplicates with preclean somewhat
-        for f in os.listdir( rundir ):
-            if f not in xL and not f.startswith( 'vvtest_util' ) and \
-               not fnmatch.fnmatch( f, 'execute_*.log' ):
-                fp = pjoin( rundir, f )
-                if os.path.islink( fp ):
-                    os.remove( fp )
-                elif os.path.isdir( fp ):
-                    shutil.rmtree( fp )
-                else:
-                    os.remove( fp )
+        post_clean_execute_directory( rundir, specform, linkfiles )
 
     def copyBaselineFiles(self):
-        """
-        """
+        ""
         tspec = self.tcase.getSpec()
 
         troot = tspec.getRootpath()
@@ -374,8 +239,7 @@ class ExecutionHandler:
         # TODO: add file globbing for baseline files
         for fromfile,tofile in tspec.getBaselineFiles():
             dst = pjoin( srcdir, tofile )
-            sys.stdout.write( "baseline: cp -p "+fromfile+" "+dst+'\n' )
-            sys.stdout.flush()
+            print3( "baseline: cp -p "+fromfile+" "+dst )
             shutil.copy2( fromfile, dst )
 
     def check_write_mpi_machine_file(self):
@@ -451,8 +315,7 @@ class ExecutionHandler:
 
         echo_test_execution_info( self.tcase.getSpec().getName(), cmd_list, tm )
 
-        sys.stdout.write( '\n' )
-        sys.stdout.flush()
+        print3()
 
         if baseline:
             self.copyBaselineFiles()
@@ -526,16 +389,173 @@ def get_execution_log_filename( tcase, baseline ):
 
 def echo_test_execution_info( testname, cmd_list, timeout ):
     ""
-    sys.stdout.write( "Starting test: "+testname+'\n' )
-    sys.stdout.write( "Directory    : "+os.getcwd()+'\n' )
+    print3( "Starting test: "+testname )
+    print3( "Directory    : "+os.getcwd() )
 
     if cmd_list != None:
-        sys.stdout.write( "Command      : "+' '.join( cmd_list )+'\n' )
+        print3( "Command      : "+' '.join( cmd_list ) )
 
-    sys.stdout.write( "Timeout      : "+str(timeout)+'\n' )
+    print3( "Timeout      : "+str(timeout) )
 
-    sys.stdout.write( '\n' )
-    sys.stdout.flush()
+    print3()
+
+
+def pre_clean_execute_directory( specform ):
+    ""
+    xL = [ 'execute.log', 'baseline.log' ]
+
+    if specform == 'xml':
+        xL.append( 'runscript' )
+
+    for f in os.listdir('.'):
+        if f not in xL and not f.startswith( 'vvtest_util' ) and \
+           not fnmatch.fnmatch( f, 'execute_*.log' ):
+            if os.path.islink( f ):
+                os.remove( f )
+            elif os.path.isdir(f):
+                print3( "rm -r "+f )
+                shutil.rmtree( f )
+            else:
+                print3( "rm "+f )
+                os.remove( f )
+
+
+def post_clean_execute_directory( rundir, specform, linkfiles ):
+    ""
+    xL = [ 'execute.log', 'baseline.log', 'machinefile' ]
+
+    if specform == 'xml':
+        xL.append( 'runscript' )
+
+    # might as well keep the linked files
+    for sf,tf in linkfiles:
+        if tf == None:
+            tf = os.path.basename( sf )
+        xL.append( tf )
+
+    # magic: this is ugly, and duplicates with preclean somewhat
+    for f in os.listdir( rundir ):
+        if f not in xL and not f.startswith( 'vvtest_util' ) and \
+           not fnmatch.fnmatch( f, 'execute_*.log' ):
+            fp = pjoin( rundir, f )
+            if os.path.islink( fp ):
+                os.remove( fp )
+            elif os.path.isdir( fp ):
+                shutil.rmtree( fp )
+            else:
+                os.remove( fp )
+
+
+def link_and_copy_files( srcdir, linkfiles, copyfiles ):
+    ""
+    ok = True
+
+    # first establish the soft linked files
+    for srcname,tstname in linkfiles:
+
+        f = os.path.normpath( pjoin( srcdir, srcname ) )
+
+        srcL = []
+        if os.path.exists(f):
+            srcL.append( f )
+        else:
+            fL = glob.glob( f )
+            if len(fL) > 1 and tstname != None:
+                printerr( "*** error: the test requested to",
+                          "soft link a file that matched multiple sources",
+                          "AND a single linkname was given:", f )
+                ok = False
+                continue
+            else:
+                srcL.extend( fL )
+
+        if len(srcL) > 0:
+            for srcf in srcL:
+                force_link_path_to_current_directory( tstname, srcf )
+
+        else:
+            printerr( "*** error: the test requested to",
+                      "soft link a non-existent file:", f )
+            ok = False
+
+    for srcname,tstname in copyfiles:
+
+        f = os.path.normpath( pjoin( srcdir, srcname ) )
+
+        srcL = []
+        if os.path.exists(f):
+            srcL.append( f )
+        else:
+            fL = glob.glob( f )
+            if len(fL) > 1 and tstname != None:
+                printerr( "*** error: the test requested to",
+                          "copy a file that matched multiple sources",
+                          "AND a single copyname was given:", f )
+                ok = False
+                continue
+            else:
+                srcL.extend( fL )
+
+        if len(srcL) > 0:
+            for srcf in srcL:
+                force_copy_path_to_current_directory( tstname, srcf )
+
+        else:
+            printerr( "*** error: the test requested to",
+                      "copy a non-existent file:", f )
+            ok = False
+
+    return ok
+
+
+def force_link_path_to_current_directory( destname, srcf ):
+    ""
+    if destname == None:
+        tstf = os.path.basename( srcf )
+    else:
+        tstf = destname
+
+    if os.path.islink( tstf ):
+        lf = os.readlink( tstf )
+        if lf != srcf:
+            os.remove( tstf )
+            print3( 'ln -s '+srcf+' '+tstf )
+            os.symlink( srcf, tstf )
+
+    elif os.path.exists( tstf ):
+        if os.path.isdir( tstf ):
+            shutil.rmtree( tstf )
+        else:
+            os.remove( tstf )
+        print3( 'ln -s '+srcf+' '+tstf )
+        os.symlink( srcf, tstf )
+
+    else:
+        print3( 'ln -s '+srcf+' '+tstf )
+        os.symlink( srcf, tstf )
+
+
+def force_copy_path_to_current_directory( destname, srcf ):
+    ""
+    if destname == None:
+        tstf = os.path.basename( srcf )
+    else:
+        tstf = destname
+
+    if os.path.islink( tstf ):
+        os.remove( tstf )
+    elif os.path.exists( tstf ):
+        if os.path.isdir( tstf ):
+            shutil.rmtree( tstf )
+        else:
+            os.remove( tstf )
+
+    if os.path.isdir( srcf ):
+        print3( 'cp -rp '+srcf+' '+tstf )
+        shutil.copytree( srcf, tstf, symlinks=True )
+    else:
+        print3( 'cp -p '+srcf+' '+tstf )
+        shutil.copy2( srcf, tstf )
 
 
 def redirect_stdout_stderr_to_filename( filename ):
@@ -545,3 +565,14 @@ def redirect_stdout_stderr_to_filename( filename ):
     # reassign stdout & stderr file descriptors to the file
     os.dup2( ofile.fileno(), sys.stdout.fileno() )
     os.dup2( ofile.fileno(), sys.stderr.fileno() )
+
+
+def print3( *args ):
+    ""
+    sys.stdout.write( ' '.join( [ str(x) for x in args ] ) + '\n' )
+    sys.stdout.flush()
+
+def printerr( *args ):
+    ""
+    sys.stderr.write( ' '.join( [ str(x) for x in args ] ) + '\n' )
+    sys.stderr.flush()
