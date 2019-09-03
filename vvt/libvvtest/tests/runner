@@ -169,6 +169,87 @@ class testrunner_free_functions( vtu.vvtestTestCase ):
         assert not os.path.islink( 'destdir3/bdir' )
         assert util.readfile( 'destdir3/bdir/file3.txt' ).strip() == 'file3 contents'
 
+    def make_example_execute_directory(self):
+        ""
+        util.writefile( 'xdir/execute.log', 'log\n' )
+        util.writefile( 'xdir/execute_stage.log', 'stage log\n' )
+        util.writefile( 'xdir/baseline.log', 'baseline log\n' )
+        util.writefile( 'xdir/vvtest_util.sh', 'util sh\n' )
+        util.writefile( 'xdir/vvtest_util.py', 'util py\n' )
+        util.writefile( 'xdir/runscript', 'run me\n' )
+        util.writefile( 'xdir/machinefile', 'sparky\n' )
+
+        util.writefile( 'xdir/old.exo', 'exo data\n' )
+        os.symlink( 'execute.log', 'xdir/alink' )
+        util.writefile( 'xdir/subdir/afile', 'afile contents\n' )
+
+    def test_pre_cleaning(self):
+        ""
+        self.make_example_execute_directory()
+        time.sleep(1)
+
+        with util.change_directory( 'xdir' ):
+            # with xml specification form, the 'runscript' must not be removed
+            testrunner.pre_clean_execute_directory( 'xml' )
+
+        time.sleep(1)
+
+        self.check_example_pre_cleaned_execute_directory( 'xml' )
+
+        with util.change_directory( 'xdir' ):
+            testrunner.pre_clean_execute_directory( None )
+
+        self.check_example_pre_cleaned_execute_directory( None )
+
+    def check_example_pre_cleaned_execute_directory(self, specform):
+        ""
+        assert os.path.exists( 'xdir/execute.log' )
+        assert os.path.exists( 'xdir/execute_stage.log' )
+        assert os.path.exists( 'xdir/baseline.log' )
+        assert os.path.exists( 'xdir/vvtest_util.sh' )
+        assert os.path.exists( 'xdir/vvtest_util.py' )
+
+        if specform == 'xml':
+            assert os.path.exists( 'xdir/runscript' )
+        else:
+            assert not os.path.exists( 'xdir/runscript' )
+
+        assert not os.path.exists( 'xdir/machinefile' )
+        assert not os.path.exists( 'xdir/old.exo' )
+        assert not os.path.exists( 'xdir/alink' )
+        assert not os.path.exists( 'xdir/subdir' )
+
+    def test_post_cleaning(self):
+        ""
+        self.make_example_execute_directory()
+        time.sleep(1)
+
+        testrunner.post_clean_execute_directory( 'xdir', 'xml' )
+        time.sleep(1)
+        self.check_example_post_cleaned_execute_directory( 'xml' )
+
+        testrunner.post_clean_execute_directory( 'xdir', None )
+        time.sleep(1)
+        self.check_example_post_cleaned_execute_directory( None )
+
+    def check_example_post_cleaned_execute_directory(self, specform):
+        ""
+        assert os.path.exists( 'xdir/execute.log' )
+        assert os.path.exists( 'xdir/execute_stage.log' )
+        assert os.path.exists( 'xdir/baseline.log' )
+        assert os.path.exists( 'xdir/vvtest_util.sh' )
+        assert os.path.exists( 'xdir/vvtest_util.py' )
+        assert os.path.exists( 'xdir/machinefile' )
+
+        if specform == 'xml':
+            assert os.path.exists( 'xdir/runscript' )
+        else:
+            assert not os.path.exists( 'xdir/runscript' )
+
+        assert not os.path.exists( 'xdir/old.exo' )
+        assert     os.path.exists( 'xdir/alink' )
+        assert not os.path.exists( 'xdir/subdir' )
+
 
 ############################################################################
 

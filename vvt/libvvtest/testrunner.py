@@ -108,7 +108,7 @@ class ExecutionHandler:
         removes all files in the execute directory except for a few vvtest
         files.
         """
-        print3( "Cleaning execute directory..." )
+        print3( "Cleaning execute directory for execution..." )
         specform = self.tcase.getSpec().getSpecificationForm()
         pre_clean_execute_directory( specform )
 
@@ -220,13 +220,12 @@ class ExecutionHandler:
         Should only be run right after the test script finishes.  It removes
         all files in the execute directory except for a few vvtest files.
         """
-        tspec = self.tcase.getSpec()
+        print3( "Cleaning execute directory after execution..." )
 
-        specform = tspec.getSpecificationForm()
-        linkfiles = tspec.getLinkFiles()
+        specform = self.tcase.getSpec().getSpecificationForm()
         rundir = self.tcase.getExec().getRunDirectory()
 
-        post_clean_execute_directory( rundir, specform, linkfiles )
+        post_clean_execute_directory( rundir, specform )
 
     def copyBaselineFiles(self):
         ""
@@ -402,48 +401,37 @@ def echo_test_execution_info( testname, cmd_list, timeout ):
 
 def pre_clean_execute_directory( specform ):
     ""
-    xL = [ 'execute.log', 'baseline.log' ]
+    excludes = [ 'execute.log',
+                 'baseline.log',
+                 'vvtest_util.py',
+                 'vvtest_util.sh' ]
 
     if specform == 'xml':
-        xL.append( 'runscript' )
+        excludes.append( 'runscript' )
 
-    for f in os.listdir('.'):
-        if f not in xL and not f.startswith( 'vvtest_util' ) and \
-           not fnmatch.fnmatch( f, 'execute_*.log' ):
-            if os.path.islink( f ):
-                os.remove( f )
-            elif os.path.isdir(f):
-                print3( "rm -r "+f )
-                shutil.rmtree( f )
-            else:
-                print3( "rm "+f )
-                os.remove( f )
+    for fn in os.listdir('.'):
+        if fn not in excludes and \
+           not fnmatch.fnmatch( fn, 'execute_*.log' ):
+            remove_path( fn )
 
 
-def post_clean_execute_directory( rundir, specform, linkfiles ):
+def post_clean_execute_directory( rundir, specform ):
     ""
-    xL = [ 'execute.log', 'baseline.log', 'machinefile' ]
+    excludes = [ 'execute.log',
+                 'baseline.log',
+                 'vvtest_util.py',
+                 'vvtest_util.sh',
+                 'machinefile' ]
 
     if specform == 'xml':
-        xL.append( 'runscript' )
+        excludes.append( 'runscript' )
 
-    # might as well keep the linked files
-    for sf,tf in linkfiles:
-        if tf == None:
-            tf = os.path.basename( sf )
-        xL.append( tf )
-
-    # magic: this is ugly, and duplicates with preclean somewhat
-    for f in os.listdir( rundir ):
-        if f not in xL and not f.startswith( 'vvtest_util' ) and \
-           not fnmatch.fnmatch( f, 'execute_*.log' ):
-            fp = pjoin( rundir, f )
-            if os.path.islink( fp ):
-                os.remove( fp )
-            elif os.path.isdir( fp ):
-                shutil.rmtree( fp )
-            else:
-                os.remove( fp )
+    for fn in os.listdir( rundir ):
+        if fn not in excludes and \
+           not fnmatch.fnmatch( fn, 'execute_*.log' ):
+            fullpath = pjoin( rundir, fn )
+            if not os.path.islink( fullpath ):
+                remove_path( fullpath )
 
 
 def link_and_copy_files( srcdir, linkfiles, copyfiles ):
