@@ -402,8 +402,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <include platforms="some/value"/>
             </rtest>""" )
 
-        self.assertRaises( TestSpecError,
-                create_tests, 'bad10.xml' )
+        self.assertRaises( TestSpecError, create_tests, 'bad10.xml' )
 
         util.writefile( 'bad11.xml', """
             <rtest name="atest">
@@ -624,12 +623,10 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize platforms="IRIX" np="1"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='IRIX' )
-        tL = create_tests( 'ok15.xml', uf )
+        tL = create_tests( 'ok15.xml', 'IRIX' )
         assert len(tL) == 1
         assert tL[0].getParameterValue('np') == '1'
-        uf = RuntimeConfig( platform_name='something' )
-        tL = create_tests( 'ok15.xml', uf )
+        tL = create_tests( 'ok15.xml', 'something' )
         assert len(tL) == 2
         assert ( tL[0].getParameterValue('np') == '1' and \
                  tL[1].getParameterValue('np') == '4' ) or \
@@ -643,11 +640,9 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize hsize="1.0 2.0"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='IRIX' )
-        tL = create_tests( 'ok16.xml', uf )
+        tL = create_tests( 'ok16.xml', 'IRIX' )
         assert len(tL) == 2
-        uf = RuntimeConfig( platform_name='something' )
-        tL = create_tests( 'ok16.xml', uf )
+        tL = create_tests( 'ok16.xml', 'something' )
         assert len(tL) == 4
 
         util.writefile( 'ok17.xml', """
@@ -658,13 +653,11 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize platforms="IRIX"     hsize="1.0"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='IRIX' )
-        tL = create_tests( 'ok17.xml', uf )
+        tL = create_tests( 'ok17.xml', 'IRIX' )
         assert len(tL) == 1
         assert tL[0].getParameterValue('np') == '1' and \
                tL[0].getParameterValue('hsize') == '1.0'
-        uf = RuntimeConfig( platform_name='something' )
-        tL = create_tests( 'ok17.xml', uf )
+        tL = create_tests( 'ok17.xml', 'something' )
         assert len(tL) == 4
 
         util.writefile( 'ok18.xml', """
@@ -674,11 +667,9 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize platforms="IRIX"     hsize="1.0"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='IRIX' )
-        tL = create_tests( 'ok18.xml', uf )
+        tL = create_tests( 'ok18.xml', 'IRIX' )
         assert len(tL) == 2
-        uf = RuntimeConfig( platform_name='something' )
-        tL = create_tests( 'ok18.xml', uf )
+        tL = create_tests( 'ok18.xml', 'something' )
         assert len(tL) == 4
 
     def test_timeout_specifications(self):
@@ -719,12 +710,10 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <timeout platforms="SunOS" value="300"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='anything' )
-        tL = create_tests( 'ok23.xml', uf )
+        tL = create_tests( 'ok23.xml', 'anything' )
         assert len(tL) == 1
         assert tL[0].getTimeout() == 240
-        uf = RuntimeConfig( platform_name='SunOS' )
-        tL = create_tests( 'ok23.xml', uf )
+        tL = create_tests( 'ok23.xml', 'SunOS' )
         assert len(tL) == 1
         assert tL[0].getTimeout() == 300
 
@@ -998,15 +987,13 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <baseline platforms="not SunOS" file="file.exo" destination="file.base_exo"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='SunOS' )
-        tL = create_tests( 'ok33.xml', uf )
+        tL = create_tests( 'ok33.xml', 'SunOS' )
         assert len(tL) == 1
         assert not tL[0].getBaselineScript()
         bL = tL[0].getBaselineFiles()
         assert len(bL) == 1
         assert bL[0] == ('file.exo', 'file.SunOS_exo')
-        uf = RuntimeConfig( platform_name='Linux' )
-        tL = create_tests( 'ok33.xml', uf )
+        tL = create_tests( 'ok33.xml', 'Linux' )
         assert len(tL) == 1
         assert not tL[0].getBaselineScript()
         bL = tL[0].getBaselineFiles()
@@ -1099,8 +1086,7 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <link_files linkname="file"> lnfile </link_files>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='Linux' )
-        tL = create_tests( 'ok34.xml', uf )
+        tL = create_tests( 'ok34.xml', 'Linux' )
         assert len(tL) == 2
         for t in tL:
           print3( t )
@@ -1165,114 +1151,12 @@ class XML_test_specifications( vtu.vvtestTestCase ):
               <parameterize platforms="Linux or tbird" np="1 2 4"/>
             </rtest>""" )
 
-        uf = RuntimeConfig( platform_name='SunOS' )
-        tL = create_tests( 'ok43.xml', uf )
+        tL = create_tests( 'ok43.xml', 'SunOS' )
         assert len(tL) == 2
-        uf = RuntimeConfig( platform_name='Linux' )
-        tL = create_tests( 'ok43.xml', uf )
+        tL = create_tests( 'ok43.xml', 'Linux' )
         assert len(tL) == 3
-        uf = RuntimeConfig( platform_name='tbird' )
-        tL = create_tests( 'ok43.xml', uf )
+        tL = create_tests( 'ok43.xml', 'tbird' )
         assert len(tL) == 3
-
-    def regexes(self, *patterns):
-        ""
-        rxL = []
-        for pat in patterns:
-            rxL.append( re.compile( pat, re.IGNORECASE | re.MULTILINE ) )
-        return rxL
-
-    def test_using_RuntimeConfig_filtering(self):
-        ""
-        util.writefile( 'regexfile.txt', """
-            One line 
-            Line Two, then
-            line thrEE""" )
-
-        util.writefile( 'ok46.xml', """
-            <rtest name="atest">
-              <parameterize np="1 4"/>
-              <link_files> regexfile.txt </link_files>
-            </rtest>""" )
-
-        create_and_search_files( 'ok46.xml', ['*.txt'],
-                                 self.regexes('One'), 2 )
-        create_and_search_files( 'ok46.xml', ['*.txt'],
-                                 self.regexes('three'), 2 )
-        create_and_search_files( 'ok46.xml', ['*.txt'],
-                                 self.regexes('line two'), 2 )
-        create_and_search_files( 'ok46.xml', ['*.txt'],
-                                 self.regexes('line one'), 0 )
-        create_and_search_files( 'ok46.xml', ['*.txt'],
-                                 self.regexes('LINE *THEN'), 0 )
-        create_and_search_files( 'ok46.xml', ['*.txt'],
-                                 self.regexes('LINE .*THEN'), 2 )
-        create_and_search_files( 'ok46.xml', ['*.txt'],
-                                 self.regexes('line $'), 2 )
-        create_and_search_files( 'ok46.xml', ['*.txt'],
-                                 self.regexes('line$'), 0 )
-        create_and_search_files( 'ok46.xml', ['*.nun','*.txt'],
-                                 self.regexes('LINE .*THEN'), 2 )
-        create_and_search_files( 'ok46.xml', ['*.nun','*.two'],
-                                 self.regexes('LINE .*THEN'), 0 )
-        create_and_search_files( 'ok46.xml', ['*.txt'],
-                                 self.regexes('nomatch','LINE .*THEN'), 2 )
-
-        util.writefile( 'ok47.xml', """
-            <rtest name="atest">
-              <parameterize np="1 4"/>
-              <copy_files> regexfile.txt </copy_files>
-            </rtest>""" )
-
-        create_and_search_files( 'ok47.xml', ['*.txt'],
-                                 self.regexes('One'), 2 )
-        create_and_search_files( 'ok47.xml', ['*.txt'],
-                                 self.regexes('three'), 2 )
-        create_and_search_files( 'ok47.xml', ['*.txt'],
-                                 self.regexes('line two'), 2 )
-        create_and_search_files( 'ok47.xml', ['*.txt'],
-                                 self.regexes('line one'), 0 )
-        create_and_search_files( 'ok47.xml', ['*.txt'],
-                                 self.regexes('LINE *THEN'), 0 )
-        create_and_search_files( 'ok47.xml', ['*.txt'],
-                                 self.regexes('LINE .*THEN'), 2 )
-        create_and_search_files( 'ok47.xml', ['*.txt'],
-                                 self.regexes('line $'), 2 )
-        create_and_search_files( 'ok47.xml', ['*.txt'],
-                                 self.regexes('line$'), 0 )
-        create_and_search_files( 'ok47.xml', ['*.nun','*.txt'],
-                                 self.regexes('LINE .*THEN'), 2 )
-        create_and_search_files( 'ok47.xml', ['*.nun','*.two'],
-                                 self.regexes('LINE .*THEN'), 0 )
-        create_and_search_files( 'ok47.xml', ['*.txt'],
-                                 self.regexes('nomatch','LINE .*THEN'), 2 )
-
-        util.writefile( 'ok48.xml', """
-            <rtest name="atest">
-              <parameterize np="1 4"/>
-              <copy_files> noexist.txt </copy_files>
-            </rtest>""" )
-
-        create_and_search_files( 'ok48.xml', ['*.txt'],
-                                 self.regexes('One'), 0 )
-
-        util.writefile( 'ok49.xml', """
-            <rtest name="regexfile">
-              <parameterize np="1 4"/>
-              <copy_files> $NAME.txt </copy_files>
-            </rtest>""" )
-
-        create_and_search_files( 'ok49.xml', ['*.txt'],
-                                 self.regexes('One'), 2 )
-
-        util.writefile( 'ok50.xml', """
-            <rtest name="regex">
-              <parameterize np="1 4"/>
-              <copy_files> ${NAME}file.txt </copy_files>
-            </rtest>""" )
-
-        create_and_search_files( 'ok50.xml', ['*.txt'],
-                                 self.regexes('One'), 2 )
 
     def test_file_globbing_and_source_file_specification(self):
         ""
@@ -1411,7 +1295,7 @@ def reparse_test_string( stringid ):
     ""
     tcase = tio.string_to_test( stringid )
 
-    creator = TestCreator( RuntimeConfig() )
+    creator = TestCreator( 'atari', [] )
     creator.reparse( tcase.getSpec() )
 
     return tcase
@@ -1419,7 +1303,7 @@ def reparse_test_string( stringid ):
 
 def parse_create_analyze_test( filename ):
     ""
-    creator = TestCreator( RuntimeConfig() )
+    creator = TestCreator( 'atari', [] )
 
     tL = creator.fromFile( '.', filename, None )
 
@@ -1431,12 +1315,9 @@ def parse_create_analyze_test( filename ):
 
 #####################################################################
 
-def create_tests( relpath, rtconfig=None ):
+def create_tests( relpath, platname='dummy', optlist=[] ):
     ""
-    if rtconfig == None:
-        rtconfig = RuntimeConfig( platform_name='dummy' )
-
-    creator = TestCreator( rtconfig )
+    creator = TestCreator( platname, optlist )
     tL = creator.fromFile( os.getcwd(), relpath, None )
     sortL = [ (ts.getDisplayString(),ts) for ts in tL ]
     sortL.sort()
@@ -1446,7 +1327,7 @@ def create_tests( relpath, rtconfig=None ):
 
 def reparse_test( testobj ):
     ""
-    creator = TestCreator( RuntimeConfig() )
+    creator = TestCreator( 'atari', [] )
     creator.reparse( testobj )
 
 
@@ -1469,7 +1350,7 @@ def paramGather(testL):
 def create_and_eval_option_expr( filename, options, boolean_result ):
     ""
     rtcfg = RuntimeConfig( option_list=options )
-    tL = create_tests( filename, rtcfg )
+    tL = create_tests( filename, optlist=options )
     assert len(tL) == 1
     exprL = tL[0].getOptionEnableExpressions()
     assert len(exprL) == 1
@@ -1483,7 +1364,8 @@ def create_test_and_eval_platform_expr( filename, platname, boolean_result,
     rtcfg = RuntimeConfig( platform_name=platname,
                            set_platform_expr=platform_expr,
                            option_list=option_list )
-    tL = create_tests( filename, rtcfg )
+
+    tL = create_tests( filename, platname, option_list )
 
     exprL = tL[0].getPlatformEnableExpressions()
     pev = PlatformEvaluator( exprL )
@@ -1501,22 +1383,6 @@ def create_test_and_eval_platform_expr( filename, platname, boolean_result,
 
     else:
         assert pval == boolean_result
-
-
-def create_and_search_files( filename, globlist, regexes, test_count ):
-    ""
-    rtcfg = RuntimeConfig( search_file_globs=globlist,
-                           search_regexes=regexes )
-
-    tL = create_tests( filename, rtcfg )
-
-    cnt = 0
-
-    for tspec in tL:
-        if rtcfg.file_search( tspec ):
-            cnt += 1
-
-    assert cnt == test_count
 
 
 #####################################################################

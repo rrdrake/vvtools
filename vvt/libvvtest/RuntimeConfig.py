@@ -8,8 +8,6 @@ import sys
 sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
-import re
-import fnmatch
 
 from . import FilterExpressions
 
@@ -17,25 +15,44 @@ from . import FilterExpressions
 class RuntimeConfig:
 
     known_attrs = [ \
-       'param_expr_list',  # k-format or string expression parameter filter
-       'keyword_expr',     # a WordExpression object for keyword filtering
-       'option_list',      # list of build options
-       'platform_name',    # target platform name
-       'ignore_platforms', # boolean to turn off filtering by platform
-       'set_platform_expr',# platform expression
-       'search_file_globs',# file glob patterns used with 'search_regexes'
-       'search_regexes',   # list of regexes for seaching within files
-       'include_tdd',      # if True, tests marked TDD are not excluded
-       'include_all',      # boolean to turn off test inclusion filtering
-       'runtime_range',    # [ minimum runtime, maximum runtime ]
-       'runtime_sum',      # maximum accumulated runtime
-       'maxprocs',         # maximum number of processors, np
+       'param_expr_list',   # k-format or string expression parameter filter
+       'keyword_expr',      # a WordExpression object for keyword filtering
+       'option_list',       # list of build options
+       'platform_name',     # target platform name
+       'ignore_platforms',  # boolean to turn off filtering by platform
+       'set_platform_expr', # platform expression
+       'search_file_globs', # file glob patterns used with 'search_regexes'
+       'search_regexes',    # list of regexes for seaching within files
+       'include_tdd',       # if True, tests marked TDD are not excluded
+       'include_all',       # boolean to turn off test inclusion filtering
+       'runtime_range',     # [ minimum runtime, maximum runtime ]
+       'runtime_sum',       # maximum accumulated runtime
+       'maxprocs',          # maximum number of processors, np
     ]
+
+    defaults = { \
+        'vvtestdir'  : None,  # the top level vvtest directory
+        'configdir'  : None,  # the configuration directory
+        'exepath'    : None,  # the path to the executables
+        'onopts'     : [],
+        'offopts'    : [],
+        'refresh'    : 1,
+        'postclean'  : 0,
+        'timeout'    : None,
+        'multiplier' : 1.0,
+        'preclean'   : 1,
+        'analyze'    : 0,
+        'logfile'    : 1,
+        'testargs'   : [],
+    }
 
     def __init__(self, **kwargs ):
         """
         """
         self.attrs = {}
+
+        for n,v in RuntimeConfig.defaults.items():
+            self.setAttr( n, v )
 
         for k,v in kwargs.items():
             self.setAttr( k, v )
@@ -44,7 +61,6 @@ class RuntimeConfig:
         """
         Set the value of an attribute name (which must be known).
         """
-        assert name in RuntimeConfig.known_attrs
         self.attrs[name] = value
 
         if name in ['platform_name','set_platform_expr']:
@@ -60,6 +76,14 @@ class RuntimeConfig:
         if len(default) == 0:
             return self.attrs[name]
         return self.attrs.get( name, default[0] )
+
+    def get(self, name):
+        ""
+        return self.attrs[name]
+
+    def set(self, name, value):
+        ""
+        self.attrs[name] = value
 
     def platformName(self):
         ""
@@ -127,46 +151,6 @@ class RuntimeConfig:
         opL = self.attrs.get( 'option_list', [] )
         return expr.evaluate( opL.count )
 
-    def file_search(self, tspec):
-        """
-        Searches certain test files that are linked or copied in the test for
-        regular expression patterns.  Returns true if at least one pattern
-        matched in one of the files.  Also returns true if no regular
-        expressions were given at construction.
-        """
-        regexL = self.attrs.get( 'search_regexes', None )
-        if regexL == None or len(regexL) == 0:
-            return True
-
-        fnglob = self.attrs.get( 'search_file_globs', None )
-        if fnglob == None:
-            # filter not applied if no file glob patterns
-            return True
-
-        # TODO: see if there is a way to avoid passing tpsec in here
-
-        varD = { 'NAME':tspec.getName() }
-        for k,v in tspec.getParameters().items():
-            varD[k] = v
-        for src,dest in tspec.getLinkFiles()+tspec.getCopyFiles():
-            src = expand_variables(src,varD)
-            for fn in fnglob:
-                xmldir = os.path.join( tspec.getRootpath(), \
-                                       os.path.dirname(tspec.getFilepath()) )
-                f = os.path.join( xmldir, src )
-                if os.path.exists(f) and fnmatch.fnmatch(os.path.basename(src),fn):
-                    for p in regexL:
-                        try:
-                            fp = open(f)
-                            s = fp.read()
-                            fp.close()
-                            if p.search(s):
-                                return True
-                        except IOError:
-                            pass
-
-        return False
-
     def evaluate_runtime(self, test_runtime):
         """
         If a runtime range is specified in this object, the given runtime is
@@ -189,58 +173,3 @@ class RuntimeConfig:
             return False
 
         return True
-
-
-class PatternStore:
-    """Class to store the patterns used by the expand_variables function."""
-    curly    = re.compile( '[$][{][^}]*[}]' )
-    var      = re.compile( '[$][a-zA-Z][a-zA-Z0-9_]*' )
-
-
-def expand_variables(s, vardict):
-    """
-    Expands the given string with values from the dictionary.  It will
-    expand ${NAME} and $NAME style variables.
-    """
-    if s:
-
-        # first, substitute from dictionary argument
-
-        if len(vardict) > 0:
-
-            idx = 0
-            while idx < len(s):
-                m = PatternStore.curly.search( s, idx )
-                if m != None:
-                    p = m.span()
-                    varname = s[ p[0]+2 : p[1]-1 ]
-                    if varname in vardict:
-                        varval = vardict[varname]
-                        s = s[:p[0]] + varval + s[p[1]:]
-                        idx = p[0] + len(varval)
-                    else:
-                        idx = p[1]
-                else:
-                    break
-
-            idx = 0
-            while idx < len(s):
-                m = PatternStore.var.search( s, idx )
-                if m != None:
-                    p = m.span()
-                    varname = s[ p[0]+1 : p[1] ]
-                    if varname in vardict:
-                        varval = vardict[varname]
-                        s = s[:p[0]] + varval + s[p[1]:]
-                        idx = p[0] + len(varval)
-                    else:
-                        idx = p[1]
-                else:
-                    break
-
-        # then replace un-expanded variables with empty strings
-        
-        s = PatternStore.curly.sub('', s)
-        s = PatternStore.var.sub('', s)
-
-    return s

@@ -22,12 +22,12 @@ class TestExecList:
         self.started = {}  # TestSpec ID -> TestCase object
         self.stopped = {}  # TestSpec ID -> TestCase object
 
-    def createTestExecs(self, test_dir, platform, config, perms):
+    def createTestExecs(self, test_dir, platform, rtconfig, perms):
         """
         Creates the set of TestExec objects from the active test list.
         """
         runner = testrunner.TestRunner( test_dir, platform,
-                                        config, self.plugin,
+                                        rtconfig, self.plugin,
                                         perms )
 
         self._createTestExecList( perms )

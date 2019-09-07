@@ -19,10 +19,9 @@ from .errors import TestSpecError
 
 class TestCreator:
 
-    def __init__(self, rtconfig):
+    def __init__(self, platname, optionlist):
         ""
-        self.evaluator = ExpressionEvaluator( rtconfig.platformName(),
-                                              rtconfig.getOptionList() )
+        self.evaluator = ExpressionEvaluator( platname, optionlist )
 
     def fromFile(self, rootpath, relpath, force_params):
         """

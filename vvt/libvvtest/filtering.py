@@ -5,6 +5,8 @@
 # Government retains certain rights in this software.
 
 import os, sys
+import re
+import fnmatch
 
 
 class TestFilter:
@@ -112,9 +114,13 @@ class TestFilter:
         ""
         tspec = tcase.getSpec()
 
-        ok = self.rtconfig.file_search( tspec )
+        regexL = self.rtconfig.getAttr( 'search_regexes', None )
+        globL = self.rtconfig.getAttr( 'search_file_globs', None )
+
+        ok = file_search( tspec, regexL, globL )
         if not ok:
             tcase.getStat().markSkipByFileSearch()
+
         return ok
 
     def checkMaxProcessors(self, tcase):
@@ -267,3 +273,93 @@ def is_subdir(parent_dir, subdir):
     if ls > lp and parent_dir + '/' == subdir[0:lp+1]:
       return subdir[lp+1:]
     return None
+
+
+def file_search( tspec, regex_patterns, file_globs ):
+    """
+    Searches certain test files that are linked or copied in the test for
+    regular expression patterns.  Returns true if at least one pattern
+    matched in one of the files.  Also returns true if no regular
+    expressions were given at construction.
+    """
+    if regex_patterns == None or len(regex_patterns) == 0:
+        return True
+
+    if file_globs == None:
+        # filter not applied if no file glob patterns
+        return True
+
+    varD = { 'NAME':tspec.getName() }
+    for k,v in tspec.getParameters().items():
+        varD[k] = v
+    for src,dest in tspec.getLinkFiles()+tspec.getCopyFiles():
+        src = expand_variables(src,varD)
+        for fn in file_globs:
+            xmldir = os.path.join( tspec.getRootpath(), \
+                                   os.path.dirname(tspec.getFilepath()) )
+            f = os.path.join( xmldir, src )
+            if os.path.exists(f) and fnmatch.fnmatch(os.path.basename(src),fn):
+                for p in regex_patterns:
+                    try:
+                        fp = open(f)
+                        s = fp.read()
+                        fp.close()
+                        if p.search(s):
+                            return True
+                    except IOError:
+                        pass
+
+    return False
+
+
+curly_pat = re.compile( '[$][{][^}]*[}]' )
+var_pat   = re.compile( '[$][a-zA-Z][a-zA-Z0-9_]*' )
+
+
+def expand_variables(s, vardict):
+    """
+    Expands the given string with values from the dictionary.  It will
+    expand ${NAME} and $NAME style variables.
+    """
+    if s:
+
+        # first, substitute from dictionary argument
+
+        if len(vardict) > 0:
+
+            idx = 0
+            while idx < len(s):
+                m = curly_pat.search( s, idx )
+                if m != None:
+                    p = m.span()
+                    varname = s[ p[0]+2 : p[1]-1 ]
+                    if varname in vardict:
+                        varval = vardict[varname]
+                        s = s[:p[0]] + varval + s[p[1]:]
+                        idx = p[0] + len(varval)
+                    else:
+                        idx = p[1]
+                else:
+                    break
+
+            idx = 0
+            while idx < len(s):
+                m = var_pat.search( s, idx )
+                if m != None:
+                    p = m.span()
+                    varname = s[ p[0]+1 : p[1] ]
+                    if varname in vardict:
+                        varval = vardict[varname]
+                        s = s[:p[0]] + varval + s[p[1]:]
+                        idx = p[0] + len(varval)
+                    else:
+                        idx = p[1]
+                else:
+                    break
+
+        # then replace un-expanded variables with empty strings
+        
+        s = curly_pat.sub('', s)
+        s = var_pat.sub('', s)
+
+    return s

@@ -19,7 +19,7 @@ from .makecmd import MakeScriptCommand
 
 class TestRunner:
 
-    def __init__(self, test_dir, platform, config, usrplugin, perms):
+    def __init__(self, test_dir, platform, rtconfig, usrplugin, perms):
         """
         The platform is a Platform object.  The test_dir is the top level
         testing directory, which is either an absolute path or relative to
@@ -27,7 +27,7 @@ class TestRunner:
         """
         self.test_dir = test_dir
         self.platform = platform
-        self.config = config
+        self.rtconfig = rtconfig
         self.usrplugin = usrplugin
         self.perms = perms
 
@@ -41,7 +41,7 @@ class TestRunner:
 
         handler = ExecutionHandler( tcase,
                                     self.perms,
-                                    self.config,
+                                    self.rtconfig,
                                     self.platform,
                                     self.usrplugin,
                                     self.test_dir,
@@ -65,8 +65,8 @@ class TestRunner:
         ""
         if tspec.getSpecificationForm() == 'xml':
             if self.commondb == None:
-                d = pjoin( self.config.get('vvtestdir'), 'libvvtest' )
-                c = self.config.get('configdir')
+                d = pjoin( self.rtconfig.get('vvtestdir'), 'libvvtest' )
+                c = self.rtconfig.get('configdir')
                 self.commondb = CommonSpec.loadCommonSpec( d, c )
 
             return self.commondb
@@ -76,12 +76,12 @@ class TestRunner:
 
 class ExecutionHandler:
 
-    def __init__(self, tcase, perms, config, platform,
+    def __init__(self, tcase, perms, rtconfig, platform,
                        usrplugin, test_dir, commondb):
         ""
         self.tcase = tcase
         self.perms = perms
-        self.config = config
+        self.rtconfig = rtconfig
         self.platform = platform
         self.plugin = usrplugin
         self.test_dir = test_dir
@@ -89,15 +89,15 @@ class ExecutionHandler:
 
     def check_redirect_output_to_log_file(self, baseline):
         ""
-        if self.config.get('logfile'):
+        if self.rtconfig.get('logfile'):
             logfname = get_execution_log_filename( self.tcase, baseline )
             redirect_stdout_stderr_to_filename( logfname )
             self.perms.set( os.path.abspath( logfname ) )
 
     def check_run_preclean(self, baseline):
         ""
-        if self.config.get('preclean') and \
-           not self.config.get('analyze') and \
+        if self.rtconfig.get('preclean') and \
+           not self.rtconfig.get('analyze') and \
            not baseline and \
            self.tcase.getSpec().isFirstStage():
             self.preclean()
@@ -191,11 +191,11 @@ class ExecutionHandler:
         """
         val = ''
 
-        cfgd = self.config.get( 'configdir' )
+        cfgd = self.rtconfig.get( 'configdir' )
         if cfgd and ':' not in cfgd:
             val += ':'+cfgd
 
-        tdir = self.config.get( 'vvtestdir' )
+        tdir = self.rtconfig.get( 'vvtestdir' )
         if ':' not in tdir:
             val += ':'+pjoin( tdir, 'config' ) + ':'+tdir
 
@@ -209,7 +209,7 @@ class ExecutionHandler:
 
     def check_run_postclean(self):
         ""
-        if self.config.get('postclean') and \
+        if self.rtconfig.get('postclean') and \
            self.tcase.getStat().passed() and \
            not self.tcase.hasDependent() and \
            self.tcase.getSpec().isLastStage():
@@ -283,10 +283,10 @@ class ExecutionHandler:
             if hasattr( obj, "mpi_opts") and obj.mpi_opts:
                 cmdL.extend( ['--mpirun_opts', obj.mpi_opts] )
 
-            if self.config.get('analyze'):
+            if self.rtconfig.get('analyze'):
                 cmdL.append('--execute_analysis_sections')
 
-            cmdL.extend( self.config.get( 'testargs' ) )
+            cmdL.extend( self.rtconfig.get( 'testargs' ) )
 
         return cmdL
 
@@ -331,7 +331,7 @@ class ExecutionHandler:
 
         script_file = pjoin( rundir, 'runscript' )
 
-        if self.config.get('refresh') or not os.path.exists( script_file ):
+        if self.rtconfig.get('refresh') or not os.path.exists( script_file ):
 
             troot = tspec.getRootpath()
             assert os.path.isabs( troot )
@@ -343,11 +343,11 @@ class ExecutionHandler:
             cshScriptWriter.writeScript( tspec,
                                          self.commondb,
                                          self.platform,
-                                         self.config.get('vvtestdir'),
-                                         self.config.get('exepath'),
+                                         self.rtconfig.get('vvtestdir'),
+                                         self.rtconfig.get('exepath'),
                                          srcdir,
-                                         self.config.get('onopts'),
-                                         self.config.get('offopts'),
+                                         self.rtconfig.get('onopts'),
+                                         self.rtconfig.get('offopts'),
                                          script_file )
 
             self.perms.set( os.path.abspath( script_file ) )
@@ -361,11 +361,11 @@ class ExecutionHandler:
 
             script_file = pjoin( rundir, 'vvtest_util.'+lang )
 
-            if self.config.get('refresh') or not os.path.exists( script_file ):
+            if self.rtconfig.get('refresh') or not os.path.exists( script_file ):
                 ScriptWriter.writeScript( self.tcase,
                                           script_file,
                                           lang,
-                                          self.config,
+                                          self.rtconfig,
                                           self.platform,
                                           self.test_dir )
 

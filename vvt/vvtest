@@ -9,11 +9,11 @@ sys.dont_write_bytecode = True
 sys.excepthook = sys.__excepthook__
 import os
 from os.path import join as pjoin
+from os.path import dirname, abspath, normpath
 import time
 import shlex
 
 import libvvtest.cmdline as cmdline
-import libvvtest.misc as misc
 from libvvtest.execlist import TestExecList
 import libvvtest.pathutil as pathutil
 from libvvtest.errors import FatalError
@@ -49,19 +49,21 @@ class MainEntry:
         self.opts, self.optD, self.dirs = \
             cmdline.parse_command_line( self.argv[1:], version )
 
+        # non-None only if the CWD is in a TestResults.* directory
+        self.cache_file = get_test_cache_file()
+
+        configdir = determine_configdir( self.vvtestdir, self.opts )
+        insert_configdir_into_sys_path( self.vvtestdir, configdir )
+
         self.rtdata = RuntimeData( self.argv, self.vvtestdir, self.exepath )
 
-        self.constructConfiguration()
+        rtconfig = self.constructRuntimeConfig( configdir )
 
-        insert_configdir_into_sys_path( self.rtdata )
-
-        test_cache_dir = self.readCacheData()
-
-        self.constructPlatform()
+        self.constructPlatform( rtconfig )
 
         self.constructTestSubdirectory()
 
-        self.rtdata.setTestResultsDir( test_cache_dir )
+        self.rtdata.setTestResultsDir( self.cache_file )
 
         self.rtdata.setPermissionsObject( self.opts, self.optD )
 
@@ -110,22 +112,27 @@ class MainEntry:
         if self.opts.encode_exit_status:
             return exitstat
 
-    def constructConfiguration(self):
+    def constructRuntimeConfig(self, configdir):
         ""
-        config = create_configuration( self.opts, self.optD,
-                                       self.rtdata.getVvtestDir() )
-        self.rtdata.setConfiguration( config )
+        rtconfig = construct_RuntimeConfig( self.opts, self.optD )
+        self.rtdata.setRuntimeConfig( rtconfig )
 
-    def readCacheData(self):
+        self.readCacheData( rtconfig )
+
+        create_configuration( rtconfig, self.opts, self.optD,
+                              self.vvtestdir, configdir )
+
+        return rtconfig
+
+    def readCacheData(self, rtconfig):
         ""
-        # non-None only if the CWD is in a TestResults.* directory
-        test_cache_dir = readCommandInfo( self.opts, self.optD, self.rtdata )
+        readCommandInfo( self.opts, self.optD, rtconfig, self.cache_file )
 
-        if test_cache_dir and self.optD['param_dict']:
+        if self.cache_file and self.optD['param_dict']:
             print3( "*** error: cannot use -S in a TestResults directory" )
             sys.exit(1)
 
-        if test_cache_dir and self.opts.dash_g:
+        if self.cache_file and self.opts.dash_g:
             print3( "*** error: cannot use -g in a TestResults directory" )
             sys.exit(1)
 
@@ -134,13 +141,14 @@ class MainEntry:
             for n in self.opts.check:
                 os.environ[ 'CHECK_' + n.upper() ] = ''
 
-        return test_cache_dir
-
-    def constructPlatform(self):
+    def constructPlatform(self, rtconfig):
         ""
-        plat = construct_platform_instance( self.rtdata.getVvtestDir(),
-                                            self.opts, self.optD )
+        plat = construct_platform_instance( self.vvtestdir, self.opts, self.optD )
         self.rtdata.setPlatformObject( plat )
+
+        rtconfig.setAttr( 'platform_name', plat.getName() )
+        rtconfig.setAttr( 'option_list', self.optD['onopts'] + [plat.getCompiler()] )
+        rtconfig.setAttr( 'maxprocs', plat.getMaxProcs() )
 
     def constructTestSubdirectory(self):
         ""
@@ -167,11 +175,12 @@ class MainEntry:
         from libvvtest.timeout import TimeHandler
 
         platobj = self.rtdata.getPlatformObject()
+        rtconfig = self.rtdata.getRuntimeConfig()
 
-        rtconfig = construct_RuntimeConfig( platobj, self.opts, self.optD )
-        self.rtdata.setRuntimeConfig( rtconfig )
+        # rtconfig = construct_RuntimeConfig( platobj, self.opts, self.optD )
+        # self.rtdata.setRuntimeConfig( rtconfig )
 
-        creator = TestCreator( rtconfig )
+        creator = TestCreator( rtconfig.platformName(), rtconfig.getOptionList() )
         self.rtdata.setTestCreator( creator )
 
         plug = import_plugin_module( rtconfig )
@@ -205,82 +214,50 @@ def import_plugin_module( rtconfig ):
     return plug
 
 
-class Configuration:
-    
-    defaults = { \
-                 'vvtestdir':None,  # the top level vvtest directory
-                 'configdir':None,  # the configuration directory
-                 'exepath':None,  # the path to the executables
-                 'onopts':[],
-                 'offopts':[],
-                 'refresh':1,
-                 'postclean':0,
-                 'timeout':None,
-                 'multiplier':1.0,
-                 'preclean':1,
-                 'analyze':0,
-                 'logfile':1,
-                 'testargs':[],
-               }
-    
-    def get(self, name):
-        ""
-        return self.attrs[name]
-    
-    def set(self, name, value):
-        ""
-        if value == None:
-          self.attrs[name] = Configuration.defaults[name]
-        else:
-          self.attrs[name] = value
-    
-    def __init__(self):
-        self.attrs = {}
-        for n,v in Configuration.defaults.items():
-          self.attrs[n] = v
-
-
-def create_configuration( opts, optD, vvtestdir ):
+def determine_configdir( vvtestdir, opts ):
     ""
-    config = Configuration()
-
-    config.set( 'vvtestdir', vvtestdir )
-
-    if optD['onopts']:
-        config.set( 'onopts', optD['onopts'] )
-    if optD['offopts']:
-        config.set( 'offopts', optD['offopts'] )
-
-    if opts.bin_dir:
-        config.set( 'exepath', opts.bin_dir )
-
     if opts.config:
-        config.set( 'configdir', opts.config[-1] )
+        return opts.config[-1]
+
     else:
         d = os.getenv( 'VVTEST_CONFIGDIR' )
         if d == None:
             d = pjoin( vvtestdir, 'config' )
-        config.set( 'configdir', os.path.abspath(d) )
 
-    config.set( 'refresh', not opts.dash_m )
-    config.set( 'postclean', opts.postclean == True )
+        return abspath(d)
+
+
+def create_configuration( rtconfig, opts, optD, vvtestdir, configdir ):
+    ""
+    rtconfig.set( 'vvtestdir', vvtestdir )
+
+    if optD['onopts']:
+        rtconfig.set( 'onopts', optD['onopts'] )
+    if optD['offopts']:
+        rtconfig.set( 'offopts', optD['offopts'] )
+
+    if opts.bin_dir:
+        rtconfig.set( 'exepath', opts.bin_dir )
+
+    rtconfig.set( 'configdir', configdir )
+
+    rtconfig.set( 'refresh', not opts.dash_m )
+    rtconfig.set( 'postclean', opts.postclean == True )
 
     if opts.dash_T != None:
-        config.set( 'timeout', opts.dash_T )
+        rtconfig.set( 'timeout', opts.dash_T )
     if opts.timeout_multiplier != None:
-        config.set( 'multiplier', opts.timeout_multiplier )
+        rtconfig.set( 'multiplier', opts.timeout_multiplier )
 
-    config.set( 'preclean', not opts.dash_m )
-    config.set( 'analyze', opts.analyze == True )
-    config.set( 'logfile', not opts.dash_L )
+    rtconfig.set( 'preclean', not opts.dash_m )
+    rtconfig.set( 'analyze', opts.analyze == True )
+    rtconfig.set( 'logfile', not opts.dash_L )
 
     if opts.test_args:
         argL = []
         for args in opts.test_args:
             argL.extend( shlex.split( args ) )
-        config.set( 'testargs', argL )
-
-    return config
+        rtconfig.set( 'testargs', argL )
 
 
 class RuntimeData:
@@ -290,7 +267,7 @@ class RuntimeData:
         'vvtestdir' is the directory containing the vvtest script
         'exepath' is the absolute path to vvtest (without following soft links)
         """
-        self.cmdL = [ os.path.abspath( cmdL[0] ) ]
+        self.cmdL = [ abspath( cmdL[0] ) ]
         self.cmdL.extend( cmdL[1:] )
 
         self.vvtestdir = vvtestdir
@@ -298,9 +275,6 @@ class RuntimeData:
 
     def getVvtestDir(self): return self.vvtestdir
     def getVvtestPath(self): return self.exepath
-
-    def setConfiguration(self, config): self.config = config
-    def getConfiguration(self): return self.config
 
     def setPlatformObject(self, platobj): self.plat = platobj
     def getPlatformObject(self): return self.plat
@@ -320,14 +294,14 @@ class RuntimeData:
     def setTestSubdir(self, subdir): self.testsubdir = subdir
     def getTestSubdir(self): return self.testsubdir
 
-    def setTestResultsDir(self, test_cache_dir):
+    def setTestResultsDir(self, test_cache_file):
         ""
-        if test_cache_dir:
-            assert os.path.isabs( test_cache_dir )
-            self.test_dir = test_cache_dir
+        if test_cache_file:
+            assert os.path.isabs( test_cache_file )
+            self.test_dir = dirname( test_cache_file )
             self.is_restart = True
         else:
-            self.test_dir = os.path.abspath( self.testsubdir )
+            self.test_dir = abspath( self.testsubdir )
             self.is_restart = False
 
     def getTestResultsDir(self): return self.test_dir
@@ -384,23 +358,23 @@ def construct_platform_instance( vvtestdir, opts, optD ):
     return plat
 
 
-def construct_RuntimeConfig( plat, opts, optD ):
+def construct_RuntimeConfig( opts, optD ):
     ""
     from libvvtest.RuntimeConfig import RuntimeConfig
 
     rtconfig = RuntimeConfig( \
                   param_expr_list=optD['param_list'],
                   keyword_expr=optD['keyword_expr'],
-                  option_list=( optD['onopts'] + [plat.getCompiler()] ),
-                  platform_name=plat.getName(),
+                  # option_list=( optD['onopts'] + [plat.getCompiler()] ),
+                  # platform_name=plat.getName(),
                   ignore_platforms=( opts.dash_A == True ),
                   set_platform_expr=optD['platform_expr'],
                   search_file_globs=search_fnmatch,
                   search_regexes=optD['search_regexes'],
                   include_tdd=( opts.include_tdd == True ),
                   runtime_range=[ opts.tmin, opts.tmax ],
-                  runtime_sum=opts.tsum,
-                  maxprocs=plat.getMaxProcs() )
+                  runtime_sum=opts.tsum )
+                  # maxprocs=plat.getMaxProcs() )
 
     if opts.qsub_id != None:
         rtconfig.setAttr( 'include_all', True )
@@ -497,7 +471,7 @@ class InformationMode:
         ""
         D = {}
         for tcase in tlist.getActiveTests():
-            d = os.path.normpath( tcase.getSpec().getFilename() )
+            d = normpath( tcase.getSpec().getFilename() )
             D[d] = None
         L = list( D.keys() )
         L.sort()
@@ -534,14 +508,14 @@ def scan_test_source_directories( tlist, scan_dirs, setparams ):
 def generateTestList( opts, optD, dirs, rtdata ):
     """
     """
-    config = rtdata.getConfiguration()
+    rtconfig = rtdata.getRuntimeConfig()
     plat = rtdata.getPlatformObject()
     testsubdir = rtdata.getTestSubdir()
     perms = rtdata.getPermissionsObject()
     timehandler = rtdata.getTestTimeHandler()
     plugin = rtdata.getUserPlugin()
 
-    test_dir = os.path.abspath( testsubdir )
+    test_dir = abspath( testsubdir )
 
     tfile = pjoin( test_dir, testlist_name )
 
@@ -560,10 +534,10 @@ def generateTestList( opts, optD, dirs, rtdata ):
     writeCommandInfo( opts, optD, rtdata, test_dir, plat, perms )
 
     tlist.stringFileWrite()
-    perms.set( os.path.abspath( tfile ) )
+    perms.set( abspath( tfile ) )
 
     xlist = TestExecList( plugin, tlist )
-    xlist.createTestExecs( test_dir, plat, config, perms )
+    xlist.createTestExecs( test_dir, plat, rtconfig, perms )
 
     print3( "\nTest directory:", testsubdir )
 
@@ -594,7 +568,7 @@ def writeCommandInfo( opts, optD, rtdata, test_dir, plat, perms ):
     """
     Creates the test results information file.
     """
-    config = rtdata.getConfiguration()
+    rtconfig = rtdata.getRuntimeConfig()
 
     f = pjoin(test_dir, 'test.cache')
     if not os.path.exists( f ):
@@ -607,9 +581,9 @@ def writeCommandInfo( opts, optD, rtdata, test_dir, plat, perms ):
               fp.write( 'PLATFORM=' + plat.getName() + '\n' )
         if optD['param_list']:
             fp.write( 'PARAMETERS=' + str( optD['param_list'] ) + '\n' )
-        if config.get('exepath'):
+        if rtconfig.get('exepath'):
             fp.write( \
-                'PROJECT=' + os.path.abspath( config.get('exepath') ) + '\n' )
+                'PROJECT=' + abspath( rtconfig.get('exepath') ) + '\n' )
         if optD['onopts']:
             fp.write( 'ONOPTS=' + '+'.join( optD['onopts'] ) + '\n' )
         if optD['offopts']:
@@ -629,25 +603,29 @@ def writeCommandInfo( opts, optD, rtdata, test_dir, plat, perms ):
             fp.write( 'CHECK=' + ' '.join( opts.check ) + '\n' )
         fp.close()
 
-    perms.set( os.path.abspath(f) )
+    perms.set( abspath(f) )
 
 
-def readCommandInfo( opts, optD, rtdata ):
+def get_test_cache_file():
+    """
+    returns None if the current directory is not inside a TestResults directory
+    """
+    # an environment variable is used to identify vvtest run recursion
+    troot = os.environ.get( 'VVTEST_TEST_ROOT', None )
+
+    fn = location.find_vvtest_test_root_file( os.getcwd(), troot, 'test.cache' )
+
+    return fn
+
+
+def readCommandInfo( opts, optD, rtconfig, cache_file ):
     """
     Check for a file called 'test.cache' that indicates whether the
     current working directory is a TestResults directory (or subdirectory)
     then open that file for information.  The test results directory is
     returned, or None if not in a TestRestults directory.
     """
-    config = rtdata.getConfiguration()
-
-    # an environment variable is used to identify vvtest run recursion
-    troot = os.environ.get( 'VVTEST_TEST_ROOT', None )
-
-    test_cache = misc.find_vvtest_test_root_file(
-                                        os.getcwd(), troot, 'test.cache' )
-
-    if test_cache != None:
+    if cache_file != None:
 
         if optD['onopts'] or optD['offopts'] or opts.dash_g:
             sys.stderr.write('*** error: ' + \
@@ -655,7 +633,7 @@ def readCommandInfo( opts, optD, rtdata ):
                 'in a TestResults directory\n')
             sys.exit(1);
 
-        fp = open( test_cache, "r" )
+        fp = open( cache_file, "r" )
         write_version = 0
         for line in fp.readlines():
             line = line.strip()
@@ -674,22 +652,22 @@ def readCommandInfo( opts, optD, rtdata ):
                 # do not replace if the command line contains -j
                 if not opts.bin_dir:
                     opts.bin_dir = kvpair[1]
-                    config.set( 'exepath', kvpair[1] )
+                    rtconfig.set( 'exepath', kvpair[1] )
             elif kvpair[0] == 'ONOPTS':
                 optD['onopts'] = kvpair[1].split( '+' )
-                config.set( 'onopts', optD['onopts'] )
+                rtconfig.set( 'onopts', optD['onopts'] )
             elif kvpair[0] == 'OFFOPTS':
                 optD['offopts'] = kvpair[1].split( '+' )
-                config.set( 'offopts', optD['offopts'] )
+                rtconfig.set( 'offopts', optD['offopts'] )
             elif kvpair[0] == 'TIMEOUT':
                 # do not replace if the command line contains -T
                 if opts.dash_T == None:
                     opts.dash_T = kvpair[1]
-                    config.set( 'timeout', float(opts.dash_T) )
+                    rtconfig.set( 'timeout', float(opts.dash_T) )
             elif kvpair[0] == 'TIMEOUT_MULTIPLIER':
                 if not opts.timeout_multiplier:
                     opts.timeout_multiplier = float(kvpair[1])
-                    config.set( 'multiplier', opts.timeout_multiplier )
+                    rtconfig.set( 'multiplier', opts.timeout_multiplier )
             elif kvpair[0] == 'USE_ENV':
                 opts.dash_e = True
             elif kvpair[0] == 'ALL_PLATFORMS':
@@ -700,23 +678,18 @@ def readCommandInfo( opts, optD, rtdata ):
                 opts.check = kvpair[1].split()
         fp.close()
 
-    if test_cache != None:
-        return os.path.dirname( test_cache )
-    return None
-
 
 def runTests( opts, optD, rtdata, dirs ):
     """
     Executes a list of tests.
     """
-    config = rtdata.getConfiguration()
     plat = rtdata.getPlatformObject()
     testsubdir = rtdata.getTestSubdir()
     timehandler = rtdata.getTestTimeHandler()
     plugin = rtdata.getUserPlugin()
 
     # determine the directory that stores the test results
-    test_dir = os.path.abspath( testsubdir )
+    test_dir = abspath( testsubdir )
     tfile = pjoin( test_dir, testlist_name )
 
     tlist = make_TestList( rtdata, tfile )
@@ -724,7 +697,7 @@ def runTests( opts, optD, rtdata, dirs ):
     check_for_currently_running_vvtest( tlist.getResultsFilenames(), opts.force )
 
     # this variable allows vvtest tests to run vvtest (ie, allows recursion)
-    os.environ['VVTEST_TEST_ROOT'] = os.path.normpath( test_dir )
+    os.environ['VVTEST_TEST_ROOT'] = normpath( test_dir )
 
     perms = rtdata.getPermissionsObject()
 
@@ -745,7 +718,7 @@ def runTests( opts, optD, rtdata, dirs ):
 
     # save the test list in the TestResults directory
     tlist.stringFileWrite()
-    perms.set( os.path.abspath( tfile ) )
+    perms.set( abspath( tfile ) )
 
     tlist.readTestResults()
     tlist.ensureInlinedTestResultIncludes()
@@ -914,13 +887,13 @@ def run_test_exec_list( opts, optD, rtdata,
                         tlist, test_dir, perms,
                         results_writer ):
     ""
-    config = rtdata.getConfiguration()
+    rtconfig = rtdata.getRuntimeConfig()
     plat = rtdata.getPlatformObject()
     testsubdir = rtdata.getTestSubdir()
     plugin = rtdata.getUserPlugin()
 
     xlist = TestExecList( plugin, tlist )
-    xlist.createTestExecs( test_dir, plat, config, perms )
+    xlist.createTestExecs( test_dir, plat, rtconfig, perms )
 
     if not opts.batch:
         execute.run_test_list( opts.qsub_id, tlist, xlist, test_dir, plat,
@@ -948,7 +921,7 @@ def batchTestList( opts, optD, rtdata,
 
     vvtestcmd = vvtest_command_line_for_batch( opts, optD,
                                                rtdata.getVvtestPath(),
-                                               rtdata.getConfiguration() )
+                                               rtdata.getRuntimeConfig() )
 
     batch = batchutils.Batcher( vvtestcmd, testlist_name,
                                 plat, tlist, xlist, perms,
@@ -967,7 +940,7 @@ def batchTestList( opts, optD, rtdata,
                        test_dir, qsublimit )
 
 
-def vvtest_command_line_for_batch( opts, optD, vvtestpath, config ):
+def vvtest_command_line_for_batch( opts, optD, vvtestpath, rtconfig ):
     ""
     cmd = vvtestpath
 
@@ -979,8 +952,8 @@ def vvtest_command_line_for_batch( opts, optD, vvtestpath, config ):
     if opts.perms:
         cmd += ' --perms '+','.join( opts.perms )
 
-    if config.get('configdir'):
-        cmd += ' --config='+config.get('configdir')
+    if rtconfig.get('configdir'):
+        cmd += ' --config='+rtconfig.get('configdir')
 
     if optD['platopt_dict']:
         for k,v in optD['platopt_dict'].items():
@@ -989,7 +962,7 @@ def vvtest_command_line_for_batch( opts, optD, vvtestpath, config ):
             else:
                 cmd += ' --platopt ' + k 
 
-    for arg in config.get('testargs'):
+    for arg in rtconfig.get('testargs'):
         cmd += ' --test-args="'+arg+'"'
 
     return cmd
@@ -997,7 +970,6 @@ def vvtest_command_line_for_batch( opts, optD, vvtestpath, config ):
 
 def restartTests( opts, optD, rtdata ):
     ""
-    config = rtdata.getConfiguration()
     plat = rtdata.getPlatformObject()
     test_dir = rtdata.getTestResultsDir()
     plugin = rtdata.getUserPlugin()
@@ -1034,7 +1006,7 @@ def restartTests( opts, optD, rtdata ):
 
     perms = rtdata.getPermissionsObject()
 
-    perms.set( os.path.abspath( tfile ) )
+    perms.set( abspath( tfile ) )
 
     results_writer = rtdata.getResultsWriter()
 
@@ -1055,7 +1027,6 @@ def restartTests( opts, optD, rtdata ):
 def baselineTests( opts, optD, rtdata ):
     ""
     rtconfig = rtdata.getRuntimeConfig()
-    config = rtdata.getConfiguration()
     plat = rtdata.getPlatformObject()
     test_dir = rtdata.getTestResultsDir()
     plugin = rtdata.getUserPlugin()
@@ -1083,7 +1054,7 @@ def baselineTests( opts, optD, rtdata ):
         perms = rtdata.getPermissionsObject()
 
         xlist = TestExecList( plugin, tlist )
-        xlist.createTestExecs( test_dir, plat, config, perms )
+        xlist.createTestExecs( test_dir, plat, rtconfig, perms )
 
         execute.run_baseline( xlist, plat )
 
@@ -1111,20 +1082,20 @@ def check_for_bootstrap_file():
     except ImportError:
         # to allow for vvtest to be a soft link to an installed vvtest area,
         # look for a bootstrap file in the directory containing the soft link
-        bindir = os.path.dirname( os.path.abspath( sys.argv[0] ) )
+        bindir = dirname( abspath( sys.argv[0] ) )
         boot = pjoin( bindir, 'vvtest_bootstrap.py' )
         if os.path.exists( boot ):
             sys.path.append( bindir )
             import vvtest_bootstrap
 
 
-def insert_configdir_into_sys_path( rtdata ):
+def insert_configdir_into_sys_path( vvtestdir, configdir ):
     ""
-    d1 = os.path.normpath( pjoin( rtdata.getVvtestDir(), 'config' ) )
+    d1 = normpath( pjoin( vvtestdir, 'config' ) )
 
-    d2 = rtdata.getConfiguration().get( 'configdir' )
+    d2 = configdir
     if d2:
-        d2 = os.path.normpath( d2 )
+        d2 = normpath( d2 )
 
         if d1 != d2:
             sys.path.insert( 1, d1 )
@@ -1159,7 +1130,7 @@ def get_vvtest_directory():
     # if vvtest is a soft link, this will follow it
     d = sys.path[0]
     if not d:                  d = os.getcwd()
-    elif not os.path.isabs(d): d = os.path.abspath(d)
+    elif not os.path.isabs(d): d = abspath(d)
     return d
 
 
@@ -1180,10 +1151,10 @@ def get_trig_directory( vvtestdir ):
     the trig directory is a sibling directory in the scidev repository, but
     a subdirectory when vvtest is installed with the 'install_vvtest' script
     """
-    trigdir = os.path.normpath( pjoin( vvtestdir, 'trig' ) )
+    trigdir = normpath( pjoin( vvtestdir, 'trig' ) )
 
     if not os.path.isdir( trigdir ):
-        trigdir = os.path.normpath( pjoin( vvtestdir, '..', 'trig' ) )
+        trigdir = normpath( pjoin( vvtestdir, '..', 'trig' ) )
 
         if not os.path.isdir( trigdir ):
             trigdir = None
@@ -1193,7 +1164,7 @@ def get_trig_directory( vvtestdir ):
 
 if __name__ == '__main__':
     ""
-    exepath = os.path.normpath( os.path.abspath( sys.argv[0] ) )
+    exepath = normpath( abspath( sys.argv[0] ) )
     vvtestdir = get_vvtest_directory()
 
     adjust_sys_path_for_shared_modules( vvtestdir )

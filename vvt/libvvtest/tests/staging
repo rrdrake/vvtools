@@ -24,6 +24,7 @@ from libvvtest.ScriptReader import ScriptReader
 from libvvtest.RuntimeConfig import RuntimeConfig
 import libvvtest.depend as depend
 import libvvtest.testlistio as tio
+import libvvtest.testrunner as testrunner
 
 import libvvtest.TestSpecCreator as TSC
 
@@ -536,10 +537,23 @@ def reparse_test_string( stringid ):
     ""
     tcase = tio.string_to_test( stringid )
 
-    creator = TSC.TestCreator( RuntimeConfig() )
+    creator = TSC.TestCreator( 'atari', [] )
     creator.reparse( tcase.getSpec() )
 
     return tcase
+
+
+class MockExecutionHandler( testrunner.ExecutionHandler ):
+
+    def __init__(self, tcase, config):
+        ""
+        testrunner.ExecutionHandler.__init__( self, tcase, config,
+                                              None, None, None, None )
+
+
+def create_mock_execution_handler():
+    ""
+    pass
 
 
 ############################################################################
