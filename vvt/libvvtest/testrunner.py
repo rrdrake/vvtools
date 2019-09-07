@@ -421,7 +421,8 @@ def post_clean_execute_directory( rundir, specform ):
                  'baseline.log',
                  'vvtest_util.py',
                  'vvtest_util.sh',
-                 'machinefile' ]
+                 'machinefile',
+                 'testdata.repr' ]
 
     if specform == 'xml':
         excludes.append( 'runscript' )
