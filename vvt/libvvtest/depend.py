@@ -102,8 +102,9 @@ def connect_dependency( from_tcase, to_tcase, pattrn=None, expr=None ):
 
 def find_tests_by_pattern( xdir, pattern, testcasemap ):
     """
-    Given 'xdir' dependent execute directory, the shell glob 'pattern' is
-    matched against the execute directories in the 'testcasemap', in this order:
+    The 'xdir' is the execute directory of the dependent test.  The shell
+    glob 'pattern' is matched against the display strings of tests in the
+    'testcasemap', in this order:
 
         1. basename(xdir)/pat
         2. basename(xdir)/*/pat
@@ -111,6 +112,10 @@ def find_tests_by_pattern( xdir, pattern, testcasemap ):
         4. *pat
 
     The first of these that matches at least one test will be returned.
+
+    If more than one staged test is matched, then only the last stage is
+    included (unless none of them are a last stage, in which case all of
+    them are included).
 
     A python set of TestSpec ID is returned.
     """
@@ -120,31 +125,101 @@ def find_tests_by_pattern( xdir, pattern, testcasemap ):
     elif tbase:
         tbase += '/'
 
+    pat1 = os.path.normpath( tbase+pattern )
+    pat2 = tbase+'*/'+pattern
+    pat3 = pattern
+    pat4 = '*'+pattern
+
     L1 = [] ; L2 = [] ; L3 = [] ; L4 = []
 
-    for tcase in testcasemap.values():
+    for tid,tcase in testcasemap.items():
 
-        xdir = tcase.getSpec().getDisplayString()
-        tid = tcase.getSpec().getID()
+        tspec = tcase.getSpec()
+        displ = tspec.getDisplayString()
 
-        p1 = os.path.normpath( tbase+pattern )
-        if fnmatch.fnmatch( xdir, p1 ):
+        if tspec.getStageID() == None:
+            xdir = None
+        else:
+            xdir = tspec.getExecuteDirectory()
+
+        if match_test( xdir, displ, pat1 ):
             L1.append( tid )
 
-        if fnmatch.fnmatch( xdir, tbase+'*/'+pattern ):
+        if match_test( xdir, displ, pat2 ):
             L2.append( tid )
 
-        if fnmatch.fnmatch( xdir, pattern ):
+        if match_test( xdir, displ, pat3 ):
             L3.append( tid )
 
-        if fnmatch.fnmatch( xdir, '*'+pattern ):
+        if match_test( xdir, displ, pat4 ):
             L4.append( tid )
 
     for L in [ L1, L2, L3, L4 ]:
         if len(L) > 0:
-            return set(L)
+            return collect_match_test_ids( L, testcasemap )
 
     return set()
+
+
+def match_test( xdir, displ, pat ):
+    ""
+    return fnmatch.fnmatch( displ, pat ) or \
+           ( xdir and fnmatch.fnmatch( xdir, pat ) )
+
+
+def collect_match_test_ids( idlist, testcasemap ):
+    ""
+    idset = set()
+
+    stagemap = map_staged_xdir_to_tspec_list( idlist, testcasemap )
+
+    for tid in idlist:
+        tspec = testcasemap[tid].getSpec()
+        if not_staged_or_last_stage( stagemap, tspec ):
+            idset.add( tid )
+
+    return idset
+
+
+def not_staged_or_last_stage( stagemap, tspec ):
+    ""
+    stagL = stagemap.get( tspec.getExecuteDirectory(), None )
+
+    if stagL == None or len(stagL) < 2:
+        return True
+
+    return tspec.isLastStage() or no_last_stages( stagL )
+
+
+def no_last_stages( tspecs ):
+    ""
+    for tspec in tspecs:
+        if tspec.isLastStage():
+            return False
+
+    return True
+
+
+def map_staged_xdir_to_tspec_list( idlist, testcasemap ):
+    ""
+    stagemap = {}
+
+    for tid in idlist:
+        tspec = testcasemap[tid].getSpec()
+        if tspec.getStageID() != None:
+            add_test_to_map( stagemap, tspec )
+
+    return stagemap
+
+
+def add_test_to_map( stagemap, tspec ):
+    ""
+    xdir = tspec.getExecuteDirectory()
+    tL = stagemap.get( xdir, None )
+    if tL == None:
+        stagemap[xdir] = [tspec]
+    else:
+        tL.append( tspec )
 
 
 def connect_analyze_dependencies( analyze, tcaseL, testcasemap ):

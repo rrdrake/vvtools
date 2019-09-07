@@ -495,6 +495,42 @@ class staged_parameters( vtu.vvtestTestCase ):
         xhand.check_run_postclean()
         assert xhand.numpostclean == 1
 
+    def test_finding_staged_test_dependencies(self):
+        ""
+        tcase1 = vtu.make_fake_staged_TestCase( 0 )
+        tcase2 = vtu.make_fake_staged_TestCase( 1 )
+        tcase3 = vtu.make_fake_staged_TestCase( 2 )
+
+        tcase = vtu.make_fake_TestCase( name='btest' )
+        bdir = tcase.getSpec().getExecuteDirectory()
+
+        tmap = { tcase1.getSpec().getID() : tcase1,
+                 tcase2.getSpec().getID() : tcase2,
+                 tcase3.getSpec().getID() : tcase3,
+                 tcase.getSpec().getID()  : tcase }
+
+        ids = depend.find_tests_by_pattern( bdir, 'atest*stage=1*', tmap )
+        assert len( ids ) == 1
+        assert ids.pop() == tcase1.getSpec().getID()
+
+        ids = depend.find_tests_by_pattern( bdir, 'atest.np', tmap )
+        assert len( ids ) == 1
+        assert ids.pop() == tcase3.getSpec().getID()
+
+        ids = depend.find_tests_by_pattern( bdir, 'atest*', tmap )
+        assert len( ids ) == 1
+        assert ids.pop() == tcase3.getSpec().getID()
+
+        tmap = { tcase1.getSpec().getID() : tcase1,
+                 tcase2.getSpec().getID() : tcase2,
+                 tcase.getSpec().getID()  : tcase }
+
+        ids = depend.find_tests_by_pattern( bdir, 'atest.np', tmap )
+        assert len( ids ) == 2
+        tcase_1_or_2 = [ tcase1.getSpec().getID(), tcase2.getSpec().getID() ]
+        assert ids.pop() in tcase_1_or_2
+        assert ids.pop() in tcase_1_or_2
+
     def test_staging_integration_test(self):
         ""
         util.writefile( 'blue.vvt', """
