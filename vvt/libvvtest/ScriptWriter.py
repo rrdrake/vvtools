@@ -9,7 +9,7 @@ from os.path import join as pjoin
 from os.path import dirname, normpath
 
 
-def writeScript( testcase, filename, lang, config, plat, test_dir ):
+def writeScript( testcase, filename, lang, rtconfig, plat, test_dir ):
     """
     Writes a helper script for the test.  The script language is based on
     the 'lang' argument.
@@ -22,19 +22,19 @@ def writeScript( testcase, filename, lang, config, plat, test_dir ):
     trel = dirname( testobj.getFilepath() )
     srcdir = normpath( pjoin( troot, trel ) )
     
-    configdir = config.get('configdir')
+    configdir = rtconfig.getAttr('configdir')
 
-    tdir = config.get('vvtestdir')
+    tdir = rtconfig.getAttr('vvtestdir')
     assert tdir
     vvtlib = pjoin( tdir, 'libvvtest' )
 
     trigdir = normpath( pjoin( tdir, '..', 'trig' ) )
 
-    projdir = config.get('exepath')
+    projdir = rtconfig.getAttr('exepath')
     if not projdir: projdir = ''
 
-    onopts = config.get('onopts')
-    offopts = config.get('offopts')
+    onopts = rtconfig.getAttr('onopts')
+    offopts = rtconfig.getAttr('offopts')
 
     platname = plat.getName()
     cplrname = plat.getCompiler()

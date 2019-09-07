@@ -229,35 +229,35 @@ def determine_configdir( vvtestdir, opts ):
 
 def create_configuration( rtconfig, opts, optD, vvtestdir, configdir ):
     ""
-    rtconfig.set( 'vvtestdir', vvtestdir )
+    rtconfig.setAttr( 'vvtestdir', vvtestdir )
 
     if optD['onopts']:
-        rtconfig.set( 'onopts', optD['onopts'] )
+        rtconfig.setAttr( 'onopts', optD['onopts'] )
     if optD['offopts']:
-        rtconfig.set( 'offopts', optD['offopts'] )
+        rtconfig.setAttr( 'offopts', optD['offopts'] )
 
     if opts.bin_dir:
-        rtconfig.set( 'exepath', opts.bin_dir )
+        rtconfig.setAttr( 'exepath', opts.bin_dir )
 
-    rtconfig.set( 'configdir', configdir )
+    rtconfig.setAttr( 'configdir', configdir )
 
-    rtconfig.set( 'refresh', not opts.dash_m )
-    rtconfig.set( 'postclean', opts.postclean == True )
+    rtconfig.setAttr( 'refresh', not opts.dash_m )
+    rtconfig.setAttr( 'postclean', opts.postclean == True )
 
     if opts.dash_T != None:
-        rtconfig.set( 'timeout', opts.dash_T )
+        rtconfig.setAttr( 'timeout', opts.dash_T )
     if opts.timeout_multiplier != None:
-        rtconfig.set( 'multiplier', opts.timeout_multiplier )
+        rtconfig.setAttr( 'multiplier', opts.timeout_multiplier )
 
-    rtconfig.set( 'preclean', not opts.dash_m )
-    rtconfig.set( 'analyze', opts.analyze == True )
-    rtconfig.set( 'logfile', not opts.dash_L )
+    rtconfig.setAttr( 'preclean', not opts.dash_m )
+    rtconfig.setAttr( 'analyze', opts.analyze == True )
+    rtconfig.setAttr( 'logfile', not opts.dash_L )
 
     if opts.test_args:
         argL = []
         for args in opts.test_args:
             argL.extend( shlex.split( args ) )
-        rtconfig.set( 'testargs', argL )
+        rtconfig.setAttr( 'testargs', argL )
 
 
 class RuntimeData:
@@ -581,9 +581,9 @@ def writeCommandInfo( opts, optD, rtdata, test_dir, plat, perms ):
               fp.write( 'PLATFORM=' + plat.getName() + '\n' )
         if optD['param_list']:
             fp.write( 'PARAMETERS=' + str( optD['param_list'] ) + '\n' )
-        if rtconfig.get('exepath'):
+        if rtconfig.getAttr('exepath'):
             fp.write( \
-                'PROJECT=' + abspath( rtconfig.get('exepath') ) + '\n' )
+                'PROJECT=' + abspath( rtconfig.getAttr('exepath') ) + '\n' )
         if optD['onopts']:
             fp.write( 'ONOPTS=' + '+'.join( optD['onopts'] ) + '\n' )
         if optD['offopts']:
@@ -652,22 +652,22 @@ def readCommandInfo( opts, optD, rtconfig, cache_file ):
                 # do not replace if the command line contains -j
                 if not opts.bin_dir:
                     opts.bin_dir = kvpair[1]
-                    rtconfig.set( 'exepath', kvpair[1] )
+                    rtconfig.setAttr( 'exepath', kvpair[1] )
             elif kvpair[0] == 'ONOPTS':
                 optD['onopts'] = kvpair[1].split( '+' )
-                rtconfig.set( 'onopts', optD['onopts'] )
+                rtconfig.setAttr( 'onopts', optD['onopts'] )
             elif kvpair[0] == 'OFFOPTS':
                 optD['offopts'] = kvpair[1].split( '+' )
-                rtconfig.set( 'offopts', optD['offopts'] )
+                rtconfig.setAttr( 'offopts', optD['offopts'] )
             elif kvpair[0] == 'TIMEOUT':
                 # do not replace if the command line contains -T
                 if opts.dash_T == None:
                     opts.dash_T = kvpair[1]
-                    rtconfig.set( 'timeout', float(opts.dash_T) )
+                    rtconfig.setAttr( 'timeout', float(opts.dash_T) )
             elif kvpair[0] == 'TIMEOUT_MULTIPLIER':
                 if not opts.timeout_multiplier:
                     opts.timeout_multiplier = float(kvpair[1])
-                    rtconfig.set( 'multiplier', opts.timeout_multiplier )
+                    rtconfig.setAttr( 'multiplier', opts.timeout_multiplier )
             elif kvpair[0] == 'USE_ENV':
                 opts.dash_e = True
             elif kvpair[0] == 'ALL_PLATFORMS':
@@ -952,8 +952,8 @@ def vvtest_command_line_for_batch( opts, optD, vvtestpath, rtconfig ):
     if opts.perms:
         cmd += ' --perms '+','.join( opts.perms )
 
-    if rtconfig.get('configdir'):
-        cmd += ' --config='+rtconfig.get('configdir')
+    if rtconfig.getAttr('configdir'):
+        cmd += ' --config='+rtconfig.getAttr('configdir')
 
     if optD['platopt_dict']:
         for k,v in optD['platopt_dict'].items():
@@ -962,7 +962,7 @@ def vvtest_command_line_for_batch( opts, optD, vvtestpath, rtconfig ):
             else:
                 cmd += ' --platopt ' + k 
 
-    for arg in rtconfig.get('testargs'):
+    for arg in rtconfig.getAttr('testargs'):
         cmd += ' --test-args="'+arg+'"'
 
     return cmd

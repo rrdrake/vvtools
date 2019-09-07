@@ -65,8 +65,8 @@ class TestRunner:
         ""
         if tspec.getSpecificationForm() == 'xml':
             if self.commondb == None:
-                d = pjoin( self.rtconfig.get('vvtestdir'), 'libvvtest' )
-                c = self.rtconfig.get('configdir')
+                d = pjoin( self.rtconfig.getAttr('vvtestdir'), 'libvvtest' )
+                c = self.rtconfig.getAttr('configdir')
                 self.commondb = CommonSpec.loadCommonSpec( d, c )
 
             return self.commondb
@@ -89,15 +89,15 @@ class ExecutionHandler:
 
     def check_redirect_output_to_log_file(self, baseline):
         ""
-        if self.rtconfig.get('logfile'):
+        if self.rtconfig.getAttr('logfile'):
             logfname = get_execution_log_filename( self.tcase, baseline )
             redirect_stdout_stderr_to_filename( logfname )
             self.perms.set( os.path.abspath( logfname ) )
 
     def check_run_preclean(self, baseline):
         ""
-        if self.rtconfig.get('preclean') and \
-           not self.rtconfig.get('analyze') and \
+        if self.rtconfig.getAttr('preclean') and \
+           not self.rtconfig.getAttr('analyze') and \
            not baseline and \
            self.tcase.getSpec().isFirstStage():
             self.preclean()
@@ -191,11 +191,11 @@ class ExecutionHandler:
         """
         val = ''
 
-        cfgd = self.rtconfig.get( 'configdir' )
+        cfgd = self.rtconfig.getAttr( 'configdir' )
         if cfgd and ':' not in cfgd:
             val += ':'+cfgd
 
-        tdir = self.rtconfig.get( 'vvtestdir' )
+        tdir = self.rtconfig.getAttr( 'vvtestdir' )
         if ':' not in tdir:
             val += ':'+pjoin( tdir, 'config' ) + ':'+tdir
 
@@ -209,7 +209,7 @@ class ExecutionHandler:
 
     def check_run_postclean(self):
         ""
-        if self.rtconfig.get('postclean') and \
+        if self.rtconfig.getAttr('postclean') and \
            self.tcase.getStat().passed() and \
            not self.tcase.hasDependent() and \
            self.tcase.getSpec().isLastStage():
@@ -283,10 +283,10 @@ class ExecutionHandler:
             if hasattr( obj, "mpi_opts") and obj.mpi_opts:
                 cmdL.extend( ['--mpirun_opts', obj.mpi_opts] )
 
-            if self.rtconfig.get('analyze'):
+            if self.rtconfig.getAttr('analyze'):
                 cmdL.append('--execute_analysis_sections')
 
-            cmdL.extend( self.rtconfig.get( 'testargs' ) )
+            cmdL.extend( self.rtconfig.getAttr( 'testargs' ) )
 
         return cmdL
 
@@ -331,7 +331,7 @@ class ExecutionHandler:
 
         script_file = pjoin( rundir, 'runscript' )
 
-        if self.rtconfig.get('refresh') or not os.path.exists( script_file ):
+        if self.rtconfig.getAttr('refresh') or not os.path.exists( script_file ):
 
             troot = tspec.getRootpath()
             assert os.path.isabs( troot )
@@ -343,11 +343,11 @@ class ExecutionHandler:
             cshScriptWriter.writeScript( tspec,
                                          self.commondb,
                                          self.platform,
-                                         self.rtconfig.get('vvtestdir'),
-                                         self.rtconfig.get('exepath'),
+                                         self.rtconfig.getAttr('vvtestdir'),
+                                         self.rtconfig.getAttr('exepath'),
                                          srcdir,
-                                         self.rtconfig.get('onopts'),
-                                         self.rtconfig.get('offopts'),
+                                         self.rtconfig.getAttr('onopts'),
+                                         self.rtconfig.getAttr('offopts'),
                                          script_file )
 
             self.perms.set( os.path.abspath( script_file ) )
@@ -361,7 +361,7 @@ class ExecutionHandler:
 
             script_file = pjoin( rundir, 'vvtest_util.'+lang )
 
-            if self.rtconfig.get('refresh') or not os.path.exists( script_file ):
+            if self.rtconfig.getAttr('refresh') or not os.path.exists( script_file ):
                 ScriptWriter.writeScript( self.tcase,
                                           script_file,
                                           lang,

@@ -77,14 +77,6 @@ class RuntimeConfig:
             return self.attrs[name]
         return self.attrs.get( name, default[0] )
 
-    def get(self, name):
-        ""
-        return self.attrs[name]
-
-    def set(self, name, value):
-        ""
-        self.attrs[name] = value
-
     def platformName(self):
         ""
         return self.getAttr( 'platform_name', None )
