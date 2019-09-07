@@ -439,6 +439,62 @@ class staged_parameters( vtu.vvtestTestCase ):
             assert ts.isLastStage()      == ts2.isLastStage()
             assert ts.getDisplayString() == ts2.getDisplayString()
 
+    def test_pre_clean_logic(self):
+        ""
+        xhand = make_prepost_execution_handler()
+        xhand.check_run_preclean( True )
+        assert xhand.numpreclean == 0
+        xhand.check_run_preclean( False )
+        assert xhand.numpreclean == 1
+
+        xhand = make_prepost_execution_handler( preclean=False )
+        xhand.check_run_preclean( False )
+        assert xhand.numpreclean == 0
+        xhand.rtconfig.setAttr( 'preclean', True )
+        xhand.check_run_preclean( False )
+        assert xhand.numpreclean == 1
+
+        xhand = make_prepost_execution_handler( analyze=True )
+        xhand.check_run_preclean( False )
+        assert xhand.numpreclean == 0
+        xhand.rtconfig.setAttr( 'analyze', False )
+        xhand.check_run_preclean( False )
+        assert xhand.numpreclean == 1
+
+        tcase = vtu.make_fake_staged_TestCase( 1 )
+        xhand = make_prepost_execution_handler( tcase=tcase )
+        xhand.check_run_preclean( False )
+        assert xhand.numpreclean == 0
+        xhand.setTestCase( vtu.make_fake_staged_TestCase( 0 ) )
+        xhand.check_run_preclean( False )
+        assert xhand.numpreclean == 1
+
+    def test_post_clean_logic(self):
+        ""
+        xhand = make_prepost_execution_handler()
+        xhand.check_run_postclean()
+        assert xhand.numpostclean == 0
+        xhand.tcase.getStat().markStarted( time.time() )
+        xhand.tcase.getStat().markDone( 0 )
+        xhand.check_run_postclean()
+        assert xhand.numpostclean == 0
+        xhand.rtconfig.setAttr( 'postclean', True )
+        xhand.check_run_postclean()
+        assert xhand.numpostclean == 1
+
+        tcase = vtu.make_fake_staged_TestCase( 1 )
+        tcase.getStat().markStarted( time.time() )
+        tcase.getStat().markDone( 0 )
+        xhand = make_prepost_execution_handler( tcase=tcase, postclean=True )
+        xhand.check_run_postclean()
+        assert xhand.numpostclean == 0
+        tcase = vtu.make_fake_staged_TestCase( 2 )
+        tcase.getStat().markStarted( time.time() )
+        tcase.getStat().markDone( 0 )
+        xhand.setTestCase( tcase )
+        xhand.check_run_postclean()
+        assert xhand.numpostclean == 1
+
     def test_staging_integration_test(self):
         ""
         util.writefile( 'blue.vvt', """
@@ -543,17 +599,42 @@ def reparse_test_string( stringid ):
     return tcase
 
 
-class MockExecutionHandler( testrunner.ExecutionHandler ):
+class MockPrePostCleanExecutionHandler( testrunner.ExecutionHandler ):
 
-    def __init__(self, tcase, config):
+    def __init__(self, tcase, rtconfig):
         ""
-        testrunner.ExecutionHandler.__init__( self, tcase, config,
+        testrunner.ExecutionHandler.__init__( self, tcase, None, rtconfig,
                                               None, None, None, None )
+        self.numpreclean = 0
+        self.numpostclean = 0
+
+    def preclean(self):
+        ""
+        self.numpreclean += 1
+
+    def postclean(self):
+        ""
+        self.numpostclean += 1
+
+    def setTestCase(self, tcase):
+        ""
+        self.tcase = tcase
 
 
-def create_mock_execution_handler():
+def make_prepost_execution_handler( **kwargs ):
     ""
-    pass
+    tcase = kwargs.pop( 'tcase', None )
+
+    rtconfig = RuntimeConfig()
+    for k,v in kwargs.items():
+        rtconfig.setAttr( k, v )
+
+    if tcase == None:
+        tcase = vtu.make_fake_TestCase()
+
+    xhand = MockPrePostCleanExecutionHandler( tcase, rtconfig )
+
+    return xhand
 
 
 ############################################################################
